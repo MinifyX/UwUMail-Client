@@ -64,6 +64,8 @@ struct Inner {
     tokens: AsyncMutex<HashMap<String, (String, Instant)>>,
     attachments: AttachmentCache,
     pictures: SenderPictures,
+    /// (account id, path) of folders created by UwUMail, with when.
+    created_folders: Mutex<HashMap<(String, String), Instant>>,
 }
 
 enum Credential {
@@ -121,6 +123,7 @@ impl Engine {
                 tokens: AsyncMutex::new(HashMap::new()),
                 attachments: AttachmentCache::new(&options.data_dir),
                 pictures: SenderPictures::new(&options.data_dir)?,
+                created_folders: Mutex::new(HashMap::new()),
             }),
         })
     }
@@ -620,6 +623,7 @@ impl Inner {
         };
         with_session!(self, account_id, |session| async { session.create(&path).await.map_err(Error::from) })
             .or_else(|error| if error.message.to_lowercase().contains("exist") { Ok(()) } else { Err(error) })?;
+        self.created_folders.lock().unwrap().insert((account_id.to_string(), path.clone()), Instant::now());
         let id = self.store.upsert_folder(
             account_id,
             &FolderInfo { path: &path, name, role: Some(role), delimiter: namespace.as_deref(), selectable: true },
@@ -642,6 +646,13 @@ impl Inner {
                 },
             )?;
             paths.insert(folder.path.clone());
+        }
+        // A folder UwUMail just created may be missing from a listing that
+        // started before; don't forget it (and the mail just moved into it).
+        {
+            let mut created = self.created_folders.lock().unwrap();
+            created.retain(|_, at| at.elapsed() < Duration::from_secs(120));
+            paths.extend(created.keys().filter(|(id, _)| *id == account.id).map(|(_, path)| path.clone()));
         }
         self.store.retain_folders(&account.id, &paths)?;
         let mut folders: Vec<FolderRecord> =

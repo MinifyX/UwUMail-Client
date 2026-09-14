@@ -205,13 +205,15 @@ async fn sync_send_reply_flag_and_trash() {
         gone.then_some(())
     })
     .await;
-    let trash = engine
-        .list_folders(Some(&account.id))
-        .unwrap()
-        .into_iter()
-        .find(|f| f.role == Some(FolderRole::Trash))
-        .expect("a trash folder exists");
-    assert!(trash.total >= 2);
+    wait_for("both messages in the trash folder", async || {
+        engine.sync_now(Some(&account.id));
+        engine
+            .list_folders(Some(&account.id))
+            .unwrap()
+            .into_iter()
+            .find(|f| f.role == Some(FolderRole::Trash) && f.total >= 2)
+    })
+    .await;
 
     // The engine told the UI about all of it.
     let mut saw_change = false;
