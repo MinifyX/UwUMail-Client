@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -29,6 +29,11 @@ pub const INITIAL_WINDOW: u32 = 400;
 /// Messages larger than this are synced headers-only; the body loads on open.
 const FULL_FETCH_LIMIT: u32 = 2 * 1024 * 1024;
 const FETCH_BATCH: usize = 50;
+const HEADER_QUERY: &str = "(UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER])";
+/// The start of the text, enough for a preview.
+const PREVIEW_QUERY: &str = "(UID BODY.PEEK[TEXT]<0.4096>)";
+/// Server search looks at this many of the newest matches per folder.
+const SEARCH_LIMIT: usize = 200;
 
 /// A plain or TLS connection, so one session type covers every security mode.
 pub enum MailStream {
@@ -350,8 +355,73 @@ pub struct FolderSync {
     pub had_messages: bool,
 }
 
-/// Brings one folder of the local store up to date.
-pub async fn sync_folder(session: &mut ImapSession, store: &Store, folder: &FolderRecord) -> Result<FolderSync> {
+/// Accounts whose server sent a partial fetch we couldn't read (GreenMail
+/// leaves out a space there). They get no previews for header-only mail.
+static NO_PREVIEWS: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
+
+/// Stores messages by their headers, then adds a preview from the start of
+/// their text where the server allows. The full body loads when one is
+/// opened. Returns (uid, local id) of the messages that were new.
+async fn store_headers(
+    session: &mut ImapSession,
+    store: &Store,
+    folder: &FolderRecord,
+    uids: &[u32],
+) -> Result<Vec<(u32, String)>> {
+    let mut added = Vec::new();
+    let mut headers = HashMap::new();
+    for chunk in uids.chunks(FETCH_BATCH) {
+        let fetches: Vec<Fetch> = session.uid_fetch(uid_set(chunk), HEADER_QUERY).await?.try_collect().await?;
+        for fetch in fetches {
+            let (Some(uid), Some(header)) = (fetch.uid, fetch.header()) else { continue };
+            let size = u64::from(fetch.size.unwrap_or(0));
+            let date = fetch.internal_date().map(|d| d.timestamp());
+            let parsed = mime::parse(header);
+            if let Some(id) =
+                store.insert_message(&folder.account_id, &folder.id, uid, flags_of(&fetch), size, date, &parsed)?
+            {
+                headers.insert(uid, header.to_vec());
+                added.push((uid, id));
+            }
+        }
+    }
+
+    if added.is_empty() || NO_PREVIEWS.lock().unwrap().contains(&folder.account_id) {
+        return Ok(added);
+    }
+    let ids: HashMap<u32, &String> = added.iter().map(|(uid, id)| (*uid, id)).collect();
+    let new_uids: Vec<u32> = added.iter().map(|(uid, _)| *uid).collect();
+    for chunk in new_uids.chunks(FETCH_BATCH) {
+        let fetches = match session.uid_fetch(uid_set(chunk), PREVIEW_QUERY).await {
+            Ok(stream) => stream.try_collect::<Vec<Fetch>>().await,
+            Err(error) => Err(error),
+        };
+        let fetches = match fetches {
+            Ok(fetches) => fetches,
+            Err(error) => {
+                // The connection may be broken now; the next sync reconnects and skips previews.
+                NO_PREVIEWS.lock().unwrap().insert(folder.account_id.clone());
+                return Err(error.into());
+            }
+        };
+        for fetch in fetches {
+            let (Some(uid), Some(text)) = (fetch.uid, fetch.text()) else { continue };
+            let (Some(header), Some(id)) = (headers.get(&uid), ids.get(&uid)) else { continue };
+            let snippet = mime::parse(&[header.as_slice(), text].concat()).snippet;
+            store.set_snippet(id, &snippet)?;
+        }
+    }
+    Ok(added)
+}
+
+/// Brings one folder of the local store up to date. Messages received before
+/// `full_after` (Unix seconds) are stored as previews, like large ones.
+pub async fn sync_folder(
+    session: &mut ImapSession,
+    store: &Store,
+    folder: &FolderRecord,
+    full_after: Option<i64>,
+) -> Result<FolderSync> {
     let mailbox = session.select(&folder.path).await?;
     let validity = mailbox.uid_validity.unwrap_or(0);
     let mut result = FolderSync::default();
@@ -376,40 +446,36 @@ pub async fn sync_folder(session: &mut ImapSession, store: &Store, folder: &Fold
         let mut large = Vec::new();
         for fetch in listing.iter().filter(|f| f.uid.is_some_and(|uid| uid > max_uid)) {
             let uid = fetch.uid.unwrap_or_default();
-            if fetch.size.unwrap_or(0) <= FULL_FETCH_LIMIT { small.push(uid) } else { large.push(uid) }
+            let old = full_after.zip(fetch.internal_date()).is_some_and(|(cutoff, date)| date.timestamp() < cutoff);
+            if fetch.size.unwrap_or(0) <= FULL_FETCH_LIMIT && !old { small.push(uid) } else { large.push(uid) }
         }
 
         // Step 2: download, newest first so the inbox fills from the top.
         small.sort_unstable_by(|a, b| b.cmp(a));
         large.sort_unstable_by(|a, b| b.cmp(a));
-        for (uids, body) in [(small, true), (large, false)] {
-            for chunk in uids.chunks(FETCH_BATCH) {
-                let query = if body {
-                    "(UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[])"
-                } else {
-                    "(UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER])"
-                };
-                let fetches: Vec<Fetch> = session.uid_fetch(uid_set(chunk), query).await?.try_collect().await?;
-                for fetch in fetches {
-                    let Some(uid) = fetch.uid else { continue };
-                    let raw = if body { fetch.body() } else { fetch.header() };
-                    let Some(raw) = raw else { continue };
-                    let parsed = mime::parse(raw);
-                    let inserted = store.insert_message(
-                        &folder.account_id,
-                        &folder.id,
-                        uid,
-                        flags_of(&fetch),
-                        u64::from(fetch.size.unwrap_or(0)),
-                        fetch.internal_date().map(|d| d.timestamp()),
-                        &parsed,
-                    )?;
-                    if let Some(id) = inserted {
-                        result.new_message_ids.push(id);
-                        result.changed = true;
-                    }
+        for chunk in small.chunks(FETCH_BATCH) {
+            let query = "(UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[])";
+            let fetches: Vec<Fetch> = session.uid_fetch(uid_set(chunk), query).await?.try_collect().await?;
+            for fetch in fetches {
+                let (Some(uid), Some(raw)) = (fetch.uid, fetch.body()) else { continue };
+                let inserted = store.insert_message(
+                    &folder.account_id,
+                    &folder.id,
+                    uid,
+                    flags_of(&fetch),
+                    u64::from(fetch.size.unwrap_or(0)),
+                    fetch.internal_date().map(|d| d.timestamp()),
+                    &mime::parse(raw),
+                )?;
+                if let Some(id) = inserted {
+                    result.new_message_ids.push(id);
+                    result.changed = true;
                 }
             }
+        }
+        for (_, id) in store_headers(session, store, folder, &large).await? {
+            result.new_message_ids.push(id);
+            result.changed = true;
         }
     }
 
@@ -447,6 +513,40 @@ pub async fn sync_folder(session: &mut ImapSession, store: &Store, folder: &Fold
 
     store.set_folder_state(&folder.id, validity, mailbox.uid_next)?;
     Ok(result)
+}
+
+/// An IMAP quoted string.
+fn quoted(text: &str) -> String {
+    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// Asks the server for messages in a folder that contain `text` anywhere,
+/// including mail UwUMail never downloaded; those are stored as previews.
+/// Returns the local ids of the matches, newest first.
+pub async fn search_folder(
+    session: &mut ImapSession,
+    store: &Store,
+    folder: &FolderRecord,
+    text: &str,
+) -> Result<Vec<String>> {
+    session.select(&folder.path).await?;
+    let criteria = format!("TEXT {}", quoted(text));
+    let found = match session.uid_search(format!("CHARSET UTF-8 {criteria}")).await {
+        Ok(found) => found,
+        // Servers that only search in US-ASCII refuse the charset.
+        Err(async_imap::error::Error::No(_) | async_imap::error::Error::Bad(_)) => {
+            session.uid_search(&criteria).await?
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let mut uids: Vec<u32> = found.into_iter().collect();
+    uids.sort_unstable_by(|a, b| b.cmp(a));
+    uids.truncate(SEARCH_LIMIT);
+
+    let mut known = store.ids_by_uid(&folder.id, &uids)?;
+    let missing: Vec<u32> = uids.iter().copied().filter(|uid| !known.contains_key(uid)).collect();
+    known.extend(store_headers(session, store, folder, &missing).await?);
+    Ok(uids.into_iter().filter_map(|uid| known.remove(&uid)).collect())
 }
 
 /// Downloads the full message for something synced headers-only.

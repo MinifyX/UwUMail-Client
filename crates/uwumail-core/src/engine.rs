@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -25,6 +26,8 @@ const FULL_SYNC_EVERY: Duration = Duration::from_secs(5 * 60);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 /// JMAP servers without push are asked for changes this often.
 const JMAP_POLL_EVERY: Duration = Duration::from_secs(60);
+/// Server search over IMAP asks at most this many folders per mailbox.
+const SEARCH_FOLDERS: usize = 25;
 
 pub type UrlOpener = Arc<dyn Fn(&str) + Send + Sync>;
 
@@ -72,6 +75,9 @@ struct Inner {
     created_folders: Mutex<HashMap<(String, String), Instant>>,
     /// Signed-in JMAP connections by account id.
     jmap: AsyncMutex<HashMap<String, Arc<JmapClient>>>,
+    /// Mail from the last this many days is kept complete; older mail as
+    /// previews. 0 keeps everything.
+    offline_days: AtomicU32,
 }
 
 enum Credential {
@@ -131,6 +137,7 @@ impl Engine {
                 pictures: SenderPictures::new(&options.data_dir)?,
                 created_folders: Mutex::new(HashMap::new()),
                 jmap: AsyncMutex::new(HashMap::new()),
+                offline_days: AtomicU32::new(0),
             }),
         })
     }
@@ -364,6 +371,77 @@ impl Engine {
 
     pub fn list_threads(&self, query: &ThreadQuery) -> Result<ThreadPage> {
         self.inner.store.list_threads(query)
+    }
+
+    /// Keeps mail from the last `days` complete and older mail as previews
+    /// (sender, subject, preview; the body loads when opened). `None` keeps
+    /// everything. Bodies already stored that are now too old are dropped.
+    pub fn set_offline_days(&self, days: Option<u32>) -> Result<()> {
+        self.inner.offline_days.store(days.unwrap_or(0), Ordering::Relaxed);
+        if let Some(cutoff) = self.inner.full_after() {
+            self.inner.store.forget_bodies_before(cutoff)?;
+        }
+        Ok(())
+    }
+
+    /// Searches on the servers for `query.search`, also in mail that was never
+    /// downloaded, which then joins the local store as previews. Looks in the
+    /// view's folder, or everywhere but trash and junk for unified views.
+    pub async fn search_server(&self, query: &ThreadQuery) -> Result<ThreadPage> {
+        let text = query.search.as_deref().map(str::trim).filter(|text| !text.is_empty());
+        let Some(text) = text else { return Err(Error::invalid("Enter something to search for.")) };
+        let mut found = Vec::new();
+        for account in self.inner.store.accounts()? {
+            let folder_view = match &query.view {
+                MailboxView::Folder { account_id, folder_id } if *account_id == account.id => Some(folder_id.clone()),
+                MailboxView::Folder { .. } => continue,
+                MailboxView::Unified { .. } => None,
+            };
+            let result = if account.protocol == Protocol::Jmap {
+                self.search_jmap(&account.id, text, folder_view.as_deref()).await
+            } else {
+                self.search_imap(&account.id, text, folder_view.as_deref()).await
+            };
+            match result {
+                Ok(ids) => found.extend(ids),
+                // One unreachable mailbox shouldn't hide the others' results.
+                Err(error) => tracing::warn!("Server search in {} failed: {error}", account.email),
+            }
+        }
+        self.inner.store.list_threads_of(query, &found)
+    }
+
+    async fn search_jmap(&self, account_id: &str, text: &str, folder_id: Option<&str>) -> Result<Vec<String>> {
+        let client = self.inner.jmap_client(account_id).await?;
+        let mailbox = match folder_id {
+            Some(id) => Some(self.inner.store.folder(id)?.path),
+            None => None,
+        };
+        jmap_sync::search(&client, &self.inner.store, account_id, text, mailbox.as_deref()).await
+    }
+
+    async fn search_imap(&self, account_id: &str, text: &str, folder_id: Option<&str>) -> Result<Vec<String>> {
+        let folders: Vec<FolderRecord> = match folder_id {
+            Some(id) => vec![self.inner.store.folder(id)?],
+            None => self
+                .inner
+                .store
+                .folder_records(account_id)?
+                .into_iter()
+                .filter(|f| f.selectable && !matches!(f.role, Some(FolderRole::Trash | FolderRole::Junk)))
+                .take(SEARCH_FOLDERS)
+                .collect(),
+        };
+        let mut ids = Vec::new();
+        for folder in &folders {
+            ids.extend(with_session!(self.inner, account_id, |session| imap::search_folder(
+                session,
+                &self.inner.store,
+                folder,
+                text
+            ))?);
+        }
+        Ok(ids)
     }
 
     /// Loads a conversation and downloads bodies that were synced headers-only.
@@ -657,6 +735,12 @@ fn group_by_folder(locations: &[MessageLocation]) -> HashMap<(String, String), V
 }
 
 impl Inner {
+    /// Mail received before this (Unix seconds) is kept as a preview.
+    fn full_after(&self) -> Option<i64> {
+        let days = self.offline_days.load(Ordering::Relaxed);
+        (days > 0).then(|| crate::mime::now() - i64::from(days) * 24 * 60 * 60)
+    }
+
     fn emit(&self, event: EngineEvent) {
         let _ = self.events.send(event);
     }
@@ -832,7 +916,7 @@ impl Inner {
     async fn sync_jmap(&self, client: &JmapClient, account_id: &str) -> Result<()> {
         let keep = self.recently_created(account_id);
         let folders_changed = jmap_sync::sync_mailboxes(client, &self.store, account_id, &keep).await?;
-        let result = jmap_sync::sync_emails(client, &self.store, account_id).await?;
+        let result = jmap_sync::sync_emails(client, &self.store, account_id, self.full_after()).await?;
         if result.had_messages && !result.new_message_ids.is_empty() {
             let inbox = self.store.folder_by_role(account_id, FolderRole::Inbox)?.map(|f| f.id);
             let unseen: Vec<String> = self
@@ -887,7 +971,7 @@ impl Inner {
     }
 
     async fn sync_one(&self, session: &mut ImapSession, folder: &FolderRecord) -> Result<bool> {
-        let result = imap::sync_folder(session, &self.store, folder).await?;
+        let result = imap::sync_folder(session, &self.store, folder, self.full_after()).await?;
         if folder.role == Some(FolderRole::Inbox) && result.had_messages && !result.new_message_ids.is_empty() {
             let unseen: Vec<String> = self
                 .store

@@ -578,6 +578,19 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
+    /// Local ids of the given uids in a folder, for those already stored.
+    pub fn ids_by_uid(&self, folder_id: &str, uids: &[u32]) -> Result<std::collections::HashMap<u32, String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT id FROM messages WHERE folder_id = ?1 AND uid = ?2")?;
+        let mut found = std::collections::HashMap::new();
+        for uid in uids {
+            if let Some(id) = stmt.query_row(params![folder_id, uid], |row| row.get::<_, String>(0)).optional()? {
+                found.insert(*uid, id);
+            }
+        }
+        Ok(found)
+    }
+
     /// Stores a message synced from the server. Returns the new id, or `None`
     /// when the message was already known.
     #[allow(clippy::too_many_arguments)]
@@ -846,6 +859,23 @@ impl Store {
         Ok(())
     }
 
+    /// The preview line of a message stored headers-only.
+    pub fn set_snippet(&self, id: &str, snippet: &str) -> Result<()> {
+        self.conn().execute("UPDATE messages SET snippet = ?1 WHERE id = ?2", params![snippet, id])?;
+        Ok(())
+    }
+
+    /// Drops the downloaded bodies of messages from before `cutoff` (Unix
+    /// seconds) to save space; subject, preview and search index stay, and
+    /// the body loads again when such a message is opened.
+    pub fn forget_bodies_before(&self, cutoff: i64) -> Result<usize> {
+        Ok(self.conn().execute(
+            "UPDATE messages SET has_body = 0, body_html = NULL, body_text = NULL
+             WHERE has_body = 1 AND date < ?1",
+            [cutoff],
+        )?)
+    }
+
     pub fn update_flags(&self, folder_id: &str, uid: u32, flags: MessageFlags) -> Result<bool> {
         let changed = self.conn().execute(
             "UPDATE messages SET seen = ?1, flagged = ?2, answered = ?3, draft = ?4
@@ -1007,15 +1037,41 @@ impl Store {
     }
 
     pub fn list_threads(&self, query: &ThreadQuery) -> Result<ThreadPage> {
+        self.threads(query, None)
+    }
+
+    /// The conversations of the given messages, e.g. server search results,
+    /// with the query's filter but regardless of view and local search.
+    pub fn list_threads_of(&self, query: &ThreadQuery, message_ids: &[String]) -> Result<ThreadPage> {
+        self.threads(query, Some(message_ids))
+    }
+
+    fn threads(&self, query: &ThreadQuery, only: Option<&[String]>) -> Result<ThreadPage> {
         let mut values: Vec<Value> = Vec::new();
-        let mut clauses = vec![Self::view_clause(&query.view, &mut values)];
+        let mut clauses = Vec::new();
+        match only {
+            Some(ids) => {
+                if ids.is_empty() {
+                    return Ok(ThreadPage { threads: Vec::new(), next_cursor: None });
+                }
+                let placeholders: Vec<String> = ids
+                    .iter()
+                    .map(|id| {
+                        values.push(Value::Text(id.clone()));
+                        format!("?{}", values.len())
+                    })
+                    .collect();
+                clauses.push(format!("m.id IN ({})", placeholders.join(", ")));
+            }
+            None => clauses.push(Self::view_clause(&query.view, &mut values)),
+        }
         match query.filter {
             ListFilter::All => {}
             ListFilter::Unread => clauses.push("m.seen = 0".into()),
             ListFilter::Flagged => clauses.push("m.flagged = 1".into()),
             ListFilter::Attachments => clauses.push("m.attachments_json != '[]'".into()),
         }
-        if let Some(search) = query.search.as_deref().and_then(fts_query) {
+        if let Some(search) = query.search.as_deref().and_then(fts_query).filter(|_| only.is_none()) {
             values.push(Value::Text(search));
             clauses.push(format!(
                 "m.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?{})",

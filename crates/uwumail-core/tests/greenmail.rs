@@ -229,3 +229,93 @@ async fn sync_send_reply_flag_and_trash() {
     engine.remove_account(&account.id).await.unwrap();
     assert!(engine.list_accounts().unwrap().is_empty());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn old_mail_becomes_previews_and_server_search_finds_the_rest() {
+    let Some(host) = server() else {
+        eprintln!("UWUMAIL_TEST_MAILSERVER not set, skipping");
+        return;
+    };
+    let data = tempfile::tempdir().unwrap();
+    let engine = Engine::new(EngineOptions {
+        data_dir: data.path().to_path_buf(),
+        secrets: Arc::new(MemorySecrets::default()),
+        open_url: Arc::new(|_| {}),
+    })
+    .unwrap();
+    // Like the phone: only the last 30 days complete.
+    engine.set_offline_days(Some(30)).unwrap();
+
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("nyu-{}@uwumail.test", &unique[..8]);
+    let imap = ServerSettings { host: host.clone(), port: 3143, security: Security::None };
+    let smtp = ServerSettings { host, port: 3025, security: Security::None };
+
+    // Fill the inbox before UwUMail looks: the oldest mail lies beyond the first sync's window.
+    let mut client = imap::login(&imap, imap::Login::Password { username: &email, password: "uwu" }).await.unwrap();
+    let raw = |subject: &str, body: &str, date: &str| {
+        format!(
+            "From: Leni <leni@uwumail.test>\r\nTo: {email}\r\nSubject: {subject}\r\nDate: {date}\r\n\
+             Message-ID: <{}@uwumail.test>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n",
+            uuid::Uuid::new_v4().simple()
+        )
+    };
+    let long_ago = Some("\"01-Jan-2024 10:00:00 +0000\"");
+    client
+        .append(
+            "INBOX",
+            None,
+            long_ago,
+            raw("Ganz alt", "Das Geheimwort ist Zimtschnecke.", "Mon, 1 Jan 2024 10:00:00 +0000"),
+        )
+        .await
+        .unwrap();
+    for index in 0..imap::INITIAL_WINDOW - 1 {
+        let body = format!("Nachricht {index}");
+        client.append("INBOX", None, None, raw("Neu", &body, "Mon, 14 Sep 2026 10:00:00 +0000")).await.unwrap();
+    }
+    client
+        .append("INBOX", None, long_ago, raw("Etwas aelter", "Hier sind die Kekse.", "Mon, 1 Jan 2024 11:00:00 +0000"))
+        .await
+        .unwrap();
+    let _ = client.logout().await;
+
+    let account = engine
+        .add_account(NewAccount {
+            display_name: "Nyu".into(),
+            email: email.clone(),
+            auth: AuthKind::Password,
+            password: Some("uwu".into()),
+            imap,
+            smtp,
+            username: email.clone(),
+            color: AccountColor::Violet,
+            protocol: Protocol::Imap,
+            jmap_url: None,
+        })
+        .await
+        .unwrap();
+
+    let single = |search: Option<&str>| ThreadQuery { conversations: false, limit: 500, ..inbox_query(search) };
+    let older = wait_for("the older message in the inbox", async || {
+        engine.list_threads(&single(None)).unwrap().threads.into_iter().find(|t| t.subject == "Etwas aelter")
+    })
+    .await;
+
+    // Older than 30 days: only headers are stored, the body comes when opening it.
+    // (GreenMail garbles partial fetches, so there is no preview text here.)
+    let message_id = older.id.strip_prefix("m:").unwrap().to_string();
+    let stored = engine.messages(std::slice::from_ref(&message_id)).unwrap();
+    assert_eq!(stored[0].body_text, None);
+    let opened = engine.get_thread(&older.id, false).await.unwrap();
+    assert!(opened.messages[0].body_text.as_deref().unwrap_or_default().contains("Kekse"));
+
+    // The oldest mail isn't on this device, but the server finds it.
+    assert!(engine.list_threads(&single(Some("Zimtschnecke"))).unwrap().threads.is_empty());
+    let found = engine.search_server(&single(Some("Zimtschnecke"))).await.unwrap();
+    let thread = found.threads.iter().find(|t| t.subject == "Ganz alt").expect("server search finds the old mail");
+    let detail = engine.get_thread(&thread.id, false).await.unwrap();
+    assert!(detail.messages[0].body_text.as_deref().unwrap_or_default().contains("Zimtschnecke"));
+
+    engine.remove_account(&account.id).await.unwrap();
+}

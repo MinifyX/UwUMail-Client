@@ -89,3 +89,34 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: out/*.apk
+
+  smoke:
+    name: Smoke test (emulator)
+    needs: apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: UwUMail-Android-${{ github.sha }}
+          path: out
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # An x86_64 image translates the arm64 APK, like Chromebooks do.
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/android-smoke.sh out/*.apk smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: UwUMail-Android-smoke-${{ github.sha }}
+          retention-days: 7
+          path: smoke/

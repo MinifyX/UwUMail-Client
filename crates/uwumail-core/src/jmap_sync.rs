@@ -24,6 +24,8 @@ const FULL_DOWNLOAD_LIMIT: u64 = 2 * 1024 * 1024;
 const PARALLEL_DOWNLOADS: usize = 6;
 const MAX_CHANGES: usize = 500;
 const LIGHT_PROPERTIES: [&str; 6] = ["id", "blobId", "mailboxIds", "keywords", "size", "receivedAt"];
+/// Server search looks at this many of the newest matches.
+const SEARCH_LIMIT: usize = 200;
 
 #[derive(Debug, Default)]
 pub struct EmailSync {
@@ -216,8 +218,14 @@ async fn existing(client: &Client, remote_ids: Vec<String>) -> Result<(Vec<Value
     Ok((emails, gone))
 }
 
-/// Brings the account's emails in the store up to date.
-pub async fn sync_emails(client: &Client, store: &Store, account_id: &str) -> Result<EmailSync> {
+/// Brings the account's emails in the store up to date. Emails received
+/// before `full_after` (Unix seconds) are stored as previews, like large ones.
+pub async fn sync_emails(
+    client: &Client,
+    store: &Store,
+    account_id: &str,
+    full_after: Option<i64>,
+) -> Result<EmailSync> {
     let known = store.remote_messages(account_id)?;
     let mut result = EmailSync { had_messages: !known.is_empty(), ..EmailSync::default() };
 
@@ -274,12 +282,9 @@ pub async fn sync_emails(client: &Client, store: &Store, account_id: &str) -> Re
         result.changed = true;
     }
 
-    let size_of = |email: &Value| email.get("size").and_then(Value::as_u64).unwrap_or(0);
-    let received = |email: &Value| {
-        text(email, "receivedAt").and_then(mail_parser::DateTime::parse_rfc3339).map(|date| date.to_timestamp())
-    };
+    let old = |email: &Value| full_after.zip(received(email)).is_some_and(|(cutoff, date)| date < cutoff);
     let (small, large): (Vec<_>, Vec<_>) =
-        new_emails.into_iter().partition(|(email, _, _)| size_of(email) <= FULL_DOWNLOAD_LIMIT);
+        new_emails.into_iter().partition(|(email, _, _)| size_of(email) <= FULL_DOWNLOAD_LIMIT && !old(email));
 
     let mut downloads = futures::stream::iter(small)
         .map(|(email, folder_id, flags)| async move {
@@ -312,22 +317,52 @@ pub async fn sync_emails(client: &Client, store: &Store, account_id: &str) -> Re
         }
     }
 
-    for chunk in jmap::chunks(&large, client.session.max_objects_in_get) {
+    for (_, local) in store_previews(client, store, account_id, large).await? {
+        result.new_message_ids.push(local);
+        result.changed = true;
+    }
+
+    store.set_sync_state(account_id, EMAIL_STATE, Some(&state))?;
+    Ok(result)
+}
+
+fn size_of(email: &Value) -> u64 {
+    email.get("size").and_then(Value::as_u64).unwrap_or(0)
+}
+
+fn received(email: &Value) -> Option<i64> {
+    text(email, "receivedAt").and_then(mail_parser::DateTime::parse_rfc3339).map(|date| date.to_timestamp())
+}
+
+/// Stores emails with their headers and the server's preview text; the body
+/// downloads when one is opened. Returns (JMAP id, local id) of those added.
+async fn store_previews(
+    client: &Client,
+    store: &Store,
+    account_id: &str,
+    emails: Vec<(Value, String, MessageFlags)>,
+) -> Result<Vec<(String, String)>> {
+    let mut added = Vec::new();
+    for chunk in jmap::chunks(&emails, client.session.max_objects_in_get) {
         let ids: Vec<&str> = chunk.iter().filter_map(|(email, _, _)| text(email, "id")).collect();
         let responses = client
             .call(vec![(
                 "Email/get",
-                json!({ "accountId": client.account_id(), "ids": ids, "properties": ["id", "headers"] }),
+                json!({ "accountId": client.account_id(), "ids": ids, "properties": ["id", "headers", "preview"] }),
             )])
             .await?;
-        let headers: HashMap<String, Vec<Value>> = list(responses.get(0, "Email/get")?)
+        let details: HashMap<String, Value> = list(responses.get(0, "Email/get")?)
             .into_iter()
-            .filter_map(|email| Some((text(&email, "id")?.to_string(), email.get("headers")?.as_array()?.clone())))
+            .filter_map(|email| Some((text(&email, "id")?.to_string(), email)))
             .collect();
         for (email, folder_id, flags) in chunk {
             let (Some(id), Some(blob)) = (text(&email, "id"), text(&email, "blobId")) else { continue };
-            let Some(header_list) = headers.get(id) else { continue };
-            let parsed = mime::parse(&jmap::header_block(header_list));
+            let Some(detail) = details.get(id) else { continue };
+            let Some(header_list) = detail.get("headers").and_then(Value::as_array) else { continue };
+            let mut parsed = mime::parse(&jmap::header_block(header_list));
+            if let Some(preview) = text(detail, "preview") {
+                parsed.snippet = preview.trim().to_string();
+            }
             if let Some(local) = store.insert_jmap_message(
                 account_id,
                 &folder_id,
@@ -338,14 +373,76 @@ pub async fn sync_emails(client: &Client, store: &Store, account_id: &str) -> Re
                 received(&email),
                 &parsed,
             )? {
-                result.new_message_ids.push(local);
-                result.changed = true;
+                added.push((id.to_string(), local));
             }
         }
     }
+    Ok(added)
+}
 
-    store.set_sync_state(account_id, EMAIL_STATE, Some(&state))?;
-    Ok(result)
+/// Asks the server for emails containing `query`, in one mailbox or everywhere,
+/// including mail UwUMail never downloaded; those are stored as previews.
+/// Returns the local ids of the matches, newest first.
+pub async fn search(
+    client: &Client,
+    store: &Store,
+    account_id: &str,
+    query: &str,
+    mailbox: Option<&str>,
+) -> Result<Vec<String>> {
+    let account = client.account_id();
+    let mut filter = json!({ "text": query });
+    if let Some(mailbox) = mailbox {
+        filter["inMailbox"] = json!(mailbox);
+    }
+    let responses = client
+        .call(vec![
+            (
+                "Email/query",
+                json!({
+                    "accountId": account,
+                    "filter": filter,
+                    "sort": [{ "property": "receivedAt", "isAscending": false }],
+                    "limit": SEARCH_LIMIT.min(client.session.max_objects_in_get),
+                }),
+            ),
+            (
+                "Email/get",
+                json!({
+                    "accountId": account,
+                    "#ids": { "resultOf": "0", "name": "Email/query", "path": "/ids" },
+                    "properties": LIGHT_PROPERTIES,
+                }),
+            ),
+        ])
+        .await?;
+    let order: Vec<String> = responses
+        .get(0, "Email/query")?
+        .get("ids")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(String::from)
+        .collect();
+
+    let known = store.remote_messages(account_id)?;
+    let folders: HashMap<String, FolderRecord> =
+        store.folder_records(account_id)?.into_iter().map(|f| (f.path.clone(), f)).collect();
+    let mut local: HashMap<String, String> = HashMap::new();
+    let mut missing = Vec::new();
+    for email in list(responses.get(1, "Email/get")?) {
+        let Some(id) = text(&email, "id").map(String::from) else { continue };
+        if let Some(message) = known.get(&id) {
+            local.insert(id, message.id.clone());
+        } else if let Some(folder) = jmap::primary_mailbox(email.get("mailboxIds"), &folders, |f| f.role) {
+            let flags = jmap::flags_from_keywords(email.get("keywords"));
+            let folder_id = folder.id.clone();
+            missing.push((email, folder_id, flags));
+        }
+    }
+    local.extend(store_previews(client, store, account_id, missing).await?);
+    Ok(order.into_iter().filter_map(|id| local.remove(&id)).collect())
 }
 
 async fn update_emails(client: &Client, remote_ids: &[String], patch: Value) -> Result<()> {
