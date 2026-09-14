@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/backend/types";
-import { buildDocument, resolveAppearance, ROOT_ID } from "./MessageBody";
+import { buildDocument, fixViewportHeightUnits, isRunaway, resolveAppearance, ROOT_ID } from "./MessageBody";
 
 function message(patch: Partial<Message>): Message {
   return {
@@ -66,6 +66,41 @@ describe("buildDocument", () => {
   // opaque white canvas, which made plain text unreadable in dark mode.
   it("gives dark plain text a matching color scheme", () => {
     expect(buildDocument(message({ bodyText: "Hi" }), false, "dark")).toContain(":root{color-scheme:dark}");
+  });
+});
+
+describe("frame height", () => {
+  // Regression: the frame is as tall as its content, so 100vh grew forever.
+  it("turns viewport height units into fixed pixels", () => {
+    expect(fixViewportHeightUnits(".hero{min-height:100vh;height:50dvh;width:100vw;margin:-2.5vmin}")).toBe(
+      ".hero{min-height:900px;height:450px;width:100vw;margin:-22.5px}",
+    );
+    expect(buildDocument(message({ bodyHtml: '<div style="min-height:100vh">Hi</div>' }), false, "light")).toContain(
+      "min-height:900px",
+    );
+  });
+
+  it("detects a layout that grows by the same step every frame", () => {
+    const history: { time: number; delta: number }[] = [];
+    let height = 1000;
+    let runaway = false;
+    for (let frame = 0; frame < 12 && !runaway; frame += 1) {
+      runaway = isRunaway(history, height, height + 554, frame * 16);
+      height += 554;
+    }
+    expect(runaway).toBe(true);
+  });
+
+  it("lets images that load one after another grow the mail", () => {
+    const history: { time: number; delta: number }[] = [];
+    const steps = [220, 180, 400, 220, 90, 300, 180, 220, 410, 160, 240, 200];
+    let height = 800;
+    const results = steps.map((step, index) => {
+      const result = isRunaway(history, height, height + step, index * 16);
+      height += step;
+      return result;
+    });
+    expect(results.some(Boolean)).toBe(false);
   });
 });
 

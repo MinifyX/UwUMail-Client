@@ -42,6 +42,20 @@ function sanitize(html: string) {
 
 export const ROOT_ID = "uwu-mail-root";
 
+/** The frame height UwUMail pretends to have when a mail sizes things by the viewport. */
+const NOMINAL_VIEWPORT_HEIGHT = 900;
+
+/**
+ * The frame is always as tall as the mail, so `100vh` inside it means "as tall
+ * as myself" and grows forever. Height-based viewport units become fixed pixels.
+ */
+export function fixViewportHeightUnits(html: string): string {
+  return html.replace(/(-?\d*\.?\d+)(dvh|svh|lvh|vh|vmin|vmax)\b/gi, (_, amount: string) => {
+    const pixels = (parseFloat(amount) * NOMINAL_VIEWPORT_HEIGHT) / 100;
+    return `${Math.round(pixels * 100) / 100}px`;
+  });
+}
+
 /**
  * `dark` for plain text means app colors; for HTML it means the mail's own
  * dark mode styles (only used when the mail declares them).
@@ -50,7 +64,7 @@ export function buildDocument(message: Message, allowRemote: boolean, variant: "
   const isHtml = message.bodyHtml !== null;
   const dark = variant === "dark";
   const body = isHtml
-    ? forceColorSchemeQueries(sanitize(message.bodyHtml!), dark)
+    ? fixViewportHeightUnits(forceColorSchemeQueries(sanitize(message.bodyHtml!), dark))
     : linkify(textToHtml(message.bodyText ?? ""));
   const imageSources = allowRemote ? "data: cid: blob: https: http:" : "data: cid: blob:";
   const csp = `default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:; media-src data:`;
@@ -75,6 +89,28 @@ blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${dark ? "#4d233
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>${frame}
 ${isHtml ? html : text}</style></head><body><div id="${ROOT_ID}">${body}</div></body></html>`;
+}
+
+/**
+ * A feedback loop between frame size and layout grows by (almost) the same
+ * amount on every frame. Images loading one after another don't look like that.
+ * Records the step and reports whether the last ten steps form such a loop.
+ */
+export function isRunaway(
+  history: { time: number; delta: number }[],
+  last: number,
+  next: number,
+  now = performance.now(),
+) {
+  if (last <= 0 || next <= last) {
+    history.length = 0;
+    return false;
+  }
+  const delta = next - last;
+  const previous = history[history.length - 1];
+  if (previous && (now - previous.time > 120 || Math.abs(previous.delta - delta) > 2)) history.length = 0;
+  history.push({ time: now, delta });
+  return history.length >= 10;
 }
 
 /** What a mail looks like before any measuring. `auto` still needs the rendered mail to decide. */
@@ -130,18 +166,32 @@ export function MessageBody({ message, allowRemote, appearance, onAutoDecision }
     }
 
     let pending = 0;
+    let last = 0;
+    let frozen = false;
+    const growth: { time: number; delta: number }[] = [];
     // Measure the content wrapper, not the document: the document is never
     // smaller than the frame, so it would only ever grow. Updates wait for the
     // next frame, which also avoids ResizeObserver loop errors.
+    const observer = new ResizeObserver(() => updateHeight());
     const updateHeight = () => {
+      if (frozen) return;
       cancelAnimationFrame(pending);
       pending = requestAnimationFrame(() => {
         const next = Math.max(Math.ceil(root.getBoundingClientRect().height), 24);
-        setHeight((current) => (Math.abs(current - next) > 1 ? next : current));
+        if (Math.abs(next - last) <= 1) return;
+        if (isRunaway(growth, last, next)) {
+          // Some layout keeps growing with its own frame. Stop following it
+          // rather than stretching the mail forever.
+          frozen = true;
+          observer.disconnect();
+          return;
+        }
+        last = next;
+        setHeight(next);
       });
     };
     updateHeight();
-    new ResizeObserver(updateHeight).observe(root);
+    observer.observe(root);
     // Images load after the document; their size changes the height too.
     doc.addEventListener("load", updateHeight, true);
     doc.addEventListener("click", (event) => {
