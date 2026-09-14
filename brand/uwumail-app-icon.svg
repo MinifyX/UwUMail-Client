@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="UwUMail">
+  <defs>
+    <linearGradient id="uwu-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF7EB0"/>
+      <stop offset="1" stop-color="#FF3D84"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#uwu-bg)"/>
+  <rect x="88" y="152" width="336" height="240" rx="44" fill="#C8165F" opacity="0.22"/>
+  <rect x="88" y="138" width="336" height="240" rx="44" fill="#FFFFFF"/>
+  <g fill="none" stroke="#F0357F" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M126 176 L204 276 L256 238 L308 276 L386 176"/>
+    <path d="M190 190 v6 a18 18 0 0 0 36 0 v-6"/>
+    <path d="M286 190 v6 a18 18 0 0 0 36 0 v-6"/>
+  </g>
+</svg>
