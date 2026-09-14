@@ -25,15 +25,27 @@
     "loadMore": "Mehr laden",
     "loading": "Mails werden geladen",
     "empty": {
-      "inbox": { "title": "Alles gelesen", "body": "Neue Mails erscheinen hier." },
-      "search": { "title": "Keine passenden Mails", "body": "Versuch ein anderes Wort oder einen anderen Filter." },
-      "other": { "title": "Hier ist nichts", "body": "Dieser Ordner ist leer." }
+      "inbox": {
+        "title": "Alles gelesen",
+        "body": "Neue Mails erscheinen hier."
+      },
+      "search": {
+        "title": "Keine passenden Mails",
+        "body": "Versuch ein anderes Wort oder einen anderen Filter."
+      },
+      "other": {
+        "title": "Hier ist nichts",
+        "body": "Dieser Ordner ist leer."
+      }
     },
     "count_one": "{{count}} Mail",
     "count_other": "{{count}} Mails"
   },
   "reader": {
-    "empty": { "title": "Keine Mail ausgewählt", "body": "Wähle eine Mail aus, um sie zu lesen." },
+    "empty": {
+      "title": "Keine Mail ausgewählt",
+      "body": "Wähle eine Mail aus, um sie zu lesen."
+    },
     "loading": "Mail wird geladen",
     "reply": "Antworten",
     "replyAll": "Allen antworten",
@@ -96,7 +108,8 @@
   "status": {
     "syncing": "Suche nach neuen Mails",
     "error": "{{account}} ist nicht erreichbar",
-    "demo": "Demo-Modus. Beispieldaten, es wird nichts gesendet."
+    "demo": "Demo-Modus. Beispieldaten, es wird nichts gesendet.",
+    "offline": "Offline, gespeicherte Mails werden angezeigt"
   },
   "onboarding": {
     "welcomeTitle": "Willkommen bei UwUMail",
@@ -118,12 +131,24 @@
     "step": "Schritt {{current}} von {{total}}"
   },
   "layout": {
-    "simple": { "name": "Einfach", "desc": "Zwei Spalten, große Zeilen, weniger Knöpfe." },
-    "pro": { "name": "Profi", "desc": "Ordner immer sichtbar, kompakte Zeilen, Tastenkürzel." }
+    "simple": {
+      "name": "Einfach",
+      "desc": "Zwei Spalten, große Zeilen, weniger Knöpfe."
+    },
+    "pro": {
+      "name": "Profi",
+      "desc": "Ordner immer sichtbar, kompakte Zeilen, Tastenkürzel."
+    }
   },
   "tone": {
-    "playful": { "name": "Verspielt", "desc": "Kaomoji, kleine Witze und süße Meldungen." },
-    "neutral": { "name": "Neutral", "desc": "Klar und schlicht. Gleiche App, ruhigere Worte." },
+    "playful": {
+      "name": "Verspielt",
+      "desc": "Kaomoji, kleine Witze und süße Meldungen."
+    },
+    "neutral": {
+      "name": "Neutral",
+      "desc": "Klar und schlicht. Gleiche App, ruhigere Worte."
+    },
     "sample": "Beispiel: {{text}}"
   },
   "account": {
@@ -225,5 +250,13 @@
     "remove": "Entfernen",
     "retry": "Nochmal versuchen",
     "yesterday": "Gestern"
+  },
+  "folder": {
+    "inbox": "Posteingang",
+    "sent": "Gesendet",
+    "drafts": "Entwürfe",
+    "archive": "Archiv",
+    "trash": "Papierkorb",
+    "junk": "Spam"
   }
 }

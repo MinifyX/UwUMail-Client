@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ChevronDown, PenLine, Plus, Settings } from "lucide-react";
+import { ChevronDown, CircleAlert, LoaderCircle, PenLine, Plus, Settings, WifiOff } from "lucide-react";
 import { useState } from "react";
 import type { Account, Folder, MailboxView } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
@@ -53,6 +53,16 @@ function AccountSection({ account, folders }: { account: Account; folders: Folde
   const [open, setOpen] = useState(true);
   const view = useUi((s) => s.view);
   const setView = useUi((s) => s.setView);
+  const { t } = useT();
+  const { status } = account;
+  const statusLabel =
+    status.state === "syncing"
+      ? t("status.syncing")
+      : status.state === "offline"
+        ? t("status.offline")
+        : status.state === "error"
+          ? `${t("status.error", { account: account.email })}: ${status.message}`
+          : undefined;
 
   return (
     <section className="flex flex-col gap-0.5">
@@ -60,10 +70,16 @@ function AccountSection({ account, folders }: { account: Account; folders: Folde
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
+        title={statusLabel}
         className="flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-bold tracking-wide text-muted uppercase hover:text-ink"
       >
         <AccountDot color={account.color} />
         <span className="min-w-0 flex-1 truncate text-left tracking-normal normal-case">{account.email}</span>
+        {status.state === "syncing" && (
+          <LoaderCircle className="size-3.5 animate-spin text-pink" aria-label={statusLabel} />
+        )}
+        {status.state === "offline" && <WifiOff className="size-3.5 text-warning" aria-label={statusLabel} />}
+        {status.state === "error" && <CircleAlert className="size-3.5 text-danger" aria-label={statusLabel} />}
         <ChevronDown className={clsx("size-3.5 transition-transform", !open && "-rotate-90")} aria-hidden />
       </button>
       {open &&
@@ -73,7 +89,7 @@ function AccountSection({ account, folders }: { account: Account; folders: Folde
             <NavItem
               key={folder.id}
               icon={folderIcon(folder)}
-              label={folder.name}
+              label={folder.role ? t(`folder.${folder.role}`) : folder.name}
               count={folder.role === "inbox" || folder.role === null ? folder.unread : undefined}
               active={sameView(view, target)}
               onClick={() => setView(target)}

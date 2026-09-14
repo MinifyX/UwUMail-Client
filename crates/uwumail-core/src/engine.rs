@@ -413,6 +413,11 @@ impl Engine {
         Ok(())
     }
 
+    /// Messages by id, e.g. to describe new mail in a notification.
+    pub fn messages(&self, message_ids: &[String]) -> Result<Vec<Message>> {
+        self.inner.store.messages_by_ids(message_ids)
+    }
+
     pub fn search_contacts(&self, query: &str) -> Result<Vec<Contact>> {
         let own: Vec<String> = self.inner.store.accounts()?.into_iter().map(|a| a.email).collect();
         self.inner.store.search_contacts(query, &own)

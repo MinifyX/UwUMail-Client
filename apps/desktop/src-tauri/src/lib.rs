@@ -1,8 +1,146 @@
+use std::sync::Arc;
+
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_opener::OpenerExt;
+use tokio::sync::broadcast::error::RecvError;
+use uwumail_core::model::*;
+use uwumail_core::secrets::KeyringSecrets;
+use uwumail_core::{Engine, EngineOptions, Error};
+
+type CommandResult<T> = Result<T, Error>;
+
+#[tauri::command]
+fn list_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<Account>> {
+    engine.list_accounts()
+}
+
+#[tauri::command]
+async fn discover_settings(engine: State<'_, Engine>, email: String) -> CommandResult<DiscoveredSettings> {
+    engine.discover_settings(&email).await
+}
+
+#[tauri::command]
+async fn add_account(engine: State<'_, Engine>, account: NewAccount) -> CommandResult<Account> {
+    engine.add_account(account).await
+}
+
+#[tauri::command]
+async fn remove_account(engine: State<'_, Engine>, account_id: String) -> CommandResult<()> {
+    engine.remove_account(&account_id).await
+}
+
+#[tauri::command]
+fn sync_now(engine: State<'_, Engine>, account_id: Option<String>) -> CommandResult<()> {
+    engine.sync_now(account_id.as_deref());
+    Ok(())
+}
+
+#[tauri::command]
+fn list_folders(engine: State<'_, Engine>, account_id: Option<String>) -> CommandResult<Vec<Folder>> {
+    engine.list_folders(account_id.as_deref())
+}
+
+#[tauri::command]
+fn list_threads(engine: State<'_, Engine>, query: ThreadQuery) -> CommandResult<ThreadPage> {
+    engine.list_threads(&query)
+}
+
+#[tauri::command]
+async fn get_thread(engine: State<'_, Engine>, thread_id: String, conversations: bool) -> CommandResult<ThreadDetail> {
+    engine.get_thread(&thread_id, conversations).await
+}
+
+#[tauri::command]
+async fn set_flags(engine: State<'_, Engine>, message_ids: Vec<String>, change: FlagChange) -> CommandResult<()> {
+    engine.set_flags(&message_ids, change).await
+}
+
+#[tauri::command]
+async fn archive_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<()> {
+    engine.archive(&message_ids).await
+}
+
+#[tauri::command]
+async fn trash_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<()> {
+    engine.trash(&message_ids).await
+}
+
+#[tauri::command]
+async fn send_message(engine: State<'_, Engine>, message: OutgoingMessage) -> CommandResult<()> {
+    engine.send(message).await
+}
+
+#[tauri::command]
+fn search_contacts(engine: State<'_, Engine>, query: String) -> CommandResult<Vec<Contact>> {
+    engine.search_contacts(&query)
+}
+
+/// Sends engine events to the UI and rings for new mail while UwUMail is in the background.
+fn forward(app: &AppHandle, engine: &Engine, event: EngineEvent) {
+    if let EngineEvent::MailReceived { message_ids, .. } = &event {
+        let focused = app.get_webview_window("main").and_then(|window| window.is_focused().ok()).unwrap_or(false);
+        if !focused && let Ok(messages) = engine.messages(message_ids) {
+            let (title, body) = match messages.as_slice() {
+                [one] => (
+                    one.from.name.clone().unwrap_or_else(|| one.from.email.clone()),
+                    if one.subject.is_empty() { one.snippet.clone() } else { one.subject.clone() },
+                ),
+                many => ("UwUMail".to_string(), format!("{} ✉︎", many.len())),
+            };
+            let _ = app.notification().builder().title(title).body(body).show();
+        }
+    }
+    let _ = app.emit(event.name(), &event);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .setup(|app| {
+            let data_dir = app.path().app_data_dir()?;
+            let opener = app.handle().clone();
+            let open_url = Arc::new(move |url: &str| {
+                let _ = opener.opener().open_url(url, None::<&str>);
+            });
+            let engine = tauri::async_runtime::block_on(async move {
+                Engine::new(EngineOptions { data_dir, secrets: Arc::new(KeyringSecrets), open_url })
+            })?;
+            engine.start()?;
+
+            let handle = app.handle().clone();
+            let forwarding = engine.clone();
+            let mut events = engine.subscribe();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    match events.recv().await {
+                        Ok(event) => forward(&handle, &forwarding, event),
+                        Err(RecvError::Lagged(_)) => continue,
+                        Err(RecvError::Closed) => break,
+                    }
+                }
+            });
+
+            app.manage(engine);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            list_accounts,
+            discover_settings,
+            add_account,
+            remove_account,
+            sync_now,
+            list_folders,
+            list_threads,
+            get_thread,
+            set_flags,
+            archive_messages,
+            trash_messages,
+            send_message,
+            search_contacts,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running UwUMail");
 }

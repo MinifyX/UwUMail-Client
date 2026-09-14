@@ -6,12 +6,21 @@
         "title": "Posteingang leer! Zeit für einen Tee (っ˘ω˘ς)",
         "body": "Ich sag dir sofort Bescheid, wenn was ankommt."
       },
-      "search": { "title": "Nix gefunden (・_・;)", "body": "Ich hab überall gesucht, sogar unterm Sofa." },
-      "other": { "title": "So leer, so friedlich (˘ᵕ˘)", "body": "In diesem Ordner liegt gerade nichts." }
+      "search": {
+        "title": "Nix gefunden (・_・;)",
+        "body": "Ich hab überall gesucht, sogar unterm Sofa."
+      },
+      "other": {
+        "title": "So leer, so friedlich (˘ᵕ˘)",
+        "body": "In diesem Ordner liegt gerade nichts."
+      }
     }
   },
   "reader": {
-    "empty": { "title": "Such dir eine Mail aus ✉︎", "body": "Ich mach sie dir genau hier auf." },
+    "empty": {
+      "title": "Such dir eine Mail aus ✉︎",
+      "body": "Ich mach sie dir genau hier auf."
+    },
     "loading": "Umschlag wird geöffnet…",
     "remoteBlocked": "Ich hab externe Bilder blockiert, damit dir keiner hinterherspioniert (｀・ω・´)"
   },
@@ -31,7 +40,8 @@
   "status": {
     "syncing": "Hole frische Mails…",
     "error": "{{account}} antwortet nicht (・_・;)",
-    "demo": "Demo-Modus, nur Spielmails. Nichts verlässt die App (´｡• ω •｡`)"
+    "demo": "Demo-Modus, nur Spielmails. Nichts verlässt die App (´｡• ω •｡`)",
+    "offline": "Kein Internet (・_・;) Ich zeig dir, was ich gespeichert hab"
   },
   "onboarding": {
     "welcomeTitle": "Hallo! Ich bin UwUMail (◕‿◕✿)",
@@ -44,7 +54,9 @@
     "doneBody": "Ich hole deine Mails im Hintergrund."
   },
   "tone": {
-    "playful": { "desc": "Kaomoji, kleine Witze und süße Meldungen (◕ᴗ◕✿)" }
+    "playful": {
+      "desc": "Kaomoji, kleine Witze und süße Meldungen (◕ᴗ◕✿)"
+    }
   },
   "account": {
     "discovering": "Ich schnüffel nach deinen Servereinstellungen…",

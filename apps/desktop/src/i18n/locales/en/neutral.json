@@ -25,15 +25,27 @@
     "loadMore": "Load more",
     "loading": "Loading messages",
     "empty": {
-      "inbox": { "title": "You're all caught up", "body": "New messages will show up here." },
-      "search": { "title": "No messages match", "body": "Try another word or filter." },
-      "other": { "title": "Nothing here", "body": "This folder is empty." }
+      "inbox": {
+        "title": "You're all caught up",
+        "body": "New messages will show up here."
+      },
+      "search": {
+        "title": "No messages match",
+        "body": "Try another word or filter."
+      },
+      "other": {
+        "title": "Nothing here",
+        "body": "This folder is empty."
+      }
     },
     "count_one": "{{count}} message",
     "count_other": "{{count}} messages"
   },
   "reader": {
-    "empty": { "title": "No message selected", "body": "Select a message to read it." },
+    "empty": {
+      "title": "No message selected",
+      "body": "Select a message to read it."
+    },
     "loading": "Loading message",
     "reply": "Reply",
     "replyAll": "Reply all",
@@ -96,7 +108,8 @@
   "status": {
     "syncing": "Checking for mail",
     "error": "Couldn't reach {{account}}",
-    "demo": "Demo mode. Sample data, nothing is sent."
+    "demo": "Demo mode. Sample data, nothing is sent.",
+    "offline": "Offline, showing saved mail"
   },
   "onboarding": {
     "welcomeTitle": "Welcome to UwUMail",
@@ -118,12 +131,24 @@
     "step": "Step {{current}} of {{total}}"
   },
   "layout": {
-    "simple": { "name": "Simple", "desc": "Two columns, big rows, fewer buttons." },
-    "pro": { "name": "Pro", "desc": "Folders always visible, compact rows, keyboard shortcuts." }
+    "simple": {
+      "name": "Simple",
+      "desc": "Two columns, big rows, fewer buttons."
+    },
+    "pro": {
+      "name": "Pro",
+      "desc": "Folders always visible, compact rows, keyboard shortcuts."
+    }
   },
   "tone": {
-    "playful": { "name": "Playful", "desc": "Kaomoji, little jokes and cute messages." },
-    "neutral": { "name": "Neutral", "desc": "Clear and plain. Same app, calmer words." },
+    "playful": {
+      "name": "Playful",
+      "desc": "Kaomoji, little jokes and cute messages."
+    },
+    "neutral": {
+      "name": "Neutral",
+      "desc": "Clear and plain. Same app, calmer words."
+    },
     "sample": "Example: {{text}}"
   },
   "account": {
@@ -225,5 +250,13 @@
     "remove": "Remove",
     "retry": "Try again",
     "yesterday": "Yesterday"
+  },
+  "folder": {
+    "inbox": "Inbox",
+    "sent": "Sent",
+    "drafts": "Drafts",
+    "archive": "Archive",
+    "trash": "Trash",
+    "junk": "Junk"
   }
 }

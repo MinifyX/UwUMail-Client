@@ -2,13 +2,25 @@
   "list": {
     "loading": "Fetching your mail (｡･ω･｡)",
     "empty": {
-      "inbox": { "title": "Inbox zero! Time for tea (っ˘ω˘ς)", "body": "I'll tell you the moment something arrives." },
-      "search": { "title": "Nothing found (・_・;)", "body": "I looked everywhere, even under the sofa." },
-      "other": { "title": "So empty, so peaceful (˘ᵕ˘)", "body": "Nothing in this folder right now." }
+      "inbox": {
+        "title": "Inbox zero! Time for tea (っ˘ω˘ς)",
+        "body": "I'll tell you the moment something arrives."
+      },
+      "search": {
+        "title": "Nothing found (・_・;)",
+        "body": "I looked everywhere, even under the sofa."
+      },
+      "other": {
+        "title": "So empty, so peaceful (˘ᵕ˘)",
+        "body": "Nothing in this folder right now."
+      }
     }
   },
   "reader": {
-    "empty": { "title": "Pick a mail, any mail ✉︎", "body": "I'll open it right here for you." },
+    "empty": {
+      "title": "Pick a mail, any mail ✉︎",
+      "body": "I'll open it right here for you."
+    },
     "loading": "Opening the envelope…",
     "remoteBlocked": "I blocked remote images so nobody can peek at you (｀・ω・´)"
   },
@@ -28,7 +40,8 @@
   "status": {
     "syncing": "Fetching fresh mail…",
     "error": "{{account}} isn't answering (・_・;)",
-    "demo": "Demo mode, just pretend mail. Nothing leaves the app (´｡• ω •｡`)"
+    "demo": "Demo mode, just pretend mail. Nothing leaves the app (´｡• ω •｡`)",
+    "offline": "No internet (・_・;) Showing what I saved for you"
   },
   "onboarding": {
     "welcomeTitle": "Hi! I'm UwUMail (◕‿◕✿)",
@@ -41,7 +54,9 @@
     "doneBody": "I'm fetching your mail in the background."
   },
   "tone": {
-    "playful": { "desc": "Kaomoji, little jokes and cute messages (◕ᴗ◕✿)" }
+    "playful": {
+      "desc": "Kaomoji, little jokes and cute messages (◕ᴗ◕✿)"
+    }
   },
   "account": {
     "discovering": "Sniffing out your server settings…",
