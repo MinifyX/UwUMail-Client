@@ -1,0 +1,4 @@
+{
+  "de": "- Eigener Installer mit Nyu: ein Klick, ohne Adminrechte\n- Updates kommen von selbst (Stabil/Beta)\n- JMAP-Konten mit Push, z. B. Fastmail und Stalwart\n- Anhänge öffnen, speichern und ansehen\n- Firmenlogos als Absenderbilder\n- Unterordner als aufklappbarer Baum\n- Läuft im Infobereich weiter, startet mit Windows, öffnet Mail-Links\n- Links in Mails öffnen sich wieder\n- Viele Sicherheitsverbesserungen (Details im Sicherheitsbericht)",
+  "en": "- Own installer with Nyu: one click, no admin rights\n- Updates arrive on their own (Stable/Beta)\n- JMAP accounts with push, e.g. Fastmail and Stalwart\n- Open, save and preview attachments\n- Company logos as sender pictures\n- Subfolders as a collapsible tree\n- Keeps running in the notification area, starts with Windows, opens mail links\n- Links in mails open again\n- Many security improvements (details in the security report)"
+}

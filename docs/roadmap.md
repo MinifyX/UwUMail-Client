@@ -29,6 +29,9 @@
 - [x] Auto-update on Windows: signed, downloaded quietly, Stable and Beta channels, public `UwUMail-Releases` repo
 - [x] Keep running in the notification area, start with Windows, default mail app (`mailto:` links)
 - [ ] Auto-update on macOS and Linux
+- [x] Security audit with fixes, `SECURITY.md`, dependency audit in CI ([report](security-audit.md))
+- [x] Warning for links whose text shows a different site than the target
+- [x] First beta: 0.2.0-beta.1
 
 ## After v0.1 — official addons
 
