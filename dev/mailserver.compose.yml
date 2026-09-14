@@ -1,0 +1,21 @@
+# Local test mail server for integration tests and manual testing.
+#
+#   docker compose -f dev/mailserver.compose.yml up -d
+#
+# Any username/password is accepted and mailboxes are created on first use.
+# Plain IMAP on 3143, plain SMTP on 3025 (TLS variants on 3993/3465 use a
+# self-signed certificate).
+services:
+  greenmail:
+    image: greenmail/standalone:2.1.8
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.all
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.auth.disabled
+        -Dgreenmail.verbose=false
+    ports:
+      - "3025:3025"
+      - "3143:3143"
+      - "3465:3465"
+      - "3993:3993"

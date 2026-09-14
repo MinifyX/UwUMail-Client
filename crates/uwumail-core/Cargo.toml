@@ -1,0 +1,36 @@
+[package]
+name = "uwumail-core"
+description = "The UwUMail mail engine: accounts, IMAP sync, SMTP, local store and search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ammonia.workspace = true
+async-imap.workspace = true
+base64.workspace = true
+futures.workspace = true
+hickory-resolver.workspace = true
+keyring.workspace = true
+lettre.workspace = true
+mail-parser.workspace = true
+quick-xml.workspace = true
+getrandom.workspace = true
+reqwest.workspace = true
+rusqlite.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
