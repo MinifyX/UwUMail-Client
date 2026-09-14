@@ -49,12 +49,18 @@ adb shell input keyevent KEYCODE_BACK
 sleep 4
 [ -n "$(adb shell pidof "$package" | tr -d '\r')" ] || fail "Back closed UwUMail"
 
-# Window destroyed while the service keeps the process (like swiping UwUMail
-# away): it must come back in a fresh process and draw its UI again.
-adb shell settings put global always_finish_activities 1
+# Window gone while the service keeps the process (like swiping UwUMail away
+# in Recents): it must come back in a fresh process and draw its UI again.
 adb shell am start -W -n "$package/.MainActivity"
 sleep 5
-adb shell input keyevent KEYCODE_HOME
+adb shell am stack list > "$out/tasks.txt" 2>&1
+task=$(tr -d '\r' < "$out/tasks.txt" | grep -m1 "taskId=[0-9]*: $package/" | sed -n 's/.*taskId=\([0-9]*\):.*/\1/p')
+if [ -n "$task" ]; then
+  adb shell am stack remove "$task"
+else
+  echo "::warning::Couldn't find UwUMail's task, pressing Home instead"
+  adb shell input keyevent KEYCODE_HOME
+fi
 sleep 5
 before=$(adb shell pidof "$package" | tr -d '\r')
 [ -n "$before" ] || fail "The mail service didn't keep UwUMail running without a window"
@@ -64,7 +70,11 @@ shot 3-relaunch
 after=$(adb shell pidof "$package" | tr -d '\r')
 [ -n "$after" ] || fail "UwUMail isn't running after the relaunch"
 [ "$after" != "$before" ] || echo "::warning::Relaunch reused the old process"
-adb shell settings put global always_finish_activities 0
+
+# The first update check (20 s after the start) proves HTTPS certificate checks work.
+adb logcat -d > "$out/logcat.txt"
+grep -q "UwUMail : update check" "$out/logcat.txt" || fail "The update check didn't run"
+if grep "UwUMail : update check failed" "$out/logcat.txt"; then fail "HTTPS failed on Android"; fi
 
 adb logcat -d > "$out/logcat.txt"
 grep -q "UwUMail : engine running" "$out/logcat.txt" || fail "The mail engine didn't start (see uwumail-log.txt)"

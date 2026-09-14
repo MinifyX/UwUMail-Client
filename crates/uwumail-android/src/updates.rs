@@ -140,8 +140,11 @@ pub fn start(on_ready: impl Fn(&ReadyUpdate) + Send + Sync + 'static) {
     crate::host::runtime().spawn(async {
         tokio::time::sleep(FIRST_CHECK_AFTER).await;
         loop {
-            if let Err(error) = check().await {
-                tracing::info!("{error}");
+            // In logcat too: the emulator test reads it to know HTTPS works.
+            match check().await {
+                Ok(Some(update)) => crate::native::log(&format!("update check: {} is ready", update.version)),
+                Ok(None) => crate::native::log("update check: nothing new"),
+                Err(error) => crate::native::log(&format!("update check failed: {error}")),
             }
             tokio::time::sleep(CHECK_EVERY).await;
         }
