@@ -148,6 +148,16 @@ pub(crate) fn handle(method: &str, payload: &str) -> Result<Option<String>> {
             launch::deliver(payload)?;
             Ok(None)
         }
+        // How far the start got, for the log.
+        "status" => Ok(Some(
+            json!({
+                "started": crate::native::started(),
+                "certificates": crate::native::certificates_ready(),
+                "engine": ENGINE.get().is_some(),
+                "error": crate::native::start_error(),
+            })
+            .to_string(),
+        )),
         // The phone got (back) online: reconnect right away instead of waiting.
         "networkAvailable" => {
             if let Some(engine) = ENGINE.get() {

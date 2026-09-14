@@ -1,6 +1,7 @@
 package app.uwumail
 
 import android.app.Application
+import android.util.Log
 
 /**
  * Starts the mail engine together with the process, before any window. That
@@ -12,7 +13,14 @@ class UwuApplication : Application() {
         super.onCreate()
         UwuBridge.init(this)
         Notifications.createChannels(this)
-        UwuNative.start(this, dataDir.absolutePath, cacheDir.absolutePath)
+        try {
+            UwuNative.start(this, dataDir.absolutePath, cacheDir.absolutePath)
+        } catch (error: Throwable) {
+            Log.e("UwUMail", "The mail engine didn't start", error)
+            throw error
+        } finally {
+            Log.i("UwUMail", "Start: " + runCatching { UwuNative.call("status", "{}") }.getOrElse { it.toString() })
+        }
         NetworkWatcher.start(this)
     }
 }
