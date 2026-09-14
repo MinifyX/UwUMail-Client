@@ -62,6 +62,7 @@ object UwuBridge {
                 MailWatchService.sync(app)
                 null
             }
+            "offlineDays" -> Prefs.offlineDays(app).toString()
             "setSystemBars" -> {
                 activity.get()?.setSystemBars(args.getBoolean("dark"), args.getString("background"))
                 null

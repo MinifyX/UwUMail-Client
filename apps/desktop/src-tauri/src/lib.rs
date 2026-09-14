@@ -64,6 +64,19 @@ fn list_threads(engine: State<'_, Engine>, query: ThreadQuery) -> CommandResult<
     engine.list_threads(&query)
 }
 
+/// Searches on the servers too, including mail that was never downloaded.
+#[tauri::command]
+async fn search_server(engine: State<'_, Engine>, query: ThreadQuery) -> CommandResult<ThreadPage> {
+    engine.search_server(&query).await
+}
+
+/// How many days of mail stay complete on this device; `None` keeps everything.
+#[tauri::command]
+fn set_offline_days(engine: State<'_, Engine>, days: Option<u32>) -> CommandResult<()> {
+    engine.set_offline_days(days)?;
+    platform::remember_offline_days(days)
+}
+
 #[tauri::command]
 async fn get_thread(engine: State<'_, Engine>, thread_id: String, conversations: bool) -> CommandResult<ThreadDetail> {
     engine.get_thread(&thread_id, conversations).await
@@ -261,6 +274,8 @@ pub fn run() {
             sync_now,
             list_folders,
             list_threads,
+            search_server,
+            set_offline_days,
             get_thread,
             set_flags,
             archive_messages,

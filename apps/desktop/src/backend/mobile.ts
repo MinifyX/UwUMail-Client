@@ -1,6 +1,6 @@
 import { isAndroid } from "@/lib/device";
 import { isTauri } from "./backend";
-import type { Address, OutgoingAttachment } from "./types";
+import type { Address, OutgoingAttachment, ThreadPage, ThreadQuery } from "./types";
 
 /** Something UwUMail was opened for on Android. */
 export type LaunchAction =
@@ -22,6 +22,13 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   return invoke<T>(command, args);
 }
 
+/** Searches on the servers as well, including mail that was never downloaded. Null in the browser demo. */
+export async function searchServer(query: ThreadQuery): Promise<ThreadPage | null> {
+  if (!isTauri()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ThreadPage>("search_server", { query });
+}
+
 /** Android-only pieces of the app shell. Safe to call anywhere. */
 export const mobile = {
   /** Language and tone for notifications shown while no window is open. */
@@ -33,6 +40,9 @@ export const mobile = {
   uiReady: () => call<void>("mobile_action", { action: "uiReady" }),
   /** Android's settings for the lasting "waiting for mail" notification. */
   openWatchSettings: () => call<void>("mobile_action", { action: "watchSettings" }),
+
+  /** Days of mail kept complete on the phone (0 keeps everything). */
+  setOfflineDays: (days: number) => call<void>("set_offline_days", { days: days > 0 ? days : null }),
 
   takeLaunchAction: () => call<LaunchAction>("take_launch_action"),
   onLaunchAction(listener: () => void) {

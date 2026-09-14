@@ -1,7 +1,22 @@
 import clsx from "clsx";
-import { Archive, Check, MailCheck, Menu, PenLine, Plus, RefreshCw, Search, Star, Trash, X } from "lucide-react";
+import {
+  Archive,
+  Check,
+  CloudDownload,
+  MailCheck,
+  Menu,
+  PenLine,
+  Plus,
+  RefreshCw,
+  Search,
+  Star,
+  Trash,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ListFilter } from "@/backend/types";
+import { isTauri } from "@/backend/backend";
+import { searchServer } from "@/backend/mobile";
+import type { ListFilter, ThreadSummary } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -10,6 +25,7 @@ import { useT } from "@/i18n";
 import { useBackLayer } from "@/lib/backStack";
 import { flattenThreads, useAccounts, useMessageActions, useThreads } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
+import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { ThreadRow } from "../mail/ThreadRow";
 import { useViewInfo } from "../mail/view";
@@ -54,6 +70,10 @@ export function MobileList() {
   // A selection belongs to one folder, filter and search; switching ends it.
   const [selection, setSelection] = useState<{ key: string; ids: Set<string> }>({ key: "", ids: new Set() });
   const [compact, setCompact] = useState(false);
+  // Results from the server search, for the folder, filter and search they were made for.
+  const [server, setServer] = useState<{ key: string; threads: ThreadSummary[] } | null>(null);
+  const [searchingServer, setSearchingServer] = useState(false);
+  const conversations = useSettings((s) => s.conversations);
   const scroller = useRef<HTMLDivElement>(null);
   const lastScroll = useRef(0);
 
@@ -63,7 +83,38 @@ export function MobileList() {
   }, [draftSearch, setSearch]);
 
   const query = useThreads(view, filter, search);
-  const threads = flattenThreads(query.data?.pages);
+  const local = flattenThreads(query.data?.pages);
+  const searchKey = JSON.stringify([view, filter, search, conversations]);
+  const fromServer = server?.key === searchKey ? server.threads : null;
+  // Server matches join the local ones in the same list, newest first.
+  const threads = fromServer
+    ? [...new Map([...local, ...fromServer].map((thread) => [thread.id, thread])).values()].sort((a, b) =>
+        b.lastDate.localeCompare(a.lastDate),
+      )
+    : local;
+
+  const askServer = async () => {
+    setSearchingServer(true);
+    try {
+      const page = await searchServer({ view, filter, search, conversations, limit: 200 });
+      if (page) {
+        setServer({ key: searchKey, threads: page.threads });
+        if (page.threads.every((thread) => local.some((known) => known.id === thread.id))) {
+          toast(t("mobile.serverSearch.nothingMore"), "info");
+        }
+      }
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      toast(t("mobile.serverSearch.failed", { reason: message }), "error");
+    } finally {
+      setSearchingServer(false);
+    }
+  };
+  const serverButton = search && isTauri() && !fromServer && (
+    <Button icon={CloudDownload} busy={searchingServer} onClick={() => void askServer()}>
+      {searchingServer ? t("mobile.serverSearch.searching") : t("mobile.serverSearch.button")}
+    </Button>
+  );
   const ids = threads.map((thread) => thread.id).join("|");
   useEffect(() => {
     setVisibleThreadIds(ids ? ids.split("|") : []);
@@ -189,10 +240,12 @@ export function MobileList() {
               title={t(`list.empty.${empty}.title`)}
               body={t(`list.empty.${empty}.body`)}
               action={
-                empty === "noAccount" && (
+                empty === "noAccount" ? (
                   <Button variant="primary" icon={Plus} onClick={() => setAddAccountOpen(true)}>
                     {t("nav.addAccount")}
                   </Button>
+                ) : (
+                  serverButton
                 )
               }
               className="min-h-full"
@@ -236,6 +289,7 @@ export function MobileList() {
               {query.isFetchingNextPage && (
                 <li className="py-4 text-center text-[12.5px] text-muted">{t("list.loading")}</li>
               )}
+              {serverButton && !query.hasNextPage && <li className="flex justify-center px-4 py-5">{serverButton}</li>}
             </ul>
           )}
         </div>

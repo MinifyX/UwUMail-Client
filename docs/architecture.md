@@ -81,6 +81,40 @@ and the command/event bridge. Each Tauri command maps to one core function.
 Long-running work (sync, IDLE) lives in core tasks that push events such as
 `mail:changed` and `account:status` to the UI.
 
+Desktop and Android share this crate; `src/lib.rs` holds the commands and
+`src/desktop.rs` / `src/android.rs` (both as `platform`) what differs: tray,
+updater and dialogs on desktop, the Kotlin bridge on Android.
+
+### Android
+
+The Android app is the same Tauri app (`tauri.android.conf.json`, package
+`app.uwumail`, Android 10+). The Gradle project in `src-tauri/gen/android` is
+checked in because it carries UwUMail's own Kotlin code.
+
+- **The engine lives as long as the process**, not as long as the window:
+  `UwuApplication.onCreate` starts it through `crates/uwumail-android`, and
+  the Tauri window borrows it (`tauri::async_runtime::set` joins its Tokio
+  runtime). That way `MailWatchService`, a foreground service with a quiet
+  notification, keeps IMAP IDLE and JMAP push connected without a window.
+  When Android destroys the window while the service runs, the next start
+  goes through `RelaunchActivity` into a fresh process, because a web view
+  can't be attached to a second activity.
+- **Bridge:** Rust calls `UwuBridge.call(method, json)` and Kotlin calls
+  `UwuNative.call(method, json)` — one JNI function each way. Kotlin handles
+  the Android Keystore (passwords), notifications with actions, shares and
+  `mailto:` intents, opening files, Downloads, the APK installer and the
+  system bars.
+- **TLS:** IMAP, JMAP and HTTPS check certificates through Android
+  (rustls-platform-verifier, including user-installed CAs). SMTP uses
+  Mozilla's root list, because lettre's platform verifier doesn't build for
+  Android.
+- **Offline window:** phones keep the last 90 days complete
+  (`Engine::set_offline_days`); older mail is stored with headers and a
+  preview, and `Engine::search_server` finds and adds mail that never came
+  down.
+- **Signing:** CI signs every APK with the key in the
+  `UWUMAIL_ANDROID_KEYSTORE_*` secrets so newer builds install over older ones.
+
 ### `apps/desktop/src` — the UI
 
 React 19, Vite, Tailwind CSS 4, TypeScript.
@@ -94,6 +128,8 @@ React 19, Vite, Tailwind CSS 4, TypeScript.
   language: `neutral` (complete) and `playful` (overrides). `useT()` picks the
   namespace for the active tone; missing playful keys fall back to neutral.
 - `features/` — mail list, reader, composer, onboarding, settings, addons.
+  `features/mobile` is the phone layout below 700 px: list, reader, drawer,
+  swipes, pull to refresh, app lock and the Android bridge hooks.
 - `addons/` — the addon host (sandbox frames, RPC, permission checks).
 
 ### Mail rendering
@@ -127,6 +163,9 @@ the host too, limited to the hosts in the manifest.
 `<app data>` is `%APPDATA%\app.uwumail.desktop` on Windows,
 `~/Library/Application Support/app.uwumail.desktop` on macOS and
 `~/.local/share/app.uwumail.desktop` on Linux (from the Tauri identifier).
+On Android it's the app's private data folder of `app.uwumail`; passwords are
+encrypted with a key in the Android Keystore and kept in the app's private
+preferences.
 
 ## Sender pictures
 

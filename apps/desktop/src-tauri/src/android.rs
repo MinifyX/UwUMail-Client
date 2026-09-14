@@ -101,6 +101,12 @@ pub async fn save_file(
     Ok(true)
 }
 
+/// Kept on the Android side too, so the engine starts with it before any window.
+pub fn remember_offline_days(days: Option<u32>) -> Result<(), Error> {
+    call("setPrefs", json!({ "offlineDays": days.unwrap_or(0) }))?;
+    Ok(())
+}
+
 pub fn set_run_in_background(enabled: bool) -> Result<(), Error> {
     call("setPrefs", json!({ "backgroundPush": enabled }))?;
     Ok(())

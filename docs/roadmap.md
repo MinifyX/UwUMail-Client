@@ -33,6 +33,20 @@
 - [x] Warning for links whose text shows a different site than the target
 - [x] First beta: 0.2.0-beta.1
 
+## Android
+
+- [x] Same app and engine on Android, signed APK from CI, emulator smoke test
+- [x] Phone layout: list with filters, conversation with thumb-height actions, drawer, full-screen composer
+- [x] Swipe actions (configurable), long press to select, Nyu pull to refresh, back gesture
+- [x] Instant new mail through a foreground service; notifications with "Mark as read" and "Archive"
+- [x] Passwords in the Android Keystore, optional app lock with fingerprint, face or PIN
+- [x] Last 90 days offline (configurable), older mail as previews; server search for everything
+- [x] Share to UwUMail, `mailto:` links, attachments to Downloads, Nyu splash and themed icon
+- [x] Update check against UwUMail-Releases (starts working with the first Android release)
+- [ ] Android release in UwUMail-Releases with the update feed (`android-stable.json`)
+- [ ] Home screen widget
+- [ ] Sign in with Microsoft and Google on Android
+
 ## After v0.1 — official addons
 
 - [ ] Send later + Snooze
@@ -45,5 +59,5 @@
 
 - [ ] CardDAV contact sync
 - [ ] Self-hostable sync server for settings, signatures and addons (AGPL-3.0)
-- [ ] Mobile apps (Tauri iOS / Android)
+- [ ] iOS app
 - [ ] Code signing for Windows and macOS

@@ -305,7 +305,13 @@
     "appLockUnavailable": "Richte zuerst eine Displaysperre auf deinem Handy ein.",
     "backgroundPush": "Sofort über neue Mails informieren",
     "backgroundPushDesc": "UwUMail bleibt im Hintergrund verbunden. Android zeigt dafür eine stille, dauerhafte Mitteilung, die du ausblenden kannst.",
-    "hideWatchNotification": "Mitteilung ausblenden"
+    "hideWatchNotification": "Mitteilung ausblenden",
+    "offlineDays": "Auf dem Handy speichern",
+    "offlineDaysDesc": "Neuere Mails liegen komplett auf dem Handy und lassen sich offline lesen und durchsuchen. Ältere nur mit Absender, Betreff und Vorschau; ihr Inhalt lädt beim Öffnen.",
+    "offlineDays30": "30 Tage",
+    "offlineDays90": "90 Tage",
+    "offlineDaysYear": "1 Jahr",
+    "offlineDaysAll": "Alles"
   },
   "theme": {
     "system": "System",
@@ -440,6 +446,12 @@
     },
     "share": {
       "tooBig": "{{names}} ist zu groß für eine Mail und wurde nicht angehängt."
+    },
+    "serverSearch": {
+      "button": "Auch ältere Mails auf dem Server durchsuchen",
+      "searching": "Suche auf dem Server",
+      "nothingMore": "Auf dem Server gibt es keine weiteren Treffer.",
+      "failed": "Die Suche auf dem Server hat nicht geklappt. {{reason}}"
     }
   }
 }

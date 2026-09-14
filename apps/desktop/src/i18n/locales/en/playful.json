@@ -115,6 +115,10 @@
     },
     "draft": {
       "continue": "Continue writing ✎"
+    },
+    "serverSearch": {
+      "searching": "Nyu is asking the server (｡･ω･｡)",
+      "nothingMore": "The server has nothing else either (・・ )"
     }
   }
 }

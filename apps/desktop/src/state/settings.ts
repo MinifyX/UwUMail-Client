@@ -19,6 +19,8 @@ export type MailAppearance = "auto" | "light" | "dark";
 export type SwipeAction = "read" | "archive" | "trash" | "flag" | "none";
 /** Minutes in the background before the app lock asks again; 0 locks right away. */
 export type LockAfter = 0 | 1 | 5 | 15;
+/** Android: days of mail kept complete on the phone; 0 keeps everything. */
+export type OfflineDays = 30 | 90 | 365 | 0;
 
 export interface Settings {
   onboarded: boolean;
@@ -48,6 +50,7 @@ export interface Settings {
   /** Android: ask for fingerprint, face or PIN when UwUMail opens. */
   appLock: boolean;
   appLockAfter: LockAfter;
+  offlineDays: OfflineDays;
 }
 
 interface SettingsActions {
@@ -82,6 +85,7 @@ export const DEFAULT_SETTINGS: Settings = {
   swipeLeft: "archive",
   appLock: false,
   appLockAfter: 5,
+  offlineDays: 90,
 };
 
 export const useSettings = create<Settings & SettingsActions>()(

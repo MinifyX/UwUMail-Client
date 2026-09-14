@@ -16,8 +16,12 @@ object Prefs {
             if (args.has("language")) putString("language", args.getString("language"))
             if (args.has("tone")) putString("tone", args.getString("tone"))
             if (args.has("backgroundPush")) putBoolean("backgroundPush", args.getBoolean("backgroundPush"))
+            if (args.has("offlineDays")) putInt("offlineDays", args.getInt("offlineDays"))
         }.apply()
     }
+
+    /** Days of mail kept complete on the phone; 0 keeps everything. */
+    fun offlineDays(context: Context) = prefs(context).getInt("offlineDays", 90)
 
     /** Stay connected in the background for instant new mail (on by default). */
     fun backgroundPush(context: Context) = prefs(context).getBoolean("backgroundPush", true)

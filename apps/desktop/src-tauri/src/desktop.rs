@@ -107,6 +107,11 @@ pub async fn save_file(
     Ok(true)
 }
 
+/// The engine keeps the setting while it runs; desktop starts with everything.
+pub fn remember_offline_days(_days: Option<u32>) -> Result<(), Error> {
+    Ok(())
+}
+
 pub fn set_run_in_background(enabled: bool) -> Result<(), Error> {
     background::set_run_in_background(enabled);
     Ok(())

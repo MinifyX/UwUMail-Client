@@ -16,6 +16,7 @@ export function useAndroidBridge() {
   const tone = useSettings((s) => s.tone);
   const language = useSettings((s) => s.language);
   const onboarded = useSettings((s) => s.onboarded);
+  const offlineDays = useSettings((s) => s.offlineDays);
   const { data: accounts = [] } = useAccounts();
   const told = useRef(false);
 
@@ -35,6 +36,10 @@ export function useAndroidBridge() {
   useEffect(() => {
     void mobile.setPrefs(resolveLanguage(language), tone);
   }, [language, tone]);
+
+  useEffect(() => {
+    void mobile.setOfflineDays(offlineDays);
+  }, [offlineDays]);
 
   // The first screen is drawn: Nyu's splash can go.
   useEffect(() => {

@@ -58,6 +58,9 @@ pub(crate) fn start_engine(data_dir: PathBuf, cache_dir: PathBuf) -> Result<()> 
     });
     let _entered = runtime().enter();
     let engine = Engine::new(EngineOptions { data_dir, secrets: Arc::new(KeystoreSecrets), open_url })?;
+    // Phones keep the last 90 days complete unless Settings say otherwise.
+    let days = bridge::call("offlineDays", &json!({}))?.and_then(|days| days.parse::<u32>().ok()).unwrap_or(90);
+    engine.set_offline_days((days > 0).then_some(days))?;
     engine.start()?;
 
     let mut events = engine.subscribe();

@@ -18,7 +18,13 @@ import { useIsPhone } from "@/lib/device";
 import { openLinkNow } from "@/state/links";
 import { useAccounts } from "@/lib/queries";
 import { isDomainEntry, sortEntries } from "@/lib/trustedSenders";
-import { useSettings, type LanguageSetting, type LockAfter, type SwipeAction } from "@/state/settings";
+import {
+  useSettings,
+  type LanguageSetting,
+  type LockAfter,
+  type OfflineDays,
+  type SwipeAction,
+} from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi, type SettingsSection } from "@/state/ui";
 
@@ -310,6 +316,21 @@ function Reading() {
           <SwipeSelect value={settings.swipeRight} onChange={(swipeRight) => settings.update({ swipeRight })} />
           <p className="pt-1 text-sm font-semibold">{t("settings.swipeLeft")}</p>
           <SwipeSelect value={settings.swipeLeft} onChange={(swipeLeft) => settings.update({ swipeLeft })} />
+        </Row>
+      )}
+      {nativeAndroid && (
+        <Row label={t("settings.offlineDays")} description={t("settings.offlineDaysDesc")}>
+          <Segmented
+            label={t("settings.offlineDays")}
+            value={String(settings.offlineDays)}
+            onChange={(value) => settings.update({ offlineDays: Number(value) as OfflineDays })}
+            options={[
+              { value: "30", label: t("settings.offlineDays30") },
+              { value: "90", label: t("settings.offlineDays90") },
+              { value: "365", label: t("settings.offlineDaysYear") },
+              { value: "0", label: t("settings.offlineDaysAll") },
+            ]}
+          />
         </Row>
       )}
       <div className="flex flex-col gap-2 border-b border-hairline py-4">
