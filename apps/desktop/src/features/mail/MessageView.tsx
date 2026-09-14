@@ -1,12 +1,15 @@
 import clsx from "clsx";
-import { ImageOff, Moon, Sun } from "lucide-react";
+import { ChevronDown, ImageIcon, ImageOff, Moon, Sun } from "lucide-react";
 import { useState } from "react";
 import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { Menu } from "@/components/ui/Menu";
 import { useT } from "@/i18n";
 import { displayName, formatFullDate, formatListDate } from "@/lib/format";
+import { useCompanyDomain } from "@/lib/queries";
 import { useResolvedTheme } from "@/lib/theme";
+import { domainEntry, isDomainEntry, matchingEntries } from "@/lib/trustedSenders";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
@@ -55,6 +58,86 @@ function AppearanceToggle({ message, appearance, autoDark }: AppearanceTogglePro
   );
 }
 
+/** "Load images" for this mail, or always for the address or its whole company. */
+function RemoteImagesBanner({ email, onLoad }: { email: string; onLoad: () => void }) {
+  const { t } = useT();
+  const trustSender = useSettings((s) => s.trustSender);
+  const domain = useCompanyDomain(email);
+  const trust = (entry: string) => {
+    trustSender(entry);
+    toast(
+      isDomainEntry(entry)
+        ? t("reader.remoteTrustedDomain", { domain: entry.slice(1) })
+        : t("reader.remoteTrustedAddress", { email: entry }),
+      "success",
+    );
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-pink-tint/70 px-4 py-2.5 text-[13px] text-pink-ink">
+      <ImageOff className="size-4 shrink-0" aria-hidden />
+      <span className="min-w-[min(100%,14rem)] flex-1">{t("reader.remoteBlocked")}</span>
+      <span className="ml-auto flex items-center gap-2">
+        <Button size="sm" variant="secondary" onClick={onLoad}>
+          {t("reader.remoteLoad")}
+        </Button>
+        {domain ? (
+          <Menu
+            align="end"
+            items={[
+              { label: t("reader.remoteTrustAddress", { email }), onSelect: () => trust(email) },
+              { label: t("reader.remoteTrustDomain", { domain }), onSelect: () => trust(domainEntry(domain)) },
+            ]}
+            trigger={({ open, toggle, ...menu }) => (
+              <Button size="sm" variant="ghost" onClick={toggle} {...menu}>
+                {t("reader.remoteTrust")}
+                <ChevronDown
+                  className={clsx("size-3.5 transition-transform", open && "rotate-180")}
+                  strokeWidth={2.4}
+                  aria-hidden
+                />
+              </Button>
+            )}
+          />
+        ) : (
+          <Button size="sm" variant="ghost" onClick={() => trust(email)}>
+            {t("reader.remoteTrustOnly", { email })}
+          </Button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/** Quiet note in a mail whose images load because the sender is on the list. */
+function TrustedImagesNote({ entries, onUntrust }: { entries: string[]; onUntrust: () => void }) {
+  const { t } = useT();
+  const untrustSenders = useSettings((s) => s.untrustSenders);
+  // A whole company says more than one of its addresses.
+  const entry = entries.find(isDomainEntry) ?? entries[0]!;
+  const who = isDomainEntry(entry) ? { domain: entry.slice(1) } : { email: entry };
+  const key = isDomainEntry(entry) ? "Domain" : "Address";
+
+  return (
+    <p className="-mt-1 flex flex-wrap items-center gap-x-1.5 px-1 text-[12px] text-muted">
+      <ImageIcon className="size-3.5 shrink-0" aria-hidden />
+      <span className="min-w-0 break-words">{t(`reader.remoteLoading${key}`, who)}</span>
+      <span aria-hidden>·</span>
+      <button
+        type="button"
+        onClick={() => {
+          untrustSenders(entries);
+          onUntrust();
+          toast(t(`reader.remoteUntrusted${key}`, who), "info");
+        }}
+        className="rounded font-semibold text-pink-ink hover:underline focus-visible:shadow-focus focus-visible:outline-none"
+      >
+        {t("reader.remoteUntrust")}
+      </button>
+    </p>
+  );
+}
+
 interface MessageViewProps {
   message: Message;
   accounts: Account[];
@@ -67,7 +150,6 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const theme = useResolvedTheme();
   const remoteSetting = useSettings((s) => s.remoteImages);
   const trustedSenders = useSettings((s) => s.trustedSenders);
-  const trustSender = useSettings((s) => s.trustSender);
   const mailAppearance = useSettings((s) => s.mailAppearance);
   const senderChoice = useSettings((s) => s.senderAppearance[message.from.email.toLowerCase()]);
   const [loadRemote, setLoadRemote] = useState(false);
@@ -77,8 +159,8 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const recipientNames = message.to
     .map((address) => (myAddresses.has(address.email.toLowerCase()) ? t("reader.me") : displayName(address)))
     .join(", ");
-  const allowRemote =
-    loadRemote || remoteSetting === "always" || trustedSenders.includes(message.from.email.toLowerCase());
+  const trustedBy = matchingEntries(message.from.email, trustedSenders);
+  const allowRemote = loadRemote || remoteSetting === "always" || trustedBy.length > 0;
 
   // A remembered choice for this sender wins; plain text otherwise follows the app.
   const preference = senderChoice ?? (message.bodyHtml !== null ? mailAppearance : "auto");
@@ -129,16 +211,10 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
       </header>
 
       {message.hasRemoteContent && !allowRemote && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-pink-tint/70 px-4 py-2.5 text-[13px] text-pink-ink">
-          <ImageOff className="size-4 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1">{t("reader.remoteBlocked")}</span>
-          <Button size="sm" variant="secondary" onClick={() => setLoadRemote(true)}>
-            {t("reader.remoteLoad")}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => trustSender(message.from.email)}>
-            {t("reader.remoteTrust", { email: message.from.email })}
-          </Button>
-        </div>
+        <RemoteImagesBanner email={message.from.email} onLoad={() => setLoadRemote(true)} />
+      )}
+      {message.hasRemoteContent && remoteSetting !== "always" && trustedBy.length > 0 && (
+        <TrustedImagesNote entries={trustedBy} onUntrust={() => setLoadRemote(false)} />
       )}
 
       <div className="selectable">

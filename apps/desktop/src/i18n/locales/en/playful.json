@@ -33,6 +33,10 @@
     "remoteBlocked": "I blocked remote images so nobody can peek at you (｀・ω・´)",
     "appearanceAutoLight": "I kept this one light, it dressed up so nicely (・ω・)",
     "appearanceRemembered": "Got it, I'll remember that for {{email}} ✿",
+    "remoteTrustedAddress": "Got it, images from {{email}} may come in now ✿",
+    "remoteTrustedDomain": "Got it, images from {{domain}} may come in now ✿",
+    "remoteUntrustedAddress": "Okay, images from {{email}} stay outside again (｀・ω・´)",
+    "remoteUntrustedDomain": "Okay, images from {{domain}} stay outside again (｀・ω・´)",
     "error": {
       "title": "I got tangled in the cable (╥﹏╥)",
       "body": "This message didn't come through. Try again in a moment."
@@ -83,6 +87,7 @@
     "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)",
     "motionDesc": "Should Nyu blink, hop and fly around? With System, I follow your operating system.",
     "senderPicturesCleared": "Pictures swept away ✧",
+    "trustedSendersEmpty": "Nobody on my list yet (・・ )? Add senders right in the image notice of a message.",
     "protocolSwitched": "{{email}} speaks {{protocol}} now ✧",
     "runInBackgroundDesc": "Closing the window lets Nyu nap next to the clock and keep watch for new mail. Quit from the icon there.",
     "upToDate": "All fresh, nothing to do ✧"

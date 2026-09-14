@@ -23,7 +23,7 @@ export interface Settings {
   language: LanguageSetting;
   conversations: boolean;
   remoteImages: RemoteImages;
-  /** Senders whose remote images are always allowed. */
+  /** Addresses and `@domains` whose remote images are always allowed, see lib/trustedSenders. */
   trustedSenders: string[];
   mailAppearance: MailAppearance;
   /** Light/dark choices remembered per sender address (lowercase). */
@@ -39,7 +39,9 @@ export interface Settings {
 
 interface SettingsActions {
   update: (patch: Partial<Settings>) => void;
-  trustSender: (email: string) => void;
+  /** An address or an `@domain`. */
+  trustSender: (entry: string) => void;
+  untrustSenders: (entries: string[]) => void;
   rememberAppearance: (email: string, appearance: "light" | "dark") => void;
   forgetAppearances: () => void;
   toggleFolder: (folderId: string) => void;
@@ -69,10 +71,12 @@ export const useSettings = create<Settings & SettingsActions>()(
     (set) => ({
       ...DEFAULT_SETTINGS,
       update: (patch) => set(patch),
-      trustSender: (email) =>
+      trustSender: (entry) =>
         set((state) => ({
-          trustedSenders: [...new Set([...state.trustedSenders, email.toLowerCase()])],
+          trustedSenders: [...new Set([...state.trustedSenders, entry.toLowerCase()])],
         })),
+      untrustSenders: (entries) =>
+        set((state) => ({ trustedSenders: state.trustedSenders.filter((entry) => !entries.includes(entry)) })),
       rememberAppearance: (email, appearance) =>
         set((state) => ({ senderAppearance: { ...state.senderAppearance, [email.toLowerCase()]: appearance } })),
       forgetAppearances: () => set({ senderAppearance: {} }),

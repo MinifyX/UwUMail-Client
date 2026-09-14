@@ -63,6 +63,17 @@ export function useSenderPicture(email: string) {
   return enabled ? (data ?? null) : null;
 }
 
+/** Main domain of a company address; null for people at mail providers. */
+export function useCompanyDomain(email: string) {
+  const { data } = useQuery({
+    queryKey: ["companyDomain", email.toLowerCase()],
+    queryFn: () => backend().companyDomain(email),
+    staleTime: Infinity,
+    retry: false,
+  });
+  return data ?? null;
+}
+
 export function useThread(threadId: string | null) {
   const conversations = useSettings((s) => s.conversations);
   return useQuery({

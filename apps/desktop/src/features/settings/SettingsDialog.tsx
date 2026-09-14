@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ExternalLink, Info, Keyboard, Mail, Palette, Plus, Puzzle, Upload, Users } from "lucide-react";
+import { ExternalLink, ImageIcon, Info, Keyboard, Mail, Palette, Plus, Puzzle, Upload, Users, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,7 +7,7 @@ import pkg from "../../../package.json";
 import { backend } from "@/backend/backend";
 import type { Account, Protocol } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Segmented, Select, Toggle } from "@/components/ui/Field";
@@ -15,6 +15,7 @@ import { LogoSymbol } from "@/components/ui/Logo";
 import { i18n, useT } from "@/i18n";
 import { openLinkNow } from "@/state/links";
 import { useAccounts } from "@/lib/queries";
+import { isDomainEntry, sortEntries } from "@/lib/trustedSenders";
 import { useSettings, type LanguageSetting } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi, type SettingsSection } from "@/state/ui";
@@ -111,6 +112,56 @@ function Appearance() {
   );
 }
 
+function TrustedSenders() {
+  const { t } = useT();
+  const trusted = useSettings((s) => s.trustedSenders);
+  const remoteImages = useSettings((s) => s.remoteImages);
+  const untrustSenders = useSettings((s) => s.untrustSenders);
+  const entries = sortEntries(trusted);
+
+  return (
+    <Row label={t("settings.trustedSenders")} description={t("settings.trustedSendersDesc")}>
+      {remoteImages === "always" && entries.length > 0 && (
+        <p className="text-[12.5px] text-warning">{t("settings.trustedSendersInactive")}</p>
+      )}
+      {entries.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-line px-4 py-3 text-[13px] text-muted">
+          {t("settings.trustedSendersEmpty")}
+        </p>
+      ) : (
+        <ul
+          className={clsx(
+            "flex max-h-56 flex-col overflow-y-auto rounded-2xl border border-hairline p-1",
+            remoteImages === "always" && "opacity-60",
+          )}
+        >
+          {entries.map((entry) => (
+            <li key={entry} className="flex items-center gap-3 rounded-xl py-1 pr-1 pl-3 hover:bg-elevated">
+              <ImageIcon className="size-4 shrink-0 text-faint" aria-hidden />
+              <span className="selectable min-w-0 flex-1 truncate text-[13.5px]">
+                {isDomainEntry(entry) ? (
+                  <>
+                    <span className="text-muted">@</span>
+                    <span className="font-semibold">{entry.slice(1)}</span>
+                  </>
+                ) : (
+                  entry
+                )}
+              </span>
+              <IconButton
+                icon={X}
+                size="sm"
+                label={t("settings.untrustSender", { sender: entry })}
+                onClick={() => untrustSenders([entry])}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Row>
+  );
+}
+
 function Reading() {
   const { t } = useT();
   const settings = useSettings();
@@ -136,6 +187,7 @@ function Reading() {
           ]}
         />
       </Row>
+      <TrustedSenders />
       <Row label={t("settings.mailAppearance")} description={t("settings.mailAppearanceDesc")}>
         <Segmented
           label={t("settings.mailAppearance")}

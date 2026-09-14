@@ -37,6 +37,8 @@ const OAUTH_DOMAINS: Record<string, "microsoft" | "google"> = {
 /** Demo domains that pretend to offer JMAP. */
 const JMAP_DOMAINS = ["fastmail.com", "fastmail.fm", "uwumail.dev", "stalwart.example"];
 
+const DEMO_FREEMAIL = new Set(["gmail.com", "gmx.de", "web.de", "outlook.com", "icloud.com", "posteo.de", "proton.me"]);
+
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function lang(): "de" | "en" {
@@ -317,6 +319,13 @@ export class DemoBackend implements Backend {
 
   async clearSenderPictures() {
     await wait(100);
+  }
+
+  async companyDomain(email: string) {
+    // Good enough for made-up addresses; the real engine uses the public suffix list.
+    const labels = (email.split("@")[1] ?? "").toLowerCase().split(".").filter(Boolean);
+    const domain = labels.slice(-2).join(".");
+    return labels.length < 2 || DEMO_FREEMAIL.has(domain) ? null : domain;
   }
 
   async searchContacts(query: string): Promise<Contact[]> {

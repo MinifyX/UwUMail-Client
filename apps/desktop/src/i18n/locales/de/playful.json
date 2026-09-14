@@ -33,6 +33,10 @@
     "remoteBlocked": "Ich hab externe Bilder blockiert, damit dir keiner hinterherspioniert (｀・ω・´)",
     "appearanceAutoLight": "Hab ich hell gelassen, die Mail hat sich so schick gemacht (・ω・)",
     "appearanceRemembered": "Merk ich mir für {{email}} ✿",
+    "remoteTrustedAddress": "Merk ich mir: Bilder von {{email}} dürfen rein ✿",
+    "remoteTrustedDomain": "Merk ich mir: Bilder von {{domain}} dürfen rein ✿",
+    "remoteUntrustedAddress": "Okay, Bilder von {{email}} bleiben wieder draußen (｀・ω・´)",
+    "remoteUntrustedDomain": "Okay, Bilder von {{domain}} bleiben wieder draußen (｀・ω・´)",
     "error": {
       "title": "Ich hab mich im Kabel verheddert (╥﹏╥)",
       "body": "Die Mail kam nicht durch. Versuch es gleich nochmal."
@@ -83,6 +87,7 @@
     "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)",
     "motionDesc": "Soll Nyu blinzeln, hüpfen und herumfliegen? „Wie System“ hält sich an dein Betriebssystem.",
     "senderPicturesCleared": "Bilder weggefegt ✧",
+    "trustedSendersEmpty": "Noch keiner auf meiner Liste (・・ )? Absender fügst du direkt im Bilder-Hinweis einer Mail hinzu.",
     "protocolSwitched": "{{email}} spricht jetzt {{protocol}} ✧",
     "runInBackgroundDesc": "Beim Schließen macht Nyu neben der Uhr ein Nickerchen und passt weiter auf neue Mails auf. Beenden über das Symbol dort.",
     "upToDate": "Alles frisch, nichts zu tun ✧"

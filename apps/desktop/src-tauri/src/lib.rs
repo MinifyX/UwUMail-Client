@@ -173,6 +173,12 @@ fn clear_sender_pictures(engine: State<'_, Engine>) -> CommandResult<()> {
     engine.clear_sender_pictures()
 }
 
+/// The main domain of a company address, or `None` for mail providers.
+#[tauri::command]
+fn get_company_domain(email: String) -> Option<String> {
+    uwumail_core::pictures::picture_domain(&email)
+}
+
 #[tauri::command]
 fn set_run_in_background(enabled: bool) {
     background::set_run_in_background(enabled);
@@ -285,6 +291,7 @@ pub fn run() {
             save_attachment,
             get_sender_picture,
             clear_sender_pictures,
+            get_company_domain,
             set_run_in_background,
             take_mailto,
             set_update_channel,

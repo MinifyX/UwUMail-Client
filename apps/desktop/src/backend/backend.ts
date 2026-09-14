@@ -66,6 +66,8 @@ export interface Backend {
   /** Brand logo or website icon for a company address; null for people and mail providers. */
   getSenderPicture(email: string): Promise<SenderPicture | null>;
   clearSenderPictures(): Promise<void>;
+  /** Main domain of a company address (`news.shop.example` → `shop.example`); null for mail providers. */
+  companyDomain(email: string): Promise<string | null>;
 
   /** Whether closing the window keeps UwUMail running in the tray. */
   setRunInBackground(enabled: boolean): Promise<void>;

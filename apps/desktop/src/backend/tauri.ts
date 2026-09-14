@@ -126,6 +126,10 @@ export class TauriBackend implements Backend {
     return call<void>("clear_sender_pictures");
   }
 
+  companyDomain(email: string) {
+    return call<string | null>("get_company_domain", { email });
+  }
+
   searchContacts(query: string) {
     return call<Contact[]>("search_contacts", { query });
   }
