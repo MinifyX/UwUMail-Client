@@ -61,7 +61,6 @@ jobs:
 
       - name: Build
         env:
-          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
           UWUMAIL_ANDROID_KEYSTORE: ${{ runner.temp }}/uwumail-android.p12
           UWUMAIL_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_PASSWORD }}
           UWUMAIL_ANDROID_KEY_ALIAS: uwumail
@@ -70,7 +69,9 @@ jobs:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
-        run: pnpm tauri android build --apk --target aarch64 --ci
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          pnpm tauri android build --apk --target aarch64 --ci
 
       - name: Collect
         run: |
