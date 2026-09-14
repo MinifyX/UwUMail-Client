@@ -291,7 +291,21 @@
     "checkUpdates": "Nach Updates suchen",
     "upToDate": "UwUMail ist aktuell",
     "updateFound": "Version {{version}} ist bereit",
-    "updateCheckFailed": "Konnte nicht nach Updates suchen. {{reason}}"
+    "updateCheckFailed": "Konnte nicht nach Updates suchen. {{reason}}",
+    "security": "Sicherheit",
+    "swipeRight": "Nach rechts wischen",
+    "swipeLeft": "Nach links wischen",
+    "swipeDesc": "Was passiert, wenn du eine Mail in der Liste zur Seite wischst.",
+    "appLock": "App-Sperre",
+    "appLockDesc": "Beim Öffnen nach Fingerabdruck, Gesicht oder PIN fragen.",
+    "appLockAfter": "Erneut sperren nach",
+    "lockNow": "Sofort",
+    "lockMinutes_one": "{{count}} Minute",
+    "lockMinutes_other": "{{count}} Minuten",
+    "appLockUnavailable": "Richte zuerst eine Displaysperre auf deinem Handy ein.",
+    "backgroundPush": "Sofort über neue Mails informieren",
+    "backgroundPushDesc": "UwUMail bleibt im Hintergrund verbunden. Android zeigt dafür eine stille, dauerhafte Mitteilung, die du ausblenden kannst.",
+    "hideWatchNotification": "Mitteilung ausblenden"
   },
   "theme": {
     "system": "System",
@@ -366,14 +380,17 @@
     "organizer": "Organisiert von",
     "email": "E-Mail",
     "phone": "Telefon",
-    "notPdf": "Diese Datei gibt sich als PDF aus, ist aber keins, deshalb wird sie hier nicht angezeigt. Speichere sie oder öffne sie mit einer App, wenn du ihr vertraust."
+    "notPdf": "Diese Datei gibt sich als PDF aus, ist aber keins, deshalb wird sie hier nicht angezeigt. Speichere sie oder öffne sie mit einer App, wenn du ihr vertraust.",
+    "dangerOpen": "Trotzdem öffnen",
+    "dangerCancel": "Nicht öffnen"
   },
   "update": {
     "readyTitle": "Neue Version bereit",
     "version": "UwUMail {{version}}",
     "whatsNew": "Was ist neu",
     "restart": "Jetzt neu starten",
-    "later": "Später"
+    "later": "Später",
+    "install": "Jetzt aktualisieren"
   },
   "link": {
     "warningTitle": "Dieser Link führt woanders hin",
@@ -387,5 +404,42 @@
   "density": {
     "relaxed": "Entspannt",
     "compact": "Kompakt"
+  },
+  "mobile": {
+    "selected_one": "{{count}} ausgewählt",
+    "selected_other": "{{count}} ausgewählt",
+    "selection": {
+      "clear": "Auswahl aufheben"
+    },
+    "swipe": {
+      "read": "Gelesen",
+      "unread": "Ungelesen",
+      "archive": "Archiv",
+      "trash": "Löschen",
+      "flag": "Markieren",
+      "none": "Nichts"
+    },
+    "pull": {
+      "pull": "Zum Aktualisieren ziehen",
+      "release": "Loslassen zum Aktualisieren",
+      "refreshing": "Suche nach neuen Mails"
+    },
+    "draft": {
+      "to": "An {{names}}",
+      "continue": "Weiterschreiben"
+    },
+    "more": "Mehr",
+    "actions": "Aktionen",
+    "replyAllShort": "Allen",
+    "lock": {
+      "title": "UwUMail ist gesperrt",
+      "body": "Entsperre mit Fingerabdruck, Gesicht oder der PIN deines Handys.",
+      "unlock": "Entsperren",
+      "reason": "UwUMail entsperren",
+      "prompt": "UwUMail entsperren"
+    },
+    "share": {
+      "tooBig": "{{names}} ist zu groß für eine Mail und wurde nicht angehängt."
+    }
   }
 }

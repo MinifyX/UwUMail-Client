@@ -291,7 +291,21 @@
     "checkUpdates": "Check for updates",
     "upToDate": "UwUMail is up to date",
     "updateFound": "Version {{version}} is ready",
-    "updateCheckFailed": "Couldn't check for updates. {{reason}}"
+    "updateCheckFailed": "Couldn't check for updates. {{reason}}",
+    "security": "Security",
+    "swipeRight": "Swipe right",
+    "swipeLeft": "Swipe left",
+    "swipeDesc": "What happens when you swipe a mail in the list.",
+    "appLock": "App lock",
+    "appLockDesc": "Ask for fingerprint, face or PIN when UwUMail opens.",
+    "appLockAfter": "Lock again after",
+    "lockNow": "Right away",
+    "lockMinutes_one": "{{count}} minute",
+    "lockMinutes_other": "{{count}} minutes",
+    "appLockUnavailable": "Set up a screen lock on your phone first.",
+    "backgroundPush": "Tell me about new mail right away",
+    "backgroundPushDesc": "UwUMail stays connected in the background. Android shows a quiet, lasting notification for that, which you can hide.",
+    "hideWatchNotification": "Hide notification"
   },
   "theme": {
     "system": "System",
@@ -366,14 +380,17 @@
     "organizer": "Organizer",
     "email": "Email",
     "phone": "Phone",
-    "notPdf": "This file says it's a PDF but isn't one, so it isn't shown here. Save it or open it with an app if you trust it."
+    "notPdf": "This file says it's a PDF but isn't one, so it isn't shown here. Save it or open it with an app if you trust it.",
+    "dangerOpen": "Open anyway",
+    "dangerCancel": "Don't open"
   },
   "update": {
     "readyTitle": "A new version is ready",
     "version": "UwUMail {{version}}",
     "whatsNew": "What's new",
     "restart": "Restart now",
-    "later": "Later"
+    "later": "Later",
+    "install": "Update now"
   },
   "link": {
     "warningTitle": "This link goes somewhere else",
@@ -387,5 +404,42 @@
   "density": {
     "relaxed": "Relaxed",
     "compact": "Compact"
+  },
+  "mobile": {
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "selection": {
+      "clear": "Clear selection"
+    },
+    "swipe": {
+      "read": "Read",
+      "unread": "Unread",
+      "archive": "Archive",
+      "trash": "Delete",
+      "flag": "Flag",
+      "none": "Nothing"
+    },
+    "pull": {
+      "pull": "Pull to refresh",
+      "release": "Release to refresh",
+      "refreshing": "Looking for new mail"
+    },
+    "draft": {
+      "to": "To {{names}}",
+      "continue": "Continue writing"
+    },
+    "more": "More",
+    "actions": "Actions",
+    "replyAllShort": "All",
+    "lock": {
+      "title": "UwUMail is locked",
+      "body": "Unlock with your fingerprint, face or your phone's PIN.",
+      "unlock": "Unlock",
+      "reason": "Unlock UwUMail",
+      "prompt": "Unlock UwUMail"
+    },
+    "share": {
+      "tooBig": "{{names}} is too big for a mail and wasn't attached."
+    }
   }
 }

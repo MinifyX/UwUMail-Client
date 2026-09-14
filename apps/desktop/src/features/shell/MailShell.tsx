@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { backend } from "@/backend/backend";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
+import { isAndroid, PRO_QUERY, useIsPhone, useMediaQuery } from "@/lib/device";
 import { useHotkeys, type HotkeyMap } from "@/lib/hotkeys";
 import { useAccounts, useBackendEvents } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
@@ -12,6 +13,7 @@ import { useUi } from "@/state/ui";
 import { AccountSetup } from "../accounts/AccountSetup";
 import { Composer } from "../compose/Composer";
 import { MailboxNav } from "../mail/MailboxNav";
+import { MobileShell } from "../mobile/MobileShell";
 import { ThreadList } from "../mail/ThreadList";
 import { ThreadReader } from "../mail/ThreadReader";
 import { SettingsDialog } from "../settings/SettingsDialog";
@@ -46,6 +48,10 @@ export function MailShell() {
   const selectedThreadId = useUi((s) => s.selectedThreadId);
   const drawerOpen = useUi((s) => s.folderDrawerOpen);
   const setDrawerOpen = useUi((s) => s.setFolderDrawerOpen);
+  const phone = useIsPhone();
+  const roomForPro = useMediaQuery(PRO_QUERY);
+  // Android tablets in portrait lack the room for three columns.
+  const pro = layout === "pro" && (roomForPro || !isAndroid);
   useAccounts();
   useBackendEvents();
 
@@ -81,7 +87,9 @@ export function MailShell() {
         </p>
       )}
 
-      {layout === "pro" ? (
+      {phone ? (
+        <MobileShell />
+      ) : pro ? (
         // A minmax(0,1fr) row keeps the columns at window height so each one scrolls on its own.
         <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,420px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
           <MailboxNav className="min-h-0 bg-canvas" />

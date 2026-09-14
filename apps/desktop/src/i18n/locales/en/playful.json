@@ -90,7 +90,8 @@
     "trustedSendersEmpty": "Nobody on my list yet (・・ )? Add senders right in the image notice of a message.",
     "protocolSwitched": "{{email}} speaks {{protocol}} now ✧",
     "runInBackgroundDesc": "Closing the window lets Nyu nap next to the clock and keep watch for new mail. Quit from the icon there.",
-    "upToDate": "All fresh, nothing to do ✧"
+    "upToDate": "All fresh, nothing to do ✧",
+    "backgroundPushDesc": "Nyu stays awake and watches your mailbox. Android shows a quiet notification for that, which you can hide ♡"
   },
   "attachment": {
     "loading": "Unpacking the attachment…",
@@ -102,5 +103,18 @@
   },
   "link": {
     "warningTitle": "Hmm, this link might be fibbing (・_・;)"
+  },
+  "mobile": {
+    "pull": {
+      "release": "Let go and I'll check ✧",
+      "refreshing": "Nyu is checking the mailbox (｡･ω･｡)"
+    },
+    "lock": {
+      "title": "Nyu is taking a nap (˘ω˘)",
+      "body": "Wake me with your fingerprint, face or PIN."
+    },
+    "draft": {
+      "continue": "Continue writing ✎"
+    }
   }
 }

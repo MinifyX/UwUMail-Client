@@ -15,6 +15,10 @@ export type RemoteImages = "ask" | "always";
 export type UpdateChannel = "stable" | "beta";
 /** How HTML mail looks while the app is dark. */
 export type MailAppearance = "auto" | "light" | "dark";
+/** What swiping a mail in the phone list does. */
+export type SwipeAction = "read" | "archive" | "trash" | "flag" | "none";
+/** Minutes in the background before the app lock asks again; 0 locks right away. */
+export type LockAfter = 0 | 1 | 5 | 15;
 
 export interface Settings {
   onboarded: boolean;
@@ -38,6 +42,12 @@ export interface Settings {
   /** Closing the window keeps UwUMail running in the tray. */
   runInBackground: boolean;
   updateChannel: UpdateChannel;
+  /** Phone list: swiping right and left. */
+  swipeRight: SwipeAction;
+  swipeLeft: SwipeAction;
+  /** Android: ask for fingerprint, face or PIN when UwUMail opens. */
+  appLock: boolean;
+  appLockAfter: LockAfter;
 }
 
 interface SettingsActions {
@@ -68,6 +78,10 @@ export const DEFAULT_SETTINGS: Settings = {
   runInBackground: true,
   // Someone who installed a beta wants the next beta too.
   updateChannel: pkg.version.includes("-") ? "beta" : "stable",
+  swipeRight: "read",
+  swipeLeft: "archive",
+  appLock: false,
+  appLockAfter: 5,
 };
 
 export const useSettings = create<Settings & SettingsActions>()(

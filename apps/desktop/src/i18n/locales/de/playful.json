@@ -90,7 +90,8 @@
     "trustedSendersEmpty": "Noch keiner auf meiner Liste (・・ )? Absender fügst du direkt im Bilder-Hinweis einer Mail hinzu.",
     "protocolSwitched": "{{email}} spricht jetzt {{protocol}} ✧",
     "runInBackgroundDesc": "Beim Schließen macht Nyu neben der Uhr ein Nickerchen und passt weiter auf neue Mails auf. Beenden über das Symbol dort.",
-    "upToDate": "Alles frisch, nichts zu tun ✧"
+    "upToDate": "Alles frisch, nichts zu tun ✧",
+    "backgroundPushDesc": "Nyu bleibt wach und passt auf dein Postfach auf. Android zeigt dafür eine stille Mitteilung, die du ausblenden kannst ♡"
   },
   "attachment": {
     "loading": "Ich pack den Anhang aus…",
@@ -102,5 +103,18 @@
   },
   "link": {
     "warningTitle": "Hm, dieser Link schummelt vielleicht (・_・;)"
+  },
+  "mobile": {
+    "pull": {
+      "release": "Loslassen, dann guck ich nach ✧",
+      "refreshing": "Nyu sieht nach neuer Post (｡･ω･｡)"
+    },
+    "lock": {
+      "title": "Nyu hält ein Nickerchen (˘ω˘)",
+      "body": "Weck mich mit deinem Fingerabdruck, Gesicht oder deiner PIN."
+    },
+    "draft": {
+      "continue": "Weiterschreiben ✎"
+    }
   }
 }

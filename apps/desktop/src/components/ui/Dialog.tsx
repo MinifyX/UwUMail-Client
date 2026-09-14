@@ -41,6 +41,9 @@ export function Dialog({ open, onClose, title, children, width = "md", className
         width === "md" && "max-w-[560px]",
         width === "lg" && "max-w-[860px]",
         width === "viewer" && "h-[calc(100vh-48px)] max-h-none max-w-[1200px]",
+        // Phones: everything but small confirmations fills the screen.
+        width !== "sm" &&
+          "max-[699px]:h-full max-[699px]:max-h-none max-[699px]:w-full max-[699px]:max-w-none max-[699px]:rounded-none max-[699px]:border-0",
         className,
       )}
     >

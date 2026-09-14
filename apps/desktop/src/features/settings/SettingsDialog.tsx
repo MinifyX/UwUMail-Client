@@ -1,10 +1,11 @@
 import clsx from "clsx";
-import { ExternalLink, ImageIcon, Info, Keyboard, Mail, Palette, Plus, Puzzle, Upload, Users, X } from "lucide-react";
+import { BellOff, ExternalLink, ImageIcon, Info, Keyboard, Lock, Mail, Palette, Plus, Puzzle, Upload, Users, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import pkg from "../../../package.json";
 import { backend } from "@/backend/backend";
+import { mobile, nativeAndroid } from "@/backend/mobile";
 import type { Account, Protocol } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -13,18 +14,20 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Segmented, Select, Toggle } from "@/components/ui/Field";
 import { LogoSymbol } from "@/components/ui/Logo";
 import { i18n, useT } from "@/i18n";
+import { useIsPhone } from "@/lib/device";
 import { openLinkNow } from "@/state/links";
 import { useAccounts } from "@/lib/queries";
 import { isDomainEntry, sortEntries } from "@/lib/trustedSenders";
-import { useSettings, type LanguageSetting } from "@/state/settings";
+import { useSettings, type LanguageSetting, type LockAfter, type SwipeAction } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi, type SettingsSection } from "@/state/ui";
 
 const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
 
-const SECTIONS: { id: SettingsSection; icon: LucideIcon }[] = [
+const SECTIONS: { id: SettingsSection; icon: LucideIcon; androidOnly?: boolean }[] = [
   { id: "appearance", icon: Palette },
   { id: "mail", icon: Mail },
+  { id: "security", icon: Lock, androidOnly: true },
   { id: "accounts", icon: Users },
   { id: "addons", icon: Puzzle },
   { id: "about", icon: Info },
@@ -173,9 +176,64 @@ function TrustedSenders() {
   );
 }
 
+const SWIPE_ACTIONS: SwipeAction[] = ["read", "archive", "trash", "flag", "none"];
+
+function SwipeSelect({ value, onChange }: { value: SwipeAction; onChange: (value: SwipeAction) => void }) {
+  const { t } = useT();
+  return (
+    <Select value={value} onChange={(event) => onChange(event.target.value as SwipeAction)} className="max-w-[240px]">
+      {SWIPE_ACTIONS.map((action) => (
+        <option key={action} value={action}>
+          {t(`mobile.swipe.${action}`)}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+const LOCK_AFTER: LockAfter[] = [0, 1, 5, 15];
+
+function Security() {
+  const { t } = useT();
+  const appLock = useSettings((s) => s.appLock);
+  const appLockAfter = useSettings((s) => s.appLockAfter);
+  const update = useSettings((s) => s.update);
+  return (
+    <>
+      <div className="border-b border-hairline py-4">
+        <Toggle
+          checked={appLock}
+          onChange={async (enabled) => {
+            if (!enabled) return update({ appLock: false });
+            if (!(await mobile.canLock())) return toast(t("settings.appLockUnavailable"), "error");
+            // Only turn it on once the phone confirmed it can unlock.
+            if (await mobile.unlock(t("mobile.lock.reason"), t("mobile.lock.prompt"))) update({ appLock: true });
+          }}
+          label={t("settings.appLock")}
+          description={t("settings.appLockDesc")}
+        />
+      </div>
+      {appLock && (
+        <Row label={t("settings.appLockAfter")}>
+          <Segmented
+            label={t("settings.appLockAfter")}
+            value={String(appLockAfter)}
+            onChange={(value) => update({ appLockAfter: Number(value) as LockAfter })}
+            options={LOCK_AFTER.map((minutes) => ({
+              value: String(minutes),
+              label: minutes === 0 ? t("settings.lockNow") : t("settings.lockMinutes", { count: minutes }),
+            }))}
+          />
+        </Row>
+      )}
+    </>
+  );
+}
+
 function Reading() {
   const { t } = useT();
   const settings = useSettings();
+  const phone = useIsPhone();
   const client = useQueryClient();
   return (
     <>
@@ -247,13 +305,31 @@ function Reading() {
           {t("settings.clearSenderPictures")}
         </Button>
       </div>
-      <div className="border-b border-hairline py-4">
+      {phone && (
+        <Row label={t("settings.swipeRight")} description={t("settings.swipeDesc")}>
+          <SwipeSelect value={settings.swipeRight} onChange={(swipeRight) => settings.update({ swipeRight })} />
+          <p className="pt-1 text-sm font-semibold">{t("settings.swipeLeft")}</p>
+          <SwipeSelect value={settings.swipeLeft} onChange={(swipeLeft) => settings.update({ swipeLeft })} />
+        </Row>
+      )}
+      <div className="flex flex-col gap-2 border-b border-hairline py-4">
         <Toggle
           checked={settings.runInBackground}
           onChange={(runInBackground) => settings.update({ runInBackground })}
-          label={t("settings.runInBackground")}
-          description={t("settings.runInBackgroundDesc")}
+          label={t(nativeAndroid ? "settings.backgroundPush" : "settings.runInBackground")}
+          description={t(nativeAndroid ? "settings.backgroundPushDesc" : "settings.runInBackgroundDesc")}
         />
+        {nativeAndroid && settings.runInBackground && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={BellOff}
+            className="self-start"
+            onClick={() => void mobile.openWatchSettings()}
+          >
+            {t("settings.hideWatchNotification")}
+          </Button>
+        )}
       </div>
     </>
   );
@@ -439,7 +515,7 @@ export function SettingsDialog() {
     <Dialog open={section !== null} onClose={closeSettings} title={t("settings.title")} width="lg">
       <div className="flex min-h-[460px] flex-col gap-2 px-4 pb-5 sm:flex-row sm:gap-6 sm:px-6">
         <nav className="flex shrink-0 gap-1 overflow-x-auto sm:w-48 sm:flex-col" aria-label={t("settings.title")}>
-          {SECTIONS.map(({ id, icon: Icon }) => (
+          {SECTIONS.filter((item) => !item.androidOnly || nativeAndroid).map(({ id, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -458,6 +534,7 @@ export function SettingsDialog() {
         <div className="min-w-0 flex-1">
           {section === "appearance" && <Appearance />}
           {section === "mail" && <Reading />}
+          {section === "security" && <Security />}
           {section === "accounts" && <Accounts />}
           {section === "addons" && <Addons />}
           {section === "about" && <About />}

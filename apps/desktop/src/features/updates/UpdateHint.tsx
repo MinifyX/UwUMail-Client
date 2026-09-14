@@ -2,6 +2,7 @@ import { ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
+import { nativeAndroid } from "@/backend/mobile";
 import { Button } from "@/components/ui/Button";
 import { LogoSymbol } from "@/components/ui/Logo";
 import { useT } from "@/i18n";
@@ -20,7 +21,7 @@ export function UpdateHint() {
   return (
     <aside
       aria-live="polite"
-      className="fixed right-5 bottom-5 z-40 w-[min(340px,calc(100vw-32px))] animate-slide-up rounded-[20px] border border-hairline bg-elevated p-4 shadow-float"
+      className="fixed right-5 bottom-5 z-40 w-[min(340px,calc(100vw-32px))] animate-slide-up rounded-[20px] border border-hairline bg-elevated p-4 shadow-float max-[699px]:right-3 max-[699px]:bottom-24"
     >
       <div className="flex gap-3">
         <LogoSymbol mood="sparkle" hop={1} className="h-11 w-auto shrink-0" />
@@ -71,7 +72,7 @@ export function UpdateHint() {
             }
           }}
         >
-          {t("update.restart")}
+          {t(nativeAndroid ? "update.install" : "update.restart")}
         </Button>
       </div>
     </aside>

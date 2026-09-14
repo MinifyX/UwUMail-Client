@@ -113,6 +113,7 @@ export class TauriBackend implements Backend {
     return call<boolean>("open_attachment", { attachmentId });
   }
 
+  // On Android this saves to Downloads/UwUMail, elsewhere a native dialog asks where.
   saveAttachment(attachmentId: string) {
     return call<boolean>("save_attachment", { attachmentId });
   }

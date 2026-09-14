@@ -13,7 +13,7 @@ export function Toaster() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed bottom-5 left-1/2 z-50 flex w-[min(440px,calc(100vw-32px))] -translate-x-1/2 flex-col items-center gap-2"
+      className="pointer-events-none fixed bottom-5 left-1/2 z-50 flex w-[min(440px,calc(100vw-32px))] -translate-x-1/2 flex-col items-center gap-2 max-[699px]:top-2 max-[699px]:bottom-auto"
     >
       {toasts.map((item) => {
         const Icon = ICONS[item.tone];

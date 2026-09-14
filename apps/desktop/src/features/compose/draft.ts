@@ -29,6 +29,10 @@ function quoted(message: Message) {
 }
 
 export function initialDraft(request: ComposeRequest, accounts: Account[], t: Translate, locale: string): DraftState {
+  if (request.restore) {
+    const { accountId, to, cc, bcc, subject, html } = request.restore;
+    return { accountId, to, cc, bcc, subject, html };
+  }
   const source = request.source;
   const accountId = source?.accountId ?? accounts[0]?.id ?? "";
   const empty: DraftState = {

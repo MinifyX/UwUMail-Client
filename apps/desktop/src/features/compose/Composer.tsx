@@ -1,8 +1,25 @@
 import clsx from "clsx";
-import { Bold, ChevronDown, Italic, Link, List, Maximize2, Minimize2, Paperclip, Send, Trash, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Bold,
+  ChevronDown,
+  Italic,
+  Link,
+  List,
+  Maximize2,
+  Minimize2,
+  Paperclip,
+  PenLine,
+  Send,
+  Trash,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { OutgoingAttachment } from "@/backend/types";
+import { useBackLayer } from "@/lib/backStack";
+import { useIsPhone } from "@/lib/device";
+import { clearPhoneDraft, savePhoneDraft } from "./phoneDraft";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
 import { useT } from "@/i18n";
@@ -44,14 +61,41 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const accountId = draft.accountId || accounts[0]?.id || "";
   const [showCc, setShowCc] = useState(initial.cc.length > 0);
   const [large, setLarge] = useState(false);
-  const [attachments, setAttachments] = useState<OutgoingAttachment[]>([]);
+  const [attachments, setAttachments] = useState<OutgoingAttachment[]>(request.attachments ?? []);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const editor = useRef<HTMLDivElement>(null);
+  const editor = useRef<HTMLDivElement | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // The body lives outside React, so it survives minimizing (the editor unmounts meanwhile).
+  const body = useRef(initial.html);
+  const [edits, setEdits] = useState(0);
+  const phone = useIsPhone();
+  // On the phone the back gesture shrinks the draft to a bar instead of losing it.
+  useBackLayer(phone && !minimized, () => setMinimized(true));
+
+  const discard = () => {
+    clearPhoneDraft();
+    closeCompose();
+  };
 
   useEffect(() => {
-    if (editor.current && editor.current.innerHTML === "") editor.current.innerHTML = initial.html;
+    if (!phone) return;
+    const timer = window.setTimeout(() => {
+      savePhoneDraft({
+        mode: request.mode,
+        accountId: draft.accountId,
+        to: draft.to,
+        cc: draft.cc,
+        bcc: draft.bcc,
+        subject: draft.subject,
+        html: body.current,
+        inReplyTo: request.restore?.inReplyTo ?? request.source?.id,
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [phone, draft, edits, request]);
+
+  useEffect(() => {
     if (request.mode !== "new") {
       editor.current?.focus();
       const selection = window.getSelection();
@@ -83,7 +127,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       return;
     }
     // What people paste can carry forms or remote content; send only the safe part.
-    const html = quotableHtml(editor.current?.innerHTML ?? "");
+    const html = quotableHtml(editor.current?.innerHTML ?? body.current);
     setSending(true);
     try {
       await backend().send({
@@ -94,10 +138,11 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         subject: draft.subject,
         html,
         text: htmlToPlainText(html),
-        inReplyTo: request.mode === "forward" ? undefined : request.source?.id,
+        inReplyTo: request.mode === "forward" ? undefined : (request.restore?.inReplyTo ?? request.source?.id),
         attachments,
       });
       toast(t("toast.sent"), "success", "sent");
+      clearPhoneDraft();
       closeCompose();
       void refresh();
     } catch (reason) {
@@ -111,6 +156,31 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
     draft.subject ||
     t(request.mode === "forward" ? "compose.forward" : request.mode === "new" ? "compose.new" : "compose.reply");
   const account = accounts.find((a) => a.id === accountId);
+
+  if (minimized && phone) {
+    const names = [...draft.to, ...draft.cc].map((a) => a.name || a.email).join(", ");
+    return (
+      <div className="fixed inset-x-3 bottom-[84px] z-30 flex animate-slide-up items-center gap-2 rounded-2xl bg-[#1c1420] py-1.5 pr-1.5 pl-4 text-white shadow-float dark:bg-elevated dark:text-ink">
+        <PenLine className="size-4 shrink-0 text-[#ff7fac]" aria-hidden />
+        <button type="button" onClick={() => setMinimized(false)} className="min-w-0 flex-1 py-1 text-left">
+          <span className="block truncate text-[13.5px] font-bold">
+            {names ? t("mobile.draft.to", { names }) : title}
+            {names && draft.subject ? `: ${draft.subject}` : ""}
+          </span>
+          <span className="block text-[12px] opacity-70">{t("mobile.draft.continue")}</span>
+        </button>
+        <button
+          type="button"
+          onClick={discard}
+          aria-label={t("compose.discard")}
+          title={t("compose.discard")}
+          className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-white/10"
+        >
+          <X className="size-4" aria-hidden />
+        </button>
+      </div>
+    );
+  }
 
   if (minimized) {
     return (
@@ -138,35 +208,57 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         if (event.key === "Escape") setMinimized(true);
       }}
       className={clsx(
-        "fixed z-40 flex animate-slide-up flex-col overflow-hidden border border-line bg-surface shadow-float",
-        large
-          ? "inset-x-[max(24px,calc(50vw-460px))] top-10 bottom-10 rounded-[22px]"
-          : "right-6 bottom-6 h-[min(620px,calc(100vh-48px))] w-[min(580px,calc(100vw-48px))] rounded-[22px]",
+        "fixed z-40 flex animate-slide-up flex-col overflow-hidden bg-surface",
+        phone
+          ? "inset-0"
+          : large
+            ? "inset-x-[max(24px,calc(50vw-460px))] top-10 bottom-10 rounded-[22px] border border-line shadow-float"
+            : "right-6 bottom-6 h-[min(620px,calc(100vh-48px))] w-[min(580px,calc(100vw-48px))] rounded-[22px] border border-line shadow-float",
       )}
     >
-      <header className="flex items-center gap-1 bg-[#1c1420] py-2 pr-2 pl-5 text-white dark:bg-elevated dark:text-ink">
+      <header
+        className={clsx(
+          "flex items-center gap-1 bg-[#1c1420] pr-2 text-white dark:bg-elevated dark:text-ink",
+          phone ? "py-1.5 pl-1.5" : "py-2 pl-5",
+        )}
+      >
+        {phone && (
+          <button
+            type="button"
+            onClick={() => setMinimized(true)}
+            aria-label={t("compose.minimize")}
+            title={t("compose.minimize")}
+            className="grid size-10 place-items-center rounded-full hover:bg-white/10"
+          >
+            <ArrowLeft className="size-5" aria-hidden />
+          </button>
+        )}
         <h2 className="min-w-0 flex-1 truncate text-[14px] font-bold">{title}</h2>
+        {!phone && (
+          <>
+            <button
+              type="button"
+              onClick={() => setMinimized(true)}
+              aria-label={t("compose.minimize")}
+              title={t("compose.minimize")}
+              className="grid size-8 place-items-center rounded-full hover:bg-white/10"
+            >
+              <ChevronDown className="size-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => setLarge(!large)}
+              aria-label={t(large ? "compose.minimize" : "compose.expand")}
+              title={t(large ? "compose.minimize" : "compose.expand")}
+              className="grid size-8 place-items-center rounded-full hover:bg-white/10"
+            >
+              {large ? <Minimize2 className="size-4" aria-hidden /> : <Maximize2 className="size-4" aria-hidden />}
+            </button>
+          </>
+        )}
         <button
           type="button"
-          onClick={() => setMinimized(true)}
-          aria-label={t("compose.minimize")}
-          title={t("compose.minimize")}
-          className="grid size-8 place-items-center rounded-full hover:bg-white/10"
-        >
-          <ChevronDown className="size-4" aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={() => setLarge(!large)}
-          aria-label={t(large ? "compose.minimize" : "compose.expand")}
-          title={t(large ? "compose.minimize" : "compose.expand")}
-          className="grid size-8 place-items-center rounded-full hover:bg-white/10"
-        >
-          {large ? <Minimize2 className="size-4" aria-hidden /> : <Maximize2 className="size-4" aria-hidden />}
-        </button>
-        <button
-          type="button"
-          onClick={closeCompose}
+          onClick={discard}
           aria-label={t("compose.close")}
           title={t("compose.close")}
           className="grid size-8 place-items-center rounded-full hover:bg-white/10"
@@ -233,13 +325,20 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
 
       <div className="relative min-h-0 flex-1 overflow-y-auto">
         <div
-          ref={editor}
+          ref={(node) => {
+            editor.current = node;
+            if (node && node.innerHTML === "") node.innerHTML = body.current;
+          }}
           contentEditable
           role="textbox"
           aria-multiline
           aria-label={t("compose.placeholder")}
           data-placeholder={t("compose.placeholder")}
-          onInput={() => setError(null)}
+          onInput={(event) => {
+            setError(null);
+            body.current = event.currentTarget.innerHTML;
+            setEdits((count) => count + 1);
+          }}
           className="min-h-full px-5 py-4 text-[14.5px] leading-relaxed outline-none empty:before:pointer-events-none empty:before:text-faint empty:before:content-[attr(data-placeholder)] [&_a]:text-pink-ink [&_a]:underline [&_blockquote]:my-2 [&_blockquote]:border-l-[3px] [&_blockquote]:border-pink-tint-strong [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_p]:min-h-[1.4em] [&_ul]:list-disc [&_ul]:pl-6"
         />
       </div>
@@ -333,7 +432,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           }}
         />
         <span className="flex-1" />
-        <IconButton icon={Trash} size="sm" label={t("compose.discard")} onClick={closeCompose} />
+        <IconButton icon={Trash} size="sm" label={t("compose.discard")} onClick={discard} />
       </footer>
     </section>
   );

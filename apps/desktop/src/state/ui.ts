@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Address, ListFilter, MailboxView, Message } from "@/backend/types";
+import type { Address, ListFilter, MailboxView, Message, OutgoingAttachment } from "@/backend/types";
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
 
@@ -13,9 +13,25 @@ export interface ComposeRequest {
   bcc?: Address[];
   subject?: string;
   body?: string;
+  /** Files shared from another app. */
+  attachments?: OutgoingAttachment[];
+  /** A draft saved on the phone, brought back after Android closed UwUMail. */
+  restore?: SavedDraft;
 }
 
-export type SettingsSection = "appearance" | "mail" | "accounts" | "addons" | "about";
+/** What the phone keeps of an unsent draft. */
+export interface SavedDraft {
+  mode: ComposeMode;
+  accountId: string;
+  to: Address[];
+  cc: Address[];
+  bcc: Address[];
+  subject: string;
+  html: string;
+  inReplyTo?: string;
+}
+
+export type SettingsSection = "appearance" | "mail" | "security" | "accounts" | "addons" | "about";
 
 interface UiState {
   view: MailboxView;
