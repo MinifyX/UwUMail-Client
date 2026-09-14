@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, Notify, OwnedMutexGuard, broadcast};
 use tokio::task::JoinHandle;
 
+use crate::attachments::{self, AttachmentCache, AttachmentFile};
 use crate::error::{Error, ErrorCode, Result};
 use crate::imap::{self, ImapSession, Login};
 use crate::model::*;
@@ -60,6 +61,7 @@ struct Inner {
     runtime: tokio::runtime::Handle,
     accounts: Mutex<HashMap<String, Runtime>>,
     tokens: AsyncMutex<HashMap<String, (String, Instant)>>,
+    attachments: AttachmentCache,
 }
 
 enum Credential {
@@ -115,6 +117,7 @@ impl Engine {
                 runtime: tokio::runtime::Handle::current(),
                 accounts: Mutex::new(HashMap::new()),
                 tokens: AsyncMutex::new(HashMap::new()),
+                attachments: AttachmentCache::new(&options.data_dir),
             }),
         })
     }
@@ -411,6 +414,57 @@ impl Engine {
         self.inner.store.remember_contacts(&recipients)?;
         self.inner.wake(&account.id);
         Ok(())
+    }
+
+    /// The file of an attachment, downloaded from the server on first use.
+    pub async fn attachment(&self, attachment_id: &str) -> Result<AttachmentFile> {
+        let (message_id, index) = attachments::parse_id(attachment_id)?;
+        let message = self
+            .inner
+            .store
+            .messages_by_ids(std::slice::from_ref(&message_id))?
+            .pop()
+            .ok_or_else(|| Error::not_found("This message no longer exists."))?;
+        let known =
+            message.attachments.get(index).ok_or_else(|| Error::not_found("This attachment no longer exists."))?;
+        if let Some(path) = self.inner.attachments.cached(&message_id, index) {
+            return Ok(AttachmentFile {
+                path,
+                filename: known.filename.clone(),
+                mime_type: known.mime_type.clone(),
+                size: known.size,
+                dangerous: attachments::is_dangerous(&known.filename),
+            });
+        }
+        let location = self
+            .inner
+            .store
+            .locations(std::slice::from_ref(&message_id))?
+            .pop()
+            .ok_or_else(|| Error::not_found("This message no longer exists."))?;
+        let uid = u32::try_from(location.uid)
+            .ok()
+            .filter(|uid| *uid > 0)
+            .ok_or_else(|| Error::connection("The message is still being moved. Try again in a moment."))?;
+        let raw = with_session!(self.inner, &location.account_id, |session| imap::fetch_body(
+            session,
+            &location.folder_path,
+            uid
+        ))?;
+        self.inner.attachments.store_from_raw(&message_id, index, &raw)
+    }
+
+    /// Copies an attachment to a place the user picked.
+    pub async fn save_attachment(&self, attachment_id: &str, destination: &std::path::Path) -> Result<()> {
+        let file = self.attachment(attachment_id).await?;
+        std::fs::copy(&file.path, destination)
+            .map(|_| ())
+            .map_err(|e| Error::invalid(format!("Couldn't save to {}: {e}", destination.display())))
+    }
+
+    /// Where attachment files are cached, for the webview's file access scope.
+    pub fn attachment_dir(&self) -> std::path::PathBuf {
+        self.inner.attachments.dir().to_path_buf()
     }
 
     /// Messages by id, e.g. to describe new mail in a notification.

@@ -68,5 +68,10 @@
   },
   "settings": {
     "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)"
+  },
+  "attachment": {
+    "loading": "Ich pack den Anhang aus…",
+    "dangerTitle": "Vorsicht! Die Datei könnte Programme starten (・_・;)",
+    "noPreview": "Da kann ich nicht reinschauen (・・ )?"
   }
 }

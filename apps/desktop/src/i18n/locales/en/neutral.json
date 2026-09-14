@@ -274,5 +274,32 @@
     "archive": "Archive",
     "trash": "Trash",
     "junk": "Junk"
+  },
+  "attachment": {
+    "open": "Open with app",
+    "save": "Save",
+    "saved": "{{name}} saved",
+    "failed": "Couldn't load the attachment. {{reason}}",
+    "previous": "Previous attachment",
+    "next": "Next attachment",
+    "counter": "{{current}} of {{total}}",
+    "loading": "Loading attachment",
+    "noPreview": "No preview for this file type",
+    "noPreviewBody": "Open it with an app on your computer or save it.",
+    "pdfHint": "Not showing up? Open it with your PDF app.",
+    "tableTruncated": "Showing the first {{count}} rows.",
+    "textTruncated": "Showing the first megabyte.",
+    "dangerTag": "Can run programs",
+    "dangerTitle": "This file can run programs on your computer",
+    "dangerBody": "{{name}} comes from {{sender}}. Files like this are a common way to install malware. Only open it if you expected it and trust the sender.",
+    "dangerOpen": "Open anyway",
+    "dangerCancel": "Don't open",
+    "invitation": "Invitation",
+    "event": "Event",
+    "when": "When",
+    "where": "Where",
+    "organizer": "Organizer",
+    "email": "Email",
+    "phone": "Phone"
   }
 }

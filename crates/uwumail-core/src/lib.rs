@@ -4,6 +4,7 @@
 //! server discovery, IMAP sync into a local SQLite store, SMTP sending and
 //! full-text search.
 
+pub mod attachments;
 pub mod autoconfig;
 pub mod engine;
 pub mod error;

@@ -7,7 +7,10 @@
 - [x] Onboarding: layout and tone choice, add a mailbox with autoconfig
 - [x] Mail engine: IMAP sync with local cache, IDLE push, SMTP sending
 - [x] Reading: sanitized HTML, remote content blocked by default, attachment list
-- [ ] Attachments: open and save
+- [x] Attachments: open, save and preview (images, PDF, text, CSV, audio, video, invitations, contact cards), warning for files that run programs, local cache
+- [x] Nested folders as a collapsible tree
+- [ ] Sender pictures from brand logos (BIMI) and website icons
+- [ ] JMAP (Fastmail, Stalwart, Cyrus) next to IMAP/SMTP
 - [x] Writing: compose, reply, reply all, forward, attachments
 - [ ] Drafts saved to the server, multiple identities per mailbox
 - [x] Unified inbox across all mailboxes

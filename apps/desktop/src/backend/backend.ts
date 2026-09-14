@@ -1,5 +1,6 @@
 import type {
   Account,
+  AttachmentContent,
   BackendEvent,
   Contact,
   DiscoveredSettings,
@@ -45,6 +46,13 @@ export interface Backend {
   send(message: OutgoingMessage): Promise<void>;
 
   searchContacts(query: string): Promise<Contact[]>;
+
+  /** Downloads the attachment on first use. */
+  getAttachment(attachmentId: string): Promise<AttachmentContent>;
+  /** Opens it in the default app. Dangerous files need `confirmed`. */
+  openAttachment(attachmentId: string, confirmed: boolean): Promise<void>;
+  /** Asks where to save it. Resolves to false when the user cancels. */
+  saveAttachment(attachmentId: string, filename: string): Promise<boolean>;
 
   subscribe(listener: (event: BackendEvent) => void): () => void;
 }

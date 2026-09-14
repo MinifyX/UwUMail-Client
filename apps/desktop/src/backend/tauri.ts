@@ -1,8 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { BackendError, type Backend, type BackendErrorCode } from "./backend";
 import type {
   Account,
+  AttachmentContent,
   BackendEvent,
   Contact,
   DiscoveredSettings,
@@ -84,6 +85,32 @@ export class TauriBackend implements Backend {
 
   send(message: OutgoingMessage) {
     return call<void>("send_message", { message });
+  }
+
+  async getAttachment(attachmentId: string): Promise<AttachmentContent> {
+    const file = await call<{ path: string; filename: string; mimeType: string; size: number; dangerous: boolean }>(
+      "get_attachment",
+      { attachmentId },
+    );
+    return {
+      url: convertFileSrc(file.path),
+      filename: file.filename,
+      mimeType: file.mimeType,
+      size: file.size,
+      dangerous: file.dangerous,
+    };
+  }
+
+  openAttachment(attachmentId: string, confirmed: boolean) {
+    return call<void>("open_attachment", { attachmentId, confirmed });
+  }
+
+  async saveAttachment(attachmentId: string, filename: string) {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const destination = await save({ defaultPath: filename });
+    if (!destination) return false;
+    await call<void>("save_attachment", { attachmentId, destination });
+    return true;
   }
 
   searchContacts(query: string) {

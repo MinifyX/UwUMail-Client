@@ -68,5 +68,10 @@
   },
   "settings": {
     "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)"
+  },
+  "attachment": {
+    "loading": "Unpacking the attachment…",
+    "dangerTitle": "Careful! This file could start programs (・_・;)",
+    "noPreview": "I can't peek into this one (・・ )?"
   }
 }

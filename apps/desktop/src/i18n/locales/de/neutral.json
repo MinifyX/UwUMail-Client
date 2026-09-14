@@ -274,5 +274,32 @@
     "archive": "Archiv",
     "trash": "Papierkorb",
     "junk": "Spam"
+  },
+  "attachment": {
+    "open": "Mit App öffnen",
+    "save": "Speichern",
+    "saved": "{{name}} gespeichert",
+    "failed": "Der Anhang konnte nicht geladen werden. {{reason}}",
+    "previous": "Vorheriger Anhang",
+    "next": "Nächster Anhang",
+    "counter": "{{current}} von {{total}}",
+    "loading": "Anhang wird geladen",
+    "noPreview": "Keine Vorschau für diesen Dateityp",
+    "noPreviewBody": "Öffne ihn mit einem Programm auf deinem Rechner oder speichere ihn.",
+    "pdfHint": "Wird nicht angezeigt? Öffne die Datei mit deinem PDF-Programm.",
+    "tableTruncated": "Die ersten {{count}} Zeilen werden angezeigt.",
+    "textTruncated": "Das erste Megabyte wird angezeigt.",
+    "dangerTag": "Kann Programme ausführen",
+    "dangerTitle": "Diese Datei kann Programme auf deinem Rechner ausführen",
+    "dangerBody": "{{name}} stammt von {{sender}}. Solche Dateien sind ein häufiger Weg, Schadsoftware zu installieren. Öffne sie nur, wenn du sie erwartet hast und dem Absender vertraust.",
+    "dangerOpen": "Trotzdem öffnen",
+    "dangerCancel": "Nicht öffnen",
+    "invitation": "Einladung",
+    "event": "Termin",
+    "when": "Wann",
+    "where": "Wo",
+    "organizer": "Organisiert von",
+    "email": "E-Mail",
+    "phone": "Telefon"
   }
 }

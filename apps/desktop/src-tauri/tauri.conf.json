@@ -25,16 +25,21 @@
         "default-src": "'self'",
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: blob: cid: https: http:",
+        "img-src": "'self' data: blob: cid: https: http: asset: http://asset.localhost",
         "font-src": "'self' data:",
-        "connect-src": "ipc: http://ipc.localhost",
-        "frame-src": "'self' uwuaddon: http://uwuaddon.localhost",
+        "connect-src": "ipc: http://ipc.localhost asset: http://asset.localhost",
+        "frame-src": "'self' blob: asset: http://asset.localhost uwuaddon: http://uwuaddon.localhost",
         "object-src": "'none'",
         "base-uri": "'none'",
-        "form-action": "'none'"
+        "form-action": "'none'",
+        "media-src": "'self' blob: asset: http://asset.localhost"
       },
       "freezePrototype": true,
-      "dangerousDisableAssetCspModification": ["style-src"]
+      "dangerousDisableAssetCspModification": ["style-src"],
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/attachments/**"]
+      }
     }
   },
   "bundle": {

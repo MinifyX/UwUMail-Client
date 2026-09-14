@@ -153,6 +153,7 @@ export const SAMPLE_THREADS: SampleThread[] = [
           "Wir wollen Freitag ab 19 Uhr zocken. Ich bring Snacks mit, du die Controller? Sag Bescheid, ob du dabei bist!",
           "We're planning to play on Friday from 7pm. I'll bring snacks, you bring the controllers? Let me know if you're in!",
         ),
+        attachments: [{ filename: "spieleabend-jingle.wav", mimeType: "audio/wav", size: 53_000, inline: false }],
       },
     ],
   },
@@ -171,6 +172,7 @@ export const SAMPLE_THREADS: SampleThread[] = [
         attachments: [
           { filename: "logo-varianten.pdf", mimeType: "application/pdf", size: 1_204_331, inline: false },
           { filename: "notizen.txt", mimeType: "text/plain", size: 2_048, inline: false },
+          { filename: "logo-review.ics", mimeType: "text/calendar", size: 612, inline: false },
         ],
       },
     ],
@@ -203,6 +205,10 @@ export const SAMPLE_THREADS: SampleThread[] = [
           "Kurze Info: Die Renderfarm läuft wieder. Die Warteschlange von gestern wird gerade abgearbeitet, dein Projekt ist auf Platz 3.",
           "Quick heads-up: the render farm is running again. Yesterday's queue is being processed, your project is number 3.",
         ),
+        attachments: [
+          { filename: "render-queue.csv", mimeType: "text/csv", size: 164, inline: false },
+          { filename: "lukas-editz.vcf", mimeType: "text/vcard", size: 140, inline: false },
+        ],
       },
       {
         from: ME_STUDIO,
@@ -211,6 +217,23 @@ export const SAMPLE_THREADS: SampleThread[] = [
         seen: true,
         folder: "sent",
         body: p("Danke dir! 🙏", "Thank you! 🙏"),
+      },
+    ],
+  },
+  {
+    account: "private",
+    subject: p("Ihre Rechnung Nr. 2026-0914", "Your invoice no. 2026-0914"),
+    messages: [
+      {
+        from: { name: "Buchhaltung", email: "rechnung@zahlung-service.example" },
+        minutesAgo: 60 * 9,
+        body: p(
+          "Sehr geehrter Kunde,\n\nanbei Ihre offene Rechnung. Bitte öffnen Sie den Anhang und begleichen Sie den Betrag innerhalb von 24 Stunden.",
+          "Dear customer,\n\nplease find your open invoice attached. Open the attachment and pay within 24 hours.",
+        ),
+        attachments: [
+          { filename: "Rechnung_2026-0914.pdf.exe", mimeType: "application/x-msdownload", size: 4, inline: false },
+        ],
       },
     ],
   },

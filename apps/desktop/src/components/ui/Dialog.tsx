@@ -9,7 +9,7 @@ interface DialogProps {
   onClose: () => void;
   title?: ReactNode;
   children: ReactNode;
-  width?: "sm" | "md" | "lg";
+  width?: "sm" | "md" | "lg" | "viewer";
   className?: string;
 }
 
@@ -40,11 +40,12 @@ export function Dialog({ open, onClose, title, children, width = "md", className
         width === "sm" && "max-w-[420px]",
         width === "md" && "max-w-[560px]",
         width === "lg" && "max-w-[860px]",
+        width === "viewer" && "h-[calc(100vh-48px)] max-h-none max-w-[1200px]",
         className,
       )}
     >
       {open && (
-        <div className="flex max-h-[inherit] flex-col">
+        <div className="flex h-full max-h-[inherit] flex-col">
           {title !== undefined && (
             <header className="flex items-center justify-between gap-4 px-6 pt-5 pb-2">
               <h2 className="text-lg font-bold">{title}</h2>

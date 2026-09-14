@@ -35,6 +35,17 @@ export function useThreads(view: MailboxView, filter: ListFilter, search: string
   });
 }
 
+/** A downloaded attachment. Files stay cached for the whole session. */
+export function useAttachment(attachmentId: string | null) {
+  return useQuery({
+    queryKey: ["attachment", attachmentId],
+    queryFn: () => backend().getAttachment(attachmentId!),
+    enabled: attachmentId !== null,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
 export function useThread(threadId: string | null) {
   const conversations = useSettings((s) => s.conversations);
   return useQuery({

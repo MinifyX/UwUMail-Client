@@ -137,6 +137,15 @@ async fn sync_send_reply_flag_and_trash() {
     assert!(message.body_html.as_deref().unwrap_or_default().contains("<b>Clip</b>"));
     assert_eq!(message.attachments[0].filename, "notiz.txt");
 
+    // Attachments load once, then come from the local cache and can be saved anywhere.
+    let file = engine.attachment(&message.attachments[0].id).await.unwrap();
+    assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "Hallo");
+    assert!(!file.dangerous);
+    assert!(file.path.starts_with(engine.attachment_dir()));
+    let copy = data.path().join("kopie.txt");
+    engine.save_attachment(&message.attachments[0].id, &copy).await.unwrap();
+    assert_eq!(std::fs::read_to_string(&copy).unwrap(), "Hallo");
+
     // Full-text search finds it by a body word prefix.
     assert!(!engine.list_threads(&inbox_query(Some("gesehe"))).unwrap().threads.is_empty());
 

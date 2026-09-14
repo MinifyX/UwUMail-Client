@@ -4,6 +4,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::broadcast::error::RecvError;
+use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::model::*;
 use uwumail_core::secrets::KeyringSecrets;
 use uwumail_core::{Engine, EngineOptions, Error};
@@ -76,6 +77,33 @@ fn search_contacts(engine: State<'_, Engine>, query: String) -> CommandResult<Ve
     engine.search_contacts(&query)
 }
 
+#[tauri::command]
+async fn get_attachment(engine: State<'_, Engine>, attachment_id: String) -> CommandResult<AttachmentFile> {
+    engine.attachment(&attachment_id).await
+}
+
+/// Opens an attachment in its default app. Files that can run code need `confirmed`.
+#[tauri::command]
+async fn open_attachment(
+    app: AppHandle,
+    engine: State<'_, Engine>,
+    attachment_id: String,
+    confirmed: bool,
+) -> CommandResult<()> {
+    let file = engine.attachment(&attachment_id).await?;
+    if file.dangerous && !confirmed {
+        return Err(Error::invalid("This file type can run programs. Confirm before opening it."));
+    }
+    app.opener()
+        .open_path(file.path.to_string_lossy(), None::<&str>)
+        .map_err(|e| Error::internal(format!("Couldn't open the attachment: {e}")))
+}
+
+#[tauri::command]
+async fn save_attachment(engine: State<'_, Engine>, attachment_id: String, destination: String) -> CommandResult<()> {
+    engine.save_attachment(&attachment_id, std::path::Path::new(&destination)).await
+}
+
 /// Sends engine events to the UI and rings for new mail while UwUMail is in the background.
 fn forward(app: &AppHandle, engine: &Engine, event: EngineEvent) {
     if let EngineEvent::MailReceived { message_ids, .. } = &event {
@@ -98,6 +126,7 @@ fn forward(app: &AppHandle, engine: &Engine, event: EngineEvent) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
@@ -140,6 +169,9 @@ pub fn run() {
             trash_messages,
             send_message,
             search_contacts,
+            get_attachment,
+            open_attachment,
+            save_attachment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running UwUMail");

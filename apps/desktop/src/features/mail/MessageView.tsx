@@ -1,21 +1,16 @@
 import clsx from "clsx";
-import { File, FileImage, FileText, ImageOff, Moon, Paperclip, Sun } from "lucide-react";
+import { ImageOff, Moon, Sun } from "lucide-react";
 import { useState } from "react";
-import type { Account, Attachment, Message } from "@/backend/types";
+import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useT } from "@/i18n";
-import { displayName, formatFullDate, formatListDate, formatSize } from "@/lib/format";
+import { displayName, formatFullDate, formatListDate } from "@/lib/format";
 import { useResolvedTheme } from "@/lib/theme";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
+import { AttachmentTiles } from "../attachments/AttachmentTiles";
 import { MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
-
-function attachmentIcon(attachment: Attachment) {
-  if (attachment.mimeType.startsWith("image/")) return FileImage;
-  if (attachment.mimeType.startsWith("text/") || attachment.mimeType === "application/pdf") return FileText;
-  return File;
-}
 
 interface AppearanceToggleProps {
   message: Message;
@@ -116,18 +111,20 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
     <article className="flex animate-fade flex-col gap-4 rounded-[20px] border border-hairline bg-surface p-5">
       <header className="flex items-start gap-3">
         <Avatar address={message.from} />
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-[15px] font-bold">{displayName(message.from)}</span>
-            <span className="selectable truncate text-[12.5px] text-muted">{message.from.email}</span>
-          </p>
-          <p className="truncate text-[12.5px] text-muted">{t("reader.to", { names: recipientNames })}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {theme === "dark" && <AppearanceToggle message={message} appearance={appearance} autoDark={autoDark} />}
-          <time dateTime={message.date} className="text-[12.5px] text-muted">
-            {formatFullDate(message.date, i18n.language)}
-          </time>
+        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-1">
+          <div className="min-w-[min(100%,12rem)] flex-1">
+            <p className="flex flex-wrap items-baseline gap-x-2">
+              <span className="min-w-0 text-[15px] font-bold break-words">{displayName(message.from)}</span>
+              <span className="selectable min-w-0 truncate text-[12.5px] text-muted">{message.from.email}</span>
+            </p>
+            <p className="truncate text-[12.5px] text-muted">{t("reader.to", { names: recipientNames })}</p>
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            {theme === "dark" && <AppearanceToggle message={message} appearance={appearance} autoDark={autoDark} />}
+            <time dateTime={message.date} className="text-[12.5px] text-muted">
+              {formatFullDate(message.date, i18n.language)}
+            </time>
+          </div>
         </div>
       </header>
 
@@ -153,37 +150,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
         />
       </div>
 
-      {message.attachments.length > 0 && (
-        <footer className="flex flex-col gap-2 border-t border-hairline pt-4">
-          <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-muted">
-            <Paperclip className="size-3.5" aria-hidden />
-            {t("reader.attachments", { count: message.attachments.length })}
-          </p>
-          <ul className="flex flex-wrap gap-2">
-            {message.attachments.map((attachment) => {
-              const Icon = attachmentIcon(attachment);
-              return (
-                <li key={attachment.id}>
-                  <button
-                    type="button"
-                    className="flex max-w-[260px] items-center gap-2.5 rounded-xl border border-line bg-surface py-2 pr-3 pl-2.5 text-left hover:border-pink hover:bg-pink-tint/40"
-                  >
-                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-pink-tint text-pink-ink">
-                      <Icon className="size-4" aria-hidden />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold">{attachment.filename}</span>
-                      <span className="block text-[11.5px] text-muted">
-                        {formatSize(attachment.size, i18n.language)}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </footer>
-      )}
+      <AttachmentTiles attachments={message.attachments} sender={message.from} />
     </article>
   );
 }

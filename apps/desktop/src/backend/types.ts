@@ -140,6 +140,16 @@ export interface OutgoingMessage {
   attachments: OutgoingAttachment[];
 }
 
+/** A locally available attachment file. `url` works in <img>, <video> and fetch. */
+export interface AttachmentContent {
+  url: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  /** The file type can run code when opened. */
+  dangerous: boolean;
+}
+
 export interface Contact {
   name?: string;
   email: string;

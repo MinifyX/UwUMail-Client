@@ -1,7 +1,10 @@
 import { BackendError, type Backend } from "./backend";
+import { isDangerous } from "@/lib/attachments";
+import { demoAttachmentBlob } from "./demo-attachments";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, welcomeMessage } from "./demo-data";
 import type {
   Account,
+  AttachmentContent,
   Address,
   BackendEvent,
   Contact,
@@ -51,6 +54,7 @@ export class DemoBackend implements Backend {
   private messages: Message[] = buildMessages(lang());
   private listeners = new Set<(event: BackendEvent) => void>();
   private nextId = 1000;
+  private attachmentUrls = new Map<string, string>();
 
   constructor() {
     setTimeout(() => {
@@ -233,6 +237,41 @@ export class DemoBackend implements Backend {
       })),
     });
     this.emit({ type: "mail:changed", accountId: account.id });
+  }
+
+  async getAttachment(attachmentId: string): Promise<AttachmentContent> {
+    await wait(250);
+    const attachment = this.messages.flatMap((m) => m.attachments).find((a) => a.id === attachmentId);
+    if (!attachment) throw new BackendError("not_found", "This attachment no longer exists.");
+    let url = this.attachmentUrls.get(attachmentId);
+    if (!url) {
+      url = URL.createObjectURL(demoAttachmentBlob(attachment.filename, attachment.mimeType));
+      this.attachmentUrls.set(attachmentId, url);
+    }
+    return {
+      url,
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      dangerous: isDangerous(attachment.filename),
+    };
+  }
+
+  async openAttachment(attachmentId: string, confirmed: boolean) {
+    const file = await this.getAttachment(attachmentId);
+    if (file.dangerous && !confirmed) {
+      throw new BackendError("invalid_input", "This file type can run programs. Confirm before opening it.");
+    }
+    window.open(file.url, "_blank", "noopener,noreferrer");
+  }
+
+  async saveAttachment(attachmentId: string, filename: string) {
+    const file = await this.getAttachment(attachmentId);
+    const link = document.createElement("a");
+    link.href = file.url;
+    link.download = filename;
+    link.click();
+    return true;
   }
 
   async searchContacts(query: string): Promise<Contact[]> {
