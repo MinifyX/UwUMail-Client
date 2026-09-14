@@ -5897,10 +5897,9 @@ name = "uwumail-android"
 version = "0.2.0-beta.1"
 dependencies = [
  "base64 0.23.1",
- "jni 0.22.4",
+ "jni 0.21.1",
  "ndk-context",
  "reqwest",
- "rustls-platform-verifier",
  "semver",
  "serde",
  "serde_json",
@@ -5940,6 +5939,7 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+ "webpki-roots",
 ]
 
 [[package]]

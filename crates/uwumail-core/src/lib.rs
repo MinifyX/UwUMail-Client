@@ -19,6 +19,7 @@ pub mod pictures;
 pub mod secrets;
 pub mod smtp;
 pub mod store;
+pub mod tls;
 
 pub use engine::{Engine, EngineOptions};
 pub use error::{Error, ErrorCode, Result};

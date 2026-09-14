@@ -100,14 +100,15 @@ checked in because it carries UwUMail's own Kotlin code.
   goes through `RelaunchActivity` into a fresh process, because a web view
   can't be attached to a second activity.
 - **Bridge:** Rust calls `UwuBridge.call(method, json)` and Kotlin calls
-  `UwuNative.call(method, json)` — one JNI function each way. Kotlin handles
+  `UwuNative.call(method, json)` — one JNI function each way, on jni 0.21
+  like tao and wry (0.22 failed its class lookups on Android). Kotlin handles
   the Android Keystore (passwords), notifications with actions, shares and
   `mailto:` intents, opening files, Downloads, the APK installer and the
   system bars.
-- **TLS:** IMAP, JMAP and HTTPS check certificates through Android
-  (rustls-platform-verifier, including user-installed CAs). SMTP uses
-  Mozilla's root list, because lettre's platform verifier doesn't build for
-  Android.
+- **TLS:** IMAP, SMTP, JMAP and HTTPS check certificates against Mozilla's
+  root list (`uwumail_core::tls`), because Android's own check needs Java
+  classes loaded before the first connection. Certificates a user installed
+  on the phone aren't trusted yet.
 - **Offline window:** phones keep the last 90 days complete
   (`Engine::set_offline_days`); older mail is stored with headers and a
   preview, and `Engine::search_server` finds and adds mail that never came

@@ -75,10 +75,6 @@ pub fn ready() -> Option<ReadyUpdate> {
 /// Looks for a newer version and downloads it. Returns the waiting update, if any.
 pub async fn check() -> Result<Option<ReadyUpdate>> {
     let _one_at_a_time = CHECKING.lock().await;
-    if !crate::native::certificates_ready() {
-        crate::native::log("certificate checks aren't set up, skipping the update check");
-        return Err(Error::internal("Certificate checks aren't ready."));
-    }
     if let Some(update) = ready() {
         return Ok(Some(update));
     }
@@ -125,11 +121,19 @@ pub fn install_now() -> Result<()> {
 
 /// Checks in the background for as long as UwUMail runs.
 pub fn start(on_ready: impl Fn(&ReadyUpdate) + Send + Sync + 'static) {
-    let http = reqwest::Client::builder()
-        .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION"), " (Android)"))
-        .timeout(Duration::from_secs(60))
-        .build()
-        .expect("the HTTP client builds");
+    let http = match uwumail_core::tls::http_client().and_then(|builder| {
+        builder
+            .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION"), " (Android)"))
+            .timeout(Duration::from_secs(60))
+            .build()
+            .map_err(|e| Error::internal(format!("HTTP client setup failed: {e}")))
+    }) {
+        Ok(http) => http,
+        Err(error) => {
+            crate::native::log(&format!("updates are off: {error}"));
+            return;
+        }
+    };
     if STATE.set(State { http, on_ready: Box::new(on_ready) }).is_err() {
         return;
     }

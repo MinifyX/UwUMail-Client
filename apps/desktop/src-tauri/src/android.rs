@@ -3,8 +3,9 @@
 
 use serde_json::json;
 use tauri::{App, AppHandle, Emitter, Manager, RunEvent, Runtime, Wry};
-use uwumail_android::jni::EnvUnowned;
+use uwumail_android::jni::JNIEnv;
 use uwumail_android::jni::objects::{JClass, JObject, JString};
+use uwumail_android::jni::sys::jstring;
 use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::EngineEvent;
@@ -14,25 +15,25 @@ pub use uwumail_android::updates::{self, Channel, ReadyUpdate};
 
 /// `UwuNative.start`, called from `UwuApplication.onCreate`.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_app_uwumail_UwuNative_start<'caller>(
-    env: EnvUnowned<'caller>,
-    _class: JClass<'caller>,
-    context: JObject<'caller>,
-    bridge: JClass<'caller>,
-    data_dir: JString<'caller>,
-    cache_dir: JString<'caller>,
+pub extern "system" fn Java_app_uwumail_UwuNative_start(
+    env: JNIEnv,
+    _class: JClass,
+    context: JObject,
+    bridge: JClass,
+    data_dir: JString,
+    cache_dir: JString,
 ) {
     uwumail_android::native::start(env, context, bridge, data_dir, cache_dir);
 }
 
 /// `UwuNative.call`, from notifications, shares and the network watcher.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_app_uwumail_UwuNative_call<'caller>(
-    env: EnvUnowned<'caller>,
-    _class: JClass<'caller>,
-    method: JString<'caller>,
-    payload: JString<'caller>,
-) -> JString<'caller> {
+pub extern "system" fn Java_app_uwumail_UwuNative_call(
+    env: JNIEnv,
+    _class: JClass,
+    method: JString,
+    payload: JString,
+) -> jstring {
     uwumail_android::native::call(env, method, payload)
 }
 

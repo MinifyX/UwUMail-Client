@@ -9,7 +9,8 @@ rust-version.workspace = true
 
 [dependencies]
 base64.workspace = true
-jni = "0.22"
+# Same version as tao and wry; 0.22 failed its class lookups on Android.
+jni = "0.21"
 ndk-context = "0.1"
 reqwest.workspace = true
 semver = "1"
@@ -19,6 +20,3 @@ sha2.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uwumail-core.workspace = true
-
-[target.'cfg(target_os = "android")'.dependencies]
-rustls-platform-verifier.workspace = true

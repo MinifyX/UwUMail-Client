@@ -113,11 +113,10 @@ macro_rules! with_session {
 impl Engine {
     /// Must be called inside a Tokio runtime.
     pub fn new(options: EngineOptions) -> Result<Self> {
-        imap::install_crypto_provider();
         std::fs::create_dir_all(&options.data_dir)
             .map_err(|e| Error::internal(format!("Couldn't create the data folder: {e}")))?;
         let store = Store::open(&options.data_dir.join("uwumail.db"))?;
-        let http = reqwest::Client::builder()
+        let http = crate::tls::http_client()?
             .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(20))
             .build()

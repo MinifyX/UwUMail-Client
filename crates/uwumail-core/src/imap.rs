@@ -2,16 +2,14 @@
 
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
-use std::sync::{Arc, LazyLock, Mutex, OnceLock};
+use std::sync::{LazyLock, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 use async_imap::types::{Fetch, Flag, NameAttribute};
 use async_imap::{Authenticator, Client, Session};
 use futures::TryStreamExt;
-use rustls::ClientConfig;
 use rustls::pki_types::ServerName;
-use rustls_platform_verifier::BuilderVerifierExt;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -102,21 +100,8 @@ impl Authenticator for XOAuth2 {
     }
 }
 
-pub fn install_crypto_provider() {
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-}
-
 fn tls_connector() -> Result<TlsConnector> {
-    static CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
-    if let Some(config) = CONFIG.get() {
-        return Ok(TlsConnector::from(config.clone()));
-    }
-    install_crypto_provider();
-    let config = ClientConfig::builder()
-        .with_platform_verifier()
-        .map_err(|e| Error::internal(format!("TLS setup failed: {e}")))?
-        .with_no_client_auth();
-    Ok(TlsConnector::from(CONFIG.get_or_init(|| Arc::new(config)).clone()))
+    Ok(TlsConnector::from(crate::tls::client_config()?))
 }
 
 async fn tls(stream: TcpStream, host: &str) -> Result<MailStream> {

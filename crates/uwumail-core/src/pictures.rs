@@ -340,7 +340,7 @@ pub struct SenderPictures {
 
 impl SenderPictures {
     pub fn new(data_dir: &Path) -> Result<Self> {
-        let http = reqwest::Client::builder()
+        let http = crate::tls::http_client()?
             .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION")))
             .timeout(TIMEOUT)
             .https_only(true)

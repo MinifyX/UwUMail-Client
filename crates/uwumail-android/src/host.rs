@@ -171,7 +171,6 @@ pub(crate) fn handle(method: &str, payload: &str) -> Result<Option<String>> {
         "status" => Ok(Some(
             json!({
                 "started": crate::native::started(),
-                "certificates": crate::native::certificates_ready(),
                 "engine": ENGINE.get().is_some(),
                 "error": crate::native::start_error(),
             })
