@@ -8,7 +8,7 @@ use std::sync::{Arc, OnceLock};
 
 use rustls::ClientConfig;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 pub fn install_crypto_provider() {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
@@ -28,6 +28,8 @@ pub fn client_config() -> Result<Arc<ClientConfig>> {
 #[cfg(not(target_os = "android"))]
 fn build() -> Result<ClientConfig> {
     use rustls_platform_verifier::BuilderVerifierExt;
+
+    use crate::error::Error;
     Ok(ClientConfig::builder()
         .with_platform_verifier()
         .map_err(|e| Error::internal(format!("TLS setup failed: {e}")))?
