@@ -156,15 +156,47 @@ pub fn sanitize_html(html: &str) -> String {
             "cellspacing",
             "dir",
             "class",
+            "id",
+            "role",
         ])
         .add_tag_attributes("font", &["color", "face", "size"])
         .add_tag_attributes("img", &["src", "alt", "width", "height"])
         .add_tag_attributes("td", &["colspan", "rowspan", "background"])
+        .add_tag_attributes("th", &["colspan", "rowspan", "background"])
         .add_tag_attributes("table", &["background"])
         .url_schemes(HashSet::from(["http", "https", "mailto", "cid", "data"]))
         .link_rel(Some("noopener noreferrer"))
         .strip_comments(true);
-    builder.clean(html).to_string()
+    let cleaned = builder.clean(html).to_string();
+    // The sanitizer drops <body>, and with it the background many newsletters set there.
+    match body_background(html) {
+        Some(style) => format!("<div style=\"{style}\">{cleaned}</div>"),
+        None => cleaned,
+    }
+}
+
+/// Reads `bgcolor` and `style` from the `<body>` tag as one inline style.
+fn body_background(html: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let start = lower.find("<body")?;
+    let end = start + lower[start..].find('>')?;
+    let tag = &html[start..end];
+    let attribute = |name: &str| {
+        let tag_lower = tag.to_ascii_lowercase();
+        let at = tag_lower.find(&format!("{name}="))? + name.len() + 1;
+        let rest = &tag[at..];
+        let quote = rest.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+        let value = &rest[1..];
+        Some(value[..value.find(quote)?].to_string())
+    };
+    let mut style = String::new();
+    if let Some(color) = attribute("bgcolor").filter(|c| c.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '#')) {
+        style.push_str(&format!("background-color:{color};"));
+    }
+    if let Some(inline) = attribute("style") {
+        style.push_str(&inline.replace('"', "'"));
+    }
+    (!style.is_empty()).then_some(style)
 }
 
 /// Rough HTML to text conversion for snippets and search.
@@ -318,6 +350,20 @@ Content-Type: text/html; charset=utf-8\r\n\
         assert!(!html.contains("script"));
         assert!(!html.contains("onclick"));
         assert!(html.contains("<style>p{color:red}</style>"));
+    }
+
+    #[test]
+    fn newsletter_layouts_survive_sanitizing() {
+        let html = "<html><head><style>#main > td { padding: 8px }</style></head>\
+            <body bgcolor=\"#f4f4f4\" style=\"margin:0\" onload=\"x()\">\
+            <table id=\"main\" width=\"600\" cellpadding=\"0\" align=\"center\"><tr><th colspan=\"2\">Hi</th></tr></table></body></html>";
+        let clean = sanitize_html(html);
+        assert!(clean.contains("#main > td { padding: 8px }"), "CSS must not be escaped: {clean}");
+        assert!(clean.contains("id=\"main\""));
+        assert!(clean.contains("width=\"600\""));
+        assert!(clean.contains("colspan=\"2\""));
+        assert!(clean.starts_with("<div style=\"background-color:#f4f4f4;margin:0\">"), "{clean}");
+        assert!(!clean.contains("onload"));
     }
 
     #[test]

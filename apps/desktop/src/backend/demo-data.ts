@@ -40,6 +40,55 @@ const lukas: Address = { name: "Lukas Editz", email: "lukas@pixelstudio.example"
 
 const p = (de: string, en: string): Localized => ({ de, en });
 
+/**
+ * A typical table-based newsletter: <style> first, fixed 600px layout and a
+ * body stretched to 100% height. These are the cases that break naive readers.
+ */
+function newsletter(lang: Lang): string {
+  const sets = [
+    "Bubblegum",
+    "Matcha",
+    "Midnight",
+    "Sakura",
+    "Lavender",
+    "Peach",
+    "Ocean",
+    "Forest",
+    "Cloud",
+    "Ember",
+    "Mint",
+    "Honey",
+  ];
+  const rows = sets
+    .map(
+      (name, index) =>
+        `<tr><td class="card"><h3>${index + 1}. ${name}</h3><p>${
+          lang === "de"
+            ? "PBT-Doubleshot, 142 Tasten, passt auf die meisten Tastaturen."
+            : "PBT double-shot, 142 keys, fits most keyboards."
+        }</p><a class="cta" href="https://pixelparts.example/sets/${name.toLowerCase()}">${lang === "de" ? "Ansehen" : "View"}</a></td></tr>`,
+    )
+    .join("");
+  return `<style>
+html, body { height: 100%; }
+body { font-family: Georgia, serif; }
+#wrapper { background: #f4efe9; padding: 24px 0; }
+#wrapper > table { margin: 0 auto; background: #ffffff; border-radius: 12px; }
+td.card { padding: 20px 28px; border-bottom: 1px solid #eee4d8; }
+td.card h3 { margin: 0 0 6px; color: #3b2f2a; font-size: 18px; }
+.cta { display: inline-block; margin-top: 8px; padding: 8px 14px; background: #3b2f2a; color: #ffffff !important; border-radius: 6px; text-decoration: none; }
+</style>
+<div id="wrapper"><table width="600" cellpadding="0" cellspacing="0" role="presentation">
+<tr><td style="padding:28px;text-align:center"><h1 style="margin:0;color:#3b2f2a">${
+    lang === "de" ? "Hallo Herbst!" : "Hello autumn!"
+  }</h1><p style="color:#7a6a5f">${lang === "de" ? "Zwölf neue Sets sind da." : "Twelve new sets just landed."}</p></td></tr>
+${rows}
+<tr><td style="padding:20px;text-align:center;font-size:12px;color:#9a8a7f">Pixel Parts · <a href="https://pixelparts.example/unsubscribe">${
+    lang === "de" ? "Abmelden" : "Unsubscribe"
+  }</a></td></tr>
+</table></div>`;
+}
+
 export const SAMPLE_THREADS: SampleThread[] = [
   {
     account: "private",
@@ -181,6 +230,19 @@ export const SAMPLE_THREADS: SampleThread[] = [
   },
   {
     account: "private",
+    subject: p("Herbst-Newsletter: 12 neue Keycap-Sets", "Autumn newsletter: 12 new keycap sets"),
+    messages: [
+      {
+        from: shop,
+        minutesAgo: 60 * 27,
+        seen: true,
+        html: true,
+        body: p(newsletter("de"), newsletter("en")),
+      },
+    ],
+  },
+  {
+    account: "private",
     subject: p("Dein Kontoauszug für August", "Your statement for August"),
     messages: [
       {
@@ -277,6 +339,7 @@ export function buildMessages(lang: Lang, now = Date.now()): Message[] {
       const body = sample.body[lang];
       const text = sample.html
         ? body
+            .replace(/<style[\s\S]*?<\/style>/gi, " ")
             .replace(/<[^>]+>/g, " ")
             .replace(/\s+/g, " ")
             .trim()

@@ -32,29 +32,38 @@ function sanitize(html: string) {
       "base",
     ],
     FORBID_ATTR: ["srcdoc", "formaction", "ping"],
+    // Without this, a leading <style> (the first thing in most newsletters) is
+    // parsed into <head> and silently dropped.
+    FORCE_BODY: true,
   });
 }
 
-function buildDocument(message: Message, allowRemote: boolean, dark: boolean) {
+export const ROOT_ID = "uwu-mail-root";
+
+export function buildDocument(message: Message, allowRemote: boolean, dark: boolean) {
   const isHtml = message.bodyHtml !== null;
   const body = isHtml ? sanitize(message.bodyHtml!) : linkify(textToHtml(message.bodyText ?? ""));
   const imageSources = allowRemote ? "data: cid: blob: https: http:" : "data: cid: blob:";
   const csp = `default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:; media-src data:`;
-  // HTML mail is designed for white paper, so it keeps a light background in dark mode.
-  const plainColors = dark ? "color:#f8f2f6;background:transparent" : "color:#1c1420;background:transparent";
-  const colors = isHtml ? "color:#1c1420;background:#ffffff" : plainColors;
-  const link = dark && !isHtml ? "#ff9dbf" : "#c8165f";
+  // The frame never scrolls itself (the reader around it does), so html/body
+  // must not stretch to the frame height. Otherwise measuring and resizing
+  // would feed each other.
+  const frame = `html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:hidden!important}
+#${ROOT_ID}{display:flow-root;overflow-x:auto}`;
+  // HTML mail brings its own design: keep the sender's typography and only
+  // give it white paper (also in dark mode) and some breathing room.
+  const html = `body{background:#ffffff;color:#1c1420}
+#${ROOT_ID}{padding:16px}
+a{color:#c8165f}`;
+  const text = `body{color:${dark ? "#f8f2f6" : "#1c1420"};background:transparent;font:15px/1.6 "Manrope Variable",ui-sans-serif,system-ui,sans-serif}
+#${ROOT_ID}{overflow-wrap:break-word}
+a{color:${dark ? "#ff9dbf" : "#c8165f"}}
+p{margin:0 0 12px}
+blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #ffd0e2;color:#716672}`;
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
-<style>
-html,body{margin:0;padding:0}
-body{${colors};font:15px/1.6 "Manrope Variable",ui-sans-serif,system-ui,sans-serif;overflow-wrap:anywhere;padding:${isHtml ? "20px" : "0"};}
-a{color:${link}}
-img{max-width:100%;height:auto}
-blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #ffd0e2;color:#716672}
-pre{white-space:pre-wrap}
-p{margin:0 0 12px}
-</style></head><body>${body}</body></html>`;
+<style>${frame}
+${isHtml ? html : text}</style></head><body><div id="${ROOT_ID}">${body}</div></body></html>`;
 }
 
 interface MessageBodyProps {
@@ -70,11 +79,23 @@ export function MessageBody({ message, allowRemote, dark }: MessageBodyProps) {
 
   const attach = useCallback(() => {
     const doc = frame.current?.contentDocument;
-    if (!doc) return;
-    const measure = () => setHeight(Math.max(doc.documentElement.scrollHeight, 40));
+    const root = doc?.getElementById(ROOT_ID);
+    if (!doc || !root) return;
+    let pending = 0;
+    // Measure the content wrapper, not the document: the document is never
+    // smaller than the frame, so it would only ever grow. Updates wait for the
+    // next frame, which also avoids ResizeObserver loop errors.
+    const measure = () => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => {
+        const next = Math.max(Math.ceil(root.getBoundingClientRect().height), 24);
+        setHeight((current) => (Math.abs(current - next) > 1 ? next : current));
+      });
+    };
     measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(doc.body);
+    new ResizeObserver(measure).observe(root);
+    // Images load after the document; their size changes the height too.
+    doc.addEventListener("load", measure, true);
     doc.addEventListener("click", (event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]");
       if (!anchor) return;

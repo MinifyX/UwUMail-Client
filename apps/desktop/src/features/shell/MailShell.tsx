@@ -82,10 +82,11 @@ export function MailShell() {
       )}
 
       {layout === "pro" ? (
-        <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,420px)_minmax(0,1fr)]">
-          <MailboxNav className="bg-canvas" />
-          <ThreadList variant="pro" className="border-x border-hairline" />
-          <ThreadReader variant="pro" />
+        // A minmax(0,1fr) row keeps the columns at window height so each one scrolls on its own.
+        <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,420px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
+          <MailboxNav className="min-h-0 bg-canvas" />
+          <ThreadList variant="pro" className="min-h-0 border-x border-hairline" />
+          <ThreadReader variant="pro" className="min-h-0" />
         </div>
       ) : (
         <div className="relative flex min-h-0 flex-1 gap-3 p-3">
