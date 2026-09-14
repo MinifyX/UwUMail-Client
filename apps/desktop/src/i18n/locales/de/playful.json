@@ -83,11 +83,16 @@
     "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)",
     "motionDesc": "Soll Nyu blinzeln, hüpfen und herumfliegen? „Wie System“ hält sich an dein Betriebssystem.",
     "senderPicturesCleared": "Bilder weggefegt ✧",
-    "protocolSwitched": "{{email}} spricht jetzt {{protocol}} ✧"
+    "protocolSwitched": "{{email}} spricht jetzt {{protocol}} ✧",
+    "runInBackgroundDesc": "Beim Schließen macht Nyu neben der Uhr ein Nickerchen und passt weiter auf neue Mails auf. Beenden über das Symbol dort.",
+    "upToDate": "Alles frisch, nichts zu tun ✧"
   },
   "attachment": {
     "loading": "Ich pack den Anhang aus…",
     "dangerTitle": "Vorsicht! Die Datei könnte Programme starten (・_・;)",
     "noPreview": "Da kann ich nicht reinschauen (・・ )?"
+  },
+  "update": {
+    "readyTitle": "Nyu hat was Neues mitgebracht ✧"
   }
 }

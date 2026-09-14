@@ -12,6 +12,7 @@ import type {
   DiscoveredSettings,
   FlagChange,
   Folder,
+  MailtoDraft,
   Message,
   NewAccount,
   OutgoingMessage,
@@ -21,6 +22,7 @@ import type {
   ThreadPage,
   ThreadQuery,
   ThreadSummary,
+  UpdateInfo,
 } from "./types";
 
 const OAUTH_DOMAINS: Record<string, "microsoft" | "google"> = {
@@ -61,6 +63,7 @@ export class DemoBackend implements Backend {
   private listeners = new Set<(event: BackendEvent) => void>();
   private nextId = 1000;
   private attachmentUrls = new Map<string, string>();
+  private mailtoTaken = false;
 
   constructor() {
     setTimeout(() => {
@@ -332,6 +335,54 @@ export class DemoBackend implements Backend {
       .filter((c) => !q || c.email.toLowerCase().includes(q) || c.name?.toLowerCase().includes(q))
       .sort((a, b) => b.timesContacted - a.timesContacted)
       .slice(0, 8);
+  }
+
+  async setRunInBackground() {}
+
+  async setUpdateChannel() {}
+
+  async updateStatus(): Promise<UpdateInfo | null> {
+    return null;
+  }
+
+  /** Pretends a new version was found, so the update hint can be seen in the browser. */
+  async checkForUpdates(): Promise<UpdateInfo | null> {
+    await wait(1200);
+    const update: UpdateInfo = {
+      version: "0.2.0",
+      notes: JSON.stringify({
+        de: "- Eigener Installer mit Nyu\n- Updates kommen jetzt von selbst\n- UwUMail kann im Infobereich weiterlaufen",
+        en: "- UwUMail's own installer with Nyu\n- Updates now arrive by themselves\n- UwUMail can keep running in the notification area",
+      }),
+    };
+    this.emit({ type: "update:ready", ...update });
+    return update;
+  }
+
+  async installUpdate() {
+    window.location.reload();
+  }
+
+  async takeMailto(): Promise<MailtoDraft | null> {
+    // Try it in the browser: open the demo with ?mailto=mailto:someone@example.com
+    const link = new URLSearchParams(window.location.search).get("mailto");
+    if (!link?.toLowerCase().startsWith("mailto:") || this.mailtoTaken) return null;
+    this.mailtoTaken = true;
+    const [recipients = "", query = ""] = link.slice(7).split("?");
+    const params = new URLSearchParams(query);
+    const addresses = (value: string | null) =>
+      (value ?? "")
+        .split(",")
+        .map((email) => email.trim())
+        .filter((email) => email.includes("@"))
+        .map((email) => ({ email }));
+    return {
+      to: [...addresses(decodeURIComponent(recipients)), ...addresses(params.get("to"))],
+      cc: addresses(params.get("cc")),
+      bcc: addresses(params.get("bcc")),
+      subject: params.get("subject") ?? "",
+      body: params.get("body") ?? "",
+    };
   }
 
   subscribe(listener: (event: BackendEvent) => void) {

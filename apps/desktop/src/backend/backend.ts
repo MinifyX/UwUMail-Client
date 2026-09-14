@@ -6,6 +6,7 @@ import type {
   DiscoveredSettings,
   FlagChange,
   Folder,
+  MailtoDraft,
   NewAccount,
   OutgoingMessage,
   Protocol,
@@ -13,6 +14,7 @@ import type {
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
+  UpdateInfo,
 } from "./types";
 
 export type BackendErrorCode =
@@ -61,6 +63,19 @@ export interface Backend {
   /** Brand logo or website icon for a company address; null for people and mail providers. */
   getSenderPicture(email: string): Promise<SenderPicture | null>;
   clearSenderPictures(): Promise<void>;
+
+  /** Whether closing the window keeps UwUMail running in the tray. */
+  setRunInBackground(enabled: boolean): Promise<void>;
+  /** The mailto: link UwUMail was opened with, handed out once. */
+  takeMailto(): Promise<MailtoDraft | null>;
+
+  setUpdateChannel(channel: "stable" | "beta"): Promise<void>;
+  /** A downloaded update waiting for a restart. */
+  updateStatus(): Promise<UpdateInfo | null>;
+  /** Looks for a new version and downloads it; null when UwUMail is up to date. */
+  checkForUpdates(): Promise<UpdateInfo | null>;
+  /** Restarts into the waiting update. */
+  installUpdate(): Promise<void>;
 
   subscribe(listener: (event: BackendEvent) => void): () => void;
 }

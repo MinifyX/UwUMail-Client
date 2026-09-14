@@ -136,10 +136,40 @@ result (including "nothing found") for 30 days. Addresses at mail providers
 (Gmail, GMX, Outlook, …) and names without a public suffix never cause a
 request. The setting lives under Reading and is on by default.
 
+## Windows installer and updates
+
+`apps/setup` is UwUMail's own installer: a small Tauri app with Nyu that
+carries the UwUMail executable inside (zstd-packed at build time,
+`pnpm build:setup`). It installs for the current user without admin rights:
+
+| What | Where |
+| --- | --- |
+| App and `uninstall.exe` | `%LOCALAPPDATA%\Programs\UwUMail` (changeable) |
+| Shortcuts | Start menu (always, with the AppUserModelID notifications need), desktop (optional) |
+| "Installed apps" entry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\UwUMail` |
+| Start with Windows | `HKCU\…\Run` → `UwUMail.exe --autostart` (starts hidden in the tray) |
+| Default mail app | `HKCU\Software\Classes\UwUMail.mailto`, `Software\UwUMail\Capabilities`, `RegisteredApplications`, then Windows' default apps page |
+| Remembered options | `HKCU\Software\UwUMail\Setup` |
+
+The setup replaces the old NSIS installation of 0.1.0 and keeps mail data. The
+uninstaller runs from a temporary copy so it can delete itself, and removes
+mail data and keychain entries only if asked. Without WebView2 it offers to
+download it first. `UWUMAIL_SETUP_SANDBOX=<folder>` redirects files, shortcuts
+and registry keys for testing.
+
+Updates: the app checks `stable.json` or `beta.json` in the public
+`MinifyX/UwUMail-Releases` repo 20 seconds after start and every six hours
+(`tauri-plugin-updater`, signature checked against the public key in
+`tauri.conf.json`). It downloads the new `UwUMail-Setup-<version>.exe` into
+`%LOCALAPPDATA%\app.uwumail.desktop\updates`, shows Nyu's hint, and either
+restarts into it now or on the next start (`--update --relaunch --wait-pid`).
+
 ## Build and release
 
 - Every push: typecheck, lint, unit tests, `cargo clippy`, `cargo test`
-  (including integration tests against a GreenMail container).
-- Every push to `main`: installers for Windows and Linux as workflow artifacts.
-- Tags `vX.Y.Z`: installers for Windows, macOS and Linux on a GitHub release
-  plus the updater manifest.
+  (including integration tests against GreenMail and Stalwart).
+- Every push to `main`: `UwUMail-Setup-<version>.exe` for Windows and the Linux
+  packages as workflow artifacts.
+- Tags `vX.Y.Z` (or `vX.Y.Z-beta.N`): the signed setup goes to
+  `MinifyX/UwUMail-Releases` as a release and into the update feeds (see
+  `release-notes/README.md`); macOS and Linux get a draft release here.

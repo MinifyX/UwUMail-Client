@@ -8,6 +8,11 @@ export interface ComposeRequest {
   mode: ComposeMode;
   source?: Message;
   to?: Address[];
+  /** Prefilled from a mailto: link. */
+  cc?: Address[];
+  bcc?: Address[];
+  subject?: string;
+  body?: string;
 }
 
 export type SettingsSection = "appearance" | "mail" | "accounts" | "addons" | "about";

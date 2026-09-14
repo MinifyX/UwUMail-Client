@@ -8,11 +8,11 @@ import { Nyu, NYU, Paw, Sticker } from "./Nyu";
 const S = { stroke: NYU.ink, strokeWidth: 6 } as const;
 const EDGE = 18;
 
-function Shadow({ cx = 160, rx = 104 }: { cx?: number; rx?: number }) {
+export function Shadow({ cx = 160, rx = 104 }: { cx?: number; rx?: number }) {
   return <ellipse className="no-edge" cx={cx} cy="204" rx={rx} ry="8" fill={NYU.ink} opacity="0.08" />;
 }
 
-function Star({ x, y, r = 12 }: { x: number; y: number; r?: number }) {
+export function Star({ x, y, r = 12 }: { x: number; y: number; r?: number }) {
   const k = r * 0.2;
   return (
     <path
@@ -24,7 +24,7 @@ function Star({ x, y, r = 12 }: { x: number; y: number; r?: number }) {
   );
 }
 
-function Heart({ x, y, size = 1, fill = NYU.body }: { x: number; y: number; size?: number; fill?: string }) {
+export function Heart({ x, y, size = 1, fill = NYU.body }: { x: number; y: number; size?: number; fill?: string }) {
   return (
     <path
       transform={`translate(${x} ${y}) scale(${size})`}
@@ -36,7 +36,7 @@ function Heart({ x, y, size = 1, fill = NYU.body }: { x: number; y: number; size
   );
 }
 
-function Letter({ x, y, rotate = 0, seal = false }: { x: number; y: number; rotate?: number; seal?: boolean }) {
+export function Letter({ x, y, rotate = 0, seal = false }: { x: number; y: number; rotate?: number; seal?: boolean }) {
   return (
     <g transform={`translate(${x} ${y}) rotate(${rotate})`}>
       <rect x="-24" y="-16" width="48" height="32" rx="6" fill={NYU.paper} {...S} strokeWidth={5} />

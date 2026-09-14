@@ -11,6 +11,7 @@ pub mod error;
 pub mod imap;
 pub mod jmap;
 pub mod jmap_sync;
+pub mod mailto;
 pub mod mime;
 pub mod model;
 pub mod oauth;

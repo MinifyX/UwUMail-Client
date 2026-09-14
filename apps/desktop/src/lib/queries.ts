@@ -5,6 +5,8 @@ import type { FlagChange, ListFilter, MailboxView, ThreadSummary } from "@/backe
 import { useT } from "@/i18n";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
+import { useUi } from "@/state/ui";
+import { useUpdates } from "@/state/updates";
 
 export const queryKeys = {
   accounts: ["accounts"] as const,
@@ -108,10 +110,38 @@ export function useMessageActions() {
 export function useBackendEvents() {
   const client = useQueryClient();
   const { t } = useT();
+  const runInBackground = useSettings((s) => s.runInBackground);
+  const updateChannel = useSettings((s) => s.updateChannel);
 
   useEffect(() => {
+    void backend().setRunInBackground(runInBackground);
+  }, [runInBackground]);
+
+  useEffect(() => {
+    void backend().setUpdateChannel(updateChannel);
+  }, [updateChannel]);
+
+  useEffect(() => {
+    void backend()
+      .updateStatus()
+      .then((update) => update && useUpdates.getState().setReady(update));
+  }, []);
+
+  useEffect(() => {
+    // A mailto: link opened UwUMail, now or while it was already running.
+    const openMailto = async () => {
+      const draft = await backend().takeMailto();
+      if (draft) useUi.getState().openCompose({ mode: "new", ...draft });
+    };
+    void openMailto();
     return backend().subscribe((event) => {
       switch (event.type) {
+        case "compose:mailto":
+          void openMailto();
+          break;
+        case "update:ready":
+          useUpdates.getState().setReady({ version: event.version, notes: event.notes });
+          break;
         case "mail:changed":
           void client.invalidateQueries({ queryKey: queryKeys.threads });
           void client.invalidateQueries({ queryKey: queryKeys.folders });

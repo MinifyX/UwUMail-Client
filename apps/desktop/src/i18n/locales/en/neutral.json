@@ -259,7 +259,18 @@
     "senderPicturesCleared": "Saved pictures deleted",
     "protocolSwitchTo": "Switch to {{protocol}}",
     "protocolSwitchConfirm": "Switch {{email}} to {{protocol}}? UwUMail downloads the mail again for that.",
-    "protocolSwitched": "{{email}} now uses {{protocol}}"
+    "protocolSwitched": "{{email}} now uses {{protocol}}",
+    "runInBackground": "Keep running in the notification area",
+    "runInBackgroundDesc": "Closing the window leaves UwUMail next to the clock, so new mail still arrives. Quit it from its icon there.",
+    "updates": "Updates",
+    "updatesDesc": "UwUMail downloads new versions quietly and installs them the next time it starts.",
+    "channelStable": "Stable",
+    "channelBeta": "Beta",
+    "channelBetaDesc": "Beta gets new features earlier, and sometimes a rough edge.",
+    "checkUpdates": "Check for updates",
+    "upToDate": "UwUMail is up to date",
+    "updateFound": "Version {{version}} is ready",
+    "updateCheckFailed": "Couldn't check for updates. {{reason}}"
   },
   "theme": {
     "system": "System",
@@ -336,5 +347,12 @@
     "organizer": "Organizer",
     "email": "Email",
     "phone": "Phone"
+  },
+  "update": {
+    "readyTitle": "A new version is ready",
+    "version": "UwUMail {{version}}",
+    "whatsNew": "What's new",
+    "restart": "Restart now",
+    "later": "Later"
   }
 }

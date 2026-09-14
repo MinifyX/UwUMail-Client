@@ -17,7 +17,8 @@
         "height": 820,
         "minWidth": 900,
         "minHeight": 600,
-        "center": true
+        "center": true,
+        "visible": false
       }
     ],
     "security": {
@@ -40,6 +41,12 @@
         "enable": true,
         "scope": ["$APPDATA/attachments/**", "$APPDATA/pictures/**"]
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJBOUExM0JDNkIxNjZCNzQKUldSMGF4WnJ2Qk9hS3BnUnYxV3RmbyszTC9QSTI0MkZaTm5TbmNMSktRZFhjT0lWTXcvK2JXZDMK",
+      "endpoints": ["https://raw.githubusercontent.com/MinifyX/UwUMail-Releases/main/stable.json"]
     }
   },
   "bundle": {

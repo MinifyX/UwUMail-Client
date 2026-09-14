@@ -30,7 +30,14 @@ function quoted(message: Message) {
 export function initialDraft(request: ComposeRequest, accounts: Account[], t: Translate, locale: string): DraftState {
   const source = request.source;
   const accountId = source?.accountId ?? accounts[0]?.id ?? "";
-  const empty: DraftState = { accountId, to: request.to ?? [], cc: [], bcc: [], subject: "", html: "" };
+  const empty: DraftState = {
+    accountId,
+    to: request.to ?? [],
+    cc: request.cc ?? [],
+    bcc: request.bcc ?? [],
+    subject: request.subject ?? "",
+    html: request.body ? textToHtml(request.body) : "",
+  };
   if (!source) return empty;
 
   const date = formatFullDate(source.date, locale);

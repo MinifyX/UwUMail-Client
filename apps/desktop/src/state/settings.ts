@@ -8,6 +8,8 @@ export type ThemeSetting = "system" | "light" | "dark";
 export type MotionSetting = "system" | "on" | "off";
 export type LanguageSetting = "system" | "de" | "en";
 export type RemoteImages = "ask" | "always";
+/** Beta gets pre-releases (tags like v0.2.0-beta.1) before everyone else. */
+export type UpdateChannel = "stable" | "beta";
 /** How HTML mail looks while the app is dark. */
 export type MailAppearance = "auto" | "light" | "dark";
 
@@ -29,6 +31,9 @@ export interface Settings {
   collapsedFolders: string[];
   /** Brand logos and website icons for company senders. */
   senderPictures: boolean;
+  /** Closing the window keeps UwUMail running in the tray. */
+  runInBackground: boolean;
+  updateChannel: UpdateChannel;
 }
 
 interface SettingsActions {
@@ -53,6 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   senderAppearance: {},
   collapsedFolders: [],
   senderPictures: true,
+  runInBackground: true,
+  updateChannel: "stable",
 };
 
 export const useSettings = create<Settings & SettingsActions>()(

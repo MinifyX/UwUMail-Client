@@ -10,6 +10,7 @@
     "dev": "pnpm --filter @uwumail/desktop dev",
     "tauri": "pnpm --filter @uwumail/desktop tauri",
     "build": "pnpm -r build",
+    "build:setup": "node scripts/build-setup.mjs",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",

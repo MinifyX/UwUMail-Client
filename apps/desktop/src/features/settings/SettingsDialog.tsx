@@ -184,6 +184,14 @@ function Reading() {
           {t("settings.clearSenderPictures")}
         </Button>
       </div>
+      <div className="border-b border-hairline py-4">
+        <Toggle
+          checked={settings.runInBackground}
+          onChange={(runInBackground) => settings.update({ runInBackground })}
+          label={t("settings.runInBackground")}
+          description={t("settings.runInBackgroundDesc")}
+        />
+      </div>
     </>
   );
 }
@@ -284,6 +292,49 @@ function Addons() {
   );
 }
 
+function UpdateSettings() {
+  const { t } = useT();
+  const channel = useSettings((s) => s.updateChannel);
+  const update = useSettings((s) => s.update);
+  const [checking, setChecking] = useState(false);
+
+  return (
+    <div className="flex w-full max-w-[420px] flex-col items-center gap-2.5 rounded-2xl border border-hairline px-4 py-3">
+      <p className="text-[13px] text-muted">{t("settings.updatesDesc")}</p>
+      <Segmented
+        label={t("settings.updates")}
+        value={channel}
+        onChange={(updateChannel) => update({ updateChannel })}
+        options={[
+          { value: "stable", label: t("settings.channelStable") },
+          { value: "beta", label: t("settings.channelBeta") },
+        ]}
+      />
+      {channel === "beta" && <p className="text-[12px] text-muted">{t("settings.channelBetaDesc")}</p>}
+      <Button
+        size="sm"
+        busy={checking}
+        onClick={async () => {
+          setChecking(true);
+          try {
+            const found = await backend().checkForUpdates();
+            toast(found ? t("settings.updateFound", { version: found.version }) : t("settings.upToDate"), "success");
+          } catch (reason) {
+            toast(
+              t("settings.updateCheckFailed", { reason: reason instanceof Error ? reason.message : String(reason) }),
+              "error",
+            );
+          } finally {
+            setChecking(false);
+          }
+        }}
+      >
+        {t("settings.checkUpdates")}
+      </Button>
+    </div>
+  );
+}
+
 function About() {
   const { t } = useT();
   const setShortcutsOpen = useUi((s) => s.setShortcutsOpen);
@@ -302,6 +353,7 @@ function About() {
           {t("status.demo")}
         </p>
       )}
+      <UpdateSettings />
       <div className="flex flex-wrap justify-center gap-2">
         <Button icon={ExternalLink} onClick={() => void openExternal("https://github.com/MinifyX/UwUMail-Client")}>
           {t("settings.source")}

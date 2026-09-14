@@ -1,3 +1,6 @@
+mod background;
+mod updates;
+
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -5,6 +8,7 @@ use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::broadcast::error::RecvError;
 use uwumail_core::attachments::AttachmentFile;
+use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
 use uwumail_core::pictures::SenderPicture;
 use uwumail_core::secrets::KeyringSecrets;
@@ -124,6 +128,38 @@ fn clear_sender_pictures(engine: State<'_, Engine>) -> CommandResult<()> {
     engine.clear_sender_pictures()
 }
 
+#[tauri::command]
+fn set_run_in_background(enabled: bool) {
+    background::set_run_in_background(enabled);
+}
+
+/// The `mailto:` link UwUMail was opened with, once.
+#[tauri::command]
+fn take_mailto(app: AppHandle) -> Option<MailtoDraft> {
+    background::take_mailto(&app)
+}
+
+#[tauri::command]
+fn set_update_channel(app: AppHandle, channel: updates::Channel) {
+    updates::set_channel(&app, channel);
+}
+
+/// A downloaded update waiting for a restart, if any.
+#[tauri::command]
+fn update_status(app: AppHandle) -> Option<updates::ReadyUpdate> {
+    updates::ready(&app)
+}
+
+#[tauri::command]
+async fn check_for_updates(app: AppHandle) -> CommandResult<Option<updates::ReadyUpdate>> {
+    updates::check(&app).await
+}
+
+#[tauri::command]
+fn install_update(app: AppHandle) -> CommandResult<()> {
+    updates::install_now(&app)
+}
+
 /// Sends engine events to the UI and rings for new mail while UwUMail is in the background.
 fn forward(app: &AppHandle, engine: &Engine, event: EngineEvent) {
     if let EngineEvent::MailReceived { message_ids, .. } = &event {
@@ -145,10 +181,17 @@ fn forward(app: &AppHandle, engine: &Engine, event: EngineEvent) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Must come first, so a second start hands over before anything else runs.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| background::on_second_instance(app, args)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            if updates::apply_pending_on_start(app.handle()) {
+                // The downloaded setup replaces this version and starts UwUMail again.
+                std::process::exit(0);
+            }
             let data_dir = app.path().app_data_dir()?;
             let opener = app.handle().clone();
             let open_url = Arc::new(move |url: &str| {
@@ -173,6 +216,8 @@ pub fn run() {
             });
 
             app.manage(engine);
+            background::setup(app)?;
+            updates::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -195,6 +240,12 @@ pub fn run() {
             save_attachment,
             get_sender_picture,
             clear_sender_pictures,
+            set_run_in_background,
+            take_mailto,
+            set_update_channel,
+            update_status,
+            check_for_updates,
+            install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running UwUMail");

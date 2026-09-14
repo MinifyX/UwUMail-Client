@@ -1,5 +1,13 @@
 name: Release
 
+# Runs for tags like v0.2.0 or v0.2.0-beta.1. The tag must match the version in
+# apps/desktop/src-tauri/tauri.conf.json, and release-notes/<version>.json must
+# exist.
+#
+# Windows: builds and signs UwUMail-Setup-<version>.exe and hands it to the
+# public MinifyX/UwUMail-Releases repo, which publishes it and updates the
+# update feeds. macOS and Linux: draft release here, as before.
+
 on:
   push:
     tags: ["v*"]
@@ -9,15 +17,78 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  windows:
+    name: Release (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check version and release notes
+        id: meta
+        shell: bash
+        run: |
+          version=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version"
+            exit 1
+          fi
+          test -f "release-notes/$version.json" || { echo "::error::release-notes/$version.json is missing"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:setup
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UwUMail-Setup-${{ steps.meta.outputs.version }}
+          path: |
+            target/release/UwUMail-Setup-${{ steps.meta.outputs.version }}.exe
+            target/release/UwUMail-Setup-${{ steps.meta.outputs.version }}.exe.sig
+      - name: Hand over to UwUMail-Releases
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          DEPLOY_KEY: ${{ secrets.RELEASES_DEPLOY_KEY }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          key="$RUNNER_TEMP/releases-key"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          export GIT_SSH_COMMAND="ssh -i '$key' -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          prerelease=false
+          case "$VERSION" in *-*) prerelease=true ;; esac
+          work="$RUNNER_TEMP/incoming"
+          mkdir -p "$work"
+          cp "target/release/UwUMail-Setup-$VERSION.exe" "target/release/UwUMail-Setup-$VERSION.exe.sig" "$work/"
+          node -e "
+            const fs = require('fs');
+            const notes = JSON.parse(fs.readFileSync('release-notes/$VERSION.json', 'utf8'));
+            fs.writeFileSync(process.argv[1], JSON.stringify({ version: '$VERSION', prerelease: $prerelease, notes }, null, 2));
+          " "$work/release.json"
+          cd "$work"
+          git init -q
+          git checkout -q --orphan "incoming/v$VERSION"
+          git add .
+          git -c user.name="UwUMail Release" -c user.email="github-actions[bot]@users.noreply.github.com" commit -qm "UwUMail $VERSION"
+          git push -q --force git@github.com:MinifyX/UwUMail-Releases.git "HEAD:refs/heads/incoming/v$VERSION"
+          rm -f "$key"
+
+  other:
     name: Release (${{ matrix.name }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Windows
-            os: windows-latest
-            args: ""
           - name: macOS
             os: macos-latest
             args: --target universal-apple-darwin

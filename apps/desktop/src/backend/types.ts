@@ -203,7 +203,24 @@ export interface NewAccount {
   jmapUrl?: string;
 }
 
+/** What a mailto: link asks for. */
+export interface MailtoDraft {
+  to: Address[];
+  cc: Address[];
+  bcc: Address[];
+  subject: string;
+  body: string;
+}
+
+/** A new UwUMail version, downloaded and waiting for a restart. */
+export interface UpdateInfo {
+  version: string;
+  notes?: string | null;
+}
+
 export type BackendEvent =
   | { type: "mail:changed"; accountId: string }
   | { type: "mail:received"; accountId: string; messageIds: string[] }
-  | { type: "account:status"; accountId: string; status: AccountStatus };
+  | { type: "account:status"; accountId: string; status: AccountStatus }
+  | { type: "compose:mailto" }
+  | ({ type: "update:ready" } & UpdateInfo);

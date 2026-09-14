@@ -9,6 +9,7 @@ import type {
   DiscoveredSettings,
   FlagChange,
   Folder,
+  MailtoDraft,
   NewAccount,
   OutgoingMessage,
   Protocol,
@@ -16,6 +17,7 @@ import type {
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
+  UpdateInfo,
 } from "./types";
 
 interface EngineError {
@@ -36,7 +38,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   }
 }
 
-const EVENT_NAMES = ["mail:changed", "mail:received", "account:status"] as const;
+const EVENT_NAMES = ["mail:changed", "mail:received", "account:status", "compose:mailto", "update:ready"] as const;
 
 export class TauriBackend implements Backend {
   readonly kind = "tauri";
@@ -130,6 +132,30 @@ export class TauriBackend implements Backend {
 
   searchContacts(query: string) {
     return call<Contact[]>("search_contacts", { query });
+  }
+
+  setRunInBackground(enabled: boolean) {
+    return call<void>("set_run_in_background", { enabled });
+  }
+
+  takeMailto() {
+    return call<MailtoDraft | null>("take_mailto");
+  }
+
+  setUpdateChannel(channel: "stable" | "beta") {
+    return call<void>("set_update_channel", { channel });
+  }
+
+  updateStatus() {
+    return call<UpdateInfo | null>("update_status");
+  }
+
+  checkForUpdates() {
+    return call<UpdateInfo | null>("check_for_updates");
+  }
+
+  installUpdate() {
+    return call<void>("install_update");
   }
 
   subscribe(listener: (event: BackendEvent) => void) {

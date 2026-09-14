@@ -259,7 +259,18 @@
     "senderPicturesCleared": "Gespeicherte Bilder gelöscht",
     "protocolSwitchTo": "Zu {{protocol}} wechseln",
     "protocolSwitchConfirm": "{{email}} auf {{protocol}} umstellen? UwUMail lädt die Mails dafür neu herunter.",
-    "protocolSwitched": "{{email}} nutzt jetzt {{protocol}}"
+    "protocolSwitched": "{{email}} nutzt jetzt {{protocol}}",
+    "runInBackground": "Im Infobereich weiterlaufen",
+    "runInBackgroundDesc": "Beim Schließen bleibt UwUMail neben der Uhr und meldet weiter neue Mails. Beenden über das Symbol dort.",
+    "updates": "Updates",
+    "updatesDesc": "UwUMail lädt neue Versionen still herunter und installiert sie beim nächsten Start.",
+    "channelStable": "Stabil",
+    "channelBeta": "Beta",
+    "channelBetaDesc": "Beta bekommt neue Funktionen früher, manchmal noch mit kleinen Ecken.",
+    "checkUpdates": "Nach Updates suchen",
+    "upToDate": "UwUMail ist aktuell",
+    "updateFound": "Version {{version}} ist bereit",
+    "updateCheckFailed": "Konnte nicht nach Updates suchen. {{reason}}"
   },
   "theme": {
     "system": "System",
@@ -336,5 +347,12 @@
     "organizer": "Organisiert von",
     "email": "E-Mail",
     "phone": "Telefon"
+  },
+  "update": {
+    "readyTitle": "Neue Version bereit",
+    "version": "UwUMail {{version}}",
+    "whatsNew": "Was ist neu",
+    "restart": "Jetzt neu starten",
+    "later": "Später"
   }
 }

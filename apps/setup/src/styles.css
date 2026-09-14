@@ -1,0 +1,172 @@
+@import "tailwindcss";
+@import "../../desktop/src/components/nyu/nyu.css";
+
+/* Tailwind classes used inside the shared Nyu components. */
+@source "../../desktop/src/components/nyu";
+
+@theme inline {
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-plum: #4b1d3f;
+  --color-plum-soft: #7a5670;
+  --color-pink: #ff4d8d;
+  --color-pink-solid: #e11d74;
+  --color-pink-solid-hover: #c8165f;
+  --color-blush: #ffe4ef;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+  font-family: var(--font-sans);
+  color: var(--color-plum);
+  background: linear-gradient(180deg, #fff3f8 0%, #ffd3e5 100%);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 3px solid rgb(255 77 141 / 0.45);
+  outline-offset: 2px;
+}
+
+.setup-card {
+  background: rgb(255 255 255 / 0.82);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.9) inset,
+    0 22px 44px -22px rgb(194 48 111 / 0.4);
+  backdrop-filter: blur(10px);
+}
+
+.setup-sparkles {
+  background-image:
+    radial-gradient(circle at 12% 18%, rgb(255 255 255 / 0.9) 0 2px, transparent 3px),
+    radial-gradient(circle at 86% 12%, rgb(255 214 110 / 0.9) 0 2.5px, transparent 3.5px),
+    radial-gradient(circle at 92% 64%, rgb(255 255 255 / 0.8) 0 1.5px, transparent 2.5px),
+    radial-gradient(circle at 6% 72%, rgb(255 111 166 / 0.5) 0 2px, transparent 3px);
+}
+
+.setup-hop {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: setup-hop 1.1s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+}
+
+.setup-toss {
+  transform-box: fill-box;
+  opacity: 0;
+  animation: setup-toss 1.65s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.setup-float {
+  transform-box: fill-box;
+  animation: setup-float 3s ease-in-out infinite;
+}
+
+.setup-pop {
+  animation: setup-pop 520ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+.setup-bar {
+  background: repeating-linear-gradient(-45deg, #ff6fa6 0 12px, #ff8ab7 12px 24px);
+  background-size: 34px 34px;
+  animation: setup-stripes 900ms linear infinite;
+}
+
+.setup-fade {
+  animation: setup-fade 260ms ease-out;
+}
+
+@keyframes setup-hop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  15% {
+    transform: translateY(0) scale(1.06, 0.92);
+  }
+  45% {
+    transform: translateY(-9%) scale(0.97, 1.04);
+  }
+  75% {
+    transform: translateY(0) scale(1.03, 0.97);
+  }
+}
+
+@keyframes setup-toss {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0);
+  }
+  10% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(62px, -58px) rotate(24deg);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(128px, 36px) rotate(40deg) scale(0.8);
+  }
+}
+
+@keyframes setup-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes setup-pop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes setup-stripes {
+  to {
+    background-position: 34px 0;
+  }
+}
+
+@keyframes setup-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nyu-host,
+  .nyu-host *,
+  .setup-bar,
+  .setup-pop,
+  .setup-fade {
+    animation: none !important;
+  }
+
+  .setup-toss {
+    display: none;
+  }
+}

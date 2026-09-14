@@ -83,11 +83,16 @@
     "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)",
     "motionDesc": "Should Nyu blink, hop and fly around? With System, I follow your operating system.",
     "senderPicturesCleared": "Pictures swept away ✧",
-    "protocolSwitched": "{{email}} speaks {{protocol}} now ✧"
+    "protocolSwitched": "{{email}} speaks {{protocol}} now ✧",
+    "runInBackgroundDesc": "Closing the window lets Nyu nap next to the clock and keep watch for new mail. Quit from the icon there.",
+    "upToDate": "All fresh, nothing to do ✧"
   },
   "attachment": {
     "loading": "Unpacking the attachment…",
     "dangerTitle": "Careful! This file could start programs (・_・;)",
     "noPreview": "I can't peek into this one (・・ )?"
+  },
+  "update": {
+    "readyTitle": "Nyu brought something new ✧"
   }
 }

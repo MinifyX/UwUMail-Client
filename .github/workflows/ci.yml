@@ -33,6 +33,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm --filter @uwumail/desktop exec vite build
+      - run: pnpm --filter @uwumail/setup exec vite build
 
   engine:
     name: Mail engine
@@ -56,7 +57,10 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       # tauri::generate_context! needs a frontend build to exist at compile time.
-      - run: mkdir -p apps/desktop/dist && echo '<!doctype html>' > apps/desktop/dist/index.html
+      - run: |
+          for app in desktop setup; do
+            mkdir -p apps/$app/dist && echo '<!doctype html>' > apps/$app/dist/index.html
+          done
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: JMAP test server (Stalwart)
@@ -112,8 +116,15 @@ jobs:
         if: steps.changes.outputs.build == 'true'
       - run: pnpm install --frozen-lockfile
         if: steps.changes.outputs.build == 'true'
+      # Windows gets UwUMail's own installer; Linux the usual packages.
+      - run: pnpm build:setup
+        if: steps.changes.outputs.build == 'true' && runner.os == 'Windows'
+        env:
+          UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
       - run: pnpm tauri build
-        if: steps.changes.outputs.build == 'true'
+        if: steps.changes.outputs.build == 'true' && runner.os == 'Linux'
         env:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
@@ -125,8 +136,7 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: |
-            target/release/bundle/nsis/*.exe
-            target/release/bundle/msi/*.msi
+            target/release/UwUMail-Setup-*.exe
             target/release/bundle/deb/*.deb
             target/release/bundle/appimage/*.AppImage
             target/release/bundle/rpm/*.rpm

@@ -25,7 +25,10 @@
 - [x] Addon SDK: manifest validation, wire protocol, typed client
 - [ ] Addon catalog (`MinifyX/UwUMail-Addons`) with one-click install
 - [x] Installers for Windows and Linux in CI, release workflow with macOS
-- [ ] Auto-update (needs an update signing key)
+- [x] UwUMail's own Windows installer with Nyu: one click, no admin, options, uninstaller that can keep mail
+- [x] Auto-update on Windows: signed, downloaded quietly, Stable and Beta channels, public `UwUMail-Releases` repo
+- [x] Keep running in the notification area, start with Windows, default mail app (`mailto:` links)
+- [ ] Auto-update on macOS and Linux
 
 ## After v0.1 — official addons
 
