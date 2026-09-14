@@ -1,5 +1,19 @@
 import clsx from "clsx";
-import { BellOff, ExternalLink, ImageIcon, Info, Keyboard, Lock, Mail, Palette, Plus, Puzzle, Upload, Users, X } from "lucide-react";
+import {
+  BellOff,
+  ExternalLink,
+  ImageIcon,
+  Info,
+  Keyboard,
+  Lock,
+  Mail,
+  Palette,
+  Plus,
+  Puzzle,
+  Upload,
+  Users,
+  X,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
