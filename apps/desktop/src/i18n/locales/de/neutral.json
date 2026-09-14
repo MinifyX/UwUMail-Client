@@ -25,6 +25,8 @@
     "refresh": "Nach neuen Mails sehen",
     "loadMore": "Mehr laden",
     "loading": "Mails werden geladen",
+    "unread": "Ungelesen",
+    "markRead": "Als gelesen markieren",
     "empty": {
       "inbox": {
         "title": "Alles gelesen",
@@ -169,7 +171,7 @@
     },
     "pro": {
       "name": "Profi",
-      "desc": "Ordner immer sichtbar, kompakte Zeilen, Tastenkürzel."
+      "desc": "Ordner immer sichtbar, drei Spalten, Tastenkürzel."
     }
   },
   "tone": {
@@ -236,6 +238,8 @@
     "addons": "Addons",
     "about": "Über",
     "layout": "Layout",
+    "listDensity": "Mail-Liste",
+    "listDensityDesc": "Kompakt zeigt mehr Mails auf einmal, mit kleinem Bild und zwei Zeilen.",
     "theme": "Design",
     "motion": "Animationen",
     "motionDesc": "„Wie System“ richtet sich nach der Einstellung für reduzierte Bewegung in deinem Betriebssystem.",
@@ -379,5 +383,9 @@
     "dontOpen": "Nicht öffnen",
     "openAnyway": "Trotzdem öffnen",
     "failed": "Der Link ließ sich nicht öffnen. {{reason}}"
+  },
+  "density": {
+    "relaxed": "Entspannt",
+    "compact": "Kompakt"
   }
 }

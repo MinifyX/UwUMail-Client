@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { backend } from "@/backend/backend";
-import type { FlagChange, ListFilter, MailboxView, ThreadSummary } from "@/backend/types";
+import type { FlagChange, ListFilter, MailboxView, Message, ThreadSummary } from "@/backend/types";
 import { useT } from "@/i18n";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
@@ -114,6 +114,54 @@ export function useMessageActions() {
     archive: (ids: string[]) => run(() => backend().archive(ids), t("toast.archived")),
     trash: (ids: string[]) => run(() => backend().trash(ids), t("toast.trashed")),
     refresh: () => run(() => backend().syncNow()),
+  };
+}
+
+/** Actions on a whole thread straight from the list, without opening it first. */
+export function useThreadActions() {
+  const client = useQueryClient();
+  const actions = useMessageActions();
+
+  const withMessages = async (thread: ThreadSummary, act: (messages: Message[]) => Promise<void>) => {
+    const { conversations } = useSettings.getState();
+    try {
+      const detail = await client.fetchQuery({
+        queryKey: [...queryKeys.thread, thread.id, conversations],
+        queryFn: () => backend().getThread(thread.id, conversations),
+      });
+      await act(detail.messages);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error), "error");
+    }
+  };
+  // Like the shortcuts: a thread that goes away hands the selection to the next one.
+  const moveOnIfOpen = (thread: ThreadSummary) => {
+    const ui = useUi.getState();
+    if (ui.selectedThreadId === thread.id) ui.selectRelative(1);
+    if (useUi.getState().selectedThreadId === thread.id) ui.selectThread(null);
+  };
+  const ids = (messages: Message[]) => messages.map((message) => message.id);
+
+  return {
+    archive: (thread: ThreadSummary) =>
+      withMessages(thread, (messages) => {
+        moveOnIfOpen(thread);
+        return actions.archive(ids(messages));
+      }),
+    trash: (thread: ThreadSummary) =>
+      withMessages(thread, (messages) => {
+        moveOnIfOpen(thread);
+        return actions.trash(ids(messages));
+      }),
+    toggleRead: (thread: ThreadSummary) =>
+      withMessages(thread, (messages) => {
+        if (thread.unreadCount > 0) return actions.setFlags(ids(messages), { seen: true });
+        // An open thread would mark itself as read again right away.
+        if (useUi.getState().selectedThreadId === thread.id) useUi.getState().selectThread(null);
+        return actions.setFlags(ids(messages.slice(-1)), { seen: false });
+      }),
+    toggleFlag: (thread: ThreadSummary) =>
+      withMessages(thread, (messages) => actions.setFlags(ids(messages), { flagged: !thread.flagged })),
   };
 }
 

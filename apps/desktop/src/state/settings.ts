@@ -3,6 +3,8 @@ import { persist } from "zustand/middleware";
 import pkg from "../../package.json";
 
 export type LayoutMode = "simple" | "pro";
+/** Mail list rows: roomy cards with three lines, or two lines with a small picture. */
+export type ListDensity = "relaxed" | "compact";
 export type Tone = "playful" | "neutral";
 export type ThemeSetting = "system" | "light" | "dark";
 /** Animations: follow the system's reduced-motion setting, or override it. */
@@ -17,6 +19,7 @@ export type MailAppearance = "auto" | "light" | "dark";
 export interface Settings {
   onboarded: boolean;
   layout: LayoutMode;
+  listDensity: ListDensity;
   tone: Tone;
   theme: ThemeSetting;
   motion: MotionSetting;
@@ -50,6 +53,7 @@ interface SettingsActions {
 export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
   layout: "simple",
+  listDensity: "relaxed",
   tone: "playful",
   theme: "system",
   motion: "system",

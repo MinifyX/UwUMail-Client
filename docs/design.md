@@ -41,7 +41,8 @@ pink, violet, sky, mint, amber, coral.
 ## Shape and space
 
 - Radius: 10px controls, 16px cards and panes, 999px pills and badges.
-- Spacing on a 4px grid; list rows 72px (Simple) / 44px (Pro).
+- Spacing on a 4px grid. Mail list rows are rounded cards with a little gap
+  and no dividers; hover and selection tint the whole card pink.
 - Shadows only for floating layers (menus, composer window, toasts).
 
 ## Layouts
@@ -50,10 +51,20 @@ pink, violet, sky, mint, amber, coral.
 | --- | --- | --- |
 | Columns | List · Reader | Folders · List · Reader |
 | Folders | Behind the menu button, pill filters on top | Always visible tree with accounts |
-| Rows | Avatar, sender, subject, two-line preview | One line, no avatar |
+| Rows | Picture (40px), sender, subject, two-line preview | Picture (36px), sender, subject, one-line preview |
 | Keyboard | Basics (`c`, `/`, `Esc`) | Everything, plus command palette `Mod+K` |
 
 The first start asks which layout to use; Settings → Appearance switches it.
+
+Both layouts share the same row. Unread mail has a pink dot left of the picture,
+bold sender and subject and a pink date. Hovering a row swaps the date for
+quick actions (archive, delete, read/unread, flag); they are mouse-only because
+the keyboard has `e`, `#`, `u` and `s`. Settings → Appearance → Mail list
+switches between **Relaxed** (default, three lines) and **Compact** (28px
+picture, subject and preview on one line).
+
+Sender pictures that don't cover their circle sit padded on white, or on dark
+grey when the logo itself is white or very light (`lib/pictureLook.ts`).
 
 ## Mail in dark mode
 

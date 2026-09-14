@@ -40,7 +40,7 @@ export const COLOR_CLASSES: Record<AccountColor, { bg: string; text: string; dot
 
 interface AvatarProps {
   address: Address;
-  size?: "xs" | "sm" | "md" | "lg";
+  size?: "sm" | "list" | "md" | "lg";
   className?: string;
 }
 
@@ -66,7 +66,7 @@ export function Avatar({ address, size = "md", className }: AvatarProps) {
         "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold",
         // Initials wait underneath until the picture is there, and come back if it can't load.
         !ready && [color.bg, color.text],
-        size === "xs" && "size-6 text-[10px]",
+        size === "list" && "size-9 text-[12px]",
         size === "sm" && "size-7 text-[11px]",
         size === "md" && "size-10 text-[13px]",
         size === "lg" && "size-12 text-[15px]",

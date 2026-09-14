@@ -58,6 +58,17 @@ function Appearance() {
           ]}
         />
       </Row>
+      <Row label={t("settings.listDensity")} description={t("settings.listDensityDesc")}>
+        <Segmented
+          label={t("settings.listDensity")}
+          value={settings.listDensity}
+          onChange={(listDensity) => settings.update({ listDensity })}
+          options={[
+            { value: "relaxed", label: t("density.relaxed") },
+            { value: "compact", label: t("density.compact") },
+          ]}
+        />
+      </Row>
       <Row label={t("settings.theme")}>
         <Segmented
           label={t("settings.theme")}

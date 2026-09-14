@@ -25,6 +25,8 @@
     "refresh": "Check for new mail",
     "loadMore": "Load more",
     "loading": "Loading messages",
+    "unread": "Unread",
+    "markRead": "Mark as read",
     "empty": {
       "inbox": {
         "title": "You're all caught up",
@@ -169,7 +171,7 @@
     },
     "pro": {
       "name": "Pro",
-      "desc": "Folders always visible, compact rows, keyboard shortcuts."
+      "desc": "Folders always visible, three columns, keyboard shortcuts."
     }
   },
   "tone": {
@@ -236,6 +238,8 @@
     "addons": "Addons",
     "about": "About",
     "layout": "Layout",
+    "listDensity": "Mail list",
+    "listDensityDesc": "Compact fits more mail on screen, with a small picture and two lines.",
     "theme": "Theme",
     "motion": "Animations",
     "motionDesc": "With System, UwUMail follows the reduced motion setting of your operating system.",
@@ -379,5 +383,9 @@
     "dontOpen": "Don't open",
     "openAnyway": "Open anyway",
     "failed": "Couldn't open the link. {{reason}}"
+  },
+  "density": {
+    "relaxed": "Relaxed",
+    "compact": "Compact"
   }
 }

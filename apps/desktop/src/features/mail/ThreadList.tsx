@@ -7,7 +7,8 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pill } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
-import { flattenThreads, useAccounts, useMessageActions, useThreads } from "@/lib/queries";
+import { flattenThreads, useAccounts, useMessageActions, useThreadActions, useThreads } from "@/lib/queries";
+import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { ThreadRow } from "./ThreadRow";
 import { useViewInfo } from "./view";
@@ -40,6 +41,8 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   const info = useViewInfo(view);
   const { data: accounts = [], isSuccess: accountsLoaded } = useAccounts();
   const { refresh } = useMessageActions();
+  const threadActions = useThreadActions();
+  const density = useSettings((s) => s.listDensity);
   const [refreshing, setRefreshing] = useState(false);
 
   const [draft, setDraft] = useState(search);
@@ -140,8 +143,9 @@ export function ThreadList({ variant, className }: ThreadListProps) {
       <div
         ref={listRef}
         className={clsx(
-          "min-h-0 flex-1 overflow-y-auto",
-          variant === "simple" ? "px-2 pb-4" : "border-t border-hairline",
+          "flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-4",
+          density === "compact" ? "gap-px" : "gap-1",
+          variant === "pro" && "border-t border-hairline pt-2",
         )}
       >
         {query.isPending ? (
@@ -168,9 +172,11 @@ export function ThreadList({ variant, className }: ThreadListProps) {
                 key={thread.id}
                 thread={thread}
                 variant={variant}
+                density={density}
                 selected={thread.id === selectedThreadId}
                 accounts={accounts}
                 showAccount={showAccount}
+                actions={threadActions}
                 onSelect={() => selectThread(thread.id)}
               />
             ))}

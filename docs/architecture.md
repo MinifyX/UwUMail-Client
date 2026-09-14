@@ -100,7 +100,10 @@ React 19, Vite, Tailwind CSS 4, TypeScript.
 
 Message HTML is sanitized in Rust, then displayed in an `<iframe sandbox>`
 without script permissions and with a CSP that blocks all remote content.
-"Load remote images" re-renders with images allowed for that message or sender.
+"Load remote images" re-renders with images allowed for that message. "Always
+load" remembers the address or the company domain (the registrable domain from
+the public suffix list, never a mail provider), kept in the settings and listed
+under Settings → Reading.
 
 ### Addons
 
