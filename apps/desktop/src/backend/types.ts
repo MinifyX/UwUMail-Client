@@ -13,6 +13,9 @@ export type AccountStatus =
   | { state: "offline" }
   | { state: "error"; message: string };
 
+/** IMAP for reading plus SMTP for sending, or JMAP for both. */
+export type Protocol = "imap" | "jmap";
+
 export interface Account {
   id: string;
   name: string;
@@ -21,6 +24,9 @@ export interface Account {
   color: AccountColor;
   auth: AuthKind;
   status: AccountStatus;
+  protocol: Protocol;
+  /** Protocols this account can switch to. */
+  protocols: Protocol[];
 }
 
 export type FolderRole = "inbox" | "sent" | "drafts" | "archive" | "trash" | "junk";
@@ -180,6 +186,8 @@ export interface DiscoveredSettings {
   smtp: ServerSettings;
   username: string;
   source: "ispdb" | "autoconfig" | "srv" | "mx" | "guess";
+  /** The JMAP session URL, when the server offers JMAP. */
+  jmap?: string;
 }
 
 export interface NewAccount {
@@ -191,6 +199,8 @@ export interface NewAccount {
   smtp: ServerSettings;
   username: string;
   color: AccountColor;
+  protocol: Protocol;
+  jmapUrl?: string;
 }
 
 export type BackendEvent =

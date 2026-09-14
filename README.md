@@ -6,13 +6,14 @@
 
 <p align="center">
   The cute, modern mail client for everyone. (◕‿◕✿)<br/>
-  IMAP · SMTP · Addons · Windows · macOS · Linux
+  IMAP · SMTP · JMAP · Addons · Windows · macOS · Linux
 </p>
 
 ---
 
 UwUMail is an open-source desktop mail client that works with any IMAP/SMTP
-mailbox. It is built for people who want it simple, for people who want
+mailbox, and speaks JMAP with servers that offer it (Fastmail, Stalwart,
+Cyrus). It is built for people who want it simple, for people who want
 everything in one place, and for everyone in between:
 
 - **Simple or Pro.** Switch between a calm two-column layout and a dense
@@ -37,7 +38,7 @@ everything in one place, and for everyone in between:
 | Path | What lives there |
 | --- | --- |
 | `apps/desktop` | The Tauri 2 desktop app (React UI + Rust shell) |
-| `crates/uwumail-core` | Mail engine: accounts, IMAP sync, SMTP, local store, search |
+| `crates/uwumail-core` | Mail engine: accounts, IMAP and JMAP sync, sending, local store, search |
 | `packages/addon-sdk` | `@uwumail/addon-sdk` — types and runtime for addon authors (MIT) |
 | `addons/` | Official example addons |
 | `brand/` | Logo and icon sources |

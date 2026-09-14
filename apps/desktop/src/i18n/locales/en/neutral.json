@@ -201,7 +201,15 @@
     "errorConnection": "Couldn't connect to the server. Check the address and your internet connection.",
     "errorInvalid": "That doesn't look like an email address.",
     "errorOauthDemo": "Sign-in with {{provider}} needs the desktop app.",
-    "changeAddress": "Use a different address"
+    "changeAddress": "Use a different address",
+    "protocol": "Connection",
+    "protocolJmap": "JMAP (recommended)",
+    "protocolImap": "IMAP & SMTP",
+    "protocolJmapHint": "Your server speaks JMAP: faster, lighter on data, and new mail arrives instantly.",
+    "protocolImapHint": "The classic way. You can switch to JMAP later in the settings.",
+    "jmapUrl": "JMAP address",
+    "jmapUrlHint": "Usually https://your-server/.well-known/jmap. Leave empty for IMAP only.",
+    "fastmailTokenHint": "Fastmail needs an API token here: Settings › Privacy & Security › Manage API tokens, with access to mail and sending."
   },
   "security": {
     "tls": "SSL/TLS",
@@ -248,7 +256,10 @@
     "senderPictures": "Pictures for company senders",
     "senderPicturesDesc": "Shows the brand logo or website icon of companies. UwUMail asks each company's website once a month, never per mail. People at mail providers like Gmail keep their initials.",
     "clearSenderPictures": "Delete saved pictures",
-    "senderPicturesCleared": "Saved pictures deleted"
+    "senderPicturesCleared": "Saved pictures deleted",
+    "protocolSwitchTo": "Switch to {{protocol}}",
+    "protocolSwitchConfirm": "Switch {{email}} to {{protocol}}? UwUMail downloads the mail again for that.",
+    "protocolSwitched": "{{email}} now uses {{protocol}}"
   },
   "theme": {
     "system": "System",

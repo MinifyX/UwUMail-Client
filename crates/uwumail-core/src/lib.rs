@@ -9,6 +9,8 @@ pub mod autoconfig;
 pub mod engine;
 pub mod error;
 pub mod imap;
+pub mod jmap;
+pub mod jmap_sync;
 pub mod mime;
 pub mod model;
 pub mod oauth;

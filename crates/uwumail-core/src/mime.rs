@@ -65,14 +65,21 @@ fn clean_id(id: &str) -> String {
     id.trim().trim_start_matches('<').trim_end_matches('>').to_string()
 }
 
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|window| window == needle)
+}
+
 /// Parses a full message or just its header block.
 pub fn parse(raw: &[u8]) -> ParsedMessage {
     let Some(message) = MessageParser::default().parse(raw) else {
         return ParsedMessage::default();
     };
 
-    let text = message.body_text(0).map(|t| t.into_owned());
-    let raw_html = message.body_html(0).map(|h| h.into_owned());
+    // A bare header block still parses with an empty text part; that isn't a body.
+    let header_end = find(raw, b"\r\n\r\n").map(|i| i + 4).or_else(|| find(raw, b"\n\n").map(|i| i + 2));
+    let body_present = header_end.is_some_and(|end| raw[end..].iter().any(|b| !b.is_ascii_whitespace()));
+    let text = message.body_text(0).map(|t| t.into_owned()).filter(|_| body_present);
+    let raw_html = message.body_html(0).map(|h| h.into_owned()).filter(|_| body_present);
     // mail-parser synthesizes HTML from text parts; only keep real HTML.
     let has_html_part = message.html_body_count() > 0
         && message

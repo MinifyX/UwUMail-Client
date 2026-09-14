@@ -11,6 +11,7 @@ import type {
   Folder,
   NewAccount,
   OutgoingMessage,
+  Protocol,
   SenderPicture,
   ThreadDetail,
   ThreadPage,
@@ -54,6 +55,10 @@ export class TauriBackend implements Backend {
 
   removeAccount(accountId: string) {
     return call<void>("remove_account", { accountId });
+  }
+
+  setAccountProtocol(accountId: string, protocol: Protocol) {
+    return call<Account>("set_account_protocol", { accountId, protocol });
   }
 
   syncNow(accountId?: string) {

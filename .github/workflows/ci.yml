@@ -59,9 +59,12 @@ jobs:
       - run: mkdir -p apps/desktop/dist && echo '<!doctype html>' > apps/desktop/dist/index.html
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: JMAP test server (Stalwart)
+        run: bash dev/stalwart.sh
       - run: cargo test --workspace
         env:
           UWUMAIL_TEST_MAILSERVER: 127.0.0.1
+          UWUMAIL_TEST_JMAP: http://127.0.0.1:8080
 
   installers:
     name: Installers (${{ matrix.name }})

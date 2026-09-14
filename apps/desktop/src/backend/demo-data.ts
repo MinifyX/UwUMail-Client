@@ -351,6 +351,8 @@ export const DEMO_ACCOUNTS: Account[] = [
     color: "pink",
     auth: "password",
     status: { state: "idle" },
+    protocol: "jmap",
+    protocols: ["imap", "jmap"],
   },
   {
     id: "acc-studio",
@@ -360,6 +362,8 @@ export const DEMO_ACCOUNTS: Account[] = [
     color: "violet",
     auth: "microsoft",
     status: { state: "idle" },
+    protocol: "imap",
+    protocols: ["imap"],
   },
 ];
 

@@ -76,12 +76,14 @@
     "discovering": "Sniffing out your server settings…",
     "connecting": "Knocking on the server's door…",
     "errorAuth": "The server said no to that password (｡•́︿•̀｡) Double-check it?",
-    "errorConnection": "I couldn't reach the server (・_・;) Check the address and your internet."
+    "errorConnection": "I couldn't reach the server (・_・;) Check the address and your internet.",
+    "protocolJmapHint": "Your server speaks JMAP: faster, lighter, and new mail flies in instantly ✧"
   },
   "settings": {
     "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)",
     "motionDesc": "Should Nyu blink, hop and fly around? With System, I follow your operating system.",
-    "senderPicturesCleared": "Pictures swept away ✧"
+    "senderPicturesCleared": "Pictures swept away ✧",
+    "protocolSwitched": "{{email}} speaks {{protocol}} now ✧"
   },
   "attachment": {
     "loading": "Unpacking the attachment…",

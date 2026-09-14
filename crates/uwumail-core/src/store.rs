@@ -99,7 +99,33 @@ CREATE TABLE addon_storage (
 ALTER TABLE folders ADD COLUMN delimiter TEXT;
 ALTER TABLE folders ADD COLUMN selectable INTEGER NOT NULL DEFAULT 1;
 "#,
+    r#"
+-- JMAP: accounts pick a protocol, mailboxes point at their parent by id,
+-- emails keep their server id and blob, and sync resumes from saved states.
+ALTER TABLE accounts ADD COLUMN protocol TEXT NOT NULL DEFAULT 'imap';
+ALTER TABLE accounts ADD COLUMN jmap_url TEXT;
+ALTER TABLE folders ADD COLUMN parent_ref TEXT;
+ALTER TABLE messages ADD COLUMN remote_id TEXT;
+ALTER TABLE messages ADD COLUMN blob_id TEXT;
+CREATE INDEX messages_by_remote_id ON messages (account_id, remote_id);
+CREATE TABLE sync_state (
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    state TEXT NOT NULL,
+    PRIMARY KEY (account_id, kind)
+);
+"#,
 ];
+
+/// A stable positive stand-in for IMAP's uid, so JMAP emails fit the same table.
+fn remote_uid(remote_id: &str) -> i64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in remote_id.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    (hash >> 2) as i64 + 1
+}
 
 /// Everything about an account except its secret.
 #[derive(Debug, Clone)]
@@ -113,6 +139,9 @@ pub struct AccountRecord {
     pub username: String,
     pub imap: ServerSettings,
     pub smtp: ServerSettings,
+    pub protocol: Protocol,
+    /// The JMAP session URL, also kept for IMAP accounts so they can switch.
+    pub jmap_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -135,11 +164,14 @@ pub struct FolderInfo<'a> {
     pub role: Option<FolderRole>,
     pub delimiter: Option<&'a str>,
     pub selectable: bool,
+    /// The parent's path, for servers that name parents instead of nesting paths (JMAP).
+    pub parent_ref: Option<&'a str>,
 }
 
 struct FolderRow {
     folder: Folder,
     delimiter: Option<String>,
+    parent_ref: Option<String>,
 }
 
 /// Works out each folder's parent from its path.
@@ -170,6 +202,8 @@ fn assign_parents(rows: &mut [FolderRow]) {
             let row = &rows[i];
             let parent = if row.folder.role.is_some() {
                 None
+            } else if let Some(parent_ref) = &row.parent_ref {
+                paths.get(parent_ref).cloned()
             } else {
                 row.delimiter
                     .as_deref()
@@ -199,6 +233,17 @@ pub struct MessageLocation {
     pub folder_path: String,
     pub uid: i64,
     pub message_id: Option<String>,
+    /// JMAP email id and blob id; `None` for IMAP.
+    pub remote_id: Option<String>,
+    pub blob_id: Option<String>,
+}
+
+/// What the store knows about a JMAP email, to compare with the server.
+#[derive(Debug, Clone)]
+pub struct RemoteMessage {
+    pub id: String,
+    pub folder_id: String,
+    pub flags: MessageFlags,
 }
 
 pub struct Store {
@@ -255,8 +300,8 @@ impl Store {
     pub fn insert_account(&self, account: &AccountRecord) -> Result<()> {
         self.conn().execute(
             "INSERT INTO accounts (id, name, email, display_name, color, auth, username,
-                imap_host, imap_port, imap_security, smtp_host, smtp_port, smtp_security, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                imap_host, imap_port, imap_security, smtp_host, smtp_port, smtp_security, created_at, protocol, jmap_url)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 account.id,
                 account.name,
@@ -272,8 +317,54 @@ impl Store {
                 account.smtp.port,
                 account.smtp.security.as_str(),
                 crate::mime::now(),
+                account.protocol.as_str(),
+                account.jmap_url,
             ],
         )?;
+        Ok(())
+    }
+
+    pub fn set_account_protocol(&self, id: &str, protocol: Protocol) -> Result<()> {
+        self.conn().execute("UPDATE accounts SET protocol = ?1 WHERE id = ?2", params![protocol.as_str(), id])?;
+        Ok(())
+    }
+
+    /// Forgets all mail, folders and sync states of an account, e.g. before syncing it over another protocol.
+    pub fn clear_account_mail(&self, account_id: &str) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            "DELETE FROM messages_fts WHERE rowid IN (SELECT rowid FROM messages WHERE account_id = ?1)",
+            [account_id],
+        )?;
+        conn.execute("DELETE FROM messages WHERE account_id = ?1", [account_id])?;
+        conn.execute("DELETE FROM folders WHERE account_id = ?1", [account_id])?;
+        conn.execute("DELETE FROM sync_state WHERE account_id = ?1", [account_id])?;
+        Ok(())
+    }
+
+    pub fn sync_state(&self, account_id: &str, kind: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT state FROM sync_state WHERE account_id = ?1 AND kind = ?2",
+                params![account_id, kind],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    pub fn set_sync_state(&self, account_id: &str, kind: &str, state: Option<&str>) -> Result<()> {
+        let conn = self.conn();
+        match state {
+            Some(state) => conn.execute(
+                "INSERT INTO sync_state (account_id, kind, state) VALUES (?1, ?2, ?3)
+                 ON CONFLICT (account_id, kind) DO UPDATE SET state = excluded.state",
+                params![account_id, kind, state],
+            )?,
+            None => {
+                conn.execute("DELETE FROM sync_state WHERE account_id = ?1 AND kind = ?2", params![account_id, kind])?
+            }
+        };
         Ok(())
     }
 
@@ -296,6 +387,8 @@ impl Store {
                 port: row.get("smtp_port")?,
                 security: Security::parse(&row.get::<_, String>("smtp_security")?),
             },
+            protocol: Protocol::parse(&row.get::<_, String>("protocol")?),
+            jmap_url: row.get("jmap_url")?,
         })
     }
 
@@ -335,16 +428,16 @@ impl Store {
         let role = info.role.map(FolderRole::as_str);
         if let Some(id) = existing {
             conn.execute(
-                "UPDATE folders SET name = ?1, role = ?2, delimiter = ?3, selectable = ?4 WHERE id = ?5",
-                params![info.name, role, info.delimiter, info.selectable, id],
+                "UPDATE folders SET name = ?1, role = ?2, delimiter = ?3, selectable = ?4, parent_ref = ?5 WHERE id = ?6",
+                params![info.name, role, info.delimiter, info.selectable, info.parent_ref, id],
             )?;
             return Ok(id);
         }
         let id = uuid::Uuid::new_v4().to_string();
         conn.execute(
-            "INSERT INTO folders (id, account_id, path, name, role, delimiter, selectable)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![id, account_id, info.path, info.name, role, info.delimiter, info.selectable],
+            "INSERT INTO folders (id, account_id, path, name, role, delimiter, selectable, parent_ref)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![id, account_id, info.path, info.name, role, info.delimiter, info.selectable, info.parent_ref],
         )?;
         Ok(id)
     }
@@ -368,7 +461,7 @@ impl Store {
         let conn = self.conn();
         let mut stmt = conn.prepare(
             "SELECT f.id, f.account_id, f.name, f.path, f.role, f.delimiter, f.selectable,
-                    COUNT(m.id) AS total, COALESCE(SUM(m.seen = 0), 0) AS unread
+                    COUNT(m.id) AS total, COALESCE(SUM(m.seen = 0), 0) AS unread, f.parent_ref
              FROM folders f LEFT JOIN messages m ON m.folder_id = f.id
              WHERE ?1 IS NULL OR f.account_id = ?1
              GROUP BY f.id ORDER BY f.path",
@@ -387,6 +480,7 @@ impl Store {
                     unread: row.get(8)?,
                 },
                 delimiter: row.get(5)?,
+                parent_ref: row.get(9)?,
             })
         })?;
         let mut rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -489,19 +583,63 @@ impl Store {
         internal_date: Option<i64>,
         parsed: &ParsedMessage,
     ) -> Result<Option<String>> {
+        self.insert(account_id, folder_id, i64::from(uid), None, flags, size, internal_date, parsed)
+    }
+
+    /// Stores an email synced over JMAP. Returns `None` when it was already known.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_jmap_message(
+        &self,
+        account_id: &str,
+        folder_id: &str,
+        remote_id: &str,
+        blob_id: &str,
+        flags: MessageFlags,
+        size: u64,
+        received_at: Option<i64>,
+        parsed: &ParsedMessage,
+    ) -> Result<Option<String>> {
+        let uid = remote_uid(remote_id);
+        self.insert(account_id, folder_id, uid, Some((remote_id, blob_id)), flags, size, received_at, parsed)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn insert(
+        &self,
+        account_id: &str,
+        folder_id: &str,
+        uid: i64,
+        remote: Option<(&str, &str)>,
+        flags: MessageFlags,
+        size: u64,
+        internal_date: Option<i64>,
+        parsed: &ParsedMessage,
+    ) -> Result<Option<String>> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
 
-        let exists: bool = tx
-            .query_row("SELECT 1 FROM messages WHERE folder_id = ?1 AND uid = ?2", params![folder_id, uid], |_| Ok(()))
-            .optional()?
-            .is_some();
+        let exists: bool = match remote {
+            Some((remote_id, _)) => tx.query_row(
+                "SELECT 1 FROM messages WHERE account_id = ?1 AND remote_id = ?2",
+                params![account_id, remote_id],
+                |_| Ok(()),
+            ),
+            None => tx.query_row(
+                "SELECT 1 FROM messages WHERE folder_id = ?1 AND uid = ?2",
+                params![folder_id, uid],
+                |_| Ok(()),
+            ),
+        }
+        .optional()?
+        .is_some();
         if exists {
             return Ok(None);
         }
 
-        // A local move leaves a placeholder with a negative uid until the target folder syncs.
-        if let Some(message_id) = &parsed.message_id {
+        // A local IMAP move leaves a placeholder with a negative uid until the target folder syncs.
+        if remote.is_none()
+            && let Some(message_id) = &parsed.message_id
+        {
             let placeholder: Option<String> = tx
                 .query_row(
                     "SELECT id FROM messages WHERE folder_id = ?1 AND uid < 0 AND message_id = ?2",
@@ -536,9 +674,9 @@ impl Store {
         tx.execute(
             "INSERT INTO messages (id, account_id, folder_id, uid, message_id, in_reply_to, refs, thread_id, subject,
                 from_json, to_json, cc_json, reply_to_json, date, seen, flagged, answered, draft, snippet, size,
-                has_body, body_html, body_text, has_remote, attachments_json)
+                has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
-                ?21, ?22, ?23, ?24, ?25)",
+                ?21, ?22, ?23, ?24, ?25, ?26, ?27)",
             params![
                 id,
                 account_id,
@@ -565,6 +703,8 @@ impl Store {
                 parsed.text,
                 parsed.has_remote_content,
                 json(&attachments)?,
+                remote.map(|(remote_id, _)| remote_id),
+                remote.map(|(_, blob_id)| blob_id),
             ],
         )?;
 
@@ -735,7 +875,7 @@ impl Store {
     pub fn locations(&self, ids: &[String]) -> Result<Vec<MessageLocation>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT m.id, m.account_id, m.folder_id, f.path, m.uid, m.message_id
+            "SELECT m.id, m.account_id, m.folder_id, f.path, m.uid, m.message_id, m.remote_id, m.blob_id
              FROM messages m JOIN folders f ON f.id = m.folder_id WHERE m.id = ?1",
         )?;
         let mut out = Vec::with_capacity(ids.len());
@@ -749,6 +889,8 @@ impl Store {
                         folder_path: row.get(3)?,
                         uid: row.get(4)?,
                         message_id: row.get(5)?,
+                        remote_id: row.get(6)?,
+                        blob_id: row.get(7)?,
                     })
                 })
                 .optional()?
@@ -757,6 +899,50 @@ impl Store {
             }
         }
         Ok(out)
+    }
+
+    /// Every JMAP email of an account by its server id.
+    pub fn remote_messages(&self, account_id: &str) -> Result<std::collections::HashMap<String, RemoteMessage>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT remote_id, id, folder_id, seen, flagged, answered, draft FROM messages
+             WHERE account_id = ?1 AND remote_id IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([account_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                RemoteMessage {
+                    id: row.get(1)?,
+                    folder_id: row.get(2)?,
+                    flags: MessageFlags {
+                        seen: row.get(3)?,
+                        flagged: row.get(4)?,
+                        answered: row.get(5)?,
+                        draft: row.get(6)?,
+                    },
+                },
+            ))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Updates folder and flags of a JMAP email. Returns whether anything changed.
+    pub fn update_remote_message(&self, id: &str, folder_id: &str, flags: MessageFlags) -> Result<bool> {
+        let changed = self.conn().execute(
+            "UPDATE messages SET folder_id = ?1, seen = ?2, flagged = ?3, answered = ?4, draft = ?5
+             WHERE id = ?6 AND (folder_id != ?1 OR seen != ?2 OR flagged != ?3 OR answered != ?4 OR draft != ?5)",
+            params![folder_id, flags.seen, flags.flagged, flags.answered, flags.draft, id],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Moves messages without a placeholder, for servers that confirm moves right away (JMAP).
+    pub fn set_folder(&self, ids: &[String], folder_id: &str) -> Result<()> {
+        let conn = self.conn();
+        for id in ids {
+            conn.execute("UPDATE messages SET folder_id = ?1 WHERE id = ?2", params![folder_id, id])?;
+        }
+        Ok(())
     }
 
     pub fn apply_flag_change(&self, ids: &[String], change: FlagChange) -> Result<()> {
@@ -1059,6 +1245,8 @@ mod tests {
             username: "mini@uwumail.dev".into(),
             imap: ServerSettings { host: "imap.example".into(), port: 993, security: Security::Tls },
             smtp: ServerSettings { host: "smtp.example".into(), port: 465, security: Security::Tls },
+            protocol: Protocol::Imap,
+            jmap_url: None,
         };
         store.insert_account(&account).unwrap();
         let inbox = folder(&store, "INBOX", Some(FolderRole::Inbox), ".");
@@ -1069,7 +1257,10 @@ mod tests {
     fn folder(store: &Store, path: &str, role: Option<FolderRole>, delimiter: &str) -> String {
         let name = path.rsplit(delimiter).next().unwrap_or(path);
         store
-            .upsert_folder("acc", &FolderInfo { path, name, role, delimiter: Some(delimiter), selectable: true })
+            .upsert_folder(
+                "acc",
+                &FolderInfo { path, name, role, delimiter: Some(delimiter), selectable: true, parent_ref: None },
+            )
             .unwrap()
     }
 
@@ -1117,6 +1308,8 @@ mod tests {
                 username: "a".into(),
                 imap: ServerSettings { host: "h".into(), port: 993, security: Security::Tls },
                 smtp: ServerSettings { host: "h".into(), port: 465, security: Security::Tls },
+                protocol: Protocol::Imap,
+                jmap_url: None,
             })
             .unwrap();
         folder(&store, "INBOX", Some(FolderRole::Inbox), ".");
@@ -1270,6 +1463,47 @@ mod tests {
 
         assert_eq!(store.delete_uids(&archive, &[3]).unwrap(), 1);
         assert!(store.messages_by_ids(&[id]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn keeps_jmap_emails_by_server_id() {
+        let (store, _, inbox, _) = store_with_account();
+        let mailbox = |path: &str, parent_ref: Option<&str>| {
+            store
+                .upsert_folder(
+                    "acc",
+                    &FolderInfo { path, name: path, role: None, delimiter: None, selectable: true, parent_ref },
+                )
+                .unwrap()
+        };
+        let projects = mailbox("m1", None);
+        let bugs = mailbox("m2", Some("m1"));
+        let folders = store.folders(Some("acc")).unwrap();
+        assert_eq!(folders.iter().find(|f| f.id == bugs).unwrap().parent_id.as_deref(), Some(projects.as_str()));
+
+        let bytes = raw("a@x", "Hi", "leni@x.example", None, "Hallo", "Mon, 14 Sep 2026 09:00:00 +0000");
+        let flags = MessageFlags { seen: true, ..MessageFlags::default() };
+        let insert = |remote_id: &str| {
+            store.insert_jmap_message("acc", &inbox, remote_id, "blob-1", flags, 42, None, &parse(&bytes)).unwrap()
+        };
+        let id = insert("e1").unwrap();
+        assert!(insert("e1").is_none(), "the same server id is stored once");
+
+        let known = store.remote_messages("acc").unwrap();
+        assert_eq!(known["e1"].id, id);
+        assert!(known["e1"].flags.seen);
+        let location = store.locations(std::slice::from_ref(&id)).unwrap().pop().unwrap();
+        assert_eq!((location.remote_id.as_deref(), location.blob_id.as_deref()), (Some("e1"), Some("blob-1")));
+
+        assert!(store.update_remote_message(&id, &bugs, MessageFlags::default()).unwrap());
+        assert!(!store.update_remote_message(&id, &bugs, MessageFlags::default()).unwrap());
+        assert_eq!(store.messages_by_ids(std::slice::from_ref(&id)).unwrap()[0].folder_id, bugs);
+
+        store.set_sync_state("acc", "Email", Some("s1")).unwrap();
+        assert_eq!(store.sync_state("acc", "Email").unwrap().as_deref(), Some("s1"));
+        store.clear_account_mail("acc").unwrap();
+        assert!(store.sync_state("acc", "Email").unwrap().is_none());
+        assert!(store.folders(Some("acc")).unwrap().is_empty());
     }
 
     #[test]

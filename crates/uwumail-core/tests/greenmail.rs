@@ -69,9 +69,13 @@ async fn sync_send_reply_flag_and_trash() {
             smtp,
             username: email.clone(),
             color: AccountColor::Pink,
+            protocol: Protocol::Imap,
+            jmap_url: None,
         })
         .await
         .expect("account can be added");
+    assert_eq!(account.protocol, Protocol::Imap);
+    assert_eq!(account.protocols, [Protocol::Imap]);
 
     // The first sync creates the folder list.
     wait_for("the inbox folder", async || {

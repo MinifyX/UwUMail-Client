@@ -1,10 +1,11 @@
 import clsx from "clsx";
 import { ExternalLink, Info, Keyboard, Mail, Palette, Plus, Puzzle, Upload, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import pkg from "../../../package.json";
 import { backend } from "@/backend/backend";
+import type { Account, Protocol } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -17,6 +18,8 @@ import { useAccounts } from "@/lib/queries";
 import { useSettings, type LanguageSetting } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi, type SettingsSection } from "@/state/ui";
+
+const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
 
 const SECTIONS: { id: SettingsSection; icon: LucideIcon }[] = [
   { id: "appearance", icon: Palette },
@@ -190,33 +193,65 @@ function Accounts() {
   const { data: accounts = [] } = useAccounts();
   const client = useQueryClient();
   const setAddAccountOpen = useUi((s) => s.setAddAccountOpen);
+  const [switching, setSwitching] = useState<string | null>(null);
+
+  const switchProtocol = async (account: Account, protocol: Protocol) => {
+    const name = PROTOCOL_NAMES[protocol];
+    if (!window.confirm(t("settings.protocolSwitchConfirm", { email: account.email, protocol: name }))) return;
+    setSwitching(account.id);
+    try {
+      await backend().setAccountProtocol(account.id, protocol);
+      await client.invalidateQueries();
+      toast(t("settings.protocolSwitched", { email: account.email, protocol: name }), "success");
+    } catch (reason) {
+      toast(reason instanceof Error ? reason.message : String(reason), "error");
+    } finally {
+      setSwitching(null);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3 py-4">
       <ul className="flex flex-col gap-2">
-        {accounts.map((account) => (
-          <li key={account.id} className="flex items-center gap-3 rounded-2xl border border-hairline px-4 py-3">
-            <AccountDot color={account.color} className="size-3" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold">{account.email}</span>
-              <span className="block text-[12.5px] text-muted">
-                {account.displayName} ·{" "}
-                {account.auth === "password" ? "IMAP" : account.auth === "microsoft" ? "Microsoft" : "Google"}
-              </span>
-            </span>
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={async () => {
-                if (!window.confirm(t("settings.removeAccountConfirm", { email: account.email }))) return;
-                await backend().removeAccount(account.id);
-                await client.invalidateQueries();
-              }}
+        {accounts.map((account) => {
+          const other = account.protocols.find((p) => p !== account.protocol);
+          return (
+            <li
+              key={account.id}
+              className="flex flex-wrap items-center gap-3 rounded-2xl border border-hairline px-4 py-3"
             >
-              {t("settings.removeAccount")}
-            </Button>
-          </li>
-        ))}
+              <AccountDot color={account.color} className="size-3" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{account.email}</span>
+                <span className="block text-[12.5px] text-muted">
+                  {account.displayName} · {PROTOCOL_NAMES[account.protocol]}
+                  {account.auth !== "password" && ` · ${account.auth === "microsoft" ? "Microsoft" : "Google"}`}
+                </span>
+              </span>
+              {other && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  busy={switching === account.id}
+                  onClick={() => void switchProtocol(account, other)}
+                >
+                  {t("settings.protocolSwitchTo", { protocol: PROTOCOL_NAMES[other] })}
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={async () => {
+                  if (!window.confirm(t("settings.removeAccountConfirm", { email: account.email }))) return;
+                  await backend().removeAccount(account.id);
+                  await client.invalidateQueries();
+                }}
+              >
+                {t("settings.removeAccount")}
+              </Button>
+            </li>
+          );
+        })}
       </ul>
       <Button icon={Plus} onClick={() => setAddAccountOpen(true)} className="self-start">
         {t("nav.addAccount")}

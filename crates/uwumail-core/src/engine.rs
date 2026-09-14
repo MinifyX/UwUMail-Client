@@ -12,6 +12,8 @@ use tokio::task::JoinHandle;
 use crate::attachments::{self, AttachmentCache, AttachmentFile};
 use crate::error::{Error, ErrorCode, Result};
 use crate::imap::{self, ImapSession, Login};
+use crate::jmap::Client as JmapClient;
+use crate::jmap_sync;
 use crate::model::*;
 use crate::pictures::{SenderPicture, SenderPictures};
 use crate::secrets::{Secret, SecretStore};
@@ -21,6 +23,8 @@ use crate::{autoconfig, mime, oauth};
 
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(5 * 60);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+/// JMAP servers without push are asked for changes this often.
+const JMAP_POLL_EVERY: Duration = Duration::from_secs(60);
 
 pub type UrlOpener = Arc<dyn Fn(&str) + Send + Sync>;
 
@@ -66,6 +70,8 @@ struct Inner {
     pictures: SenderPictures,
     /// (account id, path) of folders created by UwUMail, with when.
     created_folders: Mutex<HashMap<(String, String), Instant>>,
+    /// Signed-in JMAP connections by account id.
+    jmap: AsyncMutex<HashMap<String, Arc<JmapClient>>>,
 }
 
 enum Credential {
@@ -124,6 +130,7 @@ impl Engine {
                 attachments: AttachmentCache::new(&options.data_dir),
                 pictures: SenderPictures::new(&options.data_dir)?,
                 created_folders: Mutex::new(HashMap::new()),
+                jmap: AsyncMutex::new(HashMap::new()),
             }),
         })
     }
@@ -149,6 +156,13 @@ impl Engine {
             .into_iter()
             .map(|record| {
                 let status = accounts.get(&record.id).map(|r| r.status.clone()).unwrap_or(AccountStatus::Idle);
+                let mut protocols = Vec::new();
+                if !record.imap.host.is_empty() && !record.smtp.host.is_empty() {
+                    protocols.push(Protocol::Imap);
+                }
+                if record.jmap_url.is_some() && record.auth == AuthKind::Password {
+                    protocols.push(Protocol::Jmap);
+                }
                 Account {
                     id: record.id,
                     name: record.name,
@@ -157,6 +171,8 @@ impl Engine {
                     color: record.color,
                     auth: record.auth,
                     status,
+                    protocol: record.protocol,
+                    protocols,
                 }
             })
             .collect())
@@ -168,14 +184,20 @@ impl Engine {
 
     pub async fn add_account(&self, new: NewAccount) -> Result<Account> {
         let (_, domain) = autoconfig::split_email(&new.email)?;
-        if new.imap.host.trim().is_empty() || new.smtp.host.trim().is_empty() {
+        let jmap_url = new.jmap_url.as_deref().map(str::trim).filter(|url| !url.is_empty()).map(String::from);
+        let wants_jmap = new.protocol == Protocol::Jmap && new.auth == AuthKind::Password;
+        let has_imap = !new.imap.host.trim().is_empty() && !new.smtp.host.trim().is_empty();
+        if wants_jmap && jmap_url.is_none() {
+            return Err(Error::invalid("The JMAP address is missing."));
+        }
+        if !wants_jmap && !has_imap {
             return Err(Error::invalid("Server addresses are missing."));
         }
         if self.inner.store.accounts()?.iter().any(|a| a.email.eq_ignore_ascii_case(new.email.trim())) {
             return Err(Error::invalid("This mailbox is already in UwUMail."));
         }
         let id = uuid::Uuid::new_v4().to_string();
-        let record = AccountRecord {
+        let mut record = AccountRecord {
             id: id.clone(),
             name: domain,
             email: new.email.trim().to_string(),
@@ -185,6 +207,8 @@ impl Engine {
             username: new.username.trim().to_string(),
             imap: new.imap.clone(),
             smtp: new.smtp.clone(),
+            protocol: if wants_jmap { Protocol::Jmap } else { Protocol::Imap },
+            jmap_url: jmap_url.clone().filter(|_| new.auth == AuthKind::Password),
         };
 
         let secret = match new.auth {
@@ -194,10 +218,33 @@ impl Engine {
                     .clone()
                     .filter(|p| !p.is_empty())
                     .ok_or_else(|| Error::invalid("Enter your password."))?;
-                let mut session =
-                    imap::login(&record.imap, Login::Password { username: &record.username, password: &password })
-                        .await?;
-                let _ = session.logout().await;
+                let check_imap = async |record: &AccountRecord| -> Result<()> {
+                    let mut session =
+                        imap::login(&record.imap, Login::Password { username: &record.username, password: &password })
+                            .await?;
+                    let _ = session.logout().await;
+                    Ok(())
+                };
+                match (wants_jmap, &jmap_url) {
+                    (true, Some(url)) => {
+                        match JmapClient::connect(&self.inner.http, url, &record.username, &password).await {
+                            Ok(client) => {
+                                self.inner.jmap.lock().await.insert(id.clone(), Arc::new(client));
+                            }
+                            // Something that only looked like JMAP: use IMAP when that works.
+                            Err(error) if has_imap => {
+                                tracing::warn!("JMAP sign-in failed, trying IMAP: {error}");
+                                record.protocol = Protocol::Imap;
+                                if check_imap(&record).await.is_err() {
+                                    return Err(error);
+                                }
+                                record.jmap_url = None;
+                            }
+                            Err(error) => return Err(error),
+                        }
+                    }
+                    _ => check_imap(&record).await?,
+                }
                 Secret::Password { password }
             }
             AuthKind::Microsoft | AuthKind::Google => {
@@ -248,10 +295,48 @@ impl Engine {
             }
         }
         self.inner.tokens.lock().await.remove(account_id);
+        self.inner.jmap.lock().await.remove(account_id);
         self.inner.store.delete_account(account_id)?;
         self.inner.secrets.delete(account_id)?;
         self.inner.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
         Ok(())
+    }
+
+    /// Switches an account between IMAP/SMTP and JMAP. The local cache is
+    /// rebuilt, because the two protocols identify messages differently.
+    pub async fn set_protocol(&self, account_id: &str, protocol: Protocol) -> Result<Account> {
+        let account = self.inner.store.account(account_id)?;
+        let available = self.list_accounts()?.into_iter().find(|a| a.id == account_id).map(|a| a.protocols);
+        if !available.is_some_and(|protocols| protocols.contains(&protocol)) {
+            return Err(Error::invalid("This mailbox can't use that protocol."));
+        }
+        if account.protocol != protocol {
+            if protocol == Protocol::Jmap {
+                let url = account.jmap_url.as_deref().unwrap_or_default();
+                let Secret::Password { password } = self.inner.secrets.get(account_id)? else {
+                    return Err(Error::invalid("This mailbox can't use that protocol."));
+                };
+                let client = JmapClient::connect(&self.inner.http, url, &account.username, &password).await?;
+                self.inner.jmap.lock().await.insert(account_id.to_string(), Arc::new(client));
+            }
+            let runtime = self.inner.accounts.lock().unwrap().remove(account_id);
+            if let Some(runtime) = runtime {
+                if let Some(task) = runtime.task {
+                    task.abort();
+                }
+                if let Some(mut session) = runtime.commands.lock().await.take() {
+                    let _ = session.logout().await;
+                }
+            }
+            self.inner.store.clear_account_mail(account_id)?;
+            self.inner.store.set_account_protocol(account_id, protocol)?;
+            self.inner.spawn_sync(account_id);
+            self.inner.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
+        }
+        self.list_accounts()?
+            .into_iter()
+            .find(|a| a.id == account_id)
+            .ok_or_else(|| Error::not_found("This mailbox no longer exists."))
     }
 
     pub fn sync_now(&self, account_id: Option<&str>) {
@@ -284,12 +369,20 @@ impl Engine {
             return Ok(detail);
         }
         for location in self.inner.store.locations(&missing)? {
-            let Ok(uid) = u32::try_from(location.uid) else { continue };
-            let raw = with_session!(self.inner, &location.account_id, |session| imap::fetch_body(
-                session,
-                &location.folder_path,
-                uid
-            ))?;
+            let raw = match &location.blob_id {
+                Some(blob) => {
+                    let client = self.inner.jmap_client(&location.account_id).await?;
+                    client.download(blob, "message.eml", "message/rfc822").await?
+                }
+                None => {
+                    let Ok(uid) = u32::try_from(location.uid) else { continue };
+                    with_session!(self.inner, &location.account_id, |session| imap::fetch_body(
+                        session,
+                        &location.folder_path,
+                        uid
+                    ))?
+                }
+            };
             self.inner.store.set_body(&location.id, &mime::parse(&raw))?;
         }
         self.inner.store.get_thread(thread_id, conversations)
@@ -299,6 +392,14 @@ impl Engine {
         let locations = self.inner.store.locations(message_ids)?;
         self.inner.store.apply_flag_change(message_ids, change)?;
         self.inner.emit_changed(&locations);
+        for (account_id, remote_ids) in group_remote(&locations) {
+            let keywords: Vec<(&str, bool)> = [("$seen", change.seen), ("$flagged", change.flagged)]
+                .into_iter()
+                .filter_map(|(keyword, value)| value.map(|on| (keyword, on)))
+                .collect();
+            let client = self.inner.jmap_client(&account_id).await?;
+            jmap_sync::set_keywords(&client, &remote_ids, &keywords).await?;
+        }
         for ((account_id, path), uids) in group_by_folder(&locations) {
             if let Some(seen) = change.seen {
                 let op = if seen { "+FLAGS.SILENT (\\Seen)" } else { "-FLAGS.SILENT (\\Seen)" };
@@ -327,6 +428,10 @@ impl Engine {
             by_account.entry(location.account_id.clone()).or_default().push(location.clone());
         }
         for (account_id, messages) in by_account {
+            if self.inner.store.account(&account_id)?.protocol == Protocol::Jmap {
+                self.inner.move_jmap(&account_id, messages, role).await?;
+                continue;
+            }
             let target = self.inner.ensure_folder(&account_id, role).await?;
             let (already_there, to_move): (Vec<_>, Vec<_>) =
                 messages.into_iter().partition(|m| m.folder_id == target.id);
@@ -382,30 +487,45 @@ impl Engine {
             &outgoing.attachments,
         )?;
 
-        let auth = match self.inner.credential(&account).await? {
-            Credential::Password(password) => SmtpAuth::Password(password),
-            Credential::Token(token) => SmtpAuth::OAuth(token),
-        };
-        let username =
-            if account.auth == AuthKind::Password { account.username.clone() } else { account.email.clone() };
-        smtp::send(&account.smtp, &username, auth, &message).await?;
+        let recipients: Vec<Address> = outgoing.to.iter().chain(&outgoing.cc).chain(&outgoing.bcc).cloned().collect();
+        if account.protocol == Protocol::Jmap {
+            let client = self.inner.jmap_client(&account.id).await?;
+            let envelope: Vec<String> = recipients.iter().map(|a| a.email.clone()).collect();
+            jmap_sync::send(&client, &self.inner.store, &account.id, message.formatted(), &account.email, &envelope)
+                .await?;
+        } else {
+            let auth = match self.inner.credential(&account).await? {
+                Credential::Password(password) => SmtpAuth::Password(password),
+                Credential::Token(token) => SmtpAuth::OAuth(token),
+            };
+            let username =
+                if account.auth == AuthKind::Password { account.username.clone() } else { account.email.clone() };
+            smtp::send(&account.smtp, &username, auth, &message).await?;
 
-        // Gmail and Microsoft file sent mail themselves.
-        let provider_saves_sent = account.auth != AuthKind::Password
-            || ["gmail.com", "googlemail.com", "office365.com", "outlook.com"]
-                .iter()
-                .any(|h| account.smtp.host.ends_with(h));
-        if !provider_saves_sent && let Some(sent) = self.inner.store.folder_by_role(&account.id, FolderRole::Sent)? {
-            let raw = message.formatted();
-            if let Err(error) =
-                with_session!(self.inner, &account.id, |session| imap::append(session, &sent.path, &raw, true))
+            // Gmail and Microsoft file sent mail themselves.
+            let provider_saves_sent = account.auth != AuthKind::Password
+                || ["gmail.com", "googlemail.com", "office365.com", "outlook.com"]
+                    .iter()
+                    .any(|h| account.smtp.host.ends_with(h));
+            if !provider_saves_sent
+                && let Some(sent) = self.inner.store.folder_by_role(&account.id, FolderRole::Sent)?
             {
-                tracing::warn!("Couldn't store the sent message: {error}");
+                let raw = message.formatted();
+                if let Err(error) =
+                    with_session!(self.inner, &account.id, |session| imap::append(session, &sent.path, &raw, true))
+                {
+                    tracing::warn!("Couldn't store the sent message: {error}");
+                }
             }
         }
 
         if let Some(original) = &outgoing.in_reply_to {
             let locations = self.inner.store.locations(std::slice::from_ref(original))?;
+            for (account_id, remote_ids) in group_remote(&locations) {
+                if let Ok(client) = self.inner.jmap_client(&account_id).await {
+                    let _ = jmap_sync::set_keywords(&client, &remote_ids, &[("$answered", true)]).await;
+                }
+            }
             for ((account_id, path), uids) in group_by_folder(&locations) {
                 let _ = with_session!(self.inner, &account_id, |session| imap::store_flags(
                     session,
@@ -416,7 +536,6 @@ impl Engine {
             }
         }
 
-        let recipients: Vec<Address> = outgoing.to.iter().chain(&outgoing.cc).chain(&outgoing.bcc).cloned().collect();
         self.inner.store.remember_contacts(&recipients)?;
         self.inner.wake(&account.id);
         Ok(())
@@ -448,15 +567,20 @@ impl Engine {
             .locations(std::slice::from_ref(&message_id))?
             .pop()
             .ok_or_else(|| Error::not_found("This message no longer exists."))?;
-        let uid = u32::try_from(location.uid)
-            .ok()
-            .filter(|uid| *uid > 0)
-            .ok_or_else(|| Error::connection("The message is still being moved. Try again in a moment."))?;
-        let raw = with_session!(self.inner, &location.account_id, |session| imap::fetch_body(
-            session,
-            &location.folder_path,
-            uid
-        ))?;
+        let raw = if let Some(blob) = &location.blob_id {
+            let client = self.inner.jmap_client(&location.account_id).await?;
+            client.download(blob, "message.eml", "message/rfc822").await?
+        } else {
+            let uid = u32::try_from(location.uid)
+                .ok()
+                .filter(|uid| *uid > 0)
+                .ok_or_else(|| Error::connection("The message is still being moved. Try again in a moment."))?;
+            with_session!(self.inner, &location.account_id, |session| imap::fetch_body(
+                session,
+                &location.folder_path,
+                uid
+            ))?
+        };
         self.inner.attachments.store_from_raw(&message_id, index, &raw)
     }
 
@@ -498,9 +622,21 @@ impl Engine {
     }
 }
 
+/// JMAP email ids by account.
+fn group_remote(locations: &[MessageLocation]) -> HashMap<String, Vec<String>> {
+    let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+    for location in locations {
+        if let Some(remote_id) = &location.remote_id {
+            groups.entry(location.account_id.clone()).or_default().push(remote_id.clone());
+        }
+    }
+    groups
+}
+
+/// IMAP uids by account and folder.
 fn group_by_folder(locations: &[MessageLocation]) -> HashMap<(String, String), Vec<u32>> {
     let mut groups: HashMap<(String, String), Vec<u32>> = HashMap::new();
-    for location in locations {
+    for location in locations.iter().filter(|l| l.remote_id.is_none()) {
         if let Ok(uid) = u32::try_from(location.uid)
             && uid > 0
         {
@@ -585,6 +721,43 @@ impl Inner {
         }
     }
 
+    /// The signed-in JMAP connection of an account, connecting if needed.
+    async fn jmap_client(&self, account_id: &str) -> Result<Arc<JmapClient>> {
+        let mut clients = self.jmap.lock().await;
+        if let Some(client) = clients.get(account_id) {
+            return Ok(Arc::clone(client));
+        }
+        let account = self.store.account(account_id)?;
+        let url = account.jmap_url.as_deref().ok_or_else(|| Error::invalid("This mailbox has no JMAP address."))?;
+        let Secret::Password { password } = self.secrets.get(account_id)? else {
+            return Err(Error::not_supported("JMAP needs a password or app token."));
+        };
+        let client = Arc::new(JmapClient::connect(&self.http, url, &account.username, &password).await?);
+        clients.insert(account_id.to_string(), Arc::clone(&client));
+        Ok(client)
+    }
+
+    /// Archive or trash over JMAP. Trashing what's already in the trash deletes it.
+    async fn move_jmap(&self, account_id: &str, messages: Vec<MessageLocation>, role: FolderRole) -> Result<()> {
+        let client = self.jmap_client(account_id).await?;
+        let target = jmap_sync::ensure_mailbox(&client, &self.store, account_id, role).await?;
+        self.created_folders.lock().unwrap().insert((account_id.to_string(), target.path.clone()), Instant::now());
+        let (already_there, to_move): (Vec<_>, Vec<_>) = messages.into_iter().partition(|m| m.folder_id == target.id);
+        let remote = |list: &[MessageLocation]| list.iter().filter_map(|m| m.remote_id.clone()).collect::<Vec<_>>();
+        let ids = |list: &[MessageLocation]| list.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
+
+        if role == FolderRole::Trash && !already_there.is_empty() {
+            jmap_sync::destroy_emails(&client, &remote(&already_there)).await?;
+            self.store.delete_messages(&ids(&already_there))?;
+        }
+        if !to_move.is_empty() {
+            jmap_sync::move_emails(&client, &remote(&to_move), &target.path).await?;
+            self.store.set_folder(&ids(&to_move), &target.id)?;
+        }
+        self.wake(account_id);
+        Ok(())
+    }
+
     async fn command_session(&self, account_id: &str) -> Result<OwnedMutexGuard<Option<ImapSession>>> {
         let commands = {
             let mut accounts = self.accounts.lock().unwrap();
@@ -626,9 +799,48 @@ impl Inner {
         self.created_folders.lock().unwrap().insert((account_id.to_string(), path.clone()), Instant::now());
         let id = self.store.upsert_folder(
             account_id,
-            &FolderInfo { path: &path, name, role: Some(role), delimiter: namespace.as_deref(), selectable: true },
+            &FolderInfo {
+                path: &path,
+                name,
+                role: Some(role),
+                delimiter: namespace.as_deref(),
+                selectable: true,
+                parent_ref: None,
+            },
         )?;
         self.store.folder(&id)
+    }
+
+    /// A folder UwUMail just created may be missing from a listing that started
+    /// before; sync keeps these paths (and the mail just moved into them).
+    fn recently_created(&self, account_id: &str) -> HashSet<String> {
+        let mut created = self.created_folders.lock().unwrap();
+        created.retain(|_, at| at.elapsed() < Duration::from_secs(120));
+        created.keys().filter(|(id, _)| id == account_id).map(|(_, path)| path.clone()).collect()
+    }
+
+    async fn sync_jmap(&self, client: &JmapClient, account_id: &str) -> Result<()> {
+        let keep = self.recently_created(account_id);
+        let folders_changed = jmap_sync::sync_mailboxes(client, &self.store, account_id, &keep).await?;
+        let result = jmap_sync::sync_emails(client, &self.store, account_id).await?;
+        if result.had_messages && !result.new_message_ids.is_empty() {
+            let inbox = self.store.folder_by_role(account_id, FolderRole::Inbox)?.map(|f| f.id);
+            let unseen: Vec<String> = self
+                .store
+                .messages_by_ids(&result.new_message_ids)?
+                .into_iter()
+                .filter(|m| !m.flags.seen && Some(&m.folder_id) == inbox.as_ref())
+                .map(|m| m.id)
+                .collect();
+            if !unseen.is_empty() {
+                self.emit(EngineEvent::MailReceived { account_id: account_id.to_string(), message_ids: unseen });
+            }
+        }
+        if folders_changed || result.changed {
+            self.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
+        }
+        self.set_status(account_id, AccountStatus::Idle);
+        Ok(())
     }
 
     async fn sync_folders(&self, session: &mut ImapSession, account: &AccountRecord) -> Result<Vec<FolderRecord>> {
@@ -643,17 +855,12 @@ impl Inner {
                     role: folder.role,
                     delimiter: folder.delimiter.as_deref(),
                     selectable: folder.selectable,
+                    parent_ref: None,
                 },
             )?;
             paths.insert(folder.path.clone());
         }
-        // A folder UwUMail just created may be missing from a listing that
-        // started before; don't forget it (and the mail just moved into it).
-        {
-            let mut created = self.created_folders.lock().unwrap();
-            created.retain(|_, at| at.elapsed() < Duration::from_secs(120));
-            paths.extend(created.keys().filter(|(id, _)| *id == account.id).map(|(_, path)| path.clone()));
-        }
+        paths.extend(self.recently_created(&account.id));
         self.store.retain_folders(&account.id, &paths)?;
         let mut folders: Vec<FolderRecord> =
             self.store.folder_records(&account.id)?.into_iter().filter(|f| f.selectable).collect();
@@ -711,6 +918,8 @@ async fn sync_loop(inner: Arc<Inner>, account_id: String, wake: Arc<Notify>) {
                 }
                 failures = failures.saturating_add(1);
                 tracing::warn!("Sync of {account_id} failed: {error}");
+                // Sign in to JMAP again next time, in case the session changed.
+                inner.jmap.lock().await.remove(&account_id);
                 let status = match error.code {
                     ErrorCode::ConnectionFailed => AccountStatus::Offline,
                     _ => AccountStatus::Error { message: error.message.clone() },
@@ -726,8 +935,53 @@ async fn sync_loop(inner: Arc<Inner>, account_id: String, wake: Arc<Notify>) {
     }
 }
 
+/// JMAP: sync, then wait for a push, a wake-up or the next regular check.
+async fn run_jmap_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<()> {
+    inner.set_status(account_id, AccountStatus::Syncing { progress: None });
+    let client = inner.jmap_client(account_id).await?;
+    inner.sync_jmap(&client, account_id).await?;
+    let mut push = None;
+    loop {
+        if push.is_none() {
+            push = client.push().await.unwrap_or_else(|error| {
+                tracing::warn!("No push for {account_id}, checking every minute: {error}");
+                None
+            });
+            // Catch what changed while the push connection was being opened.
+            if push.is_some() {
+                inner.sync_jmap(&client, account_id).await?;
+            }
+        }
+        let outcome = tokio::select! {
+            changed = async {
+                match push.as_mut() {
+                    Some(stream) => stream.changed().await,
+                    None => {
+                        tokio::time::sleep(JMAP_POLL_EVERY).await;
+                        Ok(())
+                    }
+                }
+            } => changed,
+            _ = wake.notified() => Ok(()),
+            _ = tokio::time::sleep(FULL_SYNC_EVERY) => Ok(()),
+        };
+        if let Err(error) = outcome {
+            tracing::debug!("Push for {account_id} ended: {error}");
+            push = None;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(5)) => {}
+                _ = wake.notified() => {}
+            }
+        }
+        inner.sync_jmap(&client, account_id).await?;
+    }
+}
+
 async fn run_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<()> {
     let Ok(account) = inner.store.account(account_id) else { return Ok(()) };
+    if account.protocol == Protocol::Jmap {
+        return run_jmap_account(inner, account_id, wake).await;
+    }
     inner.set_status(account_id, AccountStatus::Syncing { progress: None });
     let mut session = inner.login(&account).await?;
     inner.full_sync(&mut session, &account).await?;

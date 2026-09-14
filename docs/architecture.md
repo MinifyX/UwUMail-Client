@@ -18,7 +18,7 @@
 └─────────────────────────────────────────────────────────┼──────────┼─────────┘
                                                           │          │
                                    OS keychain ◀──────────┘          ▼
-                                   (passwords, tokens)        IMAP / SMTP servers
+                                   (passwords, tokens)   IMAP / SMTP or JMAP servers
 ```
 
 ## Components
@@ -34,6 +34,8 @@ and reused (CLI, future sync server).
 | `secrets` | Store passwords and OAuth refresh tokens in the OS keychain (`keyring`) |
 | `oauth` | Authorization code flow with PKCE and a loopback redirect for Microsoft and Google |
 | `imap` | Connect (TLS / STARTTLS), authenticate (LOGIN / XOAUTH2), list folders with special-use detection, sync, IDLE |
+| `jmap` | JMAP client (RFC 8620/8621): discovery, sign-in with password or API token, method calls, blobs, EventSource push |
+| `jmap_sync` | Mailboxes and emails into the store from saved states; keywords, moves, deletes and sending via EmailSubmission |
 | `sync` | Per-account task: incremental header sync (CONDSTORE when available, otherwise UIDNEXT + flag window), body prefetch, change events |
 | `smtp` | Send through submission (465 TLS / 587 STARTTLS), then store in the Sent folder |
 | `mime` | Parse with `mail-parser`, build with `mail-builder`, sanitize HTML with `ammonia` |
@@ -41,8 +43,36 @@ and reused (CLI, future sync server).
 | `store` | SQLite (WAL) with migrations and an FTS5 index for instant search |
 | `contacts` | Address book fed by sent and received mail, later CardDAV |
 
-The IMAP server is always the source of truth. The local store is a cache that
+The mail server is always the source of truth. The local store is a cache that
 can be deleted at any time and rebuilt.
+
+### JMAP
+
+Each account uses either IMAP + SMTP or JMAP. Setup looks for JMAP next to the
+IMAP settings (known providers such as Fastmail, the `_jmap._tcp` SRV record,
+then `https://<domain | mail host | mail.<domain> | jmap.<domain>>/.well-known/jmap`)
+and picks JMAP when a server answers; the account settings can switch back to
+IMAP (and forth), which rebuilds the local cache.
+
+- **Sign-in:** HTTP Basic with the password; if the server refuses it, the same
+  secret is tried as a Bearer token (Fastmail API tokens).
+- **Addresses:** self-hosted servers often announce a public hostname that isn't
+  reachable from the client (reverse proxy, LAN). If the announced API address
+  can't be reached, UwUMail uses the origin of the session URL it was given.
+- **Sync:** mailboxes become folders (path = mailbox id, nesting from
+  `parentId`). The first sync lists the newest 400 emails per mailbox; later
+  syncs only fetch `Email/changes` since the saved state. Emails up to 2 MB are
+  downloaded whole; bigger ones are stored from their headers and downloaded on
+  open. An email in several mailboxes is shown in one (trash, junk, inbox,
+  custom, drafts, sent, archive — first match).
+- **Push:** an EventSource connection wakes the sync on every state change,
+  with a check every minute when the server offers no push.
+- **Sending:** the message is built like for SMTP, uploaded, imported into Sent
+  and submitted with an explicit envelope (so Bcc works); if the submission
+  fails, the Sent copy is removed.
+- **Tests:** `dev/stalwart.sh` starts Stalwart with two users;
+  `tests/stalwart.rs` covers setup, nested mailboxes, sending with attachments,
+  push, flags in both directions, reply threading and trash.
 
 ### `apps/desktop/src-tauri` — the shell
 

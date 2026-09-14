@@ -15,6 +15,7 @@ import type {
   Message,
   NewAccount,
   OutgoingMessage,
+  Protocol,
   SenderPicture,
   ThreadDetail,
   ThreadPage,
@@ -30,6 +31,9 @@ const OAUTH_DOMAINS: Record<string, "microsoft" | "google"> = {
   "live.com": "microsoft",
   "outlook.de": "microsoft",
 };
+
+/** Demo domains that pretend to offer JMAP. */
+const JMAP_DOMAINS = ["fastmail.com", "fastmail.fm", "uwumail.dev", "stalwart.example"];
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -99,6 +103,19 @@ export class DemoBackend implements Backend {
         source: "ispdb",
       };
     }
+    if (JMAP_DOMAINS.includes(domain)) {
+      return {
+        email,
+        providerName: domain.startsWith("fastmail") ? "Fastmail" : undefined,
+        imap: { host: `imap.${domain}`, port: 993, security: "tls" },
+        smtp: { host: `smtp.${domain}`, port: 465, security: "tls" },
+        username: email,
+        source: "autoconfig",
+        jmap: domain.startsWith("fastmail")
+          ? "https://api.fastmail.com/jmap/session"
+          : `https://${domain}/.well-known/jmap`,
+      };
+    }
     return {
       email,
       imap: { host: `imap.${domain}`, port: 993, security: "tls" },
@@ -121,10 +138,24 @@ export class DemoBackend implements Backend {
       color: input.color,
       auth: input.auth,
       status: { state: "idle" },
+      protocol: input.protocol,
+      protocols: input.jmapUrl && input.auth === "password" ? ["imap", "jmap"] : ["imap"],
     };
     this.accounts.push(account);
     this.folders.push(...buildFolders(account.id, lang()));
     this.emit({ type: "mail:changed", accountId: account.id });
+    return structuredClone(account);
+  }
+
+  async setAccountProtocol(accountId: string, protocol: Protocol) {
+    await wait(900);
+    const account = this.accounts.find((a) => a.id === accountId);
+    if (!account) throw new BackendError("not_found", "This mailbox no longer exists.");
+    if (!account.protocols.includes(protocol)) {
+      throw new BackendError("invalid_input", "This mailbox can't use that protocol.");
+    }
+    account.protocol = protocol;
+    this.emit({ type: "mail:changed", accountId });
     return structuredClone(account);
   }
 

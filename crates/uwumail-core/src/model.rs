@@ -64,6 +64,28 @@ impl AuthKind {
     }
 }
 
+/// How UwUMail talks to a mailbox: IMAP for reading plus SMTP for sending, or JMAP for both.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Protocol {
+    #[default]
+    Imap,
+    Jmap,
+}
+
+impl Protocol {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Imap => "imap",
+            Self::Jmap => "jmap",
+        }
+    }
+
+    pub fn parse(value: &str) -> Self {
+        if value == "jmap" { Self::Jmap } else { Self::Imap }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "lowercase")]
 pub enum AccountStatus {
@@ -88,6 +110,9 @@ pub struct Account {
     pub color: AccountColor,
     pub auth: AuthKind,
     pub status: AccountStatus,
+    pub protocol: Protocol,
+    /// Protocols this account can switch to.
+    pub protocols: Vec<Protocol>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -372,6 +397,9 @@ pub struct DiscoveredSettings {
     pub smtp: ServerSettings,
     pub username: String,
     pub source: DiscoverySource,
+    /// The JMAP session URL, when the server offers JMAP.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jmap: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -386,6 +414,10 @@ pub struct NewAccount {
     pub smtp: ServerSettings,
     pub username: String,
     pub color: AccountColor,
+    #[serde(default)]
+    pub protocol: Protocol,
+    #[serde(default)]
+    pub jmap_url: Option<String>,
 }
 
 /// Events pushed to the UI.

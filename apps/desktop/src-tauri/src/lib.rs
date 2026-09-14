@@ -33,6 +33,15 @@ async fn remove_account(engine: State<'_, Engine>, account_id: String) -> Comman
 }
 
 #[tauri::command]
+async fn set_account_protocol(
+    engine: State<'_, Engine>,
+    account_id: String,
+    protocol: Protocol,
+) -> CommandResult<Account> {
+    engine.set_protocol(&account_id, protocol).await
+}
+
+#[tauri::command]
 fn sync_now(engine: State<'_, Engine>, account_id: Option<String>) -> CommandResult<()> {
     engine.sync_now(account_id.as_deref());
     Ok(())
@@ -171,6 +180,7 @@ pub fn run() {
             discover_settings,
             add_account,
             remove_account,
+            set_account_protocol,
             sync_now,
             list_folders,
             list_threads,

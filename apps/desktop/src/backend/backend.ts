@@ -8,6 +8,7 @@ import type {
   Folder,
   NewAccount,
   OutgoingMessage,
+  Protocol,
   SenderPicture,
   ThreadDetail,
   ThreadPage,
@@ -35,6 +36,8 @@ export interface Backend {
   discoverSettings(email: string): Promise<DiscoveredSettings>;
   addAccount(account: NewAccount): Promise<Account>;
   removeAccount(accountId: string): Promise<void>;
+  /** Switches between IMAP/SMTP and JMAP; the mailbox syncs again from scratch. */
+  setAccountProtocol(accountId: string, protocol: Protocol): Promise<Account>;
   syncNow(accountId?: string): Promise<void>;
 
   listFolders(accountId?: string): Promise<Folder[]>;

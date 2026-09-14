@@ -116,6 +116,7 @@ pub(crate) fn parse_client_config(xml: &str, email: &str, source: DiscoverySourc
         smtp: ServerSettings { host: smtp.hostname.clone(), port: smtp.port, security: security(&smtp.socket_type) },
         username: fill_placeholders(if imap.username.is_empty() { "%EMAILADDRESS%" } else { &imap.username }, email),
         source,
+        jmap: None,
     })
 }
 
@@ -153,7 +154,7 @@ fn base_domain(host: &str) -> String {
     labels[labels.len().saturating_sub(keep)..].join(".")
 }
 
-async fn resolver() -> Option<hickory_resolver::TokioResolver> {
+pub(crate) async fn resolver() -> Option<hickory_resolver::TokioResolver> {
     hickory_resolver::Resolver::builder_tokio().ok()?.build().ok()
 }
 
@@ -180,7 +181,7 @@ async fn from_mx(http: &reqwest::Client, email: &str, domain: &str) -> Option<Di
     Some(settings)
 }
 
-async fn srv(resolver: &hickory_resolver::TokioResolver, name: &str) -> Option<(String, u16)> {
+pub(crate) async fn srv(resolver: &hickory_resolver::TokioResolver, name: &str) -> Option<(String, u16)> {
     let lookup = timeout(HTTP_TIMEOUT, resolver.srv_lookup(name)).await.ok()?.ok()?;
     let record = lookup
         .answers()
@@ -218,6 +219,7 @@ async fn from_srv(email: &str, domain: &str) -> Option<DiscoveredSettings> {
         smtp,
         username: email.to_string(),
         source: DiscoverySource::Srv,
+        jmap: None,
     })
 }
 
@@ -250,6 +252,7 @@ async fn guess(email: &str, domain: &str) -> DiscoveredSettings {
         smtp,
         username: email.to_string(),
         source: DiscoverySource::Guess,
+        jmap: None,
     }
 }
 
@@ -263,19 +266,29 @@ pub fn split_email(email: &str) -> Result<(&str, String)> {
     }
 }
 
+/// IMAP and SMTP settings for an address, plus the JMAP session URL if the server offers JMAP.
 pub async fn discover(http: &reqwest::Client, email: &str) -> Result<DiscoveredSettings> {
     let email = email.trim();
     let (_, domain) = split_email(email)?;
-    if let Some(found) = from_autoconfig(http, email, &domain).await {
-        return Ok(found);
+    let mut settings = discover_imap(http, email, &domain).await;
+    // OAuth providers (Google, Microsoft) don't offer JMAP.
+    if settings.oauth.is_none() {
+        settings.jmap = crate::jmap::discover(http, &domain, Some(&settings.imap.host)).await;
     }
-    if let Some(found) = from_mx(http, email, &domain).await {
-        return Ok(found);
+    Ok(settings)
+}
+
+async fn discover_imap(http: &reqwest::Client, email: &str, domain: &str) -> DiscoveredSettings {
+    if let Some(found) = from_autoconfig(http, email, domain).await {
+        return found;
     }
-    if let Some(found) = from_srv(email, &domain).await {
-        return Ok(found);
+    if let Some(found) = from_mx(http, email, domain).await {
+        return found;
     }
-    Ok(guess(email, &domain).await)
+    if let Some(found) = from_srv(email, domain).await {
+        return found;
+    }
+    guess(email, domain).await
 }
 
 #[cfg(test)]

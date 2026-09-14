@@ -76,12 +76,14 @@
     "discovering": "Ich schnüffel nach deinen Servereinstellungen…",
     "connecting": "Ich klopf beim Server an…",
     "errorAuth": "Der Server mag das Passwort nicht (｡•́︿•̀｡) Schau nochmal drüber?",
-    "errorConnection": "Ich komm nicht an den Server ran (・_・;) Prüf die Adresse und dein Internet."
+    "errorConnection": "Ich komm nicht an den Server ran (・_・;) Prüf die Adresse und dein Internet.",
+    "protocolJmapHint": "Dein Server kann JMAP: schneller, sparsamer und neue Mails fliegen sofort rein ✧"
   },
   "settings": {
     "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)",
     "motionDesc": "Soll Nyu blinzeln, hüpfen und herumfliegen? „Wie System“ hält sich an dein Betriebssystem.",
-    "senderPicturesCleared": "Bilder weggefegt ✧"
+    "senderPicturesCleared": "Bilder weggefegt ✧",
+    "protocolSwitched": "{{email}} spricht jetzt {{protocol}} ✧"
   },
   "attachment": {
     "loading": "Ich pack den Anhang aus…",

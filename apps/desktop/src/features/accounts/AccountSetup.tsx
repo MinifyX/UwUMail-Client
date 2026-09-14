@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ChevronDown, CircleCheck, Info, KeyRound } from "lucide-react";
+import { ChevronDown, CircleCheck, Info, KeyRound, Zap } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { backend, BackendError } from "@/backend/backend";
@@ -8,12 +8,13 @@ import {
   type Account,
   type AccountColor,
   type DiscoveredSettings,
+  type Protocol,
   type Security,
   type ServerSettings,
 } from "@/backend/types";
 import { COLOR_CLASSES } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { Field, Select, TextInput } from "@/components/ui/Field";
+import { Field, Segmented, Select, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { isEmail } from "@/lib/format";
 import { queryKeys } from "@/lib/queries";
@@ -84,6 +85,7 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
   const [password, setPassword] = useState("");
   const [color, setColor] = useState<AccountColor>("pink");
   const [settings, setSettings] = useState<DiscoveredSettings | null>(null);
+  const [protocol, setProtocol] = useState<Protocol>("imap");
   const [showServers, setShowServers] = useState(false);
   const [busy, setBusy] = useState<"discover" | "connect" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,13 +110,19 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
     try {
       const found = await backend().discoverSettings(email.trim());
       setSettings(found);
-      setShowServers(found.source === "guess");
+      // JMAP whenever the server offers it; IMAP stays one click away.
+      setProtocol(found.jmap && !found.oauth ? "jmap" : "imap");
+      setShowServers(found.source === "guess" && !found.jmap);
     } catch (reason) {
       setError(describeError(reason));
     } finally {
       setBusy(null);
     }
   };
+
+  const jmapPossible = Boolean(settings && !settings.oauth && settings.jmap?.trim());
+  const usesJmap = jmapPossible && protocol === "jmap";
+  const isFastmail = /fastmail/i.test(`${settings?.providerName ?? ""} ${settings?.jmap ?? ""}`);
 
   const connect = async () => {
     if (!settings) return;
@@ -130,6 +138,8 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
         smtp: settings.smtp,
         username: settings.username,
         color,
+        protocol: jmapPossible ? protocol : "imap",
+        jmapUrl: settings.oauth ? undefined : settings.jmap?.trim() || undefined,
       });
       await Promise.all([
         client.invalidateQueries({ queryKey: queryKeys.accounts }),
@@ -208,7 +218,7 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
             ) : (
               <CircleCheck className="size-3.5 shrink-0 text-success" aria-hidden />
             )}
-            {settings.source === "guess"
+            {settings.source === "guess" && !settings.jmap
               ? t("account.guessed")
               : t("account.found", { provider: settings.providerName ?? settings.imap.host })}
           </p>
@@ -218,13 +228,36 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
         </Button>
       </div>
 
+      {jmapPossible && (
+        <div className="flex flex-col gap-2">
+          <span className="text-[13px] font-semibold text-muted">{t("account.protocol")}</span>
+          <Segmented
+            label={t("account.protocol")}
+            value={protocol}
+            onChange={setProtocol}
+            options={[
+              { value: "jmap", label: t("account.protocolJmap") },
+              { value: "imap", label: t("account.protocolImap") },
+            ]}
+          />
+          <p className="flex items-center gap-1.5 text-[12.5px] text-muted">
+            <Zap className="size-3.5 shrink-0 text-pink-ink" aria-hidden />
+            {usesJmap ? t("account.protocolJmapHint") : t("account.protocolImapHint")}
+          </p>
+        </div>
+      )}
+
       {provider ? (
         <p className="flex gap-2 rounded-2xl bg-pink-tint/60 px-4 py-3 text-[13px] text-pink-ink">
           <KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />
           {t("account.oauthHint", { provider })}
         </p>
       ) : (
-        <Field label={t("account.password")} hint={t("account.appPasswordHint")} error={error}>
+        <Field
+          label={t("account.password")}
+          hint={usesJmap && isFastmail ? t("account.fastmailTokenHint") : t("account.appPasswordHint")}
+          error={error}
+        >
           {(id) => (
             <TextInput
               id={id}
@@ -284,16 +317,35 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
                   />
                 )}
               </Field>
-              <ServerFields
-                label={t("account.imap")}
-                value={settings.imap}
-                onChange={(imap) => setSettings({ ...settings, imap })}
-              />
-              <ServerFields
-                label={t("account.smtp")}
-                value={settings.smtp}
-                onChange={(smtp) => setSettings({ ...settings, smtp })}
-              />
+              <Field label={t("account.jmapUrl")} hint={t("account.jmapUrlHint")}>
+                {(id) => (
+                  <TextInput
+                    id={id}
+                    type="url"
+                    placeholder="https://mail.example.com/.well-known/jmap"
+                    value={settings.jmap ?? ""}
+                    onChange={(e) => {
+                      const jmap = e.target.value.trim();
+                      setSettings({ ...settings, jmap: jmap || undefined });
+                      if (jmap && !settings.jmap) setProtocol("jmap");
+                    }}
+                  />
+                )}
+              </Field>
+              {!usesJmap && (
+                <>
+                  <ServerFields
+                    label={t("account.imap")}
+                    value={settings.imap}
+                    onChange={(imap) => setSettings({ ...settings, imap })}
+                  />
+                  <ServerFields
+                    label={t("account.smtp")}
+                    value={settings.smtp}
+                    onChange={(smtp) => setSettings({ ...settings, smtp })}
+                  />
+                </>
+              )}
             </div>
           )}
         </div>
