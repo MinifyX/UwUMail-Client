@@ -87,10 +87,11 @@ the host too, limited to the hosts in the manifest.
 | Mail cache, contacts, addon storage | `<app data>/uwumail.db` |
 | Installed addons | `<app data>/addons/<addon id>/` |
 | Passwords, OAuth refresh tokens | OS keychain, service `UwUMail` |
-| UI settings | `<app data>/settings.json` |
+| UI settings | WebView local storage (`uwumail.settings`) |
 
-`<app data>` is `%APPDATA%\UwUMail` on Windows,
-`~/Library/Application Support/UwUMail` on macOS, `~/.local/share/uwumail` on Linux.
+`<app data>` is `%APPDATA%\app.uwumail.desktop` on Windows,
+`~/Library/Application Support/app.uwumail.desktop` on macOS and
+`~/.local/share/app.uwumail.desktop` on Linux (from the Tauri identifier).
 
 ## Build and release
 
