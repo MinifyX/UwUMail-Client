@@ -9,7 +9,7 @@
 - [x] Reading: sanitized HTML, remote content blocked by default, attachment list
 - [x] Attachments: open, save and preview (images, PDF, text, CSV, audio, video, invitations, contact cards), warning for files that run programs, local cache
 - [x] Nested folders as a collapsible tree
-- [ ] Sender pictures from brand logos (BIMI) and website icons
+- [x] Sender pictures from brand logos (BIMI) and website icons, once per domain, can be turned off
 - [ ] JMAP (Fastmail, Stalwart, Cyrus) next to IMAP/SMTP
 - [x] Writing: compose, reply, reply all, forward, attachments
 - [ ] Drafts saved to the server, multiple identities per mailbox

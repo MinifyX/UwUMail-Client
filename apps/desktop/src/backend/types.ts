@@ -141,6 +141,12 @@ export interface OutgoingMessage {
 }
 
 /** A locally available attachment file. `url` works in <img>, <video> and fetch. */
+/** A company's brand logo (fills the avatar) or website icon (sits on a plain background). */
+export interface SenderPicture {
+  url: string;
+  kind: "logo" | "icon";
+}
+
 export interface AttachmentContent {
   url: string;
   filename: string;

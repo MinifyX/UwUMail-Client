@@ -67,7 +67,8 @@
     "errorConnection": "I couldn't reach the server (・_・;) Check the address and your internet."
   },
   "settings": {
-    "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)"
+    "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)",
+    "senderPicturesCleared": "Pictures swept away ✧"
   },
   "attachment": {
     "loading": "Unpacking the attachment…",

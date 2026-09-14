@@ -6,6 +6,7 @@ use tauri_plugin_opener::OpenerExt;
 use tokio::sync::broadcast::error::RecvError;
 use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::model::*;
+use uwumail_core::pictures::SenderPicture;
 use uwumail_core::secrets::KeyringSecrets;
 use uwumail_core::{Engine, EngineOptions, Error};
 
@@ -104,6 +105,16 @@ async fn save_attachment(engine: State<'_, Engine>, attachment_id: String, desti
     engine.save_attachment(&attachment_id, std::path::Path::new(&destination)).await
 }
 
+#[tauri::command]
+async fn get_sender_picture(engine: State<'_, Engine>, email: String) -> CommandResult<Option<SenderPicture>> {
+    engine.sender_picture(&email).await
+}
+
+#[tauri::command]
+fn clear_sender_pictures(engine: State<'_, Engine>) -> CommandResult<()> {
+    engine.clear_sender_pictures()
+}
+
 /// Sends engine events to the UI and rings for new mail while UwUMail is in the background.
 fn forward(app: &AppHandle, engine: &Engine, event: EngineEvent) {
     if let EngineEvent::MailReceived { message_ids, .. } = &event {
@@ -172,6 +183,8 @@ pub fn run() {
             get_attachment,
             open_attachment,
             save_attachment,
+            get_sender_picture,
+            clear_sender_pictures,
         ])
         .run(tauri::generate_context!())
         .expect("error while running UwUMail");

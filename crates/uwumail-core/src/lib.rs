@@ -12,6 +12,7 @@ pub mod imap;
 pub mod mime;
 pub mod model;
 pub mod oauth;
+pub mod pictures;
 pub mod secrets;
 pub mod smtp;
 pub mod store;

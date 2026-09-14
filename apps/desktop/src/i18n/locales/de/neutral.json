@@ -229,7 +229,11 @@
     "mailAppearanceLight": "Immer hell",
     "mailAppearanceDark": "Immer dunkel",
     "forgetAppearances": "Gemerkte Absender zurücksetzen ({{count}})",
-    "appearancesForgotten": "Gemerkte Absender zurückgesetzt"
+    "appearancesForgotten": "Gemerkte Absender zurückgesetzt",
+    "senderPictures": "Bilder für Firmenabsender",
+    "senderPicturesDesc": "Zeigt das Markenlogo oder Website-Icon von Firmen. UwUMail fragt dafür höchstens einmal im Monat bei der Website der Firma an, nie pro Mail. Leute bei Mailanbietern wie Gmail behalten ihre Initialen.",
+    "clearSenderPictures": "Gespeicherte Bilder löschen",
+    "senderPicturesCleared": "Gespeicherte Bilder gelöscht"
   },
   "theme": {
     "system": "System",

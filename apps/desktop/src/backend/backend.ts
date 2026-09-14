@@ -8,6 +8,7 @@ import type {
   Folder,
   NewAccount,
   OutgoingMessage,
+  SenderPicture,
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
@@ -53,6 +54,10 @@ export interface Backend {
   openAttachment(attachmentId: string, confirmed: boolean): Promise<void>;
   /** Asks where to save it. Resolves to false when the user cancels. */
   saveAttachment(attachmentId: string, filename: string): Promise<boolean>;
+
+  /** Brand logo or website icon for a company address; null for people and mail providers. */
+  getSenderPicture(email: string): Promise<SenderPicture | null>;
+  clearSenderPictures(): Promise<void>;
 
   subscribe(listener: (event: BackendEvent) => void): () => void;
 }

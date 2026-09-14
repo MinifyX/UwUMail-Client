@@ -13,6 +13,7 @@ use crate::attachments::{self, AttachmentCache, AttachmentFile};
 use crate::error::{Error, ErrorCode, Result};
 use crate::imap::{self, ImapSession, Login};
 use crate::model::*;
+use crate::pictures::{SenderPicture, SenderPictures};
 use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
@@ -62,6 +63,7 @@ struct Inner {
     accounts: Mutex<HashMap<String, Runtime>>,
     tokens: AsyncMutex<HashMap<String, (String, Instant)>>,
     attachments: AttachmentCache,
+    pictures: SenderPictures,
 }
 
 enum Credential {
@@ -118,6 +120,7 @@ impl Engine {
                 accounts: Mutex::new(HashMap::new()),
                 tokens: AsyncMutex::new(HashMap::new()),
                 attachments: AttachmentCache::new(&options.data_dir),
+                pictures: SenderPictures::new(&options.data_dir)?,
             }),
         })
     }
@@ -465,6 +468,20 @@ impl Engine {
     /// Where attachment files are cached, for the webview's file access scope.
     pub fn attachment_dir(&self) -> std::path::PathBuf {
         self.inner.attachments.dir().to_path_buf()
+    }
+
+    /// The brand logo or website icon for a company address, fetched once per domain.
+    pub async fn sender_picture(&self, email: &str) -> Result<Option<SenderPicture>> {
+        self.inner.pictures.get(email).await
+    }
+
+    pub fn clear_sender_pictures(&self) -> Result<()> {
+        self.inner.pictures.clear()
+    }
+
+    /// Where sender pictures are cached, for the webview's file access scope.
+    pub fn picture_dir(&self) -> std::path::PathBuf {
+        self.inner.pictures.dir().to_path_buf()
     }
 
     /// Messages by id, e.g. to describe new mail in a notification.

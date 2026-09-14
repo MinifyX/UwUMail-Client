@@ -67,7 +67,8 @@
     "errorConnection": "Ich komm nicht an den Server ran (・_・;) Prüf die Adresse und dein Internet."
   },
   "settings": {
-    "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)"
+    "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)",
+    "senderPicturesCleared": "Bilder weggefegt ✧"
   },
   "attachment": {
     "loading": "Ich pack den Anhang aus…",

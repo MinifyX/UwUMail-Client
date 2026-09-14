@@ -85,6 +85,8 @@ the host too, limited to the hosts in the manifest.
 | Data | Where |
 | --- | --- |
 | Mail cache, contacts, addon storage | `<app data>/uwumail.db` |
+| Opened attachments (trimmed at 1 GB) | `<app data>/attachments/<message id>/` |
+| Sender pictures (30 days per domain) | `<app data>/pictures/<domain>.<logo\|icon>.<ext>` |
 | Installed addons | `<app data>/addons/<addon id>/` |
 | Passwords, OAuth refresh tokens | OS keychain, service `UwUMail` |
 | UI settings | WebView local storage (`uwumail.settings`) |
@@ -92,6 +94,17 @@ the host too, limited to the hosts in the manifest.
 `<app data>` is `%APPDATA%\app.uwumail.desktop` on Windows,
 `~/Library/Application Support/app.uwumail.desktop` on macOS and
 `~/.local/share/app.uwumail.desktop` on Linux (from the Tauri identifier).
+
+## Sender pictures
+
+For company addresses the engine looks for a picture in this order: the BIMI
+logo (`default._bimi.<domain>` TXT record, SVG over HTTPS), the app icon or
+largest icon linked from the website, then `/favicon.ico`. It only contacts the
+registrable domain (`news.mail.shop.example` → `shop.example`), over HTTPS,
+without cookies or referrer, at most four domains at a time, and remembers the
+result (including "nothing found") for 30 days. Addresses at mail providers
+(Gmail, GMX, Outlook, …) and names without a public suffix never cause a
+request. The setting lives under Reading and is on by default.
 
 ## Build and release
 

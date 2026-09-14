@@ -229,7 +229,11 @@
     "mailAppearanceLight": "Always light",
     "mailAppearanceDark": "Always dark",
     "forgetAppearances": "Reset remembered senders ({{count}})",
-    "appearancesForgotten": "Remembered senders reset"
+    "appearancesForgotten": "Remembered senders reset",
+    "senderPictures": "Pictures for company senders",
+    "senderPicturesDesc": "Shows the brand logo or website icon of companies. UwUMail asks each company's website once a month, never per mail. People at mail providers like Gmail keep their initials.",
+    "clearSenderPictures": "Delete saved pictures",
+    "senderPicturesCleared": "Saved pictures deleted"
   },
   "theme": {
     "system": "System",

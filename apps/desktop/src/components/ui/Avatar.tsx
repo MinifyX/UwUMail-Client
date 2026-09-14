@@ -1,6 +1,8 @@
 import clsx from "clsx";
+import { useState } from "react";
 import type { AccountColor, Address } from "@/backend/types";
 import { colorFor, initials } from "@/lib/format";
+import { useSenderPicture } from "@/lib/queries";
 
 export const COLOR_CLASSES: Record<AccountColor, { bg: string; text: string; dot: string }> = {
   pink: {
@@ -43,11 +45,15 @@ interface AvatarProps {
 
 export function Avatar({ address, size = "md", className }: AvatarProps) {
   const color = COLOR_CLASSES[colorFor(address.email)];
+  const picture = useSenderPicture(address.email);
+  const [loaded, setLoaded] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const shown = picture && picture.url !== failed ? picture : null;
   return (
     <span
       aria-hidden
       className={clsx(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-bold",
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold",
         color.bg,
         color.text,
         size === "sm" && "size-7 text-[11px]",
@@ -57,6 +63,25 @@ export function Avatar({ address, size = "md", className }: AvatarProps) {
       )}
     >
       {initials(address)}
+      {shown && (
+        // Initials stay underneath until the picture has loaded, and come back if it can't.
+        <span
+          className={clsx(
+            "absolute inset-0 grid place-items-center rounded-full transition-opacity duration-200",
+            shown.kind === "icon" && "bg-white ring-1 ring-black/5 ring-inset",
+            loaded === shown.url ? "opacity-100" : "opacity-0",
+          )}
+        >
+          <img
+            src={shown.url}
+            alt=""
+            draggable={false}
+            onLoad={() => setLoaded(shown.url)}
+            onError={() => setFailed(shown.url)}
+            className={shown.kind === "logo" ? "size-full object-cover" : "size-[62%] object-contain"}
+          />
+        </span>
+      )}
     </span>
   );
 }

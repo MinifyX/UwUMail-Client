@@ -11,6 +11,7 @@ import type {
   Folder,
   NewAccount,
   OutgoingMessage,
+  SenderPicture,
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
@@ -111,6 +112,15 @@ export class TauriBackend implements Backend {
     if (!destination) return false;
     await call<void>("save_attachment", { attachmentId, destination });
     return true;
+  }
+
+  async getSenderPicture(email: string): Promise<SenderPicture | null> {
+    const picture = await call<{ path: string; kind: SenderPicture["kind"] } | null>("get_sender_picture", { email });
+    return picture && { url: convertFileSrc(picture.path), kind: picture.kind };
+  }
+
+  clearSenderPictures() {
+    return call<void>("clear_sender_pictures");
   }
 
   searchContacts(query: string) {

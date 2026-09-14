@@ -24,6 +24,8 @@ export interface Settings {
   senderAppearance: Record<string, "light" | "dark">;
   /** Folder ids whose subfolders are hidden in the sidebar. */
   collapsedFolders: string[];
+  /** Brand logos and website icons for company senders. */
+  senderPictures: boolean;
 }
 
 interface SettingsActions {
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mailAppearance: "auto",
   senderAppearance: {},
   collapsedFolders: [],
+  senderPictures: true,
 };
 
 export const useSettings = create<Settings & SettingsActions>()(

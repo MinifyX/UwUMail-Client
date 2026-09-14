@@ -2,6 +2,7 @@ import { BackendError, type Backend } from "./backend";
 import { isDangerous } from "@/lib/attachments";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, welcomeMessage } from "./demo-data";
+import { demoSenderPicture } from "./demo-pictures";
 import type {
   Account,
   AttachmentContent,
@@ -14,6 +15,7 @@ import type {
   Message,
   NewAccount,
   OutgoingMessage,
+  SenderPicture,
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
@@ -272,6 +274,15 @@ export class DemoBackend implements Backend {
     link.download = filename;
     link.click();
     return true;
+  }
+
+  async getSenderPicture(email: string): Promise<SenderPicture | null> {
+    await wait(150);
+    return demoSenderPicture(email);
+  }
+
+  async clearSenderPictures() {
+    await wait(100);
   }
 
   async searchContacts(query: string): Promise<Contact[]> {

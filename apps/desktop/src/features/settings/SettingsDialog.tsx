@@ -99,6 +99,7 @@ function Appearance() {
 function Reading() {
   const { t } = useT();
   const settings = useSettings();
+  const client = useQueryClient();
   return (
     <>
       <div className="border-b border-hairline py-4">
@@ -145,6 +146,29 @@ function Reading() {
           </Button>
         )}
       </Row>
+      <div className="flex flex-col gap-2 border-b border-hairline py-4">
+        <Toggle
+          checked={settings.senderPictures}
+          onChange={(senderPictures) => settings.update({ senderPictures })}
+          label={t("settings.senderPictures")}
+          description={t("settings.senderPicturesDesc")}
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          className="self-start"
+          onClick={() => {
+            void backend()
+              .clearSenderPictures()
+              .then(() => {
+                client.removeQueries({ queryKey: ["senderPicture"] });
+                toast(t("settings.senderPicturesCleared"), "success");
+              });
+          }}
+        >
+          {t("settings.clearSenderPictures")}
+        </Button>
+      </div>
     </>
   );
 }

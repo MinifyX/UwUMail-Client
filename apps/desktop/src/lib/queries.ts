@@ -46,6 +46,21 @@ export function useAttachment(attachmentId: string | null) {
   });
 }
 
+/** One lookup per domain per session; the engine caches the files for 30 days. */
+export function useSenderPicture(email: string) {
+  const enabled = useSettings((s) => s.senderPictures);
+  const domain = email.includes("@") ? email.slice(email.lastIndexOf("@") + 1).toLowerCase() : "";
+  const { data } = useQuery({
+    queryKey: ["senderPicture", domain],
+    queryFn: () => backend().getSenderPicture(email),
+    enabled: enabled && domain !== "",
+    staleTime: Infinity,
+    gcTime: 60 * 60 * 1000,
+    retry: false,
+  });
+  return enabled ? (data ?? null) : null;
+}
+
 export function useThread(threadId: string | null) {
   const conversations = useSettings((s) => s.conversations);
   return useQuery({
