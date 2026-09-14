@@ -76,7 +76,7 @@ pub fn ready() -> Option<ReadyUpdate> {
 pub async fn check() -> Result<Option<ReadyUpdate>> {
     let _one_at_a_time = CHECKING.lock().await;
     if !crate::native::certificates_ready() {
-        eprintln!("UwUMail: certificate checks aren't set up, skipping the update check");
+        crate::native::log("certificate checks aren't set up, skipping the update check");
         return Err(Error::internal("Certificate checks aren't ready."));
     }
     if let Some(update) = ready() {

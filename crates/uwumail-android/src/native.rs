@@ -7,6 +7,25 @@ use jni::EnvUnowned;
 use jni::errors::ThrowRuntimeExAndDefault;
 use jni::objects::{JObject, JString};
 
+/// Writes to the Android log (tag UwUMail), also before Rust's stdout is piped there.
+#[cfg(target_os = "android")]
+pub fn log(message: &str) {
+    #[link(name = "log")]
+    unsafe extern "C" {
+        fn __android_log_write(priority: i32, tag: *const std::ffi::c_char, text: *const std::ffi::c_char) -> i32;
+    }
+    let text = std::ffi::CString::new(message.replace('\0', " ")).unwrap_or_default();
+    // SAFETY: both strings are NUL-terminated and outlive the call.
+    unsafe {
+        __android_log_write(4, c"UwUMail".as_ptr(), text.as_ptr());
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn log(message: &str) {
+    eprintln!("UwUMail: {message}");
+}
+
 /// How far `start` got: 1 bridge, 2 certificate checks, 3 engine. For `status`.
 static STARTED: AtomicU8 = AtomicU8::new(0);
 
@@ -57,9 +76,11 @@ pub fn start<'caller>(
     cache_dir: JString<'caller>,
 ) {
     env.with_env(|env| -> Result<(), NativeError> {
+        log("native start");
         let outcome = (|| -> Result<(), NativeError> {
             crate::bridge::init(env, &context)?;
             STARTED.store(1, Ordering::Relaxed);
+            log("bridge ready");
             #[cfg(target_os = "android")]
             {
                 // Certificates are checked by Android itself, including ones the user installed.
@@ -67,13 +88,16 @@ pub fn start<'caller>(
                 rustls_platform_verifier::android::init_with_env(env, context)?;
             }
             STARTED.store(2, Ordering::Relaxed);
+            log("certificate checks ready");
             let data_dir = data_dir.try_to_string(env)?;
             let cache_dir = cache_dir.try_to_string(env)?;
             crate::host::start_engine(data_dir.into(), cache_dir.into())?;
             STARTED.store(3, Ordering::Relaxed);
+            log("engine running");
             Ok(())
         })();
         if let Err(error) = &outcome {
+            log(&format!("start failed: {error}"));
             *START_ERROR.lock().unwrap() = Some(error.to_string());
         }
         outcome
@@ -96,6 +120,7 @@ pub fn call<'caller>(
     env.with_env(|env| -> Result<JString<'caller>, NativeError> {
         let method = method.try_to_string(env)?;
         let payload = payload.try_to_string(env)?;
+        log(&format!("call {method}"));
         Ok(match crate::host::handle(&method, &payload)? {
             Some(answer) => JString::from_str(env, answer)?,
             None => JString::default(),

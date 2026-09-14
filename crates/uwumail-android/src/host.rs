@@ -38,6 +38,9 @@ pub fn runtime() -> &'static tokio::runtime::Runtime {
 /// The running engine. Blocks until the process has started it, which happens
 /// before any window exists.
 pub fn engine() -> Engine {
+    if ENGINE.get().is_none() {
+        crate::native::log("the window waits for the engine");
+    }
     ENGINE.wait().clone()
 }
 
