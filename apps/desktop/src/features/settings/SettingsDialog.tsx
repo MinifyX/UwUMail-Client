@@ -66,6 +66,18 @@ function Appearance() {
           ]}
         />
       </Row>
+      <Row label={t("settings.motion")} description={t("settings.motionDesc")}>
+        <Segmented
+          label={t("settings.motion")}
+          value={settings.motion}
+          onChange={(motion) => settings.update({ motion })}
+          options={[
+            { value: "system", label: t("motion.system") },
+            { value: "on", label: t("motion.on") },
+            { value: "off", label: t("motion.off") },
+          ]}
+        />
+      </Row>
       <Row
         label={t("settings.tone")}
         description={t("tone.sample", { text: i18n.getFixedT(null, settings.tone)("toast.sent") })}

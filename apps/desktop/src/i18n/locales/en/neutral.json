@@ -217,6 +217,8 @@
     "about": "About",
     "layout": "Layout",
     "theme": "Theme",
+    "motion": "Animations",
+    "motionDesc": "With System, UwUMail follows the reduced motion setting of your operating system.",
     "tone": "Tone",
     "language": "Language",
     "conversations": "Group messages into conversations",
@@ -252,6 +254,11 @@
     "system": "System",
     "light": "Light",
     "dark": "Dark"
+  },
+  "motion": {
+    "system": "System",
+    "on": "On",
+    "off": "Off"
   },
   "language": {
     "system": "System",

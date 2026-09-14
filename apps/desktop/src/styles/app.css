@@ -257,7 +257,8 @@
     scrollbar-color: var(--uwu-border) transparent;
   }
 
-  @media (prefers-reduced-motion: reduce) {
+  /* Settings → Appearance → Animations, resolved against prefers-reduced-motion in lib/theme.ts. */
+  [data-motion="reduced"] {
     *,
     *::before,
     *::after {

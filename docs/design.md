@@ -106,7 +106,9 @@ mono symbol) and `apps/desktop/src/components/nyu/` (React).
   0.4 scale.
 - **Motion.** Nyu blinks in scenes, twitches its ears on hover, hops in the
   sidebar logo when new mail arrives (not on every sync) and flies off from
-  the "sent" toast. With reduced motion all of it stays still.
+  the "sent" toast. Settings → Appearance → Animations (System / On / Off)
+  resolves to `<html data-motion="full|reduced">` in `lib/theme.ts`; with
+  `reduced`, all app animations collapse to 1 ms and Nyu stays still.
 - **Name.** Nyu only appears by name in the playful tone ("Hi! I'm Nyu").
   The neutral tone keeps the pictures and says "UwUMail".
 

@@ -4,6 +4,8 @@ import { persist } from "zustand/middleware";
 export type LayoutMode = "simple" | "pro";
 export type Tone = "playful" | "neutral";
 export type ThemeSetting = "system" | "light" | "dark";
+/** Animations: follow the system's reduced-motion setting, or override it. */
+export type MotionSetting = "system" | "on" | "off";
 export type LanguageSetting = "system" | "de" | "en";
 export type RemoteImages = "ask" | "always";
 /** How HTML mail looks while the app is dark. */
@@ -14,6 +16,7 @@ export interface Settings {
   layout: LayoutMode;
   tone: Tone;
   theme: ThemeSetting;
+  motion: MotionSetting;
   language: LanguageSetting;
   conversations: boolean;
   remoteImages: RemoteImages;
@@ -41,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   layout: "simple",
   tone: "playful",
   theme: "system",
+  motion: "system",
   language: "system",
   conversations: true,
   remoteImages: "ask",

@@ -217,6 +217,8 @@
     "about": "Über",
     "layout": "Layout",
     "theme": "Design",
+    "motion": "Animationen",
+    "motionDesc": "„Wie System“ richtet sich nach der Einstellung für reduzierte Bewegung in deinem Betriebssystem.",
     "tone": "Ton",
     "language": "Sprache",
     "conversations": "Mails als Unterhaltungen gruppieren",
@@ -252,6 +254,11 @@
     "system": "System",
     "light": "Hell",
     "dark": "Dunkel"
+  },
+  "motion": {
+    "system": "Wie System",
+    "on": "An",
+    "off": "Aus"
   },
   "language": {
     "system": "System",
