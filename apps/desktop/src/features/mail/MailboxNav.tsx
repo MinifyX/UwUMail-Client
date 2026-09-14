@@ -1,5 +1,16 @@
 import clsx from "clsx";
-import { ChevronDown, CircleAlert, LoaderCircle, PenLine, Plus, Settings, WifiOff } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  FolderOpen,
+  LoaderCircle,
+  PenLine,
+  Plus,
+  Settings,
+  WifiOff,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 import type { Account, Folder, MailboxView } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
@@ -8,20 +19,12 @@ import { Wordmark } from "@/components/ui/Logo";
 import { Badge } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
 import { useAccounts, useFolders } from "@/lib/queries";
+import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
+import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
 import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
-import type { LucideIcon } from "lucide-react";
 
 const UNIFIED_ROLES = ["inbox", "unread", "flagged", "drafts", "sent"] as const;
-const ROLE_ORDER = ["inbox", "drafts", "sent", "archive", "junk", "trash"];
-
-function sortFolders(folders: Folder[]) {
-  return [...folders].sort((a, b) => {
-    const ra = a.role ? ROLE_ORDER.indexOf(a.role) : ROLE_ORDER.length;
-    const rb = b.role ? ROLE_ORDER.indexOf(b.role) : ROLE_ORDER.length;
-    return ra - rb || a.name.localeCompare(b.name);
-  });
-}
 
 interface NavItemProps {
   icon: LucideIcon;
@@ -49,10 +52,79 @@ function NavItem({ icon: Icon, label, count, active, onClick }: NavItemProps) {
   );
 }
 
-function AccountSection({ account, folders }: { account: Account; folders: Folder[] }) {
-  const [open, setOpen] = useState(true);
+const INDENT = 16;
+
+function Glyph({ icon: Icon, active }: { icon: LucideIcon; active: boolean }) {
+  return (
+    <Icon className={clsx("size-[17px] shrink-0", active ? "text-pink" : "text-muted")} strokeWidth={2} aria-hidden />
+  );
+}
+
+function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
+  const { t } = useT();
   const view = useUi((s) => s.view);
   const setView = useUi((s) => s.setView);
+  const collapsed = useSettings((s) => s.collapsedFolders.includes(node.folder.id));
+  const toggleFolder = useSettings((s) => s.toggleFolder);
+  const { folder, depth, children } = node;
+  const hasChildren = children.length > 0;
+  const target: MailboxView = { kind: "folder", accountId: account.id, folderId: folder.id };
+  const active = sameView(view, target);
+  const icon = folder.selectable ? folderIcon(folder) : FolderOpen;
+  // A collapsed folder also shows what's unread inside it.
+  const count = hasChildren && collapsed ? node.unreadInside : countsUnread(folder) ? folder.unread : 0;
+  const label = folder.role ? t(`folder.${folder.role}`) : folder.name;
+
+  return (
+    <li role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined} aria-selected={active}>
+      <div
+        className={clsx(
+          "group relative flex h-9 items-center rounded-xl transition-colors",
+          active ? "bg-pink-tint font-semibold text-pink-ink" : "text-ink/85 hover:bg-pink-tint/50",
+        )}
+        style={{ paddingLeft: 6 + depth * INDENT }}
+      >
+        {hasChildren ? (
+          <button
+            type="button"
+            onClick={() => toggleFolder(folder.id)}
+            aria-label={t("nav.toggleFolder", { name: label })}
+            title={t("nav.toggleFolder", { name: label })}
+            className="grid size-5 shrink-0 place-items-center rounded-md text-muted hover:bg-pink-tint-strong hover:text-ink"
+          >
+            {collapsed ? (
+              <ChevronRight className="size-3.5" aria-hidden />
+            ) : (
+              <ChevronDown className="size-3.5" aria-hidden />
+            )}
+          </button>
+        ) : (
+          <span className="size-5 shrink-0" aria-hidden />
+        )}
+        <button
+          type="button"
+          onClick={() => (folder.selectable ? setView(target) : toggleFolder(folder.id))}
+          aria-current={active ? "page" : undefined}
+          className="flex h-full min-w-0 flex-1 items-center gap-2.5 pr-3 pl-1 text-left text-[13.5px]"
+        >
+          <Glyph icon={icon} active={active} />
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+          {count > 0 && <Badge count={count} />}
+        </button>
+      </div>
+      {hasChildren && !collapsed && (
+        <ul role="group" className="flex flex-col gap-0.5 pt-0.5">
+          {children.map((child) => (
+            <FolderItem key={child.folder.id} node={child} account={account} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function AccountSection({ account, folders }: { account: Account; folders: Folder[] }) {
+  const [open, setOpen] = useState(true);
   const { t } = useT();
   const { status } = account;
   const statusLabel =
@@ -63,6 +135,7 @@ function AccountSection({ account, folders }: { account: Account; folders: Folde
         : status.state === "error"
           ? `${t("status.error", { account: account.email })}: ${status.message}`
           : undefined;
+  const tree = buildFolderTree(folders);
 
   return (
     <section className="flex flex-col gap-0.5">
@@ -82,20 +155,13 @@ function AccountSection({ account, folders }: { account: Account; folders: Folde
         {status.state === "error" && <CircleAlert className="size-3.5 text-danger" aria-label={statusLabel} />}
         <ChevronDown className={clsx("size-3.5 transition-transform", !open && "-rotate-90")} aria-hidden />
       </button>
-      {open &&
-        sortFolders(folders).map((folder) => {
-          const target: MailboxView = { kind: "folder", accountId: account.id, folderId: folder.id };
-          return (
-            <NavItem
-              key={folder.id}
-              icon={folderIcon(folder)}
-              label={folder.role ? t(`folder.${folder.role}`) : folder.name}
-              count={folder.role === "inbox" || folder.role === null ? folder.unread : undefined}
-              active={sameView(view, target)}
-              onClick={() => setView(target)}
-            />
-          );
-        })}
+      {open && (
+        <ul role="tree" aria-label={account.email} className="flex flex-col gap-0.5">
+          {tree.map((node) => (
+            <FolderItem key={node.folder.id} node={node} account={account} />
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

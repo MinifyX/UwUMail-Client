@@ -10,7 +10,8 @@
     "addAccount": "Add mailbox",
     "settings": "Settings",
     "compose": "Write",
-    "menu": "Folders"
+    "menu": "Folders",
+    "toggleFolder": "Show or hide folders in {{name}}"
   },
   "filter": {
     "all": "All",

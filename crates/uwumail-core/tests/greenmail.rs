@@ -8,6 +8,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use uwumail_core::imap;
 use uwumail_core::model::*;
 use uwumail_core::secrets::MemorySecrets;
 use uwumail_core::{Engine, EngineOptions};
@@ -64,7 +65,7 @@ async fn sync_send_reply_flag_and_trash() {
             email: email.clone(),
             auth: AuthKind::Password,
             password: Some("uwu".into()),
-            imap,
+            imap: imap.clone(),
             smtp,
             username: email.clone(),
             color: AccountColor::Pink,
@@ -77,6 +78,29 @@ async fn sync_send_reply_flag_and_trash() {
         engine.list_folders(Some(&account.id)).unwrap().into_iter().find(|f| f.role == Some(FolderRole::Inbox))
     })
     .await;
+
+    // Nested folders created by another client show up as a tree.
+    let mut other_client =
+        imap::login(&imap, imap::Login::Password { username: &email, password: "uwu" }).await.unwrap();
+    let delimiter = imap::list_folders(&mut other_client)
+        .await
+        .unwrap()
+        .into_iter()
+        .find_map(|f| f.delimiter)
+        .unwrap_or(".".into());
+    other_client.create("Projekte").await.unwrap();
+    other_client.create(format!("Projekte{delimiter}Bugs")).await.unwrap();
+    let _ = other_client.logout().await;
+    let (parent, child) = wait_for("the nested folder", async || {
+        engine.sync_now(Some(&account.id));
+        let folders = engine.list_folders(Some(&account.id)).unwrap();
+        let parent = folders.iter().find(|f| f.path == "Projekte")?.clone();
+        let child = folders.iter().find(|f| f.name == "Bugs")?.clone();
+        Some((parent, child))
+    })
+    .await;
+    assert_eq!(child.parent_id.as_deref(), Some(parent.id.as_str()));
+    assert_eq!(parent.parent_id, None);
 
     let subject = format!("Hallo {unique}");
     engine

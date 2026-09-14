@@ -184,8 +184,26 @@ pub struct RemoteFolder {
     pub path: String,
     pub name: String,
     pub role: Option<FolderRole>,
+    pub delimiter: Option<String>,
+    /// False for containers that can hold folders but no messages.
+    pub selectable: bool,
     /// Gmail's "All Mail" and similar virtual folders duplicate everything.
     pub skip_sync: bool,
+}
+
+impl RemoteFolder {
+    /// Top level, or directly below INBOX: the only places where a folder
+    /// called "Archiv" or "Spam" really is the system folder.
+    fn is_near_root(&self) -> bool {
+        let Some(delimiter) = self.delimiter.as_deref().filter(|d| !d.is_empty()) else { return true };
+        let relative = match self.path.get(..5) {
+            Some(head) if head.eq_ignore_ascii_case("INBOX") && self.path[5..].starts_with(delimiter) => {
+                &self.path[5 + delimiter.len()..]
+            }
+            _ => self.path.as_str(),
+        };
+        !relative.contains(delimiter)
+    }
 }
 
 fn role_from_name(path: &str, name: &str) -> Option<FolderRole> {
@@ -225,9 +243,10 @@ pub async fn list_folders(session: &mut ImapSession) -> Result<Vec<RemoteFolder>
     let mut special_roles = Vec::new();
     for name in &names {
         let attributes = name.attributes();
-        if attributes.iter().any(|a| matches!(a, NameAttribute::NoSelect)) {
-            continue;
-        }
+        let selectable = !attributes.iter().any(|a| {
+            matches!(a, NameAttribute::NoSelect)
+                || matches!(a, NameAttribute::Extension(ext) if ext.eq_ignore_ascii_case("\\NonExistent"))
+        });
         let path = name.name().to_string();
         let display = decode_modified_utf7(match name.delimiter() {
             Some(delimiter) if !delimiter.is_empty() => path.rsplit(delimiter).next().unwrap_or(&path),
@@ -246,8 +265,15 @@ pub async fn list_folders(session: &mut ImapSession) -> Result<Vec<RemoteFolder>
             })
         };
         let is_all = attributes.iter().any(|a| matches!(a, NameAttribute::All | NameAttribute::Flagged));
-        special_roles.push(special);
-        folders.push(RemoteFolder { name: display, path, role: None, skip_sync: is_all });
+        special_roles.push(if selectable { special } else { None });
+        folders.push(RemoteFolder {
+            name: display,
+            path,
+            role: None,
+            delimiter: name.delimiter().map(String::from),
+            selectable,
+            skip_sync: is_all,
+        });
     }
 
     // Special-use flags from the server win over guesses from folder names.
@@ -257,8 +283,10 @@ pub async fn list_folders(session: &mut ImapSession) -> Result<Vec<RemoteFolder>
             folder.role = Some(role);
         }
     }
-    for folder in folders.iter_mut().filter(|f| f.role.is_none() && !f.skip_sync) {
-        folder.role = role_from_name(&folder.path, &folder.name).filter(|r| taken.insert(*r));
+    for folder in folders.iter_mut().filter(|f| f.role.is_none() && !f.skip_sync && f.selectable) {
+        if folder.is_near_root() {
+            folder.role = role_from_name(&folder.path, &folder.name).filter(|r| taken.insert(*r));
+        }
     }
     for folder in folders.iter_mut().filter(|f| f.role == Some(FolderRole::Inbox)) {
         folder.name = "Inbox".into();

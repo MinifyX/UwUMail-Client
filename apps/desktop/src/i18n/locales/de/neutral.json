@@ -10,7 +10,8 @@
     "addAccount": "Postfach hinzufügen",
     "settings": "Einstellungen",
     "compose": "Schreiben",
-    "menu": "Ordner"
+    "menu": "Ordner",
+    "toggleFolder": "Ordner in {{name}} ein- oder ausblenden"
   },
   "filter": {
     "all": "Alle",

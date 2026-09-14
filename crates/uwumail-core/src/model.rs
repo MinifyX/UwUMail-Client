@@ -134,6 +134,10 @@ pub struct Folder {
     pub name: String,
     pub path: String,
     pub role: Option<FolderRole>,
+    /// The folder this one is nested in, if any.
+    pub parent_id: Option<String>,
+    /// False for containers that only hold other folders.
+    pub selectable: bool,
     pub unread: u32,
     pub total: u32,
 }

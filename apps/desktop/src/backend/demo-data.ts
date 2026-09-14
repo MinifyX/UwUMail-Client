@@ -17,6 +17,8 @@ interface SampleMessage {
   remote?: boolean;
   attachments?: Omit<Attachment, "id">[];
   folder?: FolderRole;
+  /** A custom folder key from CUSTOM_FOLDERS instead of a role folder. */
+  customFolder?: string;
 }
 
 interface SampleThread {
@@ -230,6 +232,21 @@ export const SAMPLE_THREADS: SampleThread[] = [
   },
   {
     account: "private",
+    subject: p("Absturz beim Öffnen von Anhängen", "Crash when opening attachments"),
+    messages: [
+      {
+        from: finn,
+        minutesAgo: 60 * 3,
+        customFolder: "projects-uwumail-bugs",
+        body: p(
+          "Wenn ich einen PDF-Anhang doppelt anklicke, passiert gar nichts. Kannst du dir das mal ansehen?",
+          "Double-clicking a PDF attachment does nothing at all. Could you take a look?",
+        ),
+      },
+    ],
+  },
+  {
+    account: "private",
     subject: p("Herbst-Aktion: 2 für 1 🎃", "Autumn deal: 2 for 1 🎃"),
     messages: [
       {
@@ -334,6 +351,18 @@ const FOLDER_NAMES: Record<FolderRole, Localized> = {
 
 const ROLES: FolderRole[] = ["inbox", "drafts", "sent", "archive", "junk", "trash"];
 
+/** Custom folders, nested like a real mailbox: [key, parent key, German name, English name]. */
+const CUSTOM_FOLDERS: [string, string | null, string, string][] = [
+  ["receipts", null, "Rechnungen", "Receipts"],
+  ["clients", null, "Kunden", "Clients"],
+  ["clients-bright", "clients", "Bright Labs", "Bright Labs"],
+  ["clients-bakery", "clients", "Kaffee & Kuchen", "Kaffee & Kuchen"],
+  ["projects", null, "Projekte", "Projects"],
+  ["projects-uwumail", "projects", "UwUMail", "UwUMail"],
+  ["projects-uwumail-bugs", "projects-uwumail", "Bugs", "Bugs"],
+  ["projects-uwumail-ideas", "projects-uwumail", "Ideen", "Ideas"],
+];
+
 export function buildFolders(accountId: string, lang: Lang): Folder[] {
   const folders: Folder[] = ROLES.map((role) => ({
     id: `${accountId}:${role}`,
@@ -341,18 +370,24 @@ export function buildFolders(accountId: string, lang: Lang): Folder[] {
     name: FOLDER_NAMES[role][lang],
     path: role.toUpperCase(),
     role,
+    parentId: null,
+    selectable: true,
     unread: 0,
     total: 0,
   }));
-  folders.push({
-    id: `${accountId}:receipts`,
-    accountId,
-    name: lang === "de" ? "Rechnungen" : "Receipts",
-    path: "Receipts",
-    role: null,
-    unread: 0,
-    total: 0,
-  });
+  for (const [key, parent, de, en] of CUSTOM_FOLDERS) {
+    folders.push({
+      id: `${accountId}:${key}`,
+      accountId,
+      name: lang === "de" ? de : en,
+      path: key.replace(/-/g, "/"),
+      role: null,
+      parentId: parent ? `${accountId}:${parent}` : null,
+      selectable: true,
+      unread: 0,
+      total: 0,
+    });
+  }
   return folders;
 }
 
@@ -378,7 +413,7 @@ export function buildMessages(lang: Lang, now = Date.now()): Message[] {
         id: `msg-${counter}`,
         threadId,
         accountId,
-        folderId: `${accountId}:${sample.folder ?? "inbox"}`,
+        folderId: `${accountId}:${sample.customFolder ?? sample.folder ?? "inbox"}`,
         from: sample.from,
         to: sample.to ?? [me],
         cc: [],

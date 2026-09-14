@@ -11,7 +11,8 @@ use crate::error::{Error, Result};
 use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
 
-const MIGRATIONS: &[&str] = &[r#"
+const MIGRATIONS: &[&str] = &[
+    r#"
 CREATE TABLE accounts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -92,7 +93,13 @@ CREATE TABLE addon_storage (
     value TEXT NOT NULL,
     PRIMARY KEY (addon_id, key)
 );
-"#];
+"#,
+    r#"
+-- Folder hierarchy: the server's delimiter, and containers that hold folders but no mail.
+ALTER TABLE folders ADD COLUMN delimiter TEXT;
+ALTER TABLE folders ADD COLUMN selectable INTEGER NOT NULL DEFAULT 1;
+"#,
+];
 
 /// Everything about an account except its secret.
 #[derive(Debug, Clone)]
@@ -116,6 +123,65 @@ pub struct FolderRecord {
     pub role: Option<FolderRole>,
     pub uid_validity: Option<u32>,
     pub uid_next: Option<u32>,
+    pub selectable: bool,
+    pub delimiter: Option<String>,
+}
+
+/// A folder as the server lists it.
+#[derive(Debug, Clone)]
+pub struct FolderInfo<'a> {
+    pub path: &'a str,
+    pub name: &'a str,
+    pub role: Option<FolderRole>,
+    pub delimiter: Option<&'a str>,
+    pub selectable: bool,
+}
+
+struct FolderRow {
+    folder: Folder,
+    delimiter: Option<String>,
+}
+
+/// Works out each folder's parent from its path.
+///
+/// System folders always stay at the top, even when a server files them under
+/// INBOX. If every folder lives under `INBOX.` (Courier-style namespaces),
+/// that prefix is treated as the namespace and not as a parent.
+fn assign_parents(rows: &mut [FolderRow]) {
+    let mut by_account: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+    for (index, row) in rows.iter().enumerate() {
+        by_account.entry(row.folder.account_id.clone()).or_default().push(index);
+    }
+    for indexes in by_account.values() {
+        let is_inbox = |path: &str| path.eq_ignore_ascii_case("INBOX");
+        let under_inbox = |row: &FolderRow| {
+            row.delimiter.as_deref().is_some_and(|d| {
+                let path = row.folder.path.as_str();
+                path.get(..5).is_some_and(|head| head.eq_ignore_ascii_case("INBOX"))
+                    && path.get(5..).is_some_and(|rest| rest.len() > d.len() && rest.starts_with(d))
+            })
+        };
+        let others: Vec<usize> = indexes.iter().copied().filter(|&i| !is_inbox(&rows[i].folder.path)).collect();
+        let inbox_is_namespace = !others.is_empty() && others.iter().all(|&i| under_inbox(&rows[i]));
+        let paths: std::collections::HashMap<String, String> =
+            indexes.iter().map(|&i| (rows[i].folder.path.clone(), rows[i].folder.id.clone())).collect();
+
+        for &i in indexes {
+            let row = &rows[i];
+            let parent = if row.folder.role.is_some() {
+                None
+            } else {
+                row.delimiter
+                    .as_deref()
+                    .filter(|d| !d.is_empty())
+                    .and_then(|d| row.folder.path.rsplit_once(d))
+                    .map(|(parent_path, _)| parent_path)
+                    .filter(|parent_path| !(inbox_is_namespace && is_inbox(parent_path)))
+                    .and_then(|parent_path| paths.get(parent_path).cloned())
+            };
+            rows[i].folder.parent_id = parent;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -256,23 +322,29 @@ impl Store {
 
     // ----------------------------------------------------------------- folders
 
-    /// Creates or renames a folder and returns its id.
-    pub fn upsert_folder(&self, account_id: &str, path: &str, name: &str, role: Option<FolderRole>) -> Result<String> {
+    /// Creates or updates a folder and returns its id.
+    pub fn upsert_folder(&self, account_id: &str, info: &FolderInfo<'_>) -> Result<String> {
         let conn = self.conn();
         let existing: Option<String> = conn
-            .query_row("SELECT id FROM folders WHERE account_id = ?1 AND path = ?2", params![account_id, path], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT id FROM folders WHERE account_id = ?1 AND path = ?2",
+                params![account_id, info.path],
+                |row| row.get(0),
+            )
             .optional()?;
-        let role = role.map(FolderRole::as_str);
+        let role = info.role.map(FolderRole::as_str);
         if let Some(id) = existing {
-            conn.execute("UPDATE folders SET name = ?1, role = ?2 WHERE id = ?3", params![name, role, id])?;
+            conn.execute(
+                "UPDATE folders SET name = ?1, role = ?2, delimiter = ?3, selectable = ?4 WHERE id = ?5",
+                params![info.name, role, info.delimiter, info.selectable, id],
+            )?;
             return Ok(id);
         }
         let id = uuid::Uuid::new_v4().to_string();
         conn.execute(
-            "INSERT INTO folders (id, account_id, path, name, role) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![id, account_id, path, name, role],
+            "INSERT INTO folders (id, account_id, path, name, role, delimiter, selectable)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, account_id, info.path, info.name, role, info.delimiter, info.selectable],
         )?;
         Ok(id)
     }
@@ -295,24 +367,31 @@ impl Store {
     pub fn folders(&self, account_id: Option<&str>) -> Result<Vec<Folder>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT f.id, f.account_id, f.name, f.path, f.role,
+            "SELECT f.id, f.account_id, f.name, f.path, f.role, f.delimiter, f.selectable,
                     COUNT(m.id) AS total, COALESCE(SUM(m.seen = 0), 0) AS unread
              FROM folders f LEFT JOIN messages m ON m.folder_id = f.id
              WHERE ?1 IS NULL OR f.account_id = ?1
              GROUP BY f.id ORDER BY f.path",
         )?;
         let rows = stmt.query_map([account_id], |row| {
-            Ok(Folder {
-                id: row.get(0)?,
-                account_id: row.get(1)?,
-                name: row.get(2)?,
-                path: row.get(3)?,
-                role: row.get::<_, Option<String>>(4)?.as_deref().and_then(FolderRole::parse),
-                total: row.get(5)?,
-                unread: row.get(6)?,
+            Ok(FolderRow {
+                folder: Folder {
+                    id: row.get(0)?,
+                    account_id: row.get(1)?,
+                    name: row.get(2)?,
+                    path: row.get(3)?,
+                    role: row.get::<_, Option<String>>(4)?.as_deref().and_then(FolderRole::parse),
+                    parent_id: None,
+                    selectable: row.get(6)?,
+                    total: row.get(7)?,
+                    unread: row.get(8)?,
+                },
+                delimiter: row.get(5)?,
             })
         })?;
-        Ok(rows.collect::<rusqlite::Result<_>>()?)
+        let mut rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        assign_parents(&mut rows);
+        Ok(rows.into_iter().map(|row| row.folder).collect())
     }
 
     fn folder_from_row(row: &Row<'_>) -> rusqlite::Result<FolderRecord> {
@@ -323,6 +402,8 @@ impl Store {
             role: row.get::<_, Option<String>>("role")?.as_deref().and_then(FolderRole::parse),
             uid_validity: row.get("uid_validity")?,
             uid_next: row.get("uid_next")?,
+            selectable: row.get("selectable")?,
+            delimiter: row.get("delimiter")?,
         })
     }
 
@@ -980,9 +1061,77 @@ mod tests {
             smtp: ServerSettings { host: "smtp.example".into(), port: 465, security: Security::Tls },
         };
         store.insert_account(&account).unwrap();
-        let inbox = store.upsert_folder("acc", "INBOX", "Inbox", Some(FolderRole::Inbox)).unwrap();
-        let sent = store.upsert_folder("acc", "Sent", "Sent", Some(FolderRole::Sent)).unwrap();
+        let inbox = folder(&store, "INBOX", Some(FolderRole::Inbox), ".");
+        let sent = folder(&store, "Sent", Some(FolderRole::Sent), ".");
         (store, "acc".into(), inbox, sent)
+    }
+
+    fn folder(store: &Store, path: &str, role: Option<FolderRole>, delimiter: &str) -> String {
+        let name = path.rsplit(delimiter).next().unwrap_or(path);
+        store
+            .upsert_folder("acc", &FolderInfo { path, name, role, delimiter: Some(delimiter), selectable: true })
+            .unwrap()
+    }
+
+    fn parent_names(store: &Store) -> Vec<(String, Option<String>)> {
+        let folders = store.folders(Some("acc")).unwrap();
+        let name_of = |id: &Option<String>| {
+            id.as_ref().and_then(|id| folders.iter().find(|f| &f.id == id)).map(|f| f.path.clone())
+        };
+        let mut pairs: Vec<_> = folders.iter().map(|f| (f.path.clone(), name_of(&f.parent_id))).collect();
+        pairs.sort();
+        pairs
+    }
+
+    #[test]
+    fn nests_folders_by_their_path() {
+        let (store, _, _, _) = store_with_account();
+        folder(&store, "Projekte", None, ".");
+        folder(&store, "Projekte.UwUMail", None, ".");
+        folder(&store, "Projekte.UwUMail.Bugs", None, ".");
+        folder(&store, "INBOX.Rechnungen", None, ".");
+        assert_eq!(
+            parent_names(&store),
+            vec![
+                ("INBOX".into(), None),
+                ("INBOX.Rechnungen".into(), Some("INBOX".into())),
+                ("Projekte".into(), None),
+                ("Projekte.UwUMail".into(), Some("Projekte".into())),
+                ("Projekte.UwUMail.Bugs".into(), Some("Projekte.UwUMail".into())),
+                ("Sent".into(), None),
+            ]
+        );
+    }
+
+    #[test]
+    fn treats_an_inbox_namespace_as_top_level() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .insert_account(&AccountRecord {
+                id: "acc".into(),
+                name: "Courier".into(),
+                email: "a@b.example".into(),
+                display_name: "A".into(),
+                color: AccountColor::Pink,
+                auth: AuthKind::Password,
+                username: "a".into(),
+                imap: ServerSettings { host: "h".into(), port: 993, security: Security::Tls },
+                smtp: ServerSettings { host: "h".into(), port: 465, security: Security::Tls },
+            })
+            .unwrap();
+        folder(&store, "INBOX", Some(FolderRole::Inbox), ".");
+        folder(&store, "INBOX.Sent", Some(FolderRole::Sent), ".");
+        folder(&store, "INBOX.Kunden", None, ".");
+        folder(&store, "INBOX.Kunden.Firma A", None, ".");
+        assert_eq!(
+            parent_names(&store),
+            vec![
+                ("INBOX".into(), None),
+                ("INBOX.Kunden".into(), None),
+                ("INBOX.Kunden.Firma A".into(), Some("INBOX.Kunden".into())),
+                ("INBOX.Sent".into(), None),
+            ]
+        );
     }
 
     fn raw(id: &str, subject: &str, from: &str, reply_to: Option<&str>, body: &str, date: &str) -> Vec<u8> {
@@ -1098,7 +1247,7 @@ mod tests {
     #[test]
     fn flags_moves_and_deletes_update_the_cache() {
         let (store, _, inbox, _) = store_with_account();
-        let archive = store.upsert_folder("acc", "Archive", "Archive", Some(FolderRole::Archive)).unwrap();
+        let archive = folder(&store, "Archive", Some(FolderRole::Archive), ".");
         let id = insert(
             &store,
             &inbox,

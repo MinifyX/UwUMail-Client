@@ -14,7 +14,7 @@ use crate::imap::{self, ImapSession, Login};
 use crate::model::*;
 use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
-use crate::store::{AccountRecord, FolderRecord, MessageLocation, Store};
+use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
 use crate::{autoconfig, mime, oauth};
 
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(5 * 60);
@@ -537,9 +537,22 @@ impl Inner {
             FolderRole::Junk => "Junk",
             FolderRole::Inbox => "INBOX",
         };
-        with_session!(self, account_id, |session| async { session.create(name).await.map_err(Error::from) })
+        // Servers that keep every folder below INBOX need the new one there too.
+        let existing = self.store.folder_records(account_id)?;
+        let namespace = existing.iter().find_map(|f| f.delimiter.clone()).filter(|delimiter| {
+            let others: Vec<_> = existing.iter().filter(|f| !f.path.eq_ignore_ascii_case("INBOX")).collect();
+            !others.is_empty() && others.iter().all(|f| f.path.starts_with(&format!("INBOX{delimiter}")))
+        });
+        let path = match &namespace {
+            Some(delimiter) => format!("INBOX{delimiter}{name}"),
+            None => name.to_string(),
+        };
+        with_session!(self, account_id, |session| async { session.create(&path).await.map_err(Error::from) })
             .or_else(|error| if error.message.to_lowercase().contains("exist") { Ok(()) } else { Err(error) })?;
-        let id = self.store.upsert_folder(account_id, name, name, Some(role))?;
+        let id = self.store.upsert_folder(
+            account_id,
+            &FolderInfo { path: &path, name, role: Some(role), delimiter: namespace.as_deref(), selectable: true },
+        )?;
         self.store.folder(&id)
     }
 
@@ -547,11 +560,21 @@ impl Inner {
         let remote = imap::list_folders(session).await?;
         let mut paths = HashSet::new();
         for folder in remote.iter().filter(|f| !f.skip_sync) {
-            self.store.upsert_folder(&account.id, &folder.path, &folder.name, folder.role)?;
+            self.store.upsert_folder(
+                &account.id,
+                &FolderInfo {
+                    path: &folder.path,
+                    name: &folder.name,
+                    role: folder.role,
+                    delimiter: folder.delimiter.as_deref(),
+                    selectable: folder.selectable,
+                },
+            )?;
             paths.insert(folder.path.clone());
         }
         self.store.retain_folders(&account.id, &paths)?;
-        let mut folders = self.store.folder_records(&account.id)?;
+        let mut folders: Vec<FolderRecord> =
+            self.store.folder_records(&account.id)?.into_iter().filter(|f| f.selectable).collect();
         folders.sort_by_key(|f| match f.role {
             Some(FolderRole::Inbox) => 0,
             Some(FolderRole::Sent) => 1,

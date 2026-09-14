@@ -22,6 +22,8 @@ export interface Settings {
   mailAppearance: MailAppearance;
   /** Light/dark choices remembered per sender address (lowercase). */
   senderAppearance: Record<string, "light" | "dark">;
+  /** Folder ids whose subfolders are hidden in the sidebar. */
+  collapsedFolders: string[];
 }
 
 interface SettingsActions {
@@ -29,6 +31,7 @@ interface SettingsActions {
   trustSender: (email: string) => void;
   rememberAppearance: (email: string, appearance: "light" | "dark") => void;
   forgetAppearances: () => void;
+  toggleFolder: (folderId: string) => void;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -42,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   trustedSenders: [],
   mailAppearance: "auto",
   senderAppearance: {},
+  collapsedFolders: [],
 };
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -56,6 +60,12 @@ export const useSettings = create<Settings & SettingsActions>()(
       rememberAppearance: (email, appearance) =>
         set((state) => ({ senderAppearance: { ...state.senderAppearance, [email.toLowerCase()]: appearance } })),
       forgetAppearances: () => set({ senderAppearance: {} }),
+      toggleFolder: (folderId) =>
+        set((state) => ({
+          collapsedFolders: state.collapsedFolders.includes(folderId)
+            ? state.collapsedFolders.filter((id) => id !== folderId)
+            : [...state.collapsedFolders, folderId],
+        })),
     }),
     { name: "uwumail.settings", version: 1 },
   ),

@@ -31,6 +31,10 @@ export interface Folder {
   name: string;
   path: string;
   role: FolderRole | null;
+  /** The folder this one is nested in. */
+  parentId: string | null;
+  /** False for containers that hold folders but no messages. */
+  selectable: boolean;
   unread: number;
   total: number;
 }
