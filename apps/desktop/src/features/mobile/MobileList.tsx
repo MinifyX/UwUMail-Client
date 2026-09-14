@@ -23,7 +23,13 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Pill } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
 import { useBackLayer } from "@/lib/backStack";
-import { flattenThreads, useAccounts, useMessageActions, useThreads } from "@/lib/queries";
+import {
+  flattenThreads,
+  useAccounts,
+  useMessageActions,
+  useThreadActions as useCardActions,
+  useThreads,
+} from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
@@ -60,12 +66,15 @@ export function MobileList() {
     openCompose,
   } = useUi.getState();
   const layout = useSettings((s) => s.layout);
+  const density = useSettings((s) => s.listDensity);
   const swipeRight = useSettings((s) => s.swipeRight);
   const swipeLeft = useSettings((s) => s.swipeLeft);
   const info = useViewInfo(view);
   const { data: accounts = [], isSuccess: accountsLoaded } = useAccounts();
   const { refresh } = useMessageActions();
   const threadActions = useThreadActions();
+  // The card's own quick actions only show on hover, so they stay out of the way on touch.
+  const cardActions = useCardActions();
   const [draftSearch, setDraftSearch] = useState(search);
   // A selection belongs to one folder, filter and search; switching ends it.
   const [selection, setSelection] = useState<{ key: string; ids: Set<string> }>({ key: "", ids: new Set() });
@@ -251,11 +260,11 @@ export function MobileList() {
               className="min-h-full"
             />
           ) : (
-            <ul className={clsx(layout === "simple" && "px-1")}>
+            <ul className={clsx("flex flex-col px-2", density === "compact" ? "gap-px" : "gap-1")}>
               {threads.map((thread) => {
                 const isSelected = selected.has(thread.id);
                 return (
-                  <li key={thread.id} className={clsx(layout === "simple" && "py-0.5")}>
+                  <li key={thread.id}>
                     <SwipeRow
                       right={swipeRight}
                       left={swipeLeft}
@@ -268,17 +277,25 @@ export function MobileList() {
                         <ThreadRow
                           thread={thread}
                           variant={layout}
+                          density={density}
                           selected={isSelected}
                           accounts={accounts}
                           showAccount={showAccount}
+                          actions={cardActions}
                           onSelect={() => (selecting ? toggle(thread.id) : selectThread(thread.id))}
                         />
-                        {isSelected && layout === "simple" && (
+                        {isSelected && (
+                          // Covers the sender picture, wherever the card's density puts it.
                           <span
                             aria-hidden
-                            className="pointer-events-none absolute top-3 left-3 grid size-10 animate-pop place-items-center rounded-full bg-pink-solid text-on-pink"
+                            className={clsx(
+                              "pointer-events-none absolute grid animate-pop place-items-center rounded-full bg-pink-solid text-on-pink",
+                              density === "compact"
+                                ? "top-2 left-6 size-7"
+                                : clsx("top-3 left-[26px]", layout === "pro" ? "size-9" : "size-10"),
+                            )}
                           >
-                            <Check className="size-5" strokeWidth={3} />
+                            <Check className={density === "compact" ? "size-4" : "size-5"} strokeWidth={3} />
                           </span>
                         )}
                       </div>

@@ -62,6 +62,8 @@ quick actions (archive, delete, read/unread, flag); they are mouse-only because
 the keyboard has `e`, `#`, `u` and `s`. Settings → Appearance → Mail list
 switches between **Relaxed** (default, three lines) and **Compact** (28px
 picture, subject and preview on one line).
+Phones use the same row and density inside their swipe rows; a long press selects
+and covers the picture with a pink check.
 
 Sender pictures that don't cover their circle sit padded on white, or on dark
 grey when the logo itself is white or very light (`lib/pictureLook.ts`).

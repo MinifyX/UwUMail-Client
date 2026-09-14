@@ -78,7 +78,7 @@ export function SwipeRow({ children, right, left, unread, onSwipe, onLongPress, 
 
   return (
     <div
-      className="relative overflow-hidden"
+      className="relative overflow-hidden rounded-2xl"
       onClickCapture={(event) => {
         if (swallowClick.current) {
           event.preventDefault();
