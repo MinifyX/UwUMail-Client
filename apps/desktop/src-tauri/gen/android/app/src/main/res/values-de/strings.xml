@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_mail">Neue Mails</string>
+    <string name="channel_watch">Warten auf neue Mails</string>
+    <string name="channel_watch_description">Hält UwUMail verbunden, damit neue Mails sofort ankommen. Du kannst diese Mitteilung ausblenden.</string>
+    <string name="watch_title_playful">Nyu passt auf dein Postfach auf ♡</string>
+    <string name="watch_title_neutral">UwUMail wartet auf neue Mails</string>
+    <string name="watch_text">Tippen zum Öffnen</string>
+    <string name="action_read">Gelesen</string>
+    <string name="action_archive">Archivieren</string>
+    <string name="action_hide">Ausblenden</string>
+    <string name="no_subject">(kein Betreff)</string>
+    <plurals name="new_mail">
+        <item quantity="one">%d neue Mail</item>
+        <item quantity="other">%d neue Mails</item>
+    </plurals>
+</resources>

@@ -1,0 +1,15 @@
+<resources>
+    <style name="Theme.UwUMail" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/uwu_pink</item>
+        <item name="colorAccent">@color/uwu_pink</item>
+        <item name="android:windowBackground">@color/uwu_canvas</item>
+    </style>
+
+    <!-- Nyu on pastel pink while the UI loads (see MainActivity.uiReady). -->
+    <style name="Theme.UwUMail.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_nyu</item>
+        <item name="postSplashScreenTheme">@style/Theme.UwUMail</item>
+    </style>
+
+</resources>

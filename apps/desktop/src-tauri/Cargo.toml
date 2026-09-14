@@ -1,6 +1,6 @@
 [package]
 name = "uwumail-desktop"
-description = "UwUMail desktop app"
+description = "UwUMail app for desktop and Android"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -19,14 +19,21 @@ serde.workspace = true
 serde_json.workspace = true
 sys-locale = "0.3"
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "image-png"] }
-tauri-plugin-dialog = "2"
-tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
-tauri-plugin-single-instance = "2"
-tauri-plugin-updater = "2"
-semver = "1"
-minisign-verify = "0.2"
-base64.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uwumail-core.workspace = true
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+base64.workspace = true
+minisign-verify = "0.2"
+semver = "1"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-biometric = "2"
+tauri-plugin-haptics = "2"
+uwumail-android.workspace = true

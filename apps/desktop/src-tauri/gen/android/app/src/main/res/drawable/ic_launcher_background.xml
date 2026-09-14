@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pastel pink tile of brand/uwumail-app-icon.svg. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:endColor="#FFD3E5"
+        android:startColor="#FFF3F8"
+        android:type="linear" />
+</shape>

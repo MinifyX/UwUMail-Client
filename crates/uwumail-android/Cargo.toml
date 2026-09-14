@@ -1,0 +1,24 @@
+[package]
+name = "uwumail-android"
+description = "Android side of UwUMail: the mail engine as a process-wide service, keystore secrets, notifications and the bridge to Kotlin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64.workspace = true
+jni = "0.22"
+ndk-context = "0.1"
+reqwest.workspace = true
+semver = "1"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uwumail-core.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+rustls-platform-verifier.workspace = true

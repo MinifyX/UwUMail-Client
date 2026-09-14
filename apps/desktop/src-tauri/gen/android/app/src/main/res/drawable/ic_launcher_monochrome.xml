@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nyu as a line drawing (brand/uwumail-symbol-mono.svg) for Android's themed icons. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.168"
+        android:scaleY="0.168"
+        android:translateX="54"
+        android:translateY="55">
+        <group android:rotation="-8">
+            <group
+                android:translateX="-256"
+                android:translateY="-232">
+                <path
+                    android:pathData="M124,160 L132,100 Q135,82 151,91 L225,152"
+                    android:strokeWidth="22"
+                    android:strokeColor="#FFFFFFFF"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round" />
+                <path
+                    android:pathData="M388,160 L380,100 Q377,82 361,91 L287,152"
+                    android:strokeWidth="22"
+                    android:strokeColor="#FFFFFFFF"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round" />
+                <path
+                    android:pathData="M150,152 H362 A50,50 0 0 1 412,202 V328 A50,50 0 0 1 362,378 H150 A50,50 0 0 1 100,328 V202 A50,50 0 0 1 150,152 Z"
+                    android:strokeWidth="22"
+                    android:strokeColor="#FFFFFFFF"
+                    android:strokeLineJoin="round" />
+                <path
+                    android:pathData="M108,207 L236,290 Q256,304 276,290 L404,207"
+                    android:strokeWidth="22"
+                    android:strokeColor="#FFFFFFFF"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round" />
+                <group
+                    android:pivotX="256"
+                    android:pivotY="216"
+                    android:scaleX="1.2"
+                    android:scaleY="1.2">
+                    <path
+                        android:pathData="M210,194 v4 a12,12 0 0 0 24,0 v-4"
+                        android:strokeWidth="18"
+                        android:strokeColor="#FFFFFFFF"
+                        android:strokeLineCap="round"
+                        android:strokeLineJoin="round" />
+                    <path
+                        android:pathData="M278,194 v4 a12,12 0 0 0 24,0 v-4"
+                        android:strokeWidth="18"
+                        android:strokeColor="#FFFFFFFF"
+                        android:strokeLineCap="round"
+                        android:strokeLineJoin="round" />
+                    <path
+                        android:pathData="M236,230 q10,13 20,0 q10,13 20,0"
+                        android:strokeWidth="18"
+                        android:strokeColor="#FFFFFFFF"
+                        android:strokeLineCap="round"
+                        android:strokeLineJoin="round" />
+                </group>
+            </group>
+        </group>
+    </group>
+</vector>

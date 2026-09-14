@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/uwumail-core", "apps/desktop/src-tauri", "apps/setup/src-tauri"]
+members = ["crates/uwumail-core", "crates/uwumail-android", "apps/desktop/src-tauri", "apps/setup/src-tauri"]
 
 [workspace.package]
 version = "0.2.0-beta.1"
@@ -11,6 +11,7 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 uwumail-core = { path = "crates/uwumail-core" }
+uwumail-android = { path = "crates/uwumail-android" }
 
 ammonia = "4"
 async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }

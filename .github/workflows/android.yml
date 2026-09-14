@@ -1,0 +1,90 @@
+name: Android
+
+# Builds the signed UwUMail APK for phones (arm64). Every build is signed with
+# the same key, so a newer APK installs over the one on the phone.
+
+on:
+  push:
+    branches: [main, feat/android]
+    paths-ignore: ["docs/**", "brand/**", "README.md", "CONTRIBUTING.md", "release-notes/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  apk:
+    name: APK (arm64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+      - run: pnpm install --frozen-lockfile
+
+      - name: Version code
+        id: version
+        run: |
+          # major·10⁹ + minor·10⁷ + patch·10⁵ + run number, so every build and every release counts up.
+          node -e '
+            const v = require("./apps/desktop/src-tauri/tauri.conf.json").version;
+            const [maj, min, pat] = v.split("-")[0].split(".").map(Number);
+            const code = maj * 1e9 + min * 1e7 + pat * 1e5 + (Number(process.env.GITHUB_RUN_NUMBER) % 1e5);
+            console.log(`version=${v}`);
+            console.log(`code=${code}`);
+          ' >> "$GITHUB_OUTPUT"
+
+      - name: Signing key
+        env:
+          KEYSTORE: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_BASE64 }}
+        run: printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/uwumail-android.p12"
+
+      - name: Build
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+          UWUMAIL_ANDROID_KEYSTORE: ${{ runner.temp }}/uwumail-android.p12
+          UWUMAIL_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_PASSWORD }}
+          UWUMAIL_ANDROID_KEY_ALIAS: uwumail
+          UWUMAIL_ANDROID_KEY_PASSWORD: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_PASSWORD }}
+          UWUMAIL_ANDROID_VERSION_CODE: ${{ steps.version.outputs.code }}
+          UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
+        run: pnpm tauri android build --apk --target aarch64 --ci
+
+      - name: Collect
+        run: |
+          apk=$(find apps/desktop/src-tauri/gen/android/app/build/outputs/apk -name '*release*.apk' | head -n 1)
+          test -n "$apk" || { echo "::error::No APK was built"; exit 1; }
+          mkdir -p out
+          cp "$apk" "out/UwUMail-${{ steps.version.outputs.version }}-${{ steps.version.outputs.code }}.apk"
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          "$apksigner" verify --print-certs out/*.apk | grep -i "SHA-256"
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UwUMail-Android-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: out/*.apk

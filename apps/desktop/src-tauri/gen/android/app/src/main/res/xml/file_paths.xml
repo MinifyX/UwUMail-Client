@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only these cache folders are ever shared with other apps. -->
+<paths>
+    <cache-path name="open" path="open/" />
+    <cache-path name="updates" path="updates/" />
+</paths>

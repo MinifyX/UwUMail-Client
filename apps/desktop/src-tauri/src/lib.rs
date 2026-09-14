@@ -1,19 +1,21 @@
+#[cfg(desktop)]
 mod background;
+#[cfg(desktop)]
 mod updates;
 
-use std::sync::Arc;
+/// What differs between desktop and Android, behind the same functions.
+#[cfg_attr(desktop, path = "desktop.rs")]
+#[cfg_attr(target_os = "android", path = "android.rs")]
+mod platform;
 
+use platform::{Channel, ReadyUpdate};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-use tauri_plugin_notification::NotificationExt;
-use tauri_plugin_opener::OpenerExt;
 use tokio::sync::broadcast::error::RecvError;
 use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
 use uwumail_core::pictures::SenderPicture;
-use uwumail_core::secrets::KeyringSecrets;
-use uwumail_core::{Engine, EngineOptions, Error};
+use uwumail_core::{Engine, Error};
 
 type CommandResult<T> = Result<T, Error>;
 
@@ -113,7 +115,7 @@ async fn open_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_i
             (
                 "Diese Datei kann Programme ausführen",
                 format!(
-                    "„{}“ kann Programme auf deinem Rechner starten. Öffne die Datei nur, wenn du sie erwartet hast und dem Absender vertraust.",
+                    "„{}“ kann Programme auf deinem Gerät starten. Öffne die Datei nur, wenn du sie erwartet hast und dem Absender vertraust.",
                     file.filename
                 ),
                 "Trotzdem öffnen",
@@ -123,44 +125,28 @@ async fn open_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_i
             (
                 "This file can run programs",
                 format!(
-                    "“{}” can start programs on your computer. Only open it if you expected it and trust the sender.",
+                    "“{}” can start programs on your device. Only open it if you expected it and trust the sender.",
                     file.filename
                 ),
                 "Open anyway",
                 "Don't open",
             )
         };
-        let dialog = app
-            .dialog()
-            .message(text)
-            .title(title)
-            .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancelCustom(open.into(), cancel.into()));
-        let confirmed = tauri::async_runtime::spawn_blocking(move || dialog.blocking_show())
-            .await
-            .map_err(|e| Error::internal(format!("The dialog failed: {e}")))?;
-        if !confirmed {
+        if !platform::confirm(&app, title, text, open, cancel).await? {
             return Ok(false);
         }
     }
-    app.opener()
-        .open_path(file.path.to_string_lossy(), None::<&str>)
-        .map_err(|e| Error::internal(format!("Couldn't open the attachment: {e}")))?;
+    platform::open_file(&app, &file)?;
     Ok(true)
 }
 
-/// Asks where to save an attachment and copies it there. The destination only
-/// ever comes from the native save dialog, never from the web page.
+/// Saves an attachment. The destination never comes from the web page: on
+/// desktop from the native save dialog, on Android it's Downloads/UwUMail.
+/// Returns false when the user cancelled.
 #[tauri::command]
 async fn save_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_id: String) -> CommandResult<bool> {
     let file = engine.attachment(&attachment_id).await?;
-    let dialog = app.dialog().file().set_file_name(uwumail_core::attachments::safe_filename(&file.filename));
-    let destination = tauri::async_runtime::spawn_blocking(move || dialog.blocking_save_file())
-        .await
-        .map_err(|e| Error::internal(format!("The dialog failed: {e}")))?;
-    let Some(destination) = destination.and_then(|path| path.into_path().ok()) else { return Ok(false) };
-    engine.save_attachment(&attachment_id, &destination).await?;
-    Ok(true)
+    platform::save_file(&app, &engine, &attachment_id, &file).await
 }
 
 #[tauri::command]
@@ -179,79 +165,72 @@ fn get_company_domain(email: String) -> Option<String> {
     uwumail_core::pictures::picture_domain(&email)
 }
 
+/// Desktop: closing the window keeps UwUMail in the tray.
+/// Android: stay connected in the background for instant new mail.
 #[tauri::command]
-fn set_run_in_background(enabled: bool) {
-    background::set_run_in_background(enabled);
+fn set_run_in_background(enabled: bool) -> CommandResult<()> {
+    platform::set_run_in_background(enabled)
 }
 
 /// The `mailto:` link UwUMail was opened with, once.
 #[tauri::command]
 fn take_mailto(app: AppHandle) -> Option<MailtoDraft> {
-    background::take_mailto(&app)
+    platform::take_mailto(&app)
+}
+
+/// Android: a share, `mailto:` link or tapped notification waiting for the UI, once.
+#[tauri::command]
+fn take_launch_action() -> Option<serde_json::Value> {
+    platform::take_launch_action()
+}
+
+/// Android: language and tone for notifications shown while no window is open.
+#[tauri::command]
+fn set_mobile_prefs(language: String, tone: String) -> CommandResult<()> {
+    platform::set_mobile_prefs(language, tone)
+}
+
+/// Android: colors behind the status and navigation bars.
+#[tauri::command]
+fn set_system_bars(dark: bool, background: String) -> CommandResult<()> {
+    platform::set_system_bars(dark, background)
+}
+
+/// Android: `requestNotifications`, `uiReady` or `watchSettings`.
+#[tauri::command]
+fn mobile_action(action: String) -> CommandResult<()> {
+    platform::mobile_action(&action)
 }
 
 #[tauri::command]
-fn set_update_channel(app: AppHandle, channel: updates::Channel) {
-    updates::set_channel(&app, channel);
+fn set_update_channel(app: AppHandle, channel: Channel) {
+    platform::set_update_channel(&app, channel);
 }
 
 /// A downloaded update waiting for a restart, if any.
 #[tauri::command]
-fn update_status(app: AppHandle) -> Option<updates::ReadyUpdate> {
-    updates::ready(&app)
+fn update_status(app: AppHandle) -> Option<ReadyUpdate> {
+    platform::update_status(&app)
 }
 
 #[tauri::command]
-async fn check_for_updates(app: AppHandle) -> CommandResult<Option<updates::ReadyUpdate>> {
-    updates::check(&app).await
+async fn check_for_updates(app: AppHandle) -> CommandResult<Option<ReadyUpdate>> {
+    platform::check_for_updates(&app).await
 }
 
 #[tauri::command]
 fn install_update(app: AppHandle) -> CommandResult<()> {
-    updates::install_now(&app)
-}
-
-/// Sends engine events to the UI and rings for new mail while UwUMail is in the background.
-fn forward(app: &AppHandle, engine: &Engine, event: EngineEvent) {
-    if let EngineEvent::MailReceived { message_ids, .. } = &event {
-        let focused = app.get_webview_window("main").and_then(|window| window.is_focused().ok()).unwrap_or(false);
-        if !focused && let Ok(messages) = engine.messages(message_ids) {
-            let (title, body) = match messages.as_slice() {
-                [one] => (
-                    one.from.name.clone().unwrap_or_else(|| one.from.email.clone()),
-                    if one.subject.is_empty() { one.snippet.clone() } else { one.subject.clone() },
-                ),
-                many => ("UwUMail".to_string(), format!("{} ✉︎", many.len())),
-            };
-            let _ = app.notification().builder().title(title).body(body).show();
-        }
-    }
-    let _ = app.emit(event.name(), &event);
+    platform::install_update(&app)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        // Must come first, so a second start hands over before anything else runs.
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| background::on_second_instance(app, args)))
+    platform::before_start();
+
+    let app = platform::plugins(tauri::Builder::default())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            if updates::apply_pending_on_start(app.handle()) {
-                // The downloaded setup replaces this version and starts UwUMail again.
-                std::process::exit(0);
-            }
-            let data_dir = app.path().app_data_dir()?;
-            let opener = app.handle().clone();
-            let open_url = Arc::new(move |url: &str| {
-                let _ = opener.opener().open_url(url, None::<&str>);
-            });
-            let engine = tauri::async_runtime::block_on(async move {
-                Engine::new(EngineOptions { data_dir, secrets: Arc::new(KeyringSecrets), open_url })
-            })?;
-            engine.start()?;
+            let engine = platform::start_engine(app)?;
 
             let handle = app.handle().clone();
             let forwarding = engine.clone();
@@ -259,7 +238,10 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 loop {
                     match events.recv().await {
-                        Ok(event) => forward(&handle, &forwarding, event),
+                        Ok(event) => {
+                            platform::on_engine_event(&handle, &forwarding, &event);
+                            let _ = handle.emit(event.name(), &event);
+                        }
                         Err(RecvError::Lagged(_)) => continue,
                         Err(RecvError::Closed) => break,
                     }
@@ -267,8 +249,7 @@ pub fn run() {
             });
 
             app.manage(engine);
-            background::setup(app)?;
-            updates::start(app.handle());
+            platform::after_start(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -294,11 +275,17 @@ pub fn run() {
             get_company_domain,
             set_run_in_background,
             take_mailto,
+            take_launch_action,
+            set_mobile_prefs,
+            set_system_bars,
+            mobile_action,
             set_update_channel,
             update_status,
             check_for_updates,
             install_update,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running UwUMail");
+        .build(tauri::generate_context!())
+        .expect("error while building UwUMail");
+
+    app.run(platform::on_run_event);
 }

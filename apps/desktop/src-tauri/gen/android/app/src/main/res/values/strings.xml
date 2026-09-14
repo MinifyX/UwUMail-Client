@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UwUMail</string>
+    <string name="main_activity_title">UwUMail</string>
+    <string name="channel_mail">New mail</string>
+    <string name="channel_watch">Waiting for new mail</string>
+    <string name="channel_watch_description">Keeps UwUMail connected so new mail arrives right away. You can hide this notification.</string>
+    <string name="watch_title_playful">Nyu is watching your mailbox ♡</string>
+    <string name="watch_title_neutral">UwUMail is waiting for new mail</string>
+    <string name="watch_text">Tap to open</string>
+    <string name="action_read">Mark as read</string>
+    <string name="action_archive">Archive</string>
+    <string name="action_hide">Hide</string>
+    <string name="no_subject">(no subject)</string>
+    <plurals name="new_mail">
+        <item quantity="one">%d new mail</item>
+        <item quantity="other">%d new mails</item>
+    </plurals>
+</resources>

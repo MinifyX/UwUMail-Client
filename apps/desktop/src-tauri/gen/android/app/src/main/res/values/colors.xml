@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same as --uwu-canvas in apps/desktop/src/styles/tokens.css -->
+    <color name="uwu_canvas">#F8F4F6</color>
+    <color name="uwu_pink">#FF4D8D</color>
+    <color name="splash_background">#FFEAF2</color>
+</resources>

@@ -5111,6 +5111,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-biometric"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b9da80a13cea8a9e7d81af3e6347c04e28d109ec0a33ac5460950fbe72f3f4b"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "tauri-plugin-dialog"
 version = "2.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5150,6 +5165,20 @@ dependencies = [
  "thiserror 2.0.20",
  "toml 1.1.6+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-haptics"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67ab59e8202362fb5fec1158bdb497466983ddac2483e606e4d5c1bf9b118c6c"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -5863,6 +5892,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "uwumail-android"
+version = "0.2.0-beta.1"
+dependencies = [
+ "base64 0.23.1",
+ "jni 0.22.4",
+ "ndk-context",
+ "reqwest",
+ "rustls-platform-verifier",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tokio",
+ "tracing",
+ "uwumail-core",
+]
+
+[[package]]
 name = "uwumail-core"
 version = "0.2.0-beta.1"
 dependencies = [
@@ -5906,13 +5953,16 @@ dependencies = [
  "sys-locale",
  "tauri",
  "tauri-build",
+ "tauri-plugin-biometric",
  "tauri-plugin-dialog",
+ "tauri-plugin-haptics",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tokio",
  "tracing",
+ "uwumail-android",
  "uwumail-core",
 ]
 

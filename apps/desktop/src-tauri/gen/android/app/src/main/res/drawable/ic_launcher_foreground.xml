@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nyu from brand/uwumail-app-icon.svg, centered in the adaptive icon's safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.168"
+        android:scaleY="0.168"
+        android:translateX="54"
+        android:translateY="55">
+        <group android:rotation="-8">
+            <group
+                android:translateX="-256"
+                android:translateY="-232">
+                <!-- White sticker edge -->
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M118,200 L132,100 Q135,82 151,91 L230,156 Z"
+                    android:strokeWidth="44"
+                    android:strokeColor="#FFFFFF"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round" />
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M394,200 L380,100 Q377,82 361,91 L282,156 Z"
+                    android:strokeWidth="44"
+                    android:strokeColor="#FFFFFF"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round" />
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M150,152 H362 A50,50 0 0 1 412,202 V328 A50,50 0 0 1 362,378 H150 A50,50 0 0 1 100,328 V202 A50,50 0 0 1 150,152 Z"
+                    android:strokeWidth="44"
+                    android:strokeColor="#FFFFFF"
+                    android:strokeLineJoin="round" />
+                <!-- Ears -->
+                <path
+                    android:fillColor="#FF6FA6"
+                    android:pathData="M118,200 L132,100 Q135,82 151,91 L230,156 Z"
+                    android:strokeWidth="14"
+                    android:strokeColor="#4B1D3F"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round" />
+                <path
+                    android:fillColor="#FF6FA6"
+                    android:pathData="M394,200 L380,100 Q377,82 361,91 L282,156 Z"
+                    android:strokeWidth="14"
+                    android:strokeColor="#4B1D3F"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round" />
+                <path
+                    android:fillColor="#FFB8D3"
+                    android:pathData="M146,150 L151,116 Q152,108 159,112 L196,144 Z" />
+                <path
+                    android:fillColor="#FFB8D3"
+                    android:pathData="M366,150 L361,116 Q360,108 353,112 L316,144 Z" />
+                <!-- Envelope and flap -->
+                <path
+                    android:fillColor="#FF6FA6"
+                    android:pathData="M150,152 H362 A50,50 0 0 1 412,202 V328 A50,50 0 0 1 362,378 H150 A50,50 0 0 1 100,328 V202 A50,50 0 0 1 150,152 Z" />
+                <path
+                    android:fillColor="#FFB8D3"
+                    android:pathData="M100,202 A50,50 0 0 1 150,152 H362 A50,50 0 0 1 412,202 L276,290 Q256,304 236,290 Z" />
+                <path
+                    android:pathData="M150,152 H362 A50,50 0 0 1 412,202 V328 A50,50 0 0 1 362,378 H150 A50,50 0 0 1 100,328 V202 A50,50 0 0 1 150,152 Z"
+                    android:strokeWidth="14"
+                    android:strokeColor="#4B1D3F"
+                    android:strokeLineJoin="round" />
+                <path
+                    android:pathData="M108,207 L236,290 Q256,304 276,290 L404,207"
+                    android:strokeWidth="14"
+                    android:strokeColor="#4B1D3F"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round" />
+                <!-- UwU face -->
+                <group
+                    android:pivotX="256"
+                    android:pivotY="216"
+                    android:scaleX="1.2"
+                    android:scaleY="1.2">
+                    <path
+                        android:fillColor="#FF7FB0"
+                        android:pathData="M179,238 A15,8.5 0 1,0 209,238 A15,8.5 0 1,0 179,238 Z" />
+                    <path
+                        android:fillColor="#FF7FB0"
+                        android:pathData="M303,238 A15,8.5 0 1,0 333,238 A15,8.5 0 1,0 303,238 Z" />
+                    <path
+                        android:pathData="M210,194 v4 a12,12 0 0 0 24,0 v-4"
+                        android:strokeWidth="14"
+                        android:strokeColor="#4B1D3F"
+                        android:strokeLineCap="round"
+                        android:strokeLineJoin="round" />
+                    <path
+                        android:pathData="M278,194 v4 a12,12 0 0 0 24,0 v-4"
+                        android:strokeWidth="14"
+                        android:strokeColor="#4B1D3F"
+                        android:strokeLineCap="round"
+                        android:strokeLineJoin="round" />
+                    <path
+                        android:pathData="M236,230 q10,13 20,0 q10,13 20,0"
+                        android:strokeWidth="14"
+                        android:strokeColor="#4B1D3F"
+                        android:strokeLineCap="round"
+                        android:strokeLineJoin="round" />
+                </group>
+            </group>
+        </group>
+    </group>
+</vector>
