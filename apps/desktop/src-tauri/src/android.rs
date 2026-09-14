@@ -2,7 +2,7 @@
 //! the window borrows it. Notifications, files and updates go through Kotlin.
 
 use serde_json::json;
-use tauri::{App, AppHandle, Emitter, RunEvent, Runtime, Wry};
+use tauri::{App, AppHandle, Emitter, Manager, RunEvent, Runtime, Wry};
 use uwumail_android::jni::EnvUnowned;
 use uwumail_android::jni::objects::{JClass, JObject, JString};
 use uwumail_core::attachments::AttachmentFile;
@@ -18,10 +18,11 @@ pub extern "system" fn Java_app_uwumail_UwuNative_start<'caller>(
     env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     context: JObject<'caller>,
+    bridge: JClass<'caller>,
     data_dir: JString<'caller>,
     cache_dir: JString<'caller>,
 ) {
-    uwumail_android::native::start(env, context, data_dir, cache_dir);
+    uwumail_android::native::start(env, context, bridge, data_dir, cache_dir);
 }
 
 /// `UwuNative.call`, from notifications, shares and the network watcher.
@@ -53,7 +54,9 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
     updates::start(move |update| {
         let _ = handle.emit("update:ready", update);
     });
-    Ok(uwumail_android::engine())
+    let data_dir = app.path().app_data_dir()?;
+    let cache_dir = app.path().app_cache_dir()?;
+    Ok(uwumail_android::engine_for_window(data_dir, cache_dir)?)
 }
 
 pub fn after_start(_app: &mut App) -> tauri::Result<()> {

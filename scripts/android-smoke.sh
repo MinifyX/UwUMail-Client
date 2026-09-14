@@ -67,6 +67,8 @@ after=$(adb shell pidof "$package" | tr -d '\r')
 adb shell settings put global always_finish_activities 0
 
 adb logcat -d > "$out/logcat.txt"
+grep -q "UwUMail : engine running" "$out/logcat.txt" || fail "The mail engine didn't start (see uwumail-log.txt)"
+if grep -q "UwUMail : start failed" "$out/logcat.txt"; then fail "The native start reported an error"; fi
 if grep -E "FATAL EXCEPTION|UnsatisfiedLinkError|panicked at|SIGABRT|Abort message" "$out/logcat.txt" | grep -v "com.android.systemui" > "$out/crashes.txt"; then
   fail "Crash in the log, see crashes.txt"
   cat "$out/crashes.txt"

@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use jni::EnvUnowned;
 use jni::errors::ThrowRuntimeExAndDefault;
-use jni::objects::{JObject, JString};
+use jni::objects::{JClass, JObject, JString};
 
 /// Writes to the Android log (tag UwUMail), also before Rust's stdout is piped there.
 #[cfg(target_os = "android")]
@@ -67,18 +67,20 @@ impl From<uwumail_core::Error> for NativeError {
     }
 }
 
-/// `UwuNative.start(context, dataDir)`, from `UwuApplication.onCreate`:
-/// connects the bridge and starts the engine for this process.
+/// `UwuNative.start(context, bridge, dataDir, cacheDir)`, from
+/// `UwuApplication.onCreate`: connects the bridge and starts the engine for
+/// this process.
 pub fn start<'caller>(
     mut env: EnvUnowned<'caller>,
     context: JObject<'caller>,
+    bridge: JClass<'caller>,
     data_dir: JString<'caller>,
     cache_dir: JString<'caller>,
 ) {
     env.with_env(|env| -> Result<(), NativeError> {
         log("native start");
         let outcome = (|| -> Result<(), NativeError> {
-            crate::bridge::init(env, &context)?;
+            crate::bridge::init(env, &context, &bridge)?;
             STARTED.store(1, Ordering::Relaxed);
             log("bridge ready");
             #[cfg(target_os = "android")]
@@ -98,6 +100,11 @@ pub fn start<'caller>(
         })();
         if let Err(error) = &outcome {
             log(&format!("start failed: {error}"));
+            if env.exception_check() {
+                // The stack trace goes to logcat; Kotlin reports the failure.
+                env.exception_describe();
+                env.exception_clear();
+            }
             *START_ERROR.lock().unwrap() = Some(error.to_string());
         }
         outcome

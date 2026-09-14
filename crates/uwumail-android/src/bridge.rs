@@ -23,13 +23,13 @@ struct Bridge {
 
 static BRIDGE: OnceLock<Bridge> = OnceLock::new();
 
-/// Remembers the VM, the bridge class and the application context.
-/// Must run on a thread that Java called into.
-pub(crate) fn init(env: &mut Env, context: &JObject) -> jni::errors::Result<()> {
+/// Remembers the VM, the bridge class and the application context. Kotlin
+/// hands over the class itself: looking it up by name from native code isn't
+/// reliable on every device (it failed on the x86 emulator).
+pub(crate) fn init(env: &mut Env, context: &JObject, class: &JClass) -> jni::errors::Result<()> {
     if BRIDGE.get().is_some() {
         return Ok(());
     }
-    let class = env.find_class(jni_str!("app/uwumail/UwuBridge"))?;
     let class = env.new_global_ref(class)?;
     let context = env.new_global_ref(context)?;
     let vm = env.get_java_vm()?;

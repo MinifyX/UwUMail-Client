@@ -38,10 +38,25 @@ pub fn runtime() -> &'static tokio::runtime::Runtime {
 /// The running engine. Blocks until the process has started it, which happens
 /// before any window exists.
 pub fn engine() -> Engine {
-    if ENGINE.get().is_none() {
-        crate::native::log("the window waits for the engine");
-    }
     ENGINE.wait().clone()
+}
+
+/// The engine for the window. Normally the process started it already; if
+/// that failed, the window starts it so the app still opens (without the
+/// Android bridge, passwords then can't be saved and the log says why).
+pub fn engine_for_window(data_dir: PathBuf, cache_dir: PathBuf) -> Result<Engine> {
+    for _ in 0..100 {
+        if let Some(engine) = ENGINE.get() {
+            return Ok(engine.clone());
+        }
+        if crate::native::start_error().is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    crate::native::log("the process didn't start the engine, the window starts it");
+    start_engine(data_dir, cache_dir)?;
+    Ok(engine())
 }
 
 /// The app's cache folder (shared files, updates, files opened in other apps).
@@ -62,7 +77,8 @@ pub(crate) fn start_engine(data_dir: PathBuf, cache_dir: PathBuf) -> Result<()> 
     let _entered = runtime().enter();
     let engine = Engine::new(EngineOptions { data_dir, secrets: Arc::new(KeystoreSecrets), open_url })?;
     // Phones keep the last 90 days complete unless Settings say otherwise.
-    let days = bridge::call("offlineDays", &json!({}))?.and_then(|days| days.parse::<u32>().ok()).unwrap_or(90);
+    let days =
+        bridge::call("offlineDays", &json!({})).ok().flatten().and_then(|days| days.parse::<u32>().ok()).unwrap_or(90);
     engine.set_offline_days((days > 0).then_some(days))?;
     engine.start()?;
 

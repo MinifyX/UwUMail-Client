@@ -14,7 +14,7 @@ class UwuApplication : Application() {
         UwuBridge.init(this)
         Notifications.createChannels(this)
         try {
-            UwuNative.start(this, dataDir.absolutePath, cacheDir.absolutePath)
+            UwuNative.start(this, UwuBridge::class.java, dataDir.absolutePath, cacheDir.absolutePath)
         } catch (error: Throwable) {
             Log.e("UwUMail", "The mail engine didn't start", error)
             throw error

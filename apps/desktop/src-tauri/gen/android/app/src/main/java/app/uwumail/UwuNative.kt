@@ -10,7 +10,7 @@ object UwuNative {
 
     /** Connects the bridge and starts the mail engine for this process. */
     @JvmStatic
-    external fun start(context: Context, dataDir: String, cacheDir: String)
+    external fun start(context: Context, bridge: Class<*>, dataDir: String, cacheDir: String)
 
     /** Method name plus JSON, answered with JSON or null. Throws on errors. */
     @JvmStatic
