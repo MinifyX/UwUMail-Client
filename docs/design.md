@@ -82,6 +82,34 @@ Plain-text mail always follows the app theme unless light is chosen. The
 mail frame's `color-scheme` must always match its document, otherwise the
 engine paints an opaque white canvas behind dark content.
 
+## Nyu, the mascot
+
+Nyu is an envelope cat: the flap is the face (UwU eyes, `w` mouth, blush),
+two ears poke out on top. The app icon, the logo next to the wordmark and
+every empty or error state use it. Sources live in `brand/` (icon, symbol,
+mono symbol) and `apps/desktop/src/components/nyu/` (React).
+
+- **Sticker style.** Plum outlines `#4B1D3F`, pink body `#FF6FA6`, light
+  flap `#FFB8D3`, pastel props, a white die-cut edge. The colors are fixed
+  artwork (`NYU` in `Nyu.tsx`) and stay the same in dark mode; the white
+  edge keeps the outlines visible on dark backgrounds.
+- **App icon.** Nyu slightly tilted on a pastel pink tile with two yellow
+  sparkles and a heart. Never on a saturated pink tile, which reads as a
+  telecom app. Regenerate the platform icons with
+  `pnpm tauri icon ../../brand/uwumail-app-icon.svg` in `apps/desktop`
+  (delete the generated `android/` and `ios/` folders).
+- **Scenes** (`NyuScene`, 320 × 220): inbox zero, no search results, empty
+  folder, nothing selected, no preview, no addons, welcome, setup done,
+  message failed to load, offline, no account yet. `EmptyState` shows them at
+  240 px, or 150 px with `compact` (Pro layout, dialogs). New scenes reuse
+  `Nyu`, `Sticker` and the props in `scenes.tsx`, with a 6 px outline at
+  0.4 scale.
+- **Motion.** Nyu blinks in scenes, twitches its ears on hover, hops in the
+  sidebar logo when new mail arrives (not on every sync) and flies off from
+  the "sent" toast. With reduced motion all of it stays still.
+- **Name.** Nyu only appears by name in the playful tone ("Hi! I'm Nyu").
+  The neutral tone keeps the pictures and says "UwUMail".
+
 ## Tone of voice
 
 UwUMail is **playful by default**: kaomoji, warm little jokes, soft animations.

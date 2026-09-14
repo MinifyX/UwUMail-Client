@@ -1,7 +1,8 @@
 import clsx from "clsx";
-import { Coffee, Menu, RefreshCw, Search, SearchX, Wind, X } from "lucide-react";
+import { Menu, Plus, RefreshCw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ListFilter } from "@/backend/types";
+import type { SceneName } from "@/components/nyu/scenes";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pill } from "@/components/ui/Pill";
@@ -12,6 +13,14 @@ import { ThreadRow } from "./ThreadRow";
 import { useViewInfo } from "./view";
 
 const FILTERS: ListFilter[] = ["all", "unread", "flagged", "attachments"];
+
+const EMPTY_SCENES = {
+  noAccount: "noAccount",
+  offline: "offline",
+  search: "search",
+  inbox: "inbox",
+  other: "emptyFolder",
+} as const satisfies Record<string, SceneName>;
 
 export const SEARCH_INPUT_ID = "uwu-search";
 
@@ -26,9 +35,10 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   const filter = useUi((s) => s.filter);
   const search = useUi((s) => s.search);
   const selectedThreadId = useUi((s) => s.selectedThreadId);
-  const { setFilter, setSearch, selectThread, setVisibleThreadIds, setFolderDrawerOpen } = useUi.getState();
+  const { setFilter, setSearch, selectThread, setVisibleThreadIds, setFolderDrawerOpen, setAddAccountOpen } =
+    useUi.getState();
   const info = useViewInfo(view);
-  const { data: accounts = [] } = useAccounts();
+  const { data: accounts = [], isSuccess: accountsLoaded } = useAccounts();
   const { refresh } = useMessageActions();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -54,7 +64,16 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   }, [selectedThreadId]);
 
   const showAccount = accounts.length > 1 && view.kind === "unified";
-  const empty = search ? "search" : info.isInbox && filter === "all" ? "inbox" : "other";
+  const empty =
+    accountsLoaded && accounts.length === 0
+      ? "noAccount"
+      : search
+        ? "search"
+        : accounts.length > 0 && accounts.every((account) => account.status.state === "offline")
+          ? "offline"
+          : info.isInbox && filter === "all"
+            ? "inbox"
+            : "other";
 
   return (
     <section className={clsx("flex h-full min-w-0 flex-col bg-surface", className)} aria-label={info.title}>
@@ -129,9 +148,17 @@ export function ThreadList({ variant, className }: ThreadListProps) {
           <p className="px-6 py-10 text-center text-[13px] text-muted">{t("list.loading")}</p>
         ) : threads.length === 0 ? (
           <EmptyState
-            icon={empty === "search" ? SearchX : empty === "inbox" ? Coffee : Wind}
+            scene={EMPTY_SCENES[empty]}
+            compact={variant === "pro"}
             title={t(`list.empty.${empty}.title`)}
             body={t(`list.empty.${empty}.body`)}
+            action={
+              empty === "noAccount" && (
+                <Button variant="primary" icon={Plus} onClick={() => setAddAccountOpen(true)}>
+                  {t("nav.addAccount")}
+                </Button>
+              )
+            }
             className="h-full"
           />
         ) : (

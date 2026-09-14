@@ -11,7 +11,8 @@ import {
   WifiOff,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { backend } from "@/backend/backend";
 import type { Account, Folder, MailboxView } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -166,8 +167,22 @@ function AccountSection({ account, folders }: { account: Account; folders: Folde
   );
 }
 
+/** Counts arriving mail so Nyu in the logo hops once each time. Syncs without new mail don't count. */
+function useNewMailHops() {
+  const [hops, setHops] = useState(0);
+  useEffect(
+    () =>
+      backend().subscribe((event) => {
+        if (event.type === "mail:received") setHops((count) => count + 1);
+      }),
+    [],
+  );
+  return hops;
+}
+
 export function MailboxNav({ className }: { className?: string }) {
   const { t } = useT();
+  const hops = useNewMailHops();
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
   const view = useUi((s) => s.view);
@@ -181,7 +196,7 @@ export function MailboxNav({ className }: { className?: string }) {
   return (
     <nav className={clsx("flex h-full flex-col gap-4 px-3 pt-4 pb-3", className)}>
       <div className="flex items-center justify-between px-2">
-        <Wordmark className="text-[19px]" />
+        <Wordmark className="text-[19px]" hop={hops} />
       </div>
 
       <Button

@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { CircleAlert, CircleCheck, Mail, X } from "lucide-react";
+import { LogoSymbol } from "@/components/ui/Logo";
 import { useT } from "@/i18n";
 import { useToasts } from "@/state/toasts";
 
@@ -22,13 +23,21 @@ export function Toaster() {
             role={item.tone === "error" ? "alert" : "status"}
             className="pointer-events-auto flex w-full animate-slide-up items-center gap-3 rounded-2xl bg-[#1c1420] py-2.5 pr-2 pl-4 text-[13px] font-medium text-white shadow-float dark:bg-[#f8f2f6] dark:text-[#1c1420]"
           >
-            <Icon
-              className={clsx(
-                "size-[18px] shrink-0",
-                item.tone === "error" ? "text-[#ff8096] dark:text-danger" : "text-[#ff7fac] dark:text-pink-solid",
+            <span className="relative shrink-0">
+              <Icon
+                className={clsx(
+                  "size-[18px]",
+                  item.tone === "error" ? "text-[#ff8096] dark:text-danger" : "text-[#ff7fac] dark:text-pink-solid",
+                )}
+                aria-hidden
+              />
+              {item.effect === "sent" && (
+                <LogoSymbol
+                  mood="happy"
+                  className="nyu-flyer pointer-events-none absolute -top-2 -left-2 h-8 w-auto animate-nyu-fly"
+                />
               )}
-              aria-hidden
-            />
+            </span>
             <span className="flex-1">{item.message}</span>
             <button
               type="button"

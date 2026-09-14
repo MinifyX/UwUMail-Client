@@ -37,6 +37,14 @@
       "other": {
         "title": "Nothing here",
         "body": "This folder is empty."
+      },
+      "offline": {
+        "title": "You are offline",
+        "body": "Your mail shows up here once the connection is back."
+      },
+      "noAccount": {
+        "title": "No mailbox yet",
+        "body": "Add a mailbox to see your mail."
       }
     },
     "count_one": "{{count}} message",
@@ -74,7 +82,12 @@
     "appearanceAutoDark": "Darkened automatically.",
     "appearanceAutoLight": "Kept light automatically because this mail has a lot of its own design.",
     "appearanceNative": "This mail brings its own dark design.",
-    "appearanceRemembered": "Applies to all mail from {{email}} from now on"
+    "appearanceRemembered": "Applies to all mail from {{email}} from now on",
+    "error": {
+      "title": "Couldn't load this message",
+      "body": "Check your connection and try again.",
+      "retry": "Try again"
+    }
   },
   "compose": {
     "new": "New message",

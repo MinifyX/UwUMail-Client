@@ -218,7 +218,8 @@ function Addons() {
   return (
     <div className="flex flex-col items-center gap-2 py-4">
       <EmptyState
-        icon={Puzzle}
+        scene="addons"
+        compact
         title={t("settings.addonsEmptyTitle")}
         body={t("settings.addonsEmptyBody")}
         className="py-6"
@@ -241,7 +242,7 @@ function About() {
   const setShortcutsOpen = useUi((s) => s.setShortcutsOpen);
   return (
     <div className="flex flex-col items-center gap-4 py-8 text-center">
-      <LogoSymbol className="h-16 w-auto" title="UwUMail" />
+      <LogoSymbol className="h-20 w-auto" title="UwUMail" />
       <div>
         <p className="text-[20px] font-extrabold">
           UwU<span className="text-pink">Mail</span>

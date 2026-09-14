@@ -101,7 +101,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         inReplyTo: request.mode === "forward" ? undefined : request.source?.id,
         attachments,
       });
-      toast(t("toast.sent"), "success");
+      toast(t("toast.sent"), "success", "sent");
       closeCompose();
       void refresh();
     } catch (reason) {

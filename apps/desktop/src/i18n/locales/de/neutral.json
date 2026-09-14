@@ -37,6 +37,14 @@
       "other": {
         "title": "Hier ist nichts",
         "body": "Dieser Ordner ist leer."
+      },
+      "offline": {
+        "title": "Du bist offline",
+        "body": "Sobald die Verbindung wieder da ist, erscheinen hier deine Mails."
+      },
+      "noAccount": {
+        "title": "Noch kein Postfach",
+        "body": "Füge ein Postfach hinzu, um deine Mails zu sehen."
       }
     },
     "count_one": "{{count}} Mail",
@@ -74,7 +82,12 @@
     "appearanceAutoDark": "Automatisch abgedunkelt.",
     "appearanceAutoLight": "Automatisch hell gelassen, weil diese Mail viel eigenes Design hat.",
     "appearanceNative": "Diese Mail bringt ihr eigenes dunkles Design mit.",
-    "appearanceRemembered": "Gilt ab jetzt für alle Mails von {{email}}"
+    "appearanceRemembered": "Gilt ab jetzt für alle Mails von {{email}}",
+    "error": {
+      "title": "Die Mail konnte nicht geladen werden",
+      "body": "Prüf deine Verbindung und versuch es noch einmal.",
+      "retry": "Nochmal versuchen"
+    }
   },
   "compose": {
     "new": "Neue Mail",

@@ -13,6 +13,14 @@
       "other": {
         "title": "So empty, so peaceful (˘ᵕ˘)",
         "body": "Nothing in this folder right now."
+      },
+      "offline": {
+        "title": "No internet (・_・;)",
+        "body": "I'll wait under my umbrella and fetch your mail once the connection is back."
+      },
+      "noAccount": {
+        "title": "My mailbox is still empty (・・ )?",
+        "body": "Add a mailbox and I'll bring your mail over."
       }
     }
   },
@@ -24,7 +32,11 @@
     "loading": "Opening the envelope…",
     "remoteBlocked": "I blocked remote images so nobody can peek at you (｀・ω・´)",
     "appearanceAutoLight": "I kept this one light, it dressed up so nicely (・ω・)",
-    "appearanceRemembered": "Got it, I'll remember that for {{email}} ✿"
+    "appearanceRemembered": "Got it, I'll remember that for {{email}} ✿",
+    "error": {
+      "title": "I got tangled in the cable (╥﹏╥)",
+      "body": "This message didn't come through. Try again in a moment."
+    }
   },
   "compose": {
     "placeholder": "Write something nice ✿",
@@ -46,8 +58,8 @@
     "offline": "No internet (・_・;) Showing what I saved for you"
   },
   "onboarding": {
-    "welcomeTitle": "Hi! I'm UwUMail (◕‿◕✿)",
-    "welcomeBody": "Your new mail client. Three tiny steps and we're ready to go!",
+    "welcomeTitle": "Hi! I'm Nyu (◕‿◕✿)",
+    "welcomeBody": "Your mail cat from UwUMail. Three tiny steps and we're ready to go!",
     "start": "Let's go!",
     "layoutTitle": "How do you like it?",
     "toneTitle": "How should I talk to you?",

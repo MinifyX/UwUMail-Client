@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Download, ExternalLink, FileQuestion, ShieldAlert, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, ShieldAlert, X } from "lucide-react";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { Address, Attachment } from "@/backend/types";
@@ -130,7 +130,7 @@ function ViewerBody({ attachments, index, sender, onIndexChange }: AttachmentVie
       <div className="min-h-0 flex-1 bg-canvas">
         {!needsFile ? (
           <EmptyState
-            icon={FileQuestion}
+            scene="noPreview"
             title={t("attachment.noPreview")}
             body={t("attachment.noPreviewBody")}
             className="h-full"

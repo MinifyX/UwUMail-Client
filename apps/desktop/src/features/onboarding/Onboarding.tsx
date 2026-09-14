@@ -3,7 +3,7 @@ import { ArrowLeft, Check } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
 import { Button } from "@/components/ui/Button";
-import { LogoSymbol } from "@/components/ui/Logo";
+import { NyuScene } from "@/components/nyu/scenes";
 import { i18n, useT } from "@/i18n";
 import { toast } from "@/state/toasts";
 import { useSettings, type LayoutMode, type Tone } from "@/state/settings";
@@ -163,7 +163,7 @@ export function Onboarding() {
 
           {step === "welcome" && (
             <div className="flex flex-col items-center gap-5 py-6 text-center">
-              <LogoSymbol className="h-24 w-auto animate-wiggle" title="UwUMail" />
+              <NyuScene name="welcome" className="h-auto w-[260px] animate-pop" />
               <div className="flex flex-col gap-2">
                 <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.02em]">
                   {t("onboarding.welcomeTitle")}
@@ -246,7 +246,7 @@ export function Onboarding() {
 
           {step === "done" && (
             <div className="flex flex-col items-center gap-5 py-6 text-center">
-              <LogoSymbol className="h-20 w-auto animate-pop" />
+              <NyuScene name="done" className="h-auto w-[260px] animate-pop" />
               <div className="flex flex-col gap-2">
                 <h1 className="text-[26px] font-extrabold tracking-[-0.02em]">{t("onboarding.doneTitle")}</h1>
                 <p className="text-[15px] text-muted">{t("onboarding.doneBody")}</p>

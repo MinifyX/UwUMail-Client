@@ -13,6 +13,14 @@
       "other": {
         "title": "So leer, so friedlich (˘ᵕ˘)",
         "body": "In diesem Ordner liegt gerade nichts."
+      },
+      "offline": {
+        "title": "Kein Internet (・_・;)",
+        "body": "Ich warte unterm Schirm. Sobald die Verbindung zurück ist, hol ich deine Mails."
+      },
+      "noAccount": {
+        "title": "Mein Briefkasten ist noch leer (・・ )?",
+        "body": "Füg ein Postfach hinzu und ich hol deine Mails rüber."
       }
     }
   },
@@ -24,7 +32,11 @@
     "loading": "Umschlag wird geöffnet…",
     "remoteBlocked": "Ich hab externe Bilder blockiert, damit dir keiner hinterherspioniert (｀・ω・´)",
     "appearanceAutoLight": "Hab ich hell gelassen, die Mail hat sich so schick gemacht (・ω・)",
-    "appearanceRemembered": "Merk ich mir für {{email}} ✿"
+    "appearanceRemembered": "Merk ich mir für {{email}} ✿",
+    "error": {
+      "title": "Ich hab mich im Kabel verheddert (╥﹏╥)",
+      "body": "Die Mail kam nicht durch. Versuch es gleich nochmal."
+    }
   },
   "compose": {
     "placeholder": "Schreib was Liebes ✿",
@@ -46,8 +58,8 @@
     "offline": "Kein Internet (・_・;) Ich zeig dir, was ich gespeichert hab"
   },
   "onboarding": {
-    "welcomeTitle": "Hallo! Ich bin UwUMail (◕‿◕✿)",
-    "welcomeBody": "Dein neues Mailprogramm. Drei winzige Schritte und wir legen los!",
+    "welcomeTitle": "Hallo! Ich bin Nyu (◕‿◕✿)",
+    "welcomeBody": "Deine Brief-Katze von UwUMail. Drei winzige Schritte und wir legen los!",
     "start": "Los geht's!",
     "layoutTitle": "Wie hättest du's gern?",
     "toneTitle": "Wie soll ich mit dir reden?",

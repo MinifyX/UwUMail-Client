@@ -1,32 +1,34 @@
 import clsx from "clsx";
-import { useId } from "react";
+import { Nyu, type NyuMood } from "@/components/nyu/Nyu";
 
-/** The UwUMail symbol: an envelope whose flap is a "w" mouth under two "U" eyes. */
-export function LogoSymbol({ className, title }: { className?: string; title?: string }) {
-  const gradient = useId();
+interface LogoSymbolProps {
+  className?: string;
+  title?: string;
+  mood?: NyuMood;
+  /** Changing this number makes Nyu hop once, e.g. when new mail arrives. */
+  hop?: number;
+}
+
+/** The UwUMail symbol: Nyu, the envelope cat, without the app icon's tile. */
+export function LogoSymbol({ className, title, mood, hop = 0 }: LogoSymbolProps) {
   return (
-    <svg viewBox="80 130 352 256" className={className} role={title ? "img" : undefined} aria-hidden={!title}>
+    <svg
+      key={hop}
+      viewBox="56 40 400 388"
+      className={clsx("nyu-host overflow-visible", hop > 0 && "origin-bottom animate-nyu-hop", className)}
+      role={title ? "img" : undefined}
+      aria-hidden={!title}
+    >
       {title && <title>{title}</title>}
-      <defs>
-        <linearGradient id={gradient} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#FF7EB0" />
-          <stop offset="1" stopColor="#FF3D84" />
-        </linearGradient>
-      </defs>
-      <rect x="88" y="138" width="336" height="240" rx="44" fill={`url(#${gradient})`} />
-      <g fill="none" stroke="#fff" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M126 176 L204 276 L256 238 L308 276 L386 176" />
-        <path d="M190 190 v6 a18 18 0 0 0 36 0 v-6" />
-        <path d="M286 190 v6 a18 18 0 0 0 36 0 v-6" />
-      </g>
+      <Nyu mood={mood} tilt={-6} />
     </svg>
   );
 }
 
-export function Wordmark({ className }: { className?: string }) {
+export function Wordmark({ className, hop }: { className?: string; hop?: number }) {
   return (
     <span className={clsx("inline-flex items-center gap-2 font-extrabold tracking-[-0.02em]", className)}>
-      <LogoSymbol className="h-[1.05em] w-auto" />
+      <LogoSymbol className="h-[1.3em] w-auto" hop={hop} />
       <span>
         UwU<span className="text-pink">Mail</span>
       </span>

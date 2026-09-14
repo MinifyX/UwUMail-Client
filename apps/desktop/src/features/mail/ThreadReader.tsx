@@ -1,8 +1,8 @@
 import clsx from "clsx";
-import { Archive, ArrowLeft, Forward, Mail, MailOpen, Reply, ReplyAll, Star, Trash } from "lucide-react";
+import { Archive, ArrowLeft, Forward, MailOpen, RefreshCw, Reply, ReplyAll, Star, Trash } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Message } from "@/backend/types";
-import { IconButton } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
 import { useAccounts, useMessageActions, useThread } from "@/lib/queries";
@@ -27,7 +27,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const threadId = useUi((s) => s.selectedThreadId);
   const selectThread = useUi((s) => s.selectThread);
   const openCompose = useUi((s) => s.openCompose);
-  const { data, isPending, isError } = useThread(threadId);
+  const { data, isPending, isError, refetch, isRefetching } = useThread(threadId);
   const { data: accounts = [] } = useAccounts();
   const actions = useMessageActions();
   const messages = data?.messages;
@@ -56,12 +56,35 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   if (!threadId) {
     return (
       <section className={clsx("flex h-full items-center justify-center bg-canvas", className)}>
-        <EmptyState icon={Mail} title={t("reader.empty.title")} body={t("reader.empty.body")} />
+        <EmptyState
+          scene="pick"
+          compact={variant === "pro"}
+          title={t("reader.empty.title")}
+          body={t("reader.empty.body")}
+        />
       </section>
     );
   }
 
-  if (isPending || isError || !data) {
+  if (isError && !data) {
+    return (
+      <section className={clsx("flex h-full items-center justify-center bg-canvas", className)}>
+        <EmptyState
+          scene="loadError"
+          compact={variant === "pro"}
+          title={t("reader.error.title")}
+          body={t("reader.error.body")}
+          action={
+            <Button icon={RefreshCw} busy={isRefetching} onClick={() => void refetch()}>
+              {t("reader.error.retry")}
+            </Button>
+          }
+        />
+      </section>
+    );
+  }
+
+  if (isPending || !data) {
     return (
       <section className={clsx("flex h-full items-center justify-center bg-canvas text-[13px] text-muted", className)}>
         {t("reader.loading")}
