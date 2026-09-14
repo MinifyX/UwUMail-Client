@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { useState } from "react";
 import type { AccountColor, Address } from "@/backend/types";
 import { colorFor, initials } from "@/lib/format";
+import { cachedLook, lookOfImage } from "@/lib/pictureLook";
 import { useSenderPicture } from "@/lib/queries";
 
 export const COLOR_CLASSES: Record<AccountColor, { bg: string; text: string; dot: string }> = {
@@ -39,7 +40,7 @@ export const COLOR_CLASSES: Record<AccountColor, { bg: string; text: string; dot
 
 interface AvatarProps {
   address: Address;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   className?: string;
 }
 
@@ -48,37 +49,56 @@ export function Avatar({ address, size = "md", className }: AvatarProps) {
   const picture = useSenderPicture(address.email);
   const [loaded, setLoaded] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  // A picture that didn't load with CORS gets one more try without, it just can't be looked at then.
+  const [withoutCors, setWithoutCors] = useState<string | null>(null);
   const shown = picture && picture.url !== failed ? picture : null;
+  const cors = shown !== null && withoutCors !== shown.url;
+  const ready = shown !== null && loaded === shown.url;
+  // Filled in by onLoad before `ready` flips. Null when the pixels couldn't be read.
+  const look = ready ? cachedLook(shown.url) : undefined;
+  // Logos that cover the whole circle stay edge to edge; everything else sits on a plain backdrop.
+  const fill = shown?.kind === "logo" && !look?.seeThrough;
+
   return (
     <span
       aria-hidden
       className={clsx(
         "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold",
-        color.bg,
-        color.text,
+        // Initials wait underneath until the picture is there, and come back if it can't load.
+        !ready && [color.bg, color.text],
+        size === "xs" && "size-6 text-[10px]",
         size === "sm" && "size-7 text-[11px]",
         size === "md" && "size-10 text-[13px]",
         size === "lg" && "size-12 text-[15px]",
         className,
       )}
     >
-      {initials(address)}
+      {!ready && initials(address)}
       {shown && (
-        // Initials stay underneath until the picture has loaded, and come back if it can't.
         <span
           className={clsx(
             "absolute inset-0 grid place-items-center rounded-full transition-opacity duration-200",
-            shown.kind === "icon" && "bg-white ring-1 ring-black/5 ring-inset",
-            loaded === shown.url ? "opacity-100" : "opacity-0",
+            !fill && "ring-1 ring-inset",
+            !fill && (look?.light ? "bg-[#2b2530] ring-white/10 dark:bg-[#3a3340]" : "bg-white ring-black/5"),
+            ready ? "opacity-100" : "opacity-0",
           )}
         >
           <img
+            key={cors ? "cors" : "plain"}
             src={shown.url}
             alt=""
+            // Lets the canvas read the pixels; the engine serves pictures with a matching CORS header.
+            crossOrigin={cors ? "anonymous" : undefined}
             draggable={false}
-            onLoad={() => setLoaded(shown.url)}
-            onError={() => setFailed(shown.url)}
-            className={shown.kind === "logo" ? "size-full object-cover" : "size-[62%] object-contain"}
+            onLoad={(event) => {
+              lookOfImage(shown.url, event.currentTarget);
+              setLoaded(shown.url);
+            }}
+            onError={() => (cors ? setWithoutCors(shown.url) : setFailed(shown.url))}
+            className={clsx(
+              fill ? "size-full object-cover" : "object-contain",
+              !fill && (shown.kind === "logo" ? "size-[72%]" : "size-[62%]"),
+            )}
           />
         </span>
       )}

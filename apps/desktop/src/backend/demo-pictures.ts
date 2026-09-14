@@ -33,12 +33,13 @@ const PICTURES: Record<string, SenderPicture> = {
         `<rect x="16" y="38" width="10" height="10"/><rect x="27" y="38" width="10" height="10" fill="#ff7aa8"/></g>`,
     ),
   },
+  // Transparent logos: a colorful one gets a white backdrop, a white one a dark backdrop.
   "sparschwein.example": {
     kind: "logo",
     url: svg(
-      `<rect width="64" height="64" fill="#0f7b5a"/><ellipse cx="31" cy="35" rx="16" ry="12" fill="#ffc4d8"/>` +
-        `<circle cx="46" cy="34" r="4" fill="#ff9bbf"/><circle cx="38" cy="30" r="1.6" fill="#0f7b5a"/>` +
-        `<rect x="26" y="20" width="10" height="3" rx="1.5" fill="#ffd166"/>`,
+      `<ellipse cx="30" cy="36" rx="22" ry="17" fill="#ff7fac"/><circle cx="51" cy="35" r="6" fill="#f0357f"/>` +
+        `<circle cx="40" cy="30" r="2.2" fill="#0f7b5a"/><rect x="22" y="15" width="14" height="4" rx="2" fill="#0f7b5a"/>` +
+        `<rect x="16" y="49" width="6" height="8" rx="2" fill="#f0357f"/><rect x="36" y="49" width="6" height="8" rx="2" fill="#f0357f"/>`,
     ),
   },
   "brightlabs.example": {
@@ -50,7 +51,10 @@ const PICTURES: Record<string, SenderPicture> = {
   },
   "pixelstudio.example": {
     kind: "logo",
-    url: svg(`<rect width="64" height="64" fill="#6d3fd9"/><path d="M25 19 L46 32 L25 45 Z" fill="#fff"/>`),
+    url: svg(
+      `<circle cx="32" cy="32" r="26" fill="none" stroke="#fff" stroke-width="5"/>` +
+        `<path d="M26 20 L45 32 L26 44 Z" fill="#fff"/>`,
+    ),
   },
 };
 
