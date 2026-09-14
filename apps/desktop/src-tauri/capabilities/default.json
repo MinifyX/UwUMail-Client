@@ -3,9 +3,5 @@
   "identifier": "default",
   "description": "Permissions of the main UwUMail window. Addon frames never get Tauri access.",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "opener:allow-open-url",
-    "notification:default"
-  ]
+  "permissions": ["core:default", "opener:allow-open-url", "notification:default"]
 }

@@ -47,12 +47,6 @@
     "longDescription": "UwUMail is an open-source IMAP/SMTP mail client with a simple and a pro layout, a unified inbox, offline search and addons with permissions.",
     "copyright": "GPL-3.0-only",
     "license": "GPL-3.0-only",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
   }
 }
