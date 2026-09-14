@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+node_modules
+dist
+target
+apps/desktop/src-tauri/gen
+*.md
+LICENSE

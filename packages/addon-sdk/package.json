@@ -1,0 +1,24 @@
+{
+  "name": "@uwumail/addon-sdk",
+  "version": "0.1.0",
+  "description": "Types and runtime for building UwUMail addons",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/protocol.ts",
+    "./manifest": "./src/manifest.ts"
+  },
+  "files": [
+    "src",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.0"
+  }
+}

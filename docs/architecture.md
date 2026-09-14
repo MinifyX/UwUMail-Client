@@ -60,9 +60,9 @@ React 19, Vite, Tailwind CSS 4, TypeScript.
   `pnpm dev` runs the UI in a normal browser on demo data, which keeps UI
   work fast and makes screenshots reproducible.
 - `state/` — UI state (zustand) and persisted settings.
-- `i18n/` — English and German strings. The tone setting is an i18next
-  *context*: `inbox.empty_playful` overrides `inbox.empty` while the playful
-  tone is active, and falls back to the neutral string otherwise.
+- `i18n/` — English and German strings in two i18next namespaces per
+  language: `neutral` (complete) and `playful` (overrides). `useT()` picks the
+  namespace for the active tone; missing playful keys fall back to neutral.
 - `features/` — mail list, reader, composer, onboarding, settings, addons.
 - `addons/` — the addon host (sandbox frames, RPC, permission checks).
 

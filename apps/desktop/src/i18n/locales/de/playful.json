@@ -1,0 +1,58 @@
+{
+  "list": {
+    "loading": "Ich hole deine Mails (｡･ω･｡)",
+    "empty": {
+      "inbox": {
+        "title": "Posteingang leer! Zeit für einen Tee (っ˘ω˘ς)",
+        "body": "Ich sag dir sofort Bescheid, wenn was ankommt."
+      },
+      "search": { "title": "Nix gefunden (・_・;)", "body": "Ich hab überall gesucht, sogar unterm Sofa." },
+      "other": { "title": "So leer, so friedlich (˘ᵕ˘)", "body": "In diesem Ordner liegt gerade nichts." }
+    }
+  },
+  "reader": {
+    "empty": { "title": "Such dir eine Mail aus ✉︎", "body": "Ich mach sie dir genau hier auf." },
+    "loading": "Umschlag wird geöffnet…",
+    "remoteBlocked": "Ich hab externe Bilder blockiert, damit dir keiner hinterherspioniert (｀・ω・´)"
+  },
+  "compose": {
+    "placeholder": "Schreib was Liebes ✿",
+    "noRecipients": "An wen soll's gehen? Füg erst einen Empfänger hinzu (・・ )?"
+  },
+  "toast": {
+    "sent": "Und ab die Post ✉︎ ~",
+    "sendFailed": "Senden hat nicht geklappt (╥﹏╥) {{reason}}",
+    "archived": "Ab ins Archiv, schön verstaut (˘ω˘)",
+    "trashed": "Tschüssi (｡•́︿•̀｡)",
+    "newMail_one": "Du hast Post! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+    "newMail_other": "{{count}} neue Mails! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+    "accountAdded": "{{email}} ist eingezogen! ٩(◕‿◕)۶"
+  },
+  "status": {
+    "syncing": "Hole frische Mails…",
+    "error": "{{account}} antwortet nicht (・_・;)",
+    "demo": "Demo-Modus, nur Spielmails. Nichts verlässt die App (´｡• ω •｡`)"
+  },
+  "onboarding": {
+    "welcomeTitle": "Hallo! Ich bin UwUMail (◕‿◕✿)",
+    "welcomeBody": "Dein neues Mailprogramm. Drei winzige Schritte und wir legen los!",
+    "start": "Los geht's!",
+    "layoutTitle": "Wie hättest du's gern?",
+    "toneTitle": "Wie soll ich mit dir reden?",
+    "accountTitle": "Jetzt holen wir deine Mails rüber ✉︎",
+    "doneTitle": "Juhu, fertig! ٩(◕‿◕)۶",
+    "doneBody": "Ich hole deine Mails im Hintergrund."
+  },
+  "tone": {
+    "playful": { "desc": "Kaomoji, kleine Witze und süße Meldungen (◕ᴗ◕✿)" }
+  },
+  "account": {
+    "discovering": "Ich schnüffel nach deinen Servereinstellungen…",
+    "connecting": "Ich klopf beim Server an…",
+    "errorAuth": "Der Server mag das Passwort nicht (｡•́︿•̀｡) Schau nochmal drüber?",
+    "errorConnection": "Ich komm nicht an den Server ran (・_・;) Prüf die Adresse und dein Internet."
+  },
+  "settings": {
+    "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)"
+  }
+}

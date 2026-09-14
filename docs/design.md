@@ -68,8 +68,10 @@ Rules for playful copy:
 2. **Short.** One kaomoji at most per message, never in buttons that act on
    data (Delete, Send) — those stay plain verbs.
 3. **Kind.** Never mock the user; the app laughs at itself.
-4. **Always both.** Every string has a neutral key. The playful variant is the
-   same key with the `_playful` suffix and is optional.
+4. **Always both.** Every string lives in `locales/<lang>/neutral.json`. The
+   playful variant goes under the same key in `locales/<lang>/playful.json`
+   and is optional — missing keys fall back to neutral. A test makes sure
+   German and English define the same keys in both files.
 
 | Situation | Neutral | Playful |
 | --- | --- | --- |

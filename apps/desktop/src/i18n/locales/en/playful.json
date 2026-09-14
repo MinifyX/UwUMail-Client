@@ -1,0 +1,55 @@
+{
+  "list": {
+    "loading": "Fetching your mail (｡･ω･｡)",
+    "empty": {
+      "inbox": { "title": "Inbox zero! Time for tea (っ˘ω˘ς)", "body": "I'll tell you the moment something arrives." },
+      "search": { "title": "Nothing found (・_・;)", "body": "I looked everywhere, even under the sofa." },
+      "other": { "title": "So empty, so peaceful (˘ᵕ˘)", "body": "Nothing in this folder right now." }
+    }
+  },
+  "reader": {
+    "empty": { "title": "Pick a mail, any mail ✉︎", "body": "I'll open it right here for you." },
+    "loading": "Opening the envelope…",
+    "remoteBlocked": "I blocked remote images so nobody can peek at you (｀・ω・´)"
+  },
+  "compose": {
+    "placeholder": "Write something nice ✿",
+    "noRecipients": "Who's it for? Add a recipient first (・・ )?"
+  },
+  "toast": {
+    "sent": "Off it goes ✉︎ ~",
+    "sendFailed": "Couldn't send (╥﹏╥) {{reason}}",
+    "archived": "Tucked away in the archive (˘ω˘)",
+    "trashed": "Bye bye (｡•́︿•̀｡)",
+    "newMail_one": "You've got mail! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+    "newMail_other": "{{count}} new mails! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+    "accountAdded": "{{email}} moved in! ٩(◕‿◕)۶"
+  },
+  "status": {
+    "syncing": "Fetching fresh mail…",
+    "error": "{{account}} isn't answering (・_・;)",
+    "demo": "Demo mode, just pretend mail. Nothing leaves the app (´｡• ω •｡`)"
+  },
+  "onboarding": {
+    "welcomeTitle": "Hi! I'm UwUMail (◕‿◕✿)",
+    "welcomeBody": "Your new mail client. Three tiny steps and we're ready to go!",
+    "start": "Let's go!",
+    "layoutTitle": "How do you like it?",
+    "toneTitle": "How should I talk to you?",
+    "accountTitle": "Now let's bring your mail over ✉︎",
+    "doneTitle": "Yay, all set! ٩(◕‿◕)۶",
+    "doneBody": "I'm fetching your mail in the background."
+  },
+  "tone": {
+    "playful": { "desc": "Kaomoji, little jokes and cute messages (◕ᴗ◕✿)" }
+  },
+  "account": {
+    "discovering": "Sniffing out your server settings…",
+    "connecting": "Knocking on the server's door…",
+    "errorAuth": "The server said no to that password (｡•́︿•̀｡) Double-check it?",
+    "errorConnection": "I couldn't reach the server (・_・;) Check the address and your internet."
+  },
+  "settings": {
+    "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)"
+  }
+}

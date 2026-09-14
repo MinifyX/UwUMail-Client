@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "uwumail-ui",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@uwumail/desktop", "dev"],
+      "port": 1420
+    }
+  ]
+}
