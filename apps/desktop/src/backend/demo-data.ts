@@ -89,6 +89,22 @@ ${rows}
 </table></div>`;
 }
 
+/** A colorful promo made of big colored blocks: automatic dark mode should leave it light. */
+function promo(lang: Lang): string {
+  const de = lang === "de";
+  return `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="font-family:Arial,sans-serif">
+<tr><td bgcolor="#f08a24" style="padding:48px 32px;text-align:center;color:#ffffff">
+<h1 style="margin:0;font-size:34px">${de ? "2 für 1 auf alle Zimtschnecken" : "2 for 1 on all cinnamon rolls"}</h1>
+<p style="margin:12px 0 0;font-size:18px">${de ? "Nur dieses Wochenende" : "This weekend only"}</p></td></tr>
+<tr><td bgcolor="#2f7d4a" style="padding:36px 32px;color:#ffffff">
+<h2 style="margin:0 0 8px">${de ? "Neu: Kürbis-Chai" : "New: pumpkin chai"}</h2>
+<p style="margin:0">${de ? "Mit Hafermilch, Zimt und einer Prise Muskat." : "With oat milk, cinnamon and a pinch of nutmeg."}</p></td></tr>
+<tr><td bgcolor="#fde7ef" style="padding:28px 32px;color:#8d0f43">
+<p style="margin:0">${de ? "Zeig diese Mail an der Kasse. Gilt bis Sonntag, 18 Uhr." : "Show this mail at the counter. Valid until Sunday, 6 pm."}</p></td></tr>
+<tr><td bgcolor="#3b2f2a" style="padding:20px 32px;color:#f4efe9;font-size:12px;text-align:center">Kaffee &amp; Kuchen · Lindenstraße 12</td></tr>
+</table>`;
+}
+
 export const SAMPLE_THREADS: SampleThread[] = [
   {
     account: "private",
@@ -209,6 +225,19 @@ export const SAMPLE_THREADS: SampleThread[] = [
           '<div style="font-family:Georgia,serif"><h1 style="color:#8a4b2a">Hallo Herbst!</h1><p>Ab heute gibt es Kürbis-Zimtschnecken und unseren Chai Latte mit Hafermilch.</p><p>Bis bald in der Kuchenecke!</p></div>',
           '<div style="font-family:Georgia,serif"><h1 style="color:#8a4b2a">Hello autumn!</h1><p>Starting today: pumpkin cinnamon rolls and our oat milk chai latte.</p><p>See you soon in the cake corner!</p></div>',
         ),
+      },
+    ],
+  },
+  {
+    account: "private",
+    subject: p("Herbst-Aktion: 2 für 1 🎃", "Autumn deal: 2 for 1 🎃"),
+    messages: [
+      {
+        from: bakery,
+        minutesAgo: 60 * 29,
+        seen: true,
+        html: true,
+        body: p(promo("de"), promo("en")),
       },
     ],
   },

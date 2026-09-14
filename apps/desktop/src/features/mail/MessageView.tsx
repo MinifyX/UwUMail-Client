@@ -1,5 +1,6 @@
 import clsx from "clsx";
-import { File, FileImage, FileText, ImageOff, Paperclip } from "lucide-react";
+import { File, FileImage, FileText, ImageOff, Moon, Paperclip, Sun } from "lucide-react";
+import { useState } from "react";
 import type { Account, Attachment, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -7,13 +8,56 @@ import { useT } from "@/i18n";
 import { displayName, formatFullDate, formatListDate, formatSize } from "@/lib/format";
 import { useResolvedTheme } from "@/lib/theme";
 import { useSettings } from "@/state/settings";
-import { MessageBody } from "./MessageBody";
-import { useState } from "react";
+import { toast } from "@/state/toasts";
+import { MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
 
 function attachmentIcon(attachment: Attachment) {
   if (attachment.mimeType.startsWith("image/")) return FileImage;
   if (attachment.mimeType.startsWith("text/") || attachment.mimeType === "application/pdf") return FileText;
   return File;
+}
+
+interface AppearanceToggleProps {
+  message: Message;
+  appearance: Appearance;
+  autoDark: boolean | undefined;
+}
+
+/** "☀ Hell" / "☾ Dunkel" in the message header. Only rendered in the dark app theme. */
+function AppearanceToggle({ message, appearance, autoDark }: AppearanceToggleProps) {
+  const { t } = useT();
+  const rememberAppearance = useSettings((s) => s.rememberAppearance);
+  const isDark =
+    appearance.kind === "dark" || appearance.kind === "darken" || (appearance.kind === "auto" && autoDark === true);
+  // Wait for the automatic decision so the label doesn't flip.
+  if (appearance.kind === "auto" && autoDark === undefined) return null;
+
+  const why =
+    appearance.kind === "auto"
+      ? autoDark
+        ? t("reader.appearanceAutoDark")
+        : t("reader.appearanceAutoLight")
+      : appearance.kind === "dark" && appearance.why === "native"
+        ? t("reader.appearanceNative")
+        : undefined;
+  const action = isDark ? t("reader.appearanceShowLight") : t("reader.appearanceShowDark");
+  const Icon = isDark ? Sun : Moon;
+
+  return (
+    <button
+      type="button"
+      title={why ? `${why} ${action}` : action}
+      aria-label={action}
+      onClick={() => {
+        rememberAppearance(message.from.email, isDark ? "light" : "dark");
+        toast(t("reader.appearanceRemembered", { email: message.from.email }), "info");
+      }}
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-line px-2.5 text-[12px] font-semibold text-muted transition-colors hover:border-pink hover:bg-pink-tint hover:text-pink-ink"
+    >
+      <Icon className="size-3.5" aria-hidden />
+      {isDark ? t("reader.appearanceLight") : t("reader.appearanceDark")}
+    </button>
+  );
 }
 
 interface MessageViewProps {
@@ -29,7 +73,10 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const remoteSetting = useSettings((s) => s.remoteImages);
   const trustedSenders = useSettings((s) => s.trustedSenders);
   const trustSender = useSettings((s) => s.trustSender);
+  const mailAppearance = useSettings((s) => s.mailAppearance);
+  const senderChoice = useSettings((s) => s.senderAppearance[message.from.email.toLowerCase()]);
   const [loadRemote, setLoadRemote] = useState(false);
+  const [autoDecision, setAutoDecision] = useState<{ key: string; dark: boolean } | null>(null);
 
   const myAddresses = new Set(accounts.map((a) => a.email.toLowerCase()));
   const recipientNames = message.to
@@ -37,6 +84,12 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
     .join(", ");
   const allowRemote =
     loadRemote || remoteSetting === "always" || trustedSenders.includes(message.from.email.toLowerCase());
+
+  // A remembered choice for this sender wins; plain text otherwise follows the app.
+  const preference = senderChoice ?? (message.bodyHtml !== null ? mailAppearance : "auto");
+  const appearance = resolveAppearance(message, theme === "dark", preference);
+  const decisionKey = `${message.id}|${allowRemote}`;
+  const autoDark = autoDecision?.key === decisionKey ? autoDecision.dark : undefined;
 
   if (collapsed) {
     return (
@@ -70,9 +123,12 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           </p>
           <p className="truncate text-[12.5px] text-muted">{t("reader.to", { names: recipientNames })}</p>
         </div>
-        <time dateTime={message.date} className="shrink-0 text-[12.5px] text-muted">
-          {formatFullDate(message.date, i18n.language)}
-        </time>
+        <div className="flex shrink-0 items-center gap-3">
+          {theme === "dark" && <AppearanceToggle message={message} appearance={appearance} autoDark={autoDark} />}
+          <time dateTime={message.date} className="text-[12.5px] text-muted">
+            {formatFullDate(message.date, i18n.language)}
+          </time>
+        </div>
       </header>
 
       {message.hasRemoteContent && !allowRemote && (
@@ -89,7 +145,12 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
       )}
 
       <div className="selectable">
-        <MessageBody message={message} allowRemote={allowRemote} dark={theme === "dark"} />
+        <MessageBody
+          message={message}
+          allowRemote={allowRemote}
+          appearance={appearance}
+          onAutoDecision={(dark) => setAutoDecision({ key: decisionKey, dark })}
+        />
       </div>
 
       {message.attachments.length > 0 && (

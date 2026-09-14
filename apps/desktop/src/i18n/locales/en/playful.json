@@ -22,7 +22,9 @@
       "body": "I'll open it right here for you."
     },
     "loading": "Opening the envelope…",
-    "remoteBlocked": "I blocked remote images so nobody can peek at you (｀・ω・´)"
+    "remoteBlocked": "I blocked remote images so nobody can peek at you (｀・ω・´)",
+    "appearanceAutoLight": "I kept this one light, it dressed up so nicely (・ω・)",
+    "appearanceRemembered": "Got it, I'll remember that for {{email}} ✿"
   },
   "compose": {
     "placeholder": "Write something nice ✿",

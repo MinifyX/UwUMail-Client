@@ -15,6 +15,7 @@ import { i18n, useT } from "@/i18n";
 import { openExternal } from "@/lib/platform";
 import { useAccounts } from "@/lib/queries";
 import { useSettings, type LanguageSetting } from "@/state/settings";
+import { toast } from "@/state/toasts";
 import { useUi, type SettingsSection } from "@/state/ui";
 
 const SECTIONS: { id: SettingsSection; icon: LucideIcon }[] = [
@@ -118,6 +119,31 @@ function Reading() {
             { value: "always", label: t("settings.remoteAlways") },
           ]}
         />
+      </Row>
+      <Row label={t("settings.mailAppearance")} description={t("settings.mailAppearanceDesc")}>
+        <Segmented
+          label={t("settings.mailAppearance")}
+          value={settings.mailAppearance}
+          onChange={(mailAppearance) => settings.update({ mailAppearance })}
+          options={[
+            { value: "auto", label: t("settings.mailAppearanceAuto") },
+            { value: "light", label: t("settings.mailAppearanceLight") },
+            { value: "dark", label: t("settings.mailAppearanceDark") },
+          ]}
+        />
+        {Object.keys(settings.senderAppearance).length > 0 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="self-start"
+            onClick={() => {
+              settings.forgetAppearances();
+              toast(t("settings.appearancesForgotten"), "success");
+            }}
+          >
+            {t("settings.forgetAppearances", { count: Object.keys(settings.senderAppearance).length })}
+          </Button>
+        )}
       </Row>
     </>
   );

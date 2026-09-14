@@ -1,8 +1,10 @@
 import DOMPurify from "dompurify";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "@/backend/types";
 import { textToHtml } from "@/lib/format";
 import { openExternal } from "@/lib/platform";
+import type { MailAppearance } from "@/state/settings";
+import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)"'\]]/g;
 
@@ -40,62 +42,108 @@ function sanitize(html: string) {
 
 export const ROOT_ID = "uwu-mail-root";
 
-export function buildDocument(message: Message, allowRemote: boolean, dark: boolean) {
+/**
+ * `dark` for plain text means app colors; for HTML it means the mail's own
+ * dark mode styles (only used when the mail declares them).
+ */
+export function buildDocument(message: Message, allowRemote: boolean, variant: "light" | "dark") {
   const isHtml = message.bodyHtml !== null;
-  const body = isHtml ? sanitize(message.bodyHtml!) : linkify(textToHtml(message.bodyText ?? ""));
+  const dark = variant === "dark";
+  const body = isHtml
+    ? forceColorSchemeQueries(sanitize(message.bodyHtml!), dark)
+    : linkify(textToHtml(message.bodyText ?? ""));
   const imageSources = allowRemote ? "data: cid: blob: https: http:" : "data: cid: blob:";
   const csp = `default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:; media-src data:`;
   // The frame never scrolls itself (the reader around it does), so html/body
   // must not stretch to the frame height. Otherwise measuring and resizing
-  // would feed each other.
-  const frame = `html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:hidden!important}
+  // would feed each other. The color-scheme must match the frame element's,
+  // or the engine paints an opaque white canvas behind dark content.
+  const frame = `:root{color-scheme:${dark ? "dark" : "light"}}
+html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:hidden!important}
 #${ROOT_ID}{display:flow-root;overflow-x:auto}`;
   // HTML mail brings its own design: keep the sender's typography and only
-  // give it white paper (also in dark mode) and some breathing room.
-  const html = `body{background:#ffffff;color:#1c1420}
+  // give it paper and some breathing room.
+  const html = `body{background:${dark ? "#1c171f" : "#ffffff"};color:${dark ? "#f8f2f6" : "#1c1420"}}
 #${ROOT_ID}{padding:16px}
-a{color:#c8165f}`;
-  const text = `body{color:${dark ? "#f8f2f6" : "#1c1420"};background:transparent;font:15px/1.6 "Manrope Variable",ui-sans-serif,system-ui,sans-serif}
-#${ROOT_ID}{overflow-wrap:break-word}
+a{color:${dark ? "#ff9dbf" : "#c8165f"}}`;
+  const text = `body{color:${dark ? "#f8f2f6" : "#1c1420"};background:${dark ? "transparent" : "#ffffff"};font:15px/1.6 "Manrope Variable",ui-sans-serif,system-ui,sans-serif}
+#${ROOT_ID}{overflow-wrap:break-word;${dark ? "" : "padding:16px"}}
 a{color:${dark ? "#ff9dbf" : "#c8165f"}}
 p{margin:0 0 12px}
-blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #ffd0e2;color:#716672}`;
+blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${dark ? "#4d2338" : "#ffd0e2"};color:${dark ? "#b3a8b3" : "#716672"}}`;
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>${frame}
 ${isHtml ? html : text}</style></head><body><div id="${ROOT_ID}">${body}</div></body></html>`;
 }
 
+/** What a mail looks like before any measuring. `auto` still needs the rendered mail to decide. */
+export type Appearance =
+  | { kind: "light"; why: "app" | "choice" }
+  | { kind: "dark"; why: "app" | "native" | "choice" }
+  | { kind: "darken"; why: "choice" }
+  | { kind: "auto" };
+
+export function resolveAppearance(message: Message, appDark: boolean, preference: MailAppearance): Appearance {
+  if (!appDark) return { kind: "light", why: "app" };
+  if (message.bodyHtml === null) {
+    return preference === "light" ? { kind: "light", why: "choice" } : { kind: "dark", why: "app" };
+  }
+  if (preference === "light") return { kind: "light", why: "choice" };
+  if (declaresDarkMode(message.bodyHtml)) return { kind: "dark", why: "native" };
+  return preference === "dark" ? { kind: "darken", why: "choice" } : { kind: "auto" };
+}
+
 interface MessageBodyProps {
   message: Message;
   allowRemote: boolean;
-  dark: boolean;
+  appearance: Appearance;
+  /** Reports the result of the automatic decision. */
+  onAutoDecision?: (dark: boolean) => void;
 }
 
-export function MessageBody({ message, allowRemote, dark }: MessageBodyProps) {
-  const frame = useRef<HTMLIFrameElement>(null);
+export function MessageBody({ message, allowRemote, appearance, onAutoDecision }: MessageBodyProps) {
   const [height, setHeight] = useState(120);
-  const html = useMemo(() => buildDocument(message, allowRemote, dark), [message, allowRemote, dark]);
+  const variant = appearance.kind === "dark" ? "dark" : "light";
+  const html = useMemo(() => buildDocument(message, allowRemote, variant), [message, allowRemote, variant]);
+  // Remount the frame whenever the look changes: recoloring happens in the
+  // loaded document, so an unchanged srcdoc alone wouldn't undo it.
+  const signature = `${message.id}|${appearance.kind}|${allowRemote}`;
+  const needsPass = appearance.kind === "auto" || appearance.kind === "darken";
+  const [finished, setFinished] = useState<{ signature: string; dark: boolean } | null>(null);
+  const done = finished?.signature === signature ? finished : null;
+  const onAutoDecisionRef = useRef(onAutoDecision);
+  useEffect(() => {
+    onAutoDecisionRef.current = onAutoDecision;
+  });
 
-  const attach = useCallback(() => {
-    const doc = frame.current?.contentDocument;
+  const handleLoad = (frame: HTMLIFrameElement) => {
+    const doc = frame.contentDocument;
     const root = doc?.getElementById(ROOT_ID);
     if (!doc || !root) return;
+
+    if (needsPass) {
+      const dark = appearance.kind === "darken" || decide(measure(root)) === "darken";
+      if (dark) darkenDocument(root);
+      if (appearance.kind === "auto") onAutoDecisionRef.current?.(dark);
+      setFinished({ signature, dark });
+    }
+
     let pending = 0;
     // Measure the content wrapper, not the document: the document is never
     // smaller than the frame, so it would only ever grow. Updates wait for the
     // next frame, which also avoids ResizeObserver loop errors.
-    const measure = () => {
+    const updateHeight = () => {
       cancelAnimationFrame(pending);
       pending = requestAnimationFrame(() => {
         const next = Math.max(Math.ceil(root.getBoundingClientRect().height), 24);
         setHeight((current) => (Math.abs(current - next) > 1 ? next : current));
       });
     };
-    measure();
-    new ResizeObserver(measure).observe(root);
+    updateHeight();
+    new ResizeObserver(updateHeight).observe(root);
     // Images load after the document; their size changes the height too.
-    doc.addEventListener("load", measure, true);
+    doc.addEventListener("load", updateHeight, true);
     doc.addEventListener("click", (event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]");
       if (!anchor) return;
@@ -103,19 +151,23 @@ export function MessageBody({ message, allowRemote, dark }: MessageBodyProps) {
       const href = anchor.getAttribute("href") ?? "";
       if (/^(https?:|mailto:)/i.test(href)) void openExternal(href);
     });
-  }, []);
+  };
+
+  const scheme = variant === "dark" || done?.dark ? "dark" : "light";
+  // Hide until recolored, so dark mode never flashes white paper.
+  const hidden = needsPass && !done;
 
   return (
     <iframe
-      ref={frame}
+      key={signature}
       title={message.subject}
       // No allow-scripts: mail content can never run code. allow-same-origin only
-      // lets the app measure the height and intercept link clicks.
+      // lets the app measure the height, recolor for dark mode and intercept links.
       sandbox="allow-same-origin"
       srcDoc={html}
-      onLoad={attach}
-      style={{ height }}
-      className="block w-full rounded-2xl border-0"
+      onLoad={(event) => handleLoad(event.currentTarget)}
+      style={{ height, colorScheme: scheme, opacity: hidden ? 0 : 1 }}
+      className="block w-full rounded-2xl border-0 transition-opacity duration-150"
     />
   );
 }

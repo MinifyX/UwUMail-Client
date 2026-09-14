@@ -65,7 +65,15 @@
     "attachments_other": "{{count}} attachments",
     "earlier_one": "{{count}} earlier message",
     "earlier_other": "{{count}} earlier messages",
-    "noSubject": "(no subject)"
+    "noSubject": "(no subject)",
+    "appearanceLight": "Light",
+    "appearanceDark": "Dark",
+    "appearanceShowLight": "Show this mail in light colors.",
+    "appearanceShowDark": "Show this mail in dark colors.",
+    "appearanceAutoDark": "Darkened automatically.",
+    "appearanceAutoLight": "Kept light automatically because this mail has a lot of its own design.",
+    "appearanceNative": "This mail brings its own dark design.",
+    "appearanceRemembered": "Applies to all mail from {{email}} from now on"
   },
   "compose": {
     "new": "New message",
@@ -213,7 +221,14 @@
     "version": "Version {{version}}",
     "license": "Free software under the GNU GPL v3.0.",
     "source": "Source code",
-    "shortcuts": "Keyboard shortcuts"
+    "shortcuts": "Keyboard shortcuts",
+    "mailAppearance": "Mail in dark mode",
+    "mailAppearanceDesc": "Automatic darkens simple mails and keeps elaborately designed newsletters light. Plain text always follows the app theme.",
+    "mailAppearanceAuto": "Automatic",
+    "mailAppearanceLight": "Always light",
+    "mailAppearanceDark": "Always dark",
+    "forgetAppearances": "Reset remembered senders ({{count}})",
+    "appearancesForgotten": "Remembered senders reset"
   },
   "theme": {
     "system": "System",

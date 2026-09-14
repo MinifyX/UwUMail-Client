@@ -65,7 +65,15 @@
     "attachments_other": "{{count}} Anhänge",
     "earlier_one": "{{count}} ältere Nachricht",
     "earlier_other": "{{count}} ältere Nachrichten",
-    "noSubject": "(kein Betreff)"
+    "noSubject": "(kein Betreff)",
+    "appearanceLight": "Hell",
+    "appearanceDark": "Dunkel",
+    "appearanceShowLight": "Diese Mail hell anzeigen.",
+    "appearanceShowDark": "Diese Mail dunkel anzeigen.",
+    "appearanceAutoDark": "Automatisch abgedunkelt.",
+    "appearanceAutoLight": "Automatisch hell gelassen, weil diese Mail viel eigenes Design hat.",
+    "appearanceNative": "Diese Mail bringt ihr eigenes dunkles Design mit.",
+    "appearanceRemembered": "Gilt ab jetzt für alle Mails von {{email}}"
   },
   "compose": {
     "new": "Neue Mail",
@@ -213,7 +221,14 @@
     "version": "Version {{version}}",
     "license": "Freie Software unter der GNU GPL v3.0.",
     "source": "Quellcode",
-    "shortcuts": "Tastenkürzel"
+    "shortcuts": "Tastenkürzel",
+    "mailAppearance": "Mails im Dunkelmodus",
+    "mailAppearanceDesc": "Automatisch dunkelt einfache Mails ab und lässt aufwendig gestaltete Newsletter hell. Reine Textmails folgen immer dem App-Design.",
+    "mailAppearanceAuto": "Automatisch",
+    "mailAppearanceLight": "Immer hell",
+    "mailAppearanceDark": "Immer dunkel",
+    "forgetAppearances": "Gemerkte Absender zurücksetzen ({{count}})",
+    "appearancesForgotten": "Gemerkte Absender zurückgesetzt"
   },
   "theme": {
     "system": "System",

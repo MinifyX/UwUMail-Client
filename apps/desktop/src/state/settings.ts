@@ -6,6 +6,8 @@ export type Tone = "playful" | "neutral";
 export type ThemeSetting = "system" | "light" | "dark";
 export type LanguageSetting = "system" | "de" | "en";
 export type RemoteImages = "ask" | "always";
+/** How HTML mail looks while the app is dark. */
+export type MailAppearance = "auto" | "light" | "dark";
 
 export interface Settings {
   onboarded: boolean;
@@ -17,11 +19,16 @@ export interface Settings {
   remoteImages: RemoteImages;
   /** Senders whose remote images are always allowed. */
   trustedSenders: string[];
+  mailAppearance: MailAppearance;
+  /** Light/dark choices remembered per sender address (lowercase). */
+  senderAppearance: Record<string, "light" | "dark">;
 }
 
 interface SettingsActions {
   update: (patch: Partial<Settings>) => void;
   trustSender: (email: string) => void;
+  rememberAppearance: (email: string, appearance: "light" | "dark") => void;
+  forgetAppearances: () => void;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -33,6 +40,8 @@ export const DEFAULT_SETTINGS: Settings = {
   conversations: true,
   remoteImages: "ask",
   trustedSenders: [],
+  mailAppearance: "auto",
+  senderAppearance: {},
 };
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -44,6 +53,9 @@ export const useSettings = create<Settings & SettingsActions>()(
         set((state) => ({
           trustedSenders: [...new Set([...state.trustedSenders, email.toLowerCase()])],
         })),
+      rememberAppearance: (email, appearance) =>
+        set((state) => ({ senderAppearance: { ...state.senderAppearance, [email.toLowerCase()]: appearance } })),
+      forgetAppearances: () => set({ senderAppearance: {} }),
     }),
     { name: "uwumail.settings", version: 1 },
   ),

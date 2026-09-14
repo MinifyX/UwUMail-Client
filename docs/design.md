@@ -55,6 +55,33 @@ pink, violet, sky, mint, amber, coral.
 
 The first start asks which layout to use; Settings → Appearance switches it.
 
+## Mail in dark mode
+
+HTML mail is designed for white paper, so dark mode needs care
+(`apps/desktop/src/features/mail/darkMode.ts`):
+
+1. **The mail's own dark design wins.** If its CSS uses
+   `prefers-color-scheme: dark` or `color-scheme`, UwUMail renders that and
+   forces the media queries to match, independent of the web engine.
+2. **Automatic** (default): after rendering, UwUMail measures the mail.
+   Mails that are mostly background images (>15 %), images (>45 %) or
+   colorful blocks (>30 % or three hue families) stay light as designed.
+   Everything else is recolored.
+3. **Recoloring** works in OKLCH: light backgrounds become dark, dark text
+   becomes light, hues stay (a pink button stays pink), every text keeps
+   at least 4.5:1 contrast, and blocks stay distinguishable from their
+   background. Images are untouched; transparent PNG/GIF/SVG logos get a
+   light backdrop so dark ink stays visible. Content on background images
+   or gradients is left alone.
+4. **The toggle** "☀ Light / ☾ Dark" in each message header (dark app theme
+   only) overrides the result and is remembered per sender address.
+   Settings → Reading sets the default (Automatic / Always light / Always
+   dark) and resets remembered senders.
+
+Plain-text mail always follows the app theme unless light is chosen. The
+mail frame's `color-scheme` must always match its document, otherwise the
+engine paints an opaque white canvas behind dark content.
+
 ## Tone of voice
 
 UwUMail is **playful by default**: kaomoji, warm little jokes, soft animations.

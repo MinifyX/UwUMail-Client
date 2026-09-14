@@ -22,7 +22,9 @@
       "body": "Ich mach sie dir genau hier auf."
     },
     "loading": "Umschlag wird geöffnet…",
-    "remoteBlocked": "Ich hab externe Bilder blockiert, damit dir keiner hinterherspioniert (｀・ω・´)"
+    "remoteBlocked": "Ich hab externe Bilder blockiert, damit dir keiner hinterherspioniert (｀・ω・´)",
+    "appearanceAutoLight": "Hab ich hell gelassen, die Mail hat sich so schick gemacht (・ω・)",
+    "appearanceRemembered": "Merk ich mir für {{email}} ✿"
   },
   "compose": {
     "placeholder": "Schreib was Liebes ✿",
