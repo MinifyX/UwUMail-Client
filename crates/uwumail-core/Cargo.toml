@@ -34,5 +34,14 @@ tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
 
+# lettre's platform verifier doesn't build for Android, so SMTP checks
+# certificates against Mozilla's root list there. IMAP, JMAP and HTTPS keep
+# using the phone's own certificate store.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+lettre = { workspace = true, features = ["rustls-platform-verifier"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+lettre = { workspace = true, features = ["webpki-roots"] }
+
 [dev-dependencies]
 tempfile.workspace = true

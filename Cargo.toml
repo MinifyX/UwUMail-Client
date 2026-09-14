@@ -19,7 +19,7 @@ base64 = "0.23"
 futures = "0.3"
 hickory-resolver = "0.26"
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native-async-persistent", "tokio", "crypto-rust"] }
-lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "pool", "tokio1-rustls", "aws-lc-rs", "rustls-platform-verifier"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "pool", "tokio1-rustls", "aws-lc-rs"] }
 mail-parser = "0.11"
 percent-encoding = "2"
 quick-xml = { version = "0.42", features = ["serialize"] }
