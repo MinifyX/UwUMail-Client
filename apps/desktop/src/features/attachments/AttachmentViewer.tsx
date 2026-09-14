@@ -43,22 +43,17 @@ function ViewerBody({ attachments, index, sender, onIndexChange }: AttachmentVie
   const dangerous = isDangerous(attachment.filename);
   const needsFile = kind !== "other";
   const { data: file, error, isPending } = useAttachment(needsFile ? attachment.id : null);
-  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState<"open" | "save" | null>(null);
   const count = attachments.length;
 
   const go = (step: 1 | -1) => onIndexChange((index + step + count) % count);
 
-  const run = async (action: "open" | "save", confirmed = false) => {
-    if (action === "open" && dangerous && !confirmed) {
-      setConfirming(true);
-      return;
-    }
-    setConfirming(false);
+  // Files that can run programs are confirmed in a native dialog by the engine.
+  const run = async (action: "open" | "save") => {
     setBusy(action);
     try {
-      if (action === "open") await backend().openAttachment(attachment.id, confirmed);
-      else if (await backend().saveAttachment(attachment.id, attachment.filename)) {
+      if (action === "open") await backend().openAttachment(attachment.id);
+      else if (await backend().saveAttachment(attachment.id)) {
         toast(t("attachment.saved", { name: attachment.filename }), "success");
       }
     } catch (reason) {
@@ -100,10 +95,7 @@ function ViewerBody({ attachments, index, sender, onIndexChange }: AttachmentVie
       </header>
 
       {dangerous && (
-        <div
-          role={confirming ? "alertdialog" : "note"}
-          className="border-b border-danger/30 bg-danger-tint px-5 py-3 text-danger"
-        >
+        <div role="note" className="border-b border-danger/30 bg-danger-tint px-5 py-3 text-danger">
           <p className="flex items-center gap-2 text-[14px] font-bold">
             <ShieldAlert className="size-5 shrink-0" aria-hidden />
             {t("attachment.dangerTitle")}
@@ -114,16 +106,6 @@ function ViewerBody({ attachments, index, sender, onIndexChange }: AttachmentVie
               sender: `${displayName(sender)} <${sender.email}>`,
             })}
           </p>
-          {confirming && (
-            <div className="flex flex-wrap gap-2 pt-3 pl-7">
-              <Button size="sm" variant="primary" autoFocus onClick={() => setConfirming(false)}>
-                {t("attachment.dangerCancel")}
-              </Button>
-              <Button size="sm" variant="danger" onClick={() => void run("open", true)}>
-                {t("attachment.dangerOpen")}
-              </Button>
-            </div>
-          )}
         </div>
       )}
 

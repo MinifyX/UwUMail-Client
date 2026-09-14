@@ -209,7 +209,9 @@
     "protocolImapHint": "The classic way. You can switch to JMAP later in the settings.",
     "jmapUrl": "JMAP address",
     "jmapUrlHint": "Usually https://your-server/.well-known/jmap. Leave empty for IMAP only.",
-    "fastmailTokenHint": "Fastmail needs an API token here: Settings › Privacy & Security › Manage API tokens, with access to mail and sending."
+    "fastmailTokenHint": "Fastmail needs an API token here: Settings › Privacy & Security › Manage API tokens, with access to mail and sending.",
+    "cleartextTitle": "This connection isn't encrypted",
+    "cleartextBody": "Your password and mail travel readable through the network. Only use this for a server in your own network."
   },
   "security": {
     "tls": "SSL/TLS",
@@ -338,15 +340,14 @@
     "dangerTag": "Can run programs",
     "dangerTitle": "This file can run programs on your computer",
     "dangerBody": "{{name}} comes from {{sender}}. Files like this are a common way to install malware. Only open it if you expected it and trust the sender.",
-    "dangerOpen": "Open anyway",
-    "dangerCancel": "Don't open",
     "invitation": "Invitation",
     "event": "Event",
     "when": "When",
     "where": "Where",
     "organizer": "Organizer",
     "email": "Email",
-    "phone": "Phone"
+    "phone": "Phone",
+    "notPdf": "This file says it's a PDF but isn't one, so it isn't shown here. Save it or open it with an app if you trust it."
   },
   "update": {
     "readyTitle": "A new version is ready",
@@ -354,5 +355,14 @@
     "whatsNew": "What's new",
     "restart": "Restart now",
     "later": "Later"
+  },
+  "link": {
+    "warningTitle": "This link goes somewhere else",
+    "warningBody": "The text shows a different address than where the link leads. Phishing mail often works like this.",
+    "shown": "Shown",
+    "actual": "Real target",
+    "dontOpen": "Don't open",
+    "openAnyway": "Open anyway",
+    "failed": "Couldn't open the link. {{reason}}"
   }
 }

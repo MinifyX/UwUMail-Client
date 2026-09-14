@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import pkg from "../../package.json";
 
 export type LayoutMode = "simple" | "pro";
 export type Tone = "playful" | "neutral";
@@ -59,7 +60,8 @@ export const DEFAULT_SETTINGS: Settings = {
   collapsedFolders: [],
   senderPictures: true,
   runInBackground: true,
-  updateChannel: "stable",
+  // Someone who installed a beta wants the next beta too.
+  updateChannel: pkg.version.includes("-") ? "beta" : "stable",
 };
 
 export const useSettings = create<Settings & SettingsActions>()(

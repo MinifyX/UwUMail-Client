@@ -157,8 +157,11 @@ async fn install(app: AppHandle, options: Options) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let setup = app.state::<Setup>();
         let _busy = guard(&setup)?;
-        if let Mode::Update { wait_pid: Some(pid), .. } = setup.mode {
-            system::wait_for_exit(pid, Duration::from_secs(15));
+        if let Mode::Update { wait_pid, .. } = setup.mode {
+            install::check_not_older(setup.layout.installed().and_then(|i| i.version).as_deref(), VERSION)?;
+            if let Some(pid) = wait_pid {
+                system::wait_for_exit(pid, Duration::from_secs(15));
+            }
         }
         const WEIGHTS: &[(Step, f64)] =
             &[(Step::Prepare, 0.08), (Step::Copy, 0.72), (Step::Shortcuts, 0.08), (Step::Register, 0.12)];

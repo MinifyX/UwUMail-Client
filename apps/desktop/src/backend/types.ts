@@ -131,7 +131,7 @@ export interface OutgoingAttachment {
   mimeType: string;
   size: number;
   /** Base64 content, or a local path when running in the desktop shell. */
-  source: { kind: "base64"; data: string } | { kind: "path"; path: string };
+  source: { kind: "base64"; data: string };
 }
 
 export interface OutgoingMessage {

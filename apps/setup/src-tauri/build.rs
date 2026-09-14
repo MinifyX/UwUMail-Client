@@ -23,5 +23,12 @@ fn main() {
             println!("cargo:rustc-env=UWUMAIL_SETUP_PAYLOAD_SIZE=0");
         }
     }
+    // The setup usually runs from Downloads, next to whatever else was downloaded:
+    // linked DLLs come from System32 only, never from the setup's own folder.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        println!("cargo:rustc-link-arg-bins=/DEPENDENTLOADFLAG:0x800");
+    }
     tauri_build::build()
 }

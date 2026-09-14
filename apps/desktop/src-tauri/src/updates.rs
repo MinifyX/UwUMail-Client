@@ -19,12 +19,18 @@ const FIRST_CHECK_AFTER: Duration = Duration::from_secs(20);
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 const PENDING: &str = "pending.json";
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Channel {
-    #[default]
     Stable,
     Beta,
+}
+
+/// Until the page says otherwise: a beta build stays on Beta, everything else on Stable.
+impl Default for Channel {
+    fn default() -> Self {
+        if env!("CARGO_PKG_VERSION").contains('-') { Channel::Beta } else { Channel::Stable }
+    }
 }
 
 /// A downloaded update waiting to be installed.
@@ -36,6 +42,9 @@ pub struct ReadyUpdate {
     pub notes: Option<String>,
     /// The downloaded setup. Also kept in `pending.json` for the next start.
     pub file: PathBuf,
+    /// The release signature, checked again right before the setup runs.
+    #[serde(default)]
+    pub signature: String,
 }
 
 #[derive(Default)]
@@ -57,13 +66,59 @@ fn is_newer(app: &AppHandle, version: &str) -> bool {
     semver::Version::parse(version).is_ok_and(|v| v > current_version(app))
 }
 
+fn setup_file(dir: &std::path::Path, version: &str) -> PathBuf {
+    dir.join(format!("UwUMail-Setup-{version}.exe"))
+}
+
+/// A waiting update, if it is where UwUMail put it and still carries a valid
+/// release signature. `pending.json` lives in a folder any program of the
+/// user can write to, so neither its path nor the file is trusted blindly.
 fn read_pending(app: &AppHandle) -> Option<ReadyUpdate> {
-    let raw = std::fs::read(updates_dir(app)?.join(PENDING)).ok()?;
-    serde_json::from_slice::<ReadyUpdate>(&raw).ok().filter(|update| update.file.exists())
+    let dir = updates_dir(app)?;
+    let raw = std::fs::read(dir.join(PENDING)).ok()?;
+    let update = serde_json::from_slice::<ReadyUpdate>(&raw).ok()?;
+    semver::Version::parse(&update.version).ok()?;
+    let expected = setup_file(&dir, &update.version);
+    if update.file != expected {
+        return None;
+    }
+    let bytes = std::fs::read(&expected).ok()?;
+    verify(app, &bytes, &update.signature).then_some(update)
+}
+
+/// Checks a setup against the release key from `tauri.conf.json`.
+fn verify(app: &AppHandle, bytes: &[u8], signature: &str) -> bool {
+    use base64::Engine as _;
+    let decode = |text: &str| {
+        base64::engine::general_purpose::STANDARD.decode(text.trim()).ok().and_then(|raw| String::from_utf8(raw).ok())
+    };
+    let Some(pubkey) = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|updater| updater.get("pubkey"))
+        .and_then(|key| key.as_str())
+        .and_then(decode)
+    else {
+        return false;
+    };
+    let (Ok(key), Some(Ok(signature))) = (
+        minisign_verify::PublicKey::decode(&pubkey),
+        decode(signature).map(|s| minisign_verify::Signature::decode(&s)),
+    ) else {
+        return false;
+    };
+    key.verify(bytes, &signature, false).is_ok()
 }
 
 /// Starts the downloaded setup to replace this UwUMail, which then quits.
 fn hand_over(update: &ReadyUpdate, relaunch: bool) -> Result<(), Error> {
+    // Each download gets one attempt. If the setup refuses (e.g. an older version), the next
+    // start must not hand over again and again.
+    if let Some(dir) = update.file.parent() {
+        let _ = std::fs::remove_file(dir.join(PENDING));
+    }
     let pid = std::process::id().to_string();
     let mut args = vec!["--update", "--wait-pid", pid.as_str()];
     if relaunch {
@@ -130,9 +185,14 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
     let bytes = found.download(|_, _| {}, || {}).await.map_err(fail)?;
     let dir = updates_dir(app).ok_or_else(|| Error::internal("No folder for updates"))?;
     std::fs::create_dir_all(&dir).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
-    let file = dir.join(format!("UwUMail-Setup-{}.exe", found.version));
+    let file = setup_file(&dir, &found.version);
     std::fs::write(&file, &bytes).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
-    let update = ReadyUpdate { version: found.version.clone(), notes: found.body.clone(), file };
+    let update = ReadyUpdate {
+        version: found.version.clone(),
+        notes: found.body.clone(),
+        file,
+        signature: found.signature.clone(),
+    };
     std::fs::write(dir.join(PENDING), serde_json::to_vec(&update)?)
         .map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
 
@@ -143,7 +203,9 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
 
 /// "Restart now".
 pub fn install_now(app: &AppHandle) -> Result<(), Error> {
-    let update = ready(app).ok_or_else(|| Error::not_found("There's no update waiting."))?;
+    ready(app).ok_or_else(|| Error::not_found("There's no update waiting."))?;
+    // Read it back from disk, so the signature is checked on the file that runs.
+    let update = read_pending(app).ok_or_else(|| Error::internal("The downloaded update is damaged."))?;
     hand_over(&update, true)?;
     app.exit(0);
     Ok(())

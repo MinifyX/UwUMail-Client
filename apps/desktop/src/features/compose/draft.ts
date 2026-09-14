@@ -1,5 +1,6 @@
 import type { Account, Address, Message } from "@/backend/types";
 import { escapeHtml, formatAddress, formatFullDate, textToHtml } from "@/lib/format";
+import { quotableHtml } from "@/lib/safeHtml";
 import type { ComposeRequest } from "@/state/ui";
 
 export interface DraftState {
@@ -24,7 +25,7 @@ function withoutMe(addresses: Address[], accounts: Account[]) {
 }
 
 function quoted(message: Message) {
-  return message.bodyHtml ?? textToHtml(message.bodyText ?? "");
+  return message.bodyHtml ? quotableHtml(message.bodyHtml) : textToHtml(message.bodyText ?? "");
 }
 
 export function initialDraft(request: ComposeRequest, accounts: Account[], t: Translate, locale: string): DraftState {

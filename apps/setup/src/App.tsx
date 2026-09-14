@@ -445,7 +445,16 @@ export function App() {
           {error}
         </p>
         <div className="flex items-center gap-2 pt-5">
-          <Button variant="quiet" onClick={() => void api.finish()}>
+          <Button
+            variant="quiet"
+            onClick={() =>
+              void (async () => {
+                // UwUMail closed itself for the update; bring the installed version back.
+                if (job === "update" && info.relaunch) await api.launchApp().catch(() => undefined);
+                await api.finish();
+              })()
+            }
+          >
             {t.close}
           </Button>
           <Button autoFocus onClick={() => void run(job, options, info, keepData)}>

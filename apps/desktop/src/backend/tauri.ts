@@ -109,16 +109,12 @@ export class TauriBackend implements Backend {
     };
   }
 
-  openAttachment(attachmentId: string, confirmed: boolean) {
-    return call<void>("open_attachment", { attachmentId, confirmed });
+  openAttachment(attachmentId: string) {
+    return call<boolean>("open_attachment", { attachmentId });
   }
 
-  async saveAttachment(attachmentId: string, filename: string) {
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const destination = await save({ defaultPath: filename });
-    if (!destination) return false;
-    await call<void>("save_attachment", { attachmentId, destination });
-    return true;
+  saveAttachment(attachmentId: string) {
+    return call<boolean>("save_attachment", { attachmentId });
   }
 
   async getSenderPicture(email: string): Promise<SenderPicture | null> {

@@ -262,6 +262,18 @@ fn remove_legacy(layout: &Layout, new_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// The version in an update feed isn't signed, only the setup is. So an update may carry an
+/// older (validly signed) setup; it must not replace a newer UwUMail.
+pub fn check_not_older(installed: Option<&str>, update: &str) -> Result<(), String> {
+    let parse = |version: &str| semver::Version::parse(version.trim()).ok();
+    match (installed.and_then(parse), parse(update)) {
+        (Some(installed), Some(update)) if update < installed => Err(format!(
+            "UwUMail {installed} is already installed. This update is older ({update}), so it was skipped."
+        )),
+        _ => Ok(()),
+    }
+}
+
 pub fn install(layout: &Layout, options: &Options, version: &str, progress: Progress) -> Result<(), String> {
     let dir = PathBuf::from(options.dir.trim());
     if !dir.is_absolute() {
@@ -444,6 +456,16 @@ mod tests {
             let _ = RegKey::predef(HKEY_CURRENT_USER).delete_subkey_all(key);
             let _ = &self.dir;
         }
+    }
+
+    #[test]
+    fn updates_never_go_back() {
+        assert!(check_not_older(Some("0.3.0"), "0.2.0-beta.1").is_err());
+        assert!(check_not_older(Some("0.2.0"), "0.2.0-beta.1").is_err());
+        assert!(check_not_older(Some("0.2.0-beta.1"), "0.2.0-beta.2").is_ok());
+        assert!(check_not_older(Some("0.2.0-beta.1"), "0.2.0-beta.1").is_ok(), "repairing is fine");
+        assert!(check_not_older(None, "0.2.0").is_ok());
+        assert!(check_not_older(Some("unknown"), "0.2.0").is_ok());
     }
 
     #[test]

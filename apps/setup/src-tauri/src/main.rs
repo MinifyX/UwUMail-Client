@@ -10,7 +10,11 @@ mod system;
 
 fn main() {
     #[cfg(windows)]
-    app::run();
+    {
+        // Same for DLLs loaded later at runtime; must happen before anything else loads one.
+        system::restrict_dll_search();
+        app::run();
+    }
     #[cfg(not(windows))]
     eprintln!("UwUMail Setup is the Windows installer. Other systems use their own packages.");
 }

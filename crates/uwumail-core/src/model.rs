@@ -293,8 +293,9 @@ pub struct FlagChange {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum AttachmentSource {
+    /// The file's content. There is deliberately no "read this path" variant:
+    /// the page could otherwise send any file on the disk.
     Base64 { data: String },
-    Path { path: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

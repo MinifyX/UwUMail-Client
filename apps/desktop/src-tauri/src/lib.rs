@@ -4,6 +4,7 @@ mod updates;
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::broadcast::error::RecvError;
@@ -96,26 +97,70 @@ async fn get_attachment(engine: State<'_, Engine>, attachment_id: String) -> Com
     engine.attachment(&attachment_id).await
 }
 
-/// Opens an attachment in its default app. Files that can run code need `confirmed`.
+fn german() -> bool {
+    sys_locale::get_locale().is_some_and(|locale| locale.to_ascii_lowercase().starts_with("de"))
+}
+
+/// Opens an attachment in its default app. Returns false when the user cancelled.
+///
+/// Files that can run programs are confirmed in a native dialog shown from
+/// here, so nothing in the web page can skip that question.
 #[tauri::command]
-async fn open_attachment(
-    app: AppHandle,
-    engine: State<'_, Engine>,
-    attachment_id: String,
-    confirmed: bool,
-) -> CommandResult<()> {
+async fn open_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_id: String) -> CommandResult<bool> {
     let file = engine.attachment(&attachment_id).await?;
-    if file.dangerous && !confirmed {
-        return Err(Error::invalid("This file type can run programs. Confirm before opening it."));
+    if file.dangerous {
+        let (title, text, open, cancel) = if german() {
+            (
+                "Diese Datei kann Programme ausführen",
+                format!(
+                    "„{}“ kann Programme auf deinem Rechner starten. Öffne die Datei nur, wenn du sie erwartet hast und dem Absender vertraust.",
+                    file.filename
+                ),
+                "Trotzdem öffnen",
+                "Nicht öffnen",
+            )
+        } else {
+            (
+                "This file can run programs",
+                format!(
+                    "“{}” can start programs on your computer. Only open it if you expected it and trust the sender.",
+                    file.filename
+                ),
+                "Open anyway",
+                "Don't open",
+            )
+        };
+        let dialog = app
+            .dialog()
+            .message(text)
+            .title(title)
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom(open.into(), cancel.into()));
+        let confirmed = tauri::async_runtime::spawn_blocking(move || dialog.blocking_show())
+            .await
+            .map_err(|e| Error::internal(format!("The dialog failed: {e}")))?;
+        if !confirmed {
+            return Ok(false);
+        }
     }
     app.opener()
         .open_path(file.path.to_string_lossy(), None::<&str>)
-        .map_err(|e| Error::internal(format!("Couldn't open the attachment: {e}")))
+        .map_err(|e| Error::internal(format!("Couldn't open the attachment: {e}")))?;
+    Ok(true)
 }
 
+/// Asks where to save an attachment and copies it there. The destination only
+/// ever comes from the native save dialog, never from the web page.
 #[tauri::command]
-async fn save_attachment(engine: State<'_, Engine>, attachment_id: String, destination: String) -> CommandResult<()> {
-    engine.save_attachment(&attachment_id, std::path::Path::new(&destination)).await
+async fn save_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_id: String) -> CommandResult<bool> {
+    let file = engine.attachment(&attachment_id).await?;
+    let dialog = app.dialog().file().set_file_name(uwumail_core::attachments::safe_filename(&file.filename));
+    let destination = tauri::async_runtime::spawn_blocking(move || dialog.blocking_save_file())
+        .await
+        .map_err(|e| Error::internal(format!("The dialog failed: {e}")))?;
+    let Some(destination) = destination.and_then(|path| path.into_path().ok()) else { return Ok(false) };
+    engine.save_attachment(&attachment_id, &destination).await?;
+    Ok(true)
 }
 
 #[tauri::command]

@@ -296,9 +296,18 @@ impl Engine {
         }
         self.inner.tokens.lock().await.remove(account_id);
         self.inner.jmap.lock().await.remove(account_id);
+        self.remove_cached_attachments(account_id)?;
         self.inner.store.delete_account(account_id)?;
         self.inner.secrets.delete(account_id)?;
         self.inner.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
+        Ok(())
+    }
+
+    /// Attachment files stay on disk after their mail is gone from the database, so they go first.
+    fn remove_cached_attachments(&self, account_id: &str) -> Result<()> {
+        for message_id in self.inner.store.account_message_ids(account_id)? {
+            self.inner.attachments.remove_message(&message_id);
+        }
         Ok(())
     }
 
@@ -328,6 +337,7 @@ impl Engine {
                     let _ = session.logout().await;
                 }
             }
+            self.remove_cached_attachments(account_id)?;
             self.inner.store.clear_account_mail(account_id)?;
             self.inner.store.set_account_protocol(account_id, protocol)?;
             self.inner.spawn_sync(account_id);

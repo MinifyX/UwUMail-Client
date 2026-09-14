@@ -55,12 +55,23 @@ const EXTENSION_KINDS: Record<string, AttachmentKind> = {
   vcf: "contact",
 };
 
-/** Same list as the engine (crates/uwumail-core/src/attachments.rs): files that run code when opened. */
+/**
+ * Same list as the engine (crates/uwumail-core/src/attachments.rs): files that run code when opened,
+ * plus web pages, a common way to deliver fake login pages.
+ */
 const DANGEROUS = new Set(
-  "exe com bat cmd msi msix msp scr pif cpl lnk url reg hta js jse vbs vbe wsf wsh ps1 psm1 jar app dmg pkg command sh run appimage deb rpm docm xlsm pptm dotm xltm iso img vhd vhdx".split(
-    " ",
-  ),
+  [
+    "exe com bat cmd msi msix msixbundle appx appxbundle appref-ms application msp mst scr pif cpl lnk url reg inf",
+    "ins isp hta chm hlp msc scf settingcontent-ms library-ms diagcab gadget js jse vbs vbe wsf wsh wsc sct ps1",
+    "ps1xml ps2 psc1 psd1 psm1 jar jnlp app dmg pkg command sh run appimage deb rpm docm dotm xlsm xltm xlam xll",
+    "pptm potm ppam sldm one iqy slk iso img vhd vhdx html htm xhtml shtml mht mhtml",
+  ]
+    .join(" ")
+    .split(" "),
 );
+
+/** Characters that flip how text is displayed, used to disguise file names. */
+const BIDI_CONTROLS = /[‎‏‪-‮⁦-⁩]/g;
 
 export function extensionOf(filename: string): string {
   const dot = filename.lastIndexOf(".");
@@ -83,7 +94,8 @@ export function attachmentKind(filename: string, mimeType: string): AttachmentKi
 }
 
 export function isDangerous(filename: string): boolean {
-  return DANGEROUS.has(extensionOf(filename));
+  // Windows ignores trailing dots and spaces, so "tool.exe. " still runs as tool.exe.
+  return DANGEROUS.has(extensionOf(filename.replace(BIDI_CONTROLS, "").replace(/[. ]+$/, "")));
 }
 
 /** RFC 4180-ish CSV parsing: quoted fields, escaped quotes, commas/semicolons/tabs. */

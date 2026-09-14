@@ -108,7 +108,7 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
                 .unwrap_or_else(|| "application/octet-stream".into());
             let inline = part.content_disposition().is_some_and(|d| d.is_inline()) && part.content_id().is_some();
             ParsedAttachment {
-                filename: part.attachment_name().unwrap_or("attachment").to_string(),
+                filename: crate::attachments::clean_display_name(part.attachment_name().unwrap_or("attachment")),
                 mime_type,
                 size: part.contents().len() as u64,
                 inline,
@@ -174,12 +174,13 @@ pub fn sanitize_html(html: &str) -> String {
         .url_schemes(HashSet::from(["http", "https", "mailto", "cid", "data"]))
         .link_rel(Some("noopener noreferrer"))
         .strip_comments(true);
-    let cleaned = builder.clean(html).to_string();
-    // The sanitizer drops <body>, and with it the background many newsletters set there.
-    match body_background(html) {
-        Some(style) => format!("<div style=\"{style}\">{cleaned}</div>"),
-        None => cleaned,
-    }
+    // The sanitizer drops <body>, and with it the background many newsletters set
+    // there. It moves to a wrapper that goes through the sanitizer like the rest.
+    let input = match body_background(html) {
+        Some(style) => format!("<div style=\"{style}\">{html}</div>"),
+        None => html.to_string(),
+    };
+    builder.clean(&input).to_string()
 }
 
 /// Reads `bgcolor` and `style` from the `<body>` tag as one inline style.

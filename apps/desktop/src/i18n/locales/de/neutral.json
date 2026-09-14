@@ -209,7 +209,9 @@
     "protocolImapHint": "Der klassische Weg. Du kannst später in den Einstellungen zu JMAP wechseln.",
     "jmapUrl": "JMAP-Adresse",
     "jmapUrlHint": "Meist https://dein-server/.well-known/jmap. Leer lassen für nur IMAP.",
-    "fastmailTokenHint": "Fastmail braucht hier ein API-Token: Einstellungen › Datenschutz & Sicherheit › API-Tokens verwalten, mit Zugriff auf Mail und Versand."
+    "fastmailTokenHint": "Fastmail braucht hier ein API-Token: Einstellungen › Datenschutz & Sicherheit › API-Tokens verwalten, mit Zugriff auf Mail und Versand.",
+    "cleartextTitle": "Diese Verbindung ist nicht verschlüsselt",
+    "cleartextBody": "Passwort und Mails gehen lesbar durchs Netz. Nutze das nur für einen Server in deinem eigenen Netzwerk."
   },
   "security": {
     "tls": "SSL/TLS",
@@ -338,15 +340,14 @@
     "dangerTag": "Kann Programme ausführen",
     "dangerTitle": "Diese Datei kann Programme auf deinem Rechner ausführen",
     "dangerBody": "{{name}} stammt von {{sender}}. Solche Dateien sind ein häufiger Weg, Schadsoftware zu installieren. Öffne sie nur, wenn du sie erwartet hast und dem Absender vertraust.",
-    "dangerOpen": "Trotzdem öffnen",
-    "dangerCancel": "Nicht öffnen",
     "invitation": "Einladung",
     "event": "Termin",
     "when": "Wann",
     "where": "Wo",
     "organizer": "Organisiert von",
     "email": "E-Mail",
-    "phone": "Telefon"
+    "phone": "Telefon",
+    "notPdf": "Diese Datei gibt sich als PDF aus, ist aber keins, deshalb wird sie hier nicht angezeigt. Speichere sie oder öffne sie mit einer App, wenn du ihr vertraust."
   },
   "update": {
     "readyTitle": "Neue Version bereit",
@@ -354,5 +355,14 @@
     "whatsNew": "Was ist neu",
     "restart": "Jetzt neu starten",
     "later": "Später"
+  },
+  "link": {
+    "warningTitle": "Dieser Link führt woanders hin",
+    "warningBody": "Der Text zeigt eine andere Adresse als das eigentliche Ziel. So arbeiten Phishing-Mails oft.",
+    "shown": "Angezeigt",
+    "actual": "Echtes Ziel",
+    "dontOpen": "Nicht öffnen",
+    "openAnyway": "Trotzdem öffnen",
+    "failed": "Der Link ließ sich nicht öffnen. {{reason}}"
   }
 }

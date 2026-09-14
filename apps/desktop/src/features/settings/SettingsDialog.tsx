@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Segmented, Select, Toggle } from "@/components/ui/Field";
 import { LogoSymbol } from "@/components/ui/Logo";
 import { i18n, useT } from "@/i18n";
-import { openExternal } from "@/lib/platform";
+import { openLinkNow } from "@/state/links";
 import { useAccounts } from "@/lib/queries";
 import { useSettings, type LanguageSetting } from "@/state/settings";
 import { toast } from "@/state/toasts";
@@ -355,7 +355,7 @@ function About() {
       )}
       <UpdateSettings />
       <div className="flex flex-wrap justify-center gap-2">
-        <Button icon={ExternalLink} onClick={() => void openExternal("https://github.com/MinifyX/UwUMail-Client")}>
+        <Button icon={ExternalLink} onClick={() => void openLinkNow("https://github.com/MinifyX/UwUMail-Client")}>
           {t("settings.source")}
         </Button>
         <Button icon={Keyboard} onClick={() => setShortcutsOpen(true)}>

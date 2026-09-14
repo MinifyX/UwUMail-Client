@@ -2,7 +2,7 @@ import DOMPurify from "dompurify";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "@/backend/types";
 import { textToHtml } from "@/lib/format";
-import { openExternal } from "@/lib/platform";
+import { requestOpenLink } from "@/state/links";
 import type { MailAppearance } from "@/state/settings";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
 
@@ -198,8 +198,7 @@ export function MessageBody({ message, allowRemote, appearance, onAutoDecision }
       const anchor = (event.target as Element | null)?.closest?.("a[href]");
       if (!anchor) return;
       event.preventDefault();
-      const href = anchor.getAttribute("href") ?? "";
-      if (/^(https?:|mailto:)/i.test(href)) void openExternal(href);
+      requestOpenLink(anchor.getAttribute("href") ?? "", anchor.textContent ?? "");
     });
   };
 

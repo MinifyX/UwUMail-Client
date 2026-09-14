@@ -293,19 +293,19 @@ export class DemoBackend implements Backend {
     };
   }
 
-  async openAttachment(attachmentId: string, confirmed: boolean) {
+  async openAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
-    if (file.dangerous && !confirmed) {
-      throw new BackendError("invalid_input", "This file type can run programs. Confirm before opening it.");
-    }
+    // Stands in for the engine's native warning dialog.
+    if (file.dangerous && !window.confirm(`"${file.filename}" can run programs. Open anyway?`)) return false;
     window.open(file.url, "_blank", "noopener,noreferrer");
+    return true;
   }
 
-  async saveAttachment(attachmentId: string, filename: string) {
+  async saveAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
     const link = document.createElement("a");
     link.href = file.url;
-    link.download = filename;
+    link.download = file.filename;
     link.click();
     return true;
   }

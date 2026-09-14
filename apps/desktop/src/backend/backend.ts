@@ -55,10 +55,13 @@ export interface Backend {
 
   /** Downloads the attachment on first use. */
   getAttachment(attachmentId: string): Promise<AttachmentContent>;
-  /** Opens it in the default app. Dangerous files need `confirmed`. */
-  openAttachment(attachmentId: string, confirmed: boolean): Promise<void>;
-  /** Asks where to save it. Resolves to false when the user cancels. */
-  saveAttachment(attachmentId: string, filename: string): Promise<boolean>;
+  /**
+   * Opens it in the default app. For files that can run programs the engine
+   * asks in a native dialog first; resolves to false when the user declines.
+   */
+  openAttachment(attachmentId: string): Promise<boolean>;
+  /** Asks where to save it in a native dialog. Resolves to false when the user cancels. */
+  saveAttachment(attachmentId: string): Promise<boolean>;
 
   /** Brand logo or website icon for a company address; null for people and mail providers. */
   getSenderPicture(email: string): Promise<SenderPicture | null>;

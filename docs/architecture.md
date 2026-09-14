@@ -134,7 +134,8 @@ registrable domain (`news.mail.shop.example` → `shop.example`), over HTTPS,
 without cookies or referrer, at most four domains at a time, and remembers the
 result (including "nothing found") for 30 days. Addresses at mail providers
 (Gmail, GMX, Outlook, …) and names without a public suffix never cause a
-request. The setting lives under Reading and is on by default.
+request, and icon links or redirects to IP addresses, `localhost` or local
+names are ignored. The setting lives under Reading and is on by default.
 
 ## Windows installer and updates
 
@@ -163,11 +164,24 @@ Updates: the app checks `stable.json` or `beta.json` in the public
 `tauri.conf.json`). It downloads the new `UwUMail-Setup-<version>.exe` into
 `%LOCALAPPDATA%\app.uwumail.desktop\updates`, shows Nyu's hint, and either
 restarts into it now or on the next start (`--update --relaunch --wait-pid`).
+Right before the setup runs, its signature is checked again, and in update mode
+the setup refuses to replace a newer installed version, because the version
+number in the feed isn't signed.
+
+## Security
+
+See [security-audit.md](security-audit.md) for the threat model, the last audit
+and accepted risks, and [SECURITY.md](../SECURITY.md) for reporting issues. In
+short: mail content never runs in the app page; file access, the dangerous-file
+warning and save locations are decided in Rust, not by the page; links only
+open for `https`, `http` and `mailto`, with a warning when the text shows a
+different site than the target.
 
 ## Build and release
 
 - Every push: typecheck, lint, unit tests, `cargo clippy`, `cargo test`
-  (including integration tests against GreenMail and Stalwart).
+  (including integration tests against GreenMail and Stalwart), `cargo audit`
+  and `pnpm audit --prod`. All actions are pinned to commit SHAs.
 - Every push to `main`: `UwUMail-Setup-<version>.exe` for Windows and the Linux
   packages as workflow artifacts.
 - Tags `vX.Y.Z` (or `vX.Y.Z-beta.N`): the signed setup goes to

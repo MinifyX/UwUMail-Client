@@ -13,11 +13,98 @@ const CACHE_LIMIT: u64 = 1024 * 1024 * 1024;
 const CACHE_TARGET: u64 = 800 * 1024 * 1024;
 
 /// Extensions that run code when opened. Opening them needs an explicit confirmation.
+/// Also web pages: attached login pages are a common way to steal passwords.
 const DANGEROUS: &[&str] = &[
-    "exe", "com", "bat", "cmd", "msi", "msix", "msp", "scr", "pif", "cpl", "lnk", "url", "reg", "hta", "js", "jse",
-    "vbs", "vbe", "wsf", "wsh", "ps1", "psm1", "jar", "app", "dmg", "pkg", "command", "sh", "run", "appimage", "deb",
-    "rpm", "docm", "xlsm", "pptm", "dotm", "xltm", "iso", "img", "vhd", "vhdx",
+    "exe",
+    "com",
+    "bat",
+    "cmd",
+    "msi",
+    "msix",
+    "msixbundle",
+    "appx",
+    "appxbundle",
+    "appref-ms",
+    "application",
+    "msp",
+    "mst",
+    "scr",
+    "pif",
+    "cpl",
+    "lnk",
+    "url",
+    "reg",
+    "inf",
+    "ins",
+    "isp",
+    "hta",
+    "chm",
+    "hlp",
+    "msc",
+    "scf",
+    "settingcontent-ms",
+    "library-ms",
+    "diagcab",
+    "gadget",
+    "js",
+    "jse",
+    "vbs",
+    "vbe",
+    "wsf",
+    "wsh",
+    "wsc",
+    "sct",
+    "ps1",
+    "ps1xml",
+    "ps2",
+    "psc1",
+    "psd1",
+    "psm1",
+    "jar",
+    "jnlp",
+    "app",
+    "dmg",
+    "pkg",
+    "command",
+    "sh",
+    "run",
+    "appimage",
+    "deb",
+    "rpm",
+    "docm",
+    "dotm",
+    "xlsm",
+    "xltm",
+    "xlam",
+    "xll",
+    "pptm",
+    "potm",
+    "ppam",
+    "sldm",
+    "one",
+    "iqy",
+    "slk",
+    "iso",
+    "img",
+    "vhd",
+    "vhdx",
+    "html",
+    "htm",
+    "xhtml",
+    "shtml",
+    "mht",
+    "mhtml",
 ];
+
+/// Characters that reverse how text is displayed, e.g. to show `rechnung\u{202E}fdp.exe` as "rechnungexe.pdf".
+fn is_bidi_control(c: char) -> bool {
+    matches!(c, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+/// An attachment name as it should be shown and stored: no invisible direction tricks.
+pub fn clean_display_name(name: &str) -> String {
+    name.chars().filter(|c| !is_bidi_control(*c)).collect()
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +117,10 @@ pub struct AttachmentFile {
 }
 
 pub fn is_dangerous(filename: &str) -> bool {
-    filename.rsplit_once('.').is_some_and(|(_, ext)| DANGEROUS.contains(&ext.to_ascii_lowercase().as_str()))
+    // Windows ignores trailing dots and spaces, so "tool.exe. " still runs as tool.exe.
+    let name = clean_display_name(filename);
+    let name = name.trim_end_matches(['.', ' ']);
+    name.rsplit_once('.').is_some_and(|(_, ext)| DANGEROUS.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
 /// A file name that is safe on every OS: no paths, no reserved names, not too long.
@@ -97,7 +187,7 @@ impl AttachmentCache {
             MessageParser::default().parse(raw).ok_or_else(|| Error::internal("The message couldn't be read."))?;
         let part =
             message.attachments().nth(index).ok_or_else(|| Error::not_found("This attachment no longer exists."))?;
-        let filename = part.attachment_name().unwrap_or("attachment").to_string();
+        let filename = clean_display_name(part.attachment_name().unwrap_or("attachment"));
         let mime_type = part
             .content_type()
             .map(|ct| match ct.subtype() {
@@ -172,6 +262,10 @@ mod tests {
         assert!(is_dangerous("angebot.docm"));
         assert!(!is_dangerous("angebot.pdf"));
         assert!(!is_dangerous("README"));
+        assert!(is_dangerous("tool.exe. "), "Windows drops trailing dots and spaces");
+        assert!(is_dangerous("login.html"));
+        assert!(is_dangerous("rechnung\u{202E}fdp.exe"));
+        assert_eq!(clean_display_name("rechnung\u{202E}fdp.exe"), "rechnungfdp.exe");
     }
 
     #[test]

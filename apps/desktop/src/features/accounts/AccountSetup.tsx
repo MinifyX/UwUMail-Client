@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ChevronDown, CircleCheck, Info, KeyRound, Zap } from "lucide-react";
+import { ChevronDown, CircleCheck, Info, KeyRound, ShieldAlert, Zap } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { backend, BackendError } from "@/backend/backend";
@@ -200,6 +200,10 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
   }
 
   const provider = settings.oauth ? PROVIDER_NAMES[settings.oauth] : null;
+  // Passwords would travel readable over these connections.
+  const cleartext = usesJmap
+    ? /^http:\/\//i.test(settings.jmap?.trim() ?? "")
+    : !provider && (settings.imap.security === "none" || settings.smtp.security === "none");
 
   return (
     <form
@@ -354,6 +358,16 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
       {provider && error && (
         <p role="alert" className="text-[13px] text-danger">
           {error}
+        </p>
+      )}
+
+      {cleartext && (
+        <p role="alert" className="flex gap-2 rounded-2xl bg-danger-tint px-4 py-3 text-[13px] text-danger">
+          <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            <strong className="block">{t("account.cleartextTitle")}</strong>
+            {t("account.cleartextBody")}
+          </span>
         </p>
       )}
 

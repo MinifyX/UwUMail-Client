@@ -127,7 +127,8 @@ async fn fetch_config(
     source: DiscoverySource,
 ) -> Option<DiscoveredSettings> {
     let response = timeout(HTTP_TIMEOUT, http.get(url).send()).await.ok()?.ok()?;
-    if !response.status().is_success() {
+    // Server settings decide where the password goes: never take them from a redirect to plain http.
+    if !response.status().is_success() || response.url().scheme() != "https" {
         return None;
     }
     let body = timeout(HTTP_TIMEOUT, response.text()).await.ok()?.ok()?;
@@ -135,7 +136,8 @@ async fn fetch_config(
 }
 
 async fn from_autoconfig(http: &reqwest::Client, email: &str, domain: &str) -> Option<DiscoveredSettings> {
-    let own = format!("https://autoconfig.{domain}/mail/config-v1.1.xml?emailaddress={email}");
+    let encoded: String = url::form_urlencoded::byte_serialize(email.as_bytes()).collect();
+    let own = format!("https://autoconfig.{domain}/mail/config-v1.1.xml?emailaddress={encoded}");
     let well_known = format!("https://{domain}/.well-known/autoconfig/mail/config-v1.1.xml");
     let ispdb = format!("https://autoconfig.thunderbird.net/v1.1/{domain}");
     let (a, b, c) = tokio::join!(
@@ -259,7 +261,13 @@ async fn guess(email: &str, domain: &str) -> DiscoveredSettings {
 pub fn split_email(email: &str) -> Result<(&str, String)> {
     let email = email.trim();
     match email.rsplit_once('@') {
-        Some((local, domain)) if !local.is_empty() && domain.contains('.') && !domain.contains(char::is_whitespace) => {
+        // The domain goes into lookup URLs, so it has to be a plain host name (no "/", "?", ports…).
+        Some((local, domain))
+            if !local.is_empty()
+                && domain.contains('.')
+                && matches!(url::Host::parse(domain), Ok(url::Host::Domain(_)))
+                && !domain.contains(|c: char| c.is_whitespace() || "/?#:@[]\\%".contains(c)) =>
+        {
             Ok((local, domain.to_ascii_lowercase()))
         }
         _ => Err(Error::invalid("That doesn't look like an email address.")),
@@ -360,5 +368,9 @@ mod tests {
         assert!(split_email("nope").is_err());
         assert!(split_email("a@localhost").is_err());
         assert_eq!(split_email(" Mini@Example.ORG ").unwrap().1, "example.org");
+        assert_eq!(split_email("leni@müller.de").unwrap().1, "müller.de");
+        assert!(split_email("a@evil.example/path").is_err());
+        assert!(split_email("a@evil.example:8080").is_err());
+        assert!(split_email("a@evil.example?x=1").is_err());
     }
 }

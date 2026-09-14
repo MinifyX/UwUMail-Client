@@ -403,6 +403,14 @@ impl Store {
         Ok(self.conn().query_row("SELECT * FROM accounts WHERE id = ?1", [id], Self::account_from_row)?)
     }
 
+    /// Ids of every cached message of an account, e.g. to clear their attachment files.
+    pub fn account_message_ids(&self, account_id: &str) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut statement = conn.prepare("SELECT id FROM messages WHERE account_id = ?1")?;
+        let ids = statement.query_map([account_id], |row| row.get(0))?.collect::<rusqlite::Result<Vec<String>>>()?;
+        Ok(ids)
+    }
+
     pub fn delete_account(&self, id: &str) -> Result<()> {
         let conn = self.conn();
         conn.execute(

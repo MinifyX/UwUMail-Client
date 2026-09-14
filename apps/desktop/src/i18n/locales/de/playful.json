@@ -94,5 +94,8 @@
   },
   "update": {
     "readyTitle": "Nyu hat was Neues mitgebracht ✧"
+  },
+  "link": {
+    "warningTitle": "Hm, dieser Link schummelt vielleicht (・_・;)"
   }
 }

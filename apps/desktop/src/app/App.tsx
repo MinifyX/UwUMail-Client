@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Toaster } from "@/components/ui/Toaster";
 import { MailShell } from "@/features/shell/MailShell";
 import { Onboarding } from "@/features/onboarding/Onboarding";
+import { LinkWarning } from "@/features/mail/LinkWarning";
 import { UpdateHint } from "@/features/updates/UpdateHint";
 import { i18n, resolveLanguage } from "@/i18n";
 import { useApplyTheme } from "@/lib/theme";
@@ -22,6 +23,7 @@ export function App() {
     <>
       {onboarded ? <MailShell /> : <Onboarding />}
       <UpdateHint />
+      <LinkWarning />
       <Toaster />
     </>
   );

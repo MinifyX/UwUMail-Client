@@ -235,6 +235,15 @@ impl Client {
             other => (basic, other?),
         };
         let session = Session::parse(&document, &base)?;
+        // A session fetched securely must not send the login on over plain HTTP.
+        if base.scheme() == "https"
+            && [&session.api_url, &session.download_url, &session.upload_url]
+                .into_iter()
+                .chain(session.event_source_url.as_ref())
+                .any(|endpoint| !endpoint.starts_with("https://"))
+        {
+            return Err(Error::connection("The JMAP server asked for unencrypted connections. UwUMail refused."));
+        }
         let mut client = Self { http: http.clone(), auth, session };
 
         // Self-hosted servers often announce a public name that isn't reachable
@@ -376,8 +385,22 @@ fn short(text: &str) -> String {
     text.chars().take(200).collect()
 }
 
+/// Whether credentials given for `from` may also go to `to`: same site (e.g.
+/// `fastmail.com` → `api.fastmail.com`) and never from HTTPS down to HTTP.
+fn may_send_credentials(from: &Url, to: &Url) -> bool {
+    if from.scheme() == "https" && to.scheme() != "https" {
+        return false;
+    }
+    let (Some(a), Some(b)) = (from.host_str(), to.host_str()) else { return false };
+    if a.eq_ignore_ascii_case(b) {
+        return true;
+    }
+    let site = |host: &str| psl::domain_str(&host.to_ascii_lowercase()).map(String::from);
+    matches!((site(a), site(b)), (Some(x), Some(y)) if x == y)
+}
+
 /// GETs the session resource. Redirects that change the host drop the
-/// Authorization header, so those are followed again with it.
+/// Authorization header; they're followed again with it only within the same site.
 async fn fetch_session(http: &reqwest::Client, url: &Url, auth: &Auth) -> Result<(Value, Url)> {
     let mut target = url.clone();
     for _ in 0..3 {
@@ -392,6 +415,13 @@ async fn fetch_session(http: &reqwest::Client, url: &Url, auth: &Auth) -> Result
         let landed = response.url().clone();
         if (status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN) && landed != target
         {
+            if !may_send_credentials(url, &landed) {
+                return Err(Error::auth(format!(
+                    "The server sent the sign-in to {}, which isn't part of {}. UwUMail didn't send your password there.",
+                    landed.host_str().unwrap_or("another address"),
+                    url.host_str().unwrap_or("the server"),
+                )));
+            }
             target = landed;
             continue;
         }
@@ -636,6 +666,22 @@ mod tests {
 
         let no_mail = json!({ "capabilities": { CORE: {} }, "apiUrl": "/", "downloadUrl": "/", "uploadUrl": "/" });
         assert_eq!(Session::parse(&no_mail, &base).unwrap_err().code, ErrorCode::NotSupported);
+    }
+
+    #[test]
+    fn keeps_credentials_within_the_site() {
+        let url = |s: &str| Url::parse(s).unwrap();
+        assert!(may_send_credentials(
+            &url("https://fastmail.com/.well-known/jmap"),
+            &url("https://api.fastmail.com/jmap/session")
+        ));
+        assert!(may_send_credentials(
+            &url("http://127.0.0.1:8080/.well-known/jmap"),
+            &url("http://127.0.0.1:8080/jmap/session")
+        ));
+        assert!(!may_send_credentials(&url("https://mail.example.com/"), &url("http://mail.example.com/jmap")));
+        assert!(!may_send_credentials(&url("https://mail.example.com/"), &url("https://collector.example.net/jmap")));
+        assert!(!may_send_credentials(&url("https://a.github.io/"), &url("https://b.github.io/")));
     }
 
     #[test]

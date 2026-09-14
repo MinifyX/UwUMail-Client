@@ -157,6 +157,14 @@ pub fn picture_domain(email: &str) -> Option<String> {
     (!FREEMAIL.contains(&domain.as_str())).then_some(domain)
 }
 
+/// Pictures only come from public websites: a web page or logo record must not make UwUMail
+/// call `localhost`, an IP address or a name that only exists in the local network.
+pub fn is_public_web_url(url: &Url) -> bool {
+    url.scheme() == "https"
+        && matches!(url.host(), Some(url::Host::Domain(host))
+            if psl::suffix(host.trim_end_matches('.').as_bytes()).is_some_and(|suffix| suffix.is_known()))
+}
+
 /// The logo URL of a `default._bimi` TXT record, if it publishes one.
 pub fn bimi_logo(record: &str) -> Option<Url> {
     let mut tags = record.split(';').map(str::trim).filter(|tag| !tag.is_empty());
@@ -337,7 +345,15 @@ impl SenderPictures {
             .timeout(TIMEOUT)
             .https_only(true)
             .referer(false)
-            .redirect(reqwest::redirect::Policy::limited(5))
+            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                if attempt.previous().len() >= 5 {
+                    attempt.error("too many redirects")
+                } else if is_public_web_url(attempt.url()) {
+                    attempt.follow()
+                } else {
+                    attempt.stop()
+                }
+            }))
             .build()
             .map_err(|e| Error::internal(format!("HTTP client setup failed: {e}")))?;
         Ok(Self {
@@ -529,6 +545,9 @@ impl SenderPictures {
     /// `Ok(Some)` with the body and final URL on success, `Ok(None)` when the
     /// server answered with an error or too much data, `Err` when nothing answered.
     async fn download(&self, url: &Url, limit: usize) -> std::result::Result<Option<(Vec<u8>, Url)>, ()> {
+        if !is_public_web_url(url) {
+            return Ok(None);
+        }
         let mut response = self.http.get(url.clone()).send().await.map_err(|_| ())?;
         let final_url = response.url().clone();
         if !response.status().is_success() {
@@ -574,6 +593,18 @@ mod tests {
         assert_eq!(picture_domain("root@localhost"), None);
         assert_eq!(picture_domain("x@[127.0.0.1]"), None);
         assert_eq!(picture_domain("not an address"), None);
+    }
+
+    #[test]
+    fn only_fetches_from_public_websites() {
+        let public = |url: &str| is_public_web_url(&Url::parse(url).unwrap());
+        assert!(public("https://www.bright-labs.de/icon.png"));
+        assert!(!public("http://bright-labs.de/icon.png"));
+        assert!(!public("https://192.168.178.1/login"));
+        assert!(!public("https://[::1]/"));
+        assert!(!public("https://localhost:8443/"));
+        assert!(!public("https://router.lan/"));
+        assert!(!public("https://nas.internal/"));
     }
 
     #[test]

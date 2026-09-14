@@ -205,18 +205,53 @@ function ContactPreview({ file }: { file: AttachmentContent }) {
   );
 }
 
-export function AttachmentPreview({ file, kind }: { file: AttachmentContent; kind: AttachmentKind }) {
+/** True when the bytes start like a PDF (the header may follow some junk within the first kilobyte). */
+export function looksLikePdf(bytes: Uint8Array) {
+  const head = new TextDecoder("latin1").decode(bytes.subarray(0, 1024));
+  return head.includes("%PDF-");
+}
+
+/**
+ * The attachment file server guesses types from content and falls back to
+ * HTML, so a "PDF" could really be a web page. It is only shown in a frame
+ * after the file proves to be a PDF and is served as one.
+ */
+function PdfPreview({ file }: { file: AttachmentContent }) {
   const { t } = useT();
+  const [state, setState] = useState<{ url: string; ok: boolean }>();
+  useEffect(() => {
+    let cancelled = false;
+    fetch(file.url)
+      .then(async (response) => {
+        const type = response.headers.get("content-type") ?? "";
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        return type.toLowerCase().startsWith("application/pdf") && looksLikePdf(bytes);
+      })
+      .catch(() => false)
+      .then((ok) => {
+        if (!cancelled) setState({ url: file.url, ok });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.url]);
+
+  if (state?.url !== file.url) return <p className="p-6 text-[13px] text-muted">{t("attachment.loading")}</p>;
+  if (!state.ok) return <p className="p-6 text-center text-[13px] text-muted">{t("attachment.notPdf")}</p>;
+  return (
+    <div className="flex h-full flex-col">
+      <iframe src={file.url} title={file.filename} className="min-h-0 w-full flex-1 border-0 bg-white" />
+      <p className="px-4 py-2 text-center text-[12px] text-muted">{t("attachment.pdfHint")}</p>
+    </div>
+  );
+}
+
+export function AttachmentPreview({ file, kind }: { file: AttachmentContent; kind: AttachmentKind }) {
   switch (kind) {
     case "image":
       return <ImagePreview file={file} />;
     case "pdf":
-      return (
-        <div className="flex h-full flex-col">
-          <iframe src={file.url} title={file.filename} className="min-h-0 w-full flex-1 border-0 bg-white" />
-          <p className="px-4 py-2 text-center text-[12px] text-muted">{t("attachment.pdfHint")}</p>
-        </div>
-      );
+      return <PdfPreview file={file} />;
     case "text":
     case "json":
     case "csv":

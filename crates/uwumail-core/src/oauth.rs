@@ -150,7 +150,7 @@ pub async fn sign_in(
         .extend_pairs(config.extra.iter().copied());
     open_url(authorize.as_str());
 
-    let (code, returned_state) = tokio::time::timeout(SIGN_IN_TIMEOUT, async {
+    let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, async {
         loop {
             let (mut socket, _) = listener.accept().await?;
             let mut buffer = vec![0u8; 8192];
@@ -162,6 +162,12 @@ pub async fn sign_in(
                 continue;
             }
             let result = parse_redirect(&request);
+            // Anything on this machine can call the port; only the answer to our own
+            // request (matching state) counts, the rest is ignored instead of ending the sign-in.
+            if matches!(&result, Ok((_, returned)) if *returned != state) {
+                let _ = socket.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n").await;
+                continue;
+            }
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{DONE_PAGE}",
                 DONE_PAGE.len()
@@ -172,10 +178,6 @@ pub async fn sign_in(
     })
     .await
     .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
-
-    if returned_state != state {
-        return Err(Error::auth("The sign-in response didn't match this request."));
-    }
 
     let mut form = vec![
         ("client_id", config.client_id.to_string()),

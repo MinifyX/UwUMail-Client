@@ -21,7 +21,7 @@ jobs:
     name: Release (Windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Check version and release notes
         id: meta
         shell: bash
@@ -33,13 +33,13 @@ jobs:
           fi
           test -f "release-notes/$version.json" || { echo "::error::release-notes/$version.json is missing"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:setup
         env:
@@ -48,7 +48,7 @@ jobs:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: UwUMail-Setup-${{ steps.meta.outputs.version }}
           path: |
@@ -76,9 +76,12 @@ jobs:
             fs.writeFileSync(process.argv[1], JSON.stringify({ version: '$VERSION', prerelease: $prerelease, notes }, null, 2));
           " "$work/release.json"
           cd "$work"
+          # GitHub only runs workflows that exist in the pushed commit, so the branch builds
+          # on UwUMail-Releases' main, which carries publish.yml.
           git init -q
-          git checkout -q --orphan "incoming/v$VERSION"
-          git add .
+          git fetch -q --depth 1 git@github.com:MinifyX/UwUMail-Releases.git main
+          git checkout -q -b "incoming/v$VERSION" FETCH_HEAD
+          git add "UwUMail-Setup-$VERSION.exe" "UwUMail-Setup-$VERSION.exe.sig" release.json
           git -c user.name="UwUMail Release" -c user.email="github-actions[bot]@users.noreply.github.com" commit -qm "UwUMail $VERSION"
           git push -q --force git@github.com:MinifyX/UwUMail-Releases.git "HEAD:refs/heads/incoming/v$VERSION"
           rm -f "$key"
@@ -97,23 +100,23 @@ jobs:
             args: ""
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: pnpm install --frozen-lockfile
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}

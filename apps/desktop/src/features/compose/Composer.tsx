@@ -8,6 +8,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { useT } from "@/i18n";
 import { formatSize } from "@/lib/format";
 import { modKey } from "@/lib/platform";
+import { htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { useAccounts, useMessageActions } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { useUi, type ComposeRequest } from "@/state/ui";
@@ -21,12 +22,6 @@ function readAsBase64(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
-}
-
-function htmlToText(html: string) {
-  const container = document.createElement("div");
-  container.innerHTML = html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n");
-  return (container.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export function Composer() {
@@ -76,7 +71,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
     editor.current?.focus();
     if (command === "createLink") {
       const url = window.prompt(t("compose.linkPrompt"), "https://");
-      if (url) document.execCommand("createLink", false, url);
+      if (url && isSafeLinkTarget(url)) document.execCommand("createLink", false, url.trim());
       return;
     }
     document.execCommand(command);
@@ -87,7 +82,8 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       setError(t("compose.noRecipients"));
       return;
     }
-    const html = editor.current?.innerHTML ?? "";
+    // What people paste can carry forms or remote content; send only the safe part.
+    const html = quotableHtml(editor.current?.innerHTML ?? "");
     setSending(true);
     try {
       await backend().send({
@@ -97,7 +93,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         bcc: draft.bcc,
         subject: draft.subject,
         html,
-        text: htmlToText(html),
+        text: htmlToPlainText(html),
         inReplyTo: request.mode === "forward" ? undefined : request.source?.id,
         attachments,
       });
