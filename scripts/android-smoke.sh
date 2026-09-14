@@ -79,6 +79,10 @@ if grep "UwUMail : update check failed" "$out/logcat.txt"; then fail "HTTPS fail
 adb logcat -d > "$out/logcat.txt"
 grep -q "UwUMail : engine running" "$out/logcat.txt" || fail "The mail engine didn't start (see uwumail-log.txt)"
 if grep -q "UwUMail : start failed" "$out/logcat.txt"; then fail "The native start reported an error"; fi
+relauncher=$(grep -m1 -o "Start proc [0-9]*:$package:relaunch" "$out/logcat.txt" | sed 's/Start proc \([0-9]*\):.*/\1/')
+if [ -n "$relauncher" ] && grep -Eq " $relauncher +$relauncher I UwUMail : native start" "$out/logcat.txt"; then
+  fail "The relaunch helper started a second mail engine"
+fi
 if grep -E "FATAL EXCEPTION|UnsatisfiedLinkError|panicked at|SIGABRT|Abort message" "$out/logcat.txt" | grep -v "com.android.systemui" > "$out/crashes.txt"; then
   fail "Crash in the log, see crashes.txt"
   cat "$out/crashes.txt"

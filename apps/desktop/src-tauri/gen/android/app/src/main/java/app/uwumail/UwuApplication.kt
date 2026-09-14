@@ -11,6 +11,8 @@ import android.util.Log
 class UwuApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // The relaunch helper lives in its own short process and must not run a second engine.
+        if (Application.getProcessName().endsWith(":relaunch")) return
         UwuBridge.init(this)
         Notifications.createChannels(this)
         try {
