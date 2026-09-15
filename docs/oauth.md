@@ -25,8 +25,10 @@ repository secrets with the same names.
    registrations → New registration.
 2. Name `UwUMail`, supported account types **"Accounts in any organizational
    directory and personal Microsoft accounts"**.
-3. Platform **"Mobile and desktop applications"**, redirect URI
-   `http://localhost`. (Any port on localhost is allowed for this platform.)
+3. Platform **"Mobile and desktop applications"**, redirect URIs
+   `http://localhost` (desktop; any port on localhost is allowed for this
+   platform) and `app.uwumail://oauth` (Android, where the browser comes back to
+   the app through this link).
 4. Authentication → Advanced → **Allow public client flows: Yes**.
 5. API permissions → Add → APIs my organization uses → search
    **"Office 365 Exchange Online"** → Delegated →
@@ -34,7 +36,13 @@ repository secrets with the same names.
    Microsoft Graph.
 6. Copy the **Application (client) ID** into `UWUMAIL_MICROSOFT_CLIENT_ID`.
 
-No client secret is needed; the app is a public client.
+No client secret is needed; the app is a public client. The client id isn't
+secret either, it ends up in every build.
+
+On Android the engine is told `Engine::use_oauth_app_link("app.uwumail://oauth")`;
+the activity that receives the link passes the URL to `Engine::finish_sign_in`,
+which only accepts that link and hands it to the sign-in that is waiting. The
+sign-in checks `state` and uses PKCE, so a forged link can't complete it.
 
 ## Google
 

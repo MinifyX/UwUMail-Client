@@ -100,6 +100,11 @@ pub(crate) fn parse_redirect(request: &str) -> Result<(String, String)> {
         .and_then(|line| line.split_whitespace().nth(1))
         .ok_or_else(|| Error::auth("The sign-in page sent an invalid response."))?;
     let url = url::Url::parse(&format!("http://localhost{target}")).map_err(|_| Error::auth("Invalid redirect."))?;
+    redirect_parameters(&url)
+}
+
+/// `code` and `state` of a redirect URL, or the error the provider reported.
+pub(crate) fn redirect_parameters(url: &url::Url) -> Result<(String, String)> {
     let mut code = None;
     let mut state = None;
     let mut error = None;
@@ -122,17 +127,32 @@ const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8><title>UwUMail</titl
 <div style=\"text-align:center\"><h1 style=\"color:#e11d74\">(◕‿◕✿)</h1><p>All done! You can close this tab and go back to UwUMail.</p>\
 <p>Fertig! Du kannst diesen Tab schließen und zu UwUMail zurückkehren.</p></div>";
 
+/// Where the provider sends the browser back to.
+pub enum Redirect {
+    /// A one-shot HTTP listener on 127.0.0.1 (desktop).
+    Loopback,
+    /// The app's own link, e.g. `app.uwumail://oauth` on Android: the platform hands
+    /// the URL it was opened with to the waiting sign-in.
+    App { uri: String, incoming: tokio::sync::oneshot::Receiver<String> },
+}
+
 /// Runs the whole browser sign-in. `open_url` must open the system browser.
 pub async fn sign_in(
     http: &reqwest::Client,
     provider: OAuthProvider,
     login_hint: &str,
     open_url: &(dyn Fn(&str) + Send + Sync),
+    redirect: Redirect,
 ) -> Result<Tokens> {
     let config = config(provider)?;
-    let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
-    let port = listener.local_addr()?.port();
-    let redirect_uri = format!("http://{}:{port}", config.redirect_host);
+    let (redirect_uri, receiver) = match redirect {
+        Redirect::Loopback => {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+            let port = listener.local_addr()?.port();
+            (format!("http://{}:{port}", config.redirect_host), Receiver::Loopback(listener))
+        }
+        Redirect::App { uri, incoming } => (uri, Receiver::App(incoming)),
+    };
     let verifier = random_token(48)?;
     let state = random_token(24)?;
 
@@ -150,6 +170,21 @@ pub async fn sign_in(
         .extend_pairs(config.extra.iter().copied());
     open_url(authorize.as_str());
 
+    let listener = match receiver {
+        Receiver::Loopback(listener) => listener,
+        Receiver::App(incoming) => {
+            let url = tokio::time::timeout(SIGN_IN_TIMEOUT, incoming)
+                .await
+                .map_err(|_| Error::auth("Sign-in took too long. Please try again."))?
+                .map_err(|_| Error::auth("The sign-in was cancelled."))?;
+            let url = url::Url::parse(&url).map_err(|_| Error::auth("Invalid redirect."))?;
+            let (code, returned) = redirect_parameters(&url)?;
+            if returned != state {
+                return Err(Error::auth("The sign-in response didn't belong to this sign-in. Please try again."));
+            }
+            return exchange_code(http, &config, code, redirect_uri, verifier).await;
+        }
+    };
     let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, async {
         loop {
             let (mut socket, _) = listener.accept().await?;
@@ -178,7 +213,21 @@ pub async fn sign_in(
     })
     .await
     .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
+    exchange_code(http, &config, code, redirect_uri, verifier).await
+}
 
+enum Receiver {
+    Loopback(TcpListener),
+    App(tokio::sync::oneshot::Receiver<String>),
+}
+
+async fn exchange_code(
+    http: &reqwest::Client,
+    config: &ProviderConfig,
+    code: String,
+    redirect_uri: String,
+    verifier: String,
+) -> Result<Tokens> {
     let mut form = vec![
         ("client_id", config.client_id.to_string()),
         ("grant_type", "authorization_code".into()),
@@ -248,6 +297,14 @@ mod tests {
         assert_eq!(code, "abc/123");
         assert_eq!(state, "xyz");
         assert!(parse_redirect("GET /?error=access_denied HTTP/1.1\r\n").is_err());
+    }
+
+    #[test]
+    fn reads_the_app_link_redirect() {
+        let url = url::Url::parse("app.uwumail://oauth?code=abc&state=xyz").unwrap();
+        assert_eq!(redirect_parameters(&url).unwrap(), ("abc".to_string(), "xyz".to_string()));
+        let cancelled = url::Url::parse("app.uwumail://oauth?error=access_denied&state=xyz").unwrap();
+        assert!(redirect_parameters(&cancelled).is_err());
     }
 
     #[test]

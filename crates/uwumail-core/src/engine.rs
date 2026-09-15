@@ -91,6 +91,10 @@ struct Inner {
     offline_days: AtomicU32,
     /// When each JMAP account's identities were last fetched.
     identities_checked: Mutex<HashMap<String, Instant>>,
+    /// The app link OAuth providers send the browser back to (Android); loopback when unset.
+    oauth_redirect: Mutex<Option<String>>,
+    /// The sign-in waiting for that link.
+    pending_sign_in: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
 }
 
 enum Credential {
@@ -151,8 +155,29 @@ impl Engine {
                 jmap: AsyncMutex::new(HashMap::new()),
                 offline_days: AtomicU32::new(0),
                 identities_checked: Mutex::new(HashMap::new()),
+                oauth_redirect: Mutex::new(None),
+                pending_sign_in: Mutex::new(None),
             }),
         })
+    }
+
+    /// Signs in through an app link instead of a loopback listener, for platforms where the
+    /// app may pause while the browser is in front (Android: `app.uwumail://oauth`).
+    pub fn use_oauth_app_link(&self, uri: &str) {
+        *self.inner.oauth_redirect.lock().unwrap() = Some(uri.to_string());
+    }
+
+    /// Hands the URL the app was opened with to the waiting sign-in. Returns false when it isn't
+    /// the sign-in link or nothing is waiting; the sign-in itself checks that it belongs to it.
+    pub fn finish_sign_in(&self, url: &str) -> bool {
+        let expected = self.inner.oauth_redirect.lock().unwrap().clone();
+        if !expected.is_some_and(|uri| url.starts_with(&format!("{uri}?"))) {
+            return false;
+        }
+        match self.inner.pending_sign_in.lock().unwrap().take() {
+            Some(waiting) => waiting.send(url.to_string()).is_ok(),
+            None => false,
+        }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<EngineEvent> {
@@ -394,8 +419,18 @@ impl Engine {
             AuthKind::Microsoft | AuthKind::Google => {
                 let provider =
                     if new.auth == AuthKind::Microsoft { OAuthProvider::Microsoft } else { OAuthProvider::Google };
+                let redirect = match self.inner.oauth_redirect.lock().unwrap().clone() {
+                    Some(uri) => {
+                        let (sender, incoming) = tokio::sync::oneshot::channel();
+                        // A newer sign-in replaces an abandoned one.
+                        *self.inner.pending_sign_in.lock().unwrap() = Some(sender);
+                        oauth::Redirect::App { uri, incoming }
+                    }
+                    None => oauth::Redirect::Loopback,
+                };
                 let tokens =
-                    oauth::sign_in(&self.inner.http, provider, &record.email, self.inner.open_url.as_ref()).await?;
+                    oauth::sign_in(&self.inner.http, provider, &record.email, self.inner.open_url.as_ref(), redirect)
+                        .await?;
                 let refresh_token = tokens
                     .refresh_token
                     .clone()
@@ -1737,6 +1772,26 @@ async fn run_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn app_link_sign_in_only_takes_its_own_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::new(EngineOptions {
+            data_dir: dir.path().to_path_buf(),
+            secrets: Arc::new(crate::secrets::MemorySecrets::default()),
+            open_url: Arc::new(|_| {}),
+        })
+        .unwrap();
+        assert!(!engine.finish_sign_in("app.uwumail://oauth?code=1&state=2"), "no app link set up");
+        engine.use_oauth_app_link("app.uwumail://oauth");
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        *engine.inner.pending_sign_in.lock().unwrap() = Some(sender);
+        assert!(!engine.finish_sign_in("https://evil.example/?code=1"));
+        assert!(!engine.finish_sign_in("app.uwumail://oauthx?code=1"));
+        assert!(engine.finish_sign_in("app.uwumail://oauth?code=1&state=2"));
+        assert_eq!(receiver.await.unwrap(), "app.uwumail://oauth?code=1&state=2");
+        assert!(!engine.finish_sign_in("app.uwumail://oauth?code=1&state=2"), "only once");
+    }
 
     #[test]
     fn blocks_addresses_and_whole_domains() {
