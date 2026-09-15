@@ -1,10 +1,12 @@
-import type { Account, Address, Message } from "@/backend/types";
+import type { Account, Address, Identity, Message } from "@/backend/types";
 import { escapeHtml, formatAddress, formatFullDate, textToHtml } from "@/lib/format";
 import { quotableHtml } from "@/lib/safeHtml";
 import type { ComposeRequest } from "@/state/ui";
 
 export interface DraftState {
   accountId: string;
+  /** One of the account's other addresses, empty for its own; null picks the one a reply was sent to. */
+  fromEmail: string | null;
   to: Address[];
   cc: Address[];
   bcc: Address[];
@@ -19,8 +21,8 @@ function prefixed(prefix: string, subject: string) {
   return pattern.test(subject) ? subject : `${prefix}: ${subject}`;
 }
 
-function withoutMe(addresses: Address[], accounts: Account[]) {
-  const mine = new Set(accounts.map((a) => a.email.toLowerCase()));
+function withoutMe(addresses: Address[], accounts: Account[], identities: Identity[]) {
+  const mine = new Set([...accounts, ...identities].map((a) => a.email.toLowerCase()));
   return addresses.filter((a) => !mine.has(a.email.toLowerCase()));
 }
 
@@ -28,15 +30,43 @@ function quoted(message: Message) {
   return message.bodyHtml ? quotableHtml(message.bodyHtml) : textToHtml(message.bodyText ?? "");
 }
 
-export function initialDraft(request: ComposeRequest, accounts: Account[], t: Translate, locale: string): DraftState {
+/**
+ * The address a reply comes from: the one of the mailbox's addresses the mail was sent to.
+ * Empty means the mailbox's own address.
+ */
+export function replyFrom(source: Message, identities: Identity[]): string {
+  const addressed = new Set([...source.to, ...source.cc].map((a) => a.email.toLowerCase()));
+  const match = identities.find(
+    (i) => i.accountId === source.accountId && !i.primary && addressed.has(i.email.toLowerCase()),
+  );
+  return match?.email ?? "";
+}
+
+export function initialDraft(
+  request: ComposeRequest,
+  accounts: Account[],
+  identities: Identity[],
+  t: Translate,
+  locale: string,
+): DraftState {
   if (request.restore) {
-    const { accountId, to, cc, bcc, subject, html } = request.restore;
-    return { accountId, to, cc, bcc, subject, html };
+    const { accountId, to, cc, bcc, subject, html, fromEmail } = request.restore;
+    const own = accounts.find((a) => a.id === accountId)?.email.toLowerCase();
+    return {
+      accountId,
+      fromEmail: fromEmail?.toLowerCase() === own ? "" : (fromEmail ?? ""),
+      to,
+      cc,
+      bcc,
+      subject,
+      html,
+    };
   }
   const source = request.source;
   const accountId = source?.accountId ?? accounts[0]?.id ?? "";
   const empty: DraftState = {
     accountId,
+    fromEmail: source ? null : "",
     to: request.to ?? [],
     cc: request.cc ?? [],
     bcc: request.bcc ?? [],
@@ -63,8 +93,8 @@ export function initialDraft(request: ComposeRequest, accounts: Account[], t: Tr
   }
 
   const replyTo = source.replyTo.length > 0 ? source.replyTo : [source.from];
-  const to = request.mode === "replyAll" ? withoutMe([...replyTo, ...source.to], accounts) : replyTo;
-  const cc = request.mode === "replyAll" ? withoutMe(source.cc, accounts) : [];
+  const to = request.mode === "replyAll" ? withoutMe([...replyTo, ...source.to], accounts, identities) : replyTo;
+  const cc = request.mode === "replyAll" ? withoutMe(source.cc, accounts, identities) : [];
   const header = escapeHtml(t("compose.quoteHeader", { date, name: "%%NAME%%" })).replace("%%NAME%%", name);
   return {
     ...empty,

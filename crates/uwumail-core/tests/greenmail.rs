@@ -124,6 +124,7 @@ async fn sync_send_reply_flag_and_trash() {
                 source: AttachmentSource::Base64 { data: "SGFsbG8=".into() },
             }],
             draft_key: None,
+            from_email: None,
         })
         .await
         .expect("message can be sent");
@@ -182,6 +183,7 @@ async fn sync_send_reply_flag_and_trash() {
             in_reply_to: Some(message.id.clone()),
             attachments: vec![],
             draft_key: None,
+            from_email: None,
         })
         .await
         .unwrap();
@@ -376,6 +378,7 @@ async fn drafts_are_saved_replaced_continued_and_removed_on_send() {
             source: AttachmentSource::Base64 { data: "SGFsbG8=".into() },
         }],
         draft_key,
+        from_email: None,
     };
 
     // A draft without recipients can be saved; saving again replaces it instead of adding one.
@@ -474,6 +477,7 @@ async fn undo_send_takes_mail_back_and_otherwise_sends_it() {
         in_reply_to: None,
         attachments: vec![],
         draft_key: None,
+        from_email: None,
     };
 
     // Taken back in time: the composer gets it again, nothing goes out.
@@ -501,6 +505,26 @@ async fn undo_send_takes_mail_back_and_otherwise_sends_it() {
     }
     assert!(done, "the UI hears that it went out");
     assert!(engine.list_threads(&inbox_query(None)).unwrap().threads.iter().all(|t| t.subject != oops));
+
+    // A second address of the mailbox can be the sender; unknown ones can't.
+    let alias = format!("hallo-{}@uwumail.test", &unique[..8]);
+    let identity = engine.add_identity(&account.id, &alias, "Mini vom Studio").unwrap();
+    assert!(engine.add_identity(&account.id, &email, "Ich").is_err(), "the own address is already there");
+    assert!(engine.list_identities().unwrap().iter().any(|i| i.email == alias && !i.primary));
+    let stranger = OutgoingMessage { from_email: Some("chef@uwumail.test".into()), ..message("Fremd") };
+    assert!(engine.queue_send(stranger, 30).is_err());
+    let from_alias = format!("Vom Studio {unique}");
+    engine.send(OutgoingMessage { from_email: Some(alias.clone()), ..message(&from_alias) }).await.unwrap();
+    let thread = wait_for("the mail from the alias", async || {
+        engine.sync_now(Some(&account.id));
+        engine.list_threads(&inbox_query(None)).unwrap().threads.into_iter().find(|t| t.subject == from_alias)
+    })
+    .await;
+    let received = engine.get_thread(&thread.id, true).await.unwrap();
+    assert_eq!(received.messages[0].from.email, alias);
+    assert_eq!(received.messages[0].from.name.as_deref(), Some("Mini vom Studio"));
+    engine.remove_identity(&identity.id).unwrap();
+    assert!(engine.list_identities().unwrap().iter().all(|i| i.email != alias));
 
     engine.remove_account(&account.id).await.unwrap();
 }

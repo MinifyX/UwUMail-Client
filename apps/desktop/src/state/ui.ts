@@ -31,6 +31,8 @@ export interface SavedDraft {
   inReplyTo?: string;
   /** Its Message-ID in the Drafts folder, once saved there. */
   draftKey?: string;
+  /** The sender address when it isn't the mailbox's own. */
+  fromEmail?: string;
   /** False while the newest text only exists on this device. */
   savedToServer?: boolean;
 }

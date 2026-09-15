@@ -332,7 +332,18 @@
     "undoSendDesc": "How long you can still take a sent mail back. It goes out even if you close the window meanwhile.",
     "undoSendOff": "Off",
     "seconds_one": "{{count}} second",
-    "seconds_other": "{{count}} s"
+    "seconds_other": "{{count}} s",
+    "senders": "Sender addresses",
+    "sendersDesc": "The addresses you can write from. JMAP mailboxes bring more addresses from the server; otherwise add your aliases here. Replies go out from the address the mail was sent to.",
+    "senderOwn": "The mailbox's address",
+    "senderFromServer": "From the mail server",
+    "senderManual": "Added by you",
+    "senderName": "Name",
+    "senderNameFor": "Name for {{email}}",
+    "senderEmail": "Address",
+    "addSender": "Add address",
+    "removeSender": "Remove {{email}}",
+    "senderAdded": "You can write from {{email}} now"
   },
   "theme": {
     "system": "System",

@@ -29,6 +29,19 @@ export interface Account {
   protocols: Protocol[];
 }
 
+/** An address a mailbox can send from. */
+export interface Identity {
+  /** The account id for the mailbox's own address. */
+  id: string;
+  accountId: string;
+  email: string;
+  name: string;
+  /** The mailbox's own address: can be renamed, not removed. */
+  primary: boolean;
+  /** Comes from the mail server and is managed there. */
+  fromServer: boolean;
+}
+
 export type FolderRole = "inbox" | "sent" | "drafts" | "archive" | "trash" | "junk";
 
 export interface Folder {
@@ -148,6 +161,8 @@ export interface OutgoingMessage {
   attachments: OutgoingAttachment[];
   /** The draft this was written in: saving replaces it, sending removes it. */
   draftKey?: string;
+  /** One of the account's addresses; its own when left out. */
+  fromEmail?: string;
 }
 
 /** A mail waiting for its "undo send" time. */
@@ -164,6 +179,7 @@ export interface DraftSaveResult {
 /** A draft from the Drafts folder, ready to continue writing. */
 export interface DraftContent {
   accountId: string;
+  fromEmail: string | null;
   draftKey: string | null;
   to: Address[];
   cc: Address[];

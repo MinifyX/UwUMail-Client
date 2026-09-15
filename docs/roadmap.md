@@ -15,7 +15,8 @@
 - [x] Writing: compose, reply, reply all, forward, attachments
 - [x] Drafts saved automatically to the server's Drafts folder, continued on any device, removed when sent
 - [x] Undo send: 0–30 seconds (10 by default), the mail waits in a local outbox and goes out even after closing UwUMail
-- [ ] Signatures, multiple identities per mailbox
+- [x] Several sender addresses per mailbox: aliases from the JMAP server or added by hand, replies from the address the mail went to
+- [ ] Signatures per sender address
 - [ ] Unsubscribe button, spam and blocked senders, move to folder, print and save as file, multi-select, more shortcuts
 - [x] Unified inbox across all mailboxes
 - [x] Conversation view (can be turned off)

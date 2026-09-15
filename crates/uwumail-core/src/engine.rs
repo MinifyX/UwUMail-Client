@@ -30,6 +30,8 @@ const JMAP_POLL_EVERY: Duration = Duration::from_secs(60);
 const SEARCH_FOLDERS: usize = 25;
 /// The longest "undo send" wait the page may ask for.
 const MAX_SEND_DELAY: u64 = 60;
+/// JMAP identities are asked for at most this often per account.
+const IDENTITIES_EVERY: Duration = Duration::from_secs(10 * 60);
 
 fn now_millis() -> i64 {
     std::time::SystemTime::now()
@@ -87,6 +89,8 @@ struct Inner {
     /// Mail from the last this many days is kept complete; older mail as
     /// previews. 0 keeps everything.
     offline_days: AtomicU32,
+    /// When each JMAP account's identities were last fetched.
+    identities_checked: Mutex<HashMap<String, Instant>>,
 }
 
 enum Credential {
@@ -146,6 +150,7 @@ impl Engine {
                 created_folders: Mutex::new(HashMap::new()),
                 jmap: AsyncMutex::new(HashMap::new()),
                 offline_days: AtomicU32::new(0),
+                identities_checked: Mutex::new(HashMap::new()),
             }),
         })
     }
@@ -195,6 +200,94 @@ impl Engine {
                 }
             })
             .collect())
+    }
+
+    /// Every address UwUMail can send from: each mailbox's own, then its aliases.
+    pub fn list_identities(&self) -> Result<Vec<Identity>> {
+        let mut identities: Vec<Identity> = self
+            .inner
+            .store
+            .accounts()?
+            .into_iter()
+            .map(|account| Identity {
+                id: account.id.clone(),
+                account_id: account.id,
+                email: account.email,
+                name: account.display_name,
+                primary: true,
+                from_server: false,
+            })
+            .collect();
+        // Each mailbox's aliases right after its own address.
+        let aliases = self.inner.store.identities()?;
+        let mut grouped = Vec::with_capacity(identities.len() + aliases.len());
+        for own in identities.drain(..) {
+            let account_id = own.account_id.clone();
+            grouped.push(own);
+            grouped.extend(aliases.iter().filter(|alias| alias.account_id == account_id).cloned());
+        }
+        Ok(grouped)
+    }
+
+    /// Adds an alias typed in by hand; whether the server accepts it shows when sending.
+    pub fn add_identity(&self, account_id: &str, email: &str, name: &str) -> Result<Identity> {
+        let account = self.inner.store.account(account_id)?;
+        let email = email.trim();
+        email
+            .parse::<lettre::Address>()
+            .map_err(|_| Error::invalid(format!("\"{email}\" isn't a valid email address.")))?;
+        if email.eq_ignore_ascii_case(&account.email) {
+            return Err(Error::invalid("That's already this mailbox's own address."));
+        }
+        let name = name.trim();
+        let id = self
+            .inner
+            .store
+            .insert_identity(&account.id, email, name)?
+            .ok_or_else(|| Error::invalid("This address is already set up."))?;
+        Ok(Identity {
+            id,
+            account_id: account.id,
+            email: email.to_string(),
+            name: name.to_string(),
+            primary: false,
+            from_server: false,
+        })
+    }
+
+    /// The name shown with an address; for a mailbox's own address that's its display name.
+    pub fn rename_identity(&self, identity_id: &str, name: &str) -> Result<()> {
+        let name = name.trim();
+        if self.inner.store.accounts()?.iter().any(|a| a.id == identity_id) {
+            return self.inner.store.set_account_display_name(identity_id, name);
+        }
+        if !self.inner.store.rename_identity(identity_id, name)? {
+            return Err(Error::not_found("This address no longer exists."));
+        }
+        Ok(())
+    }
+
+    pub fn remove_identity(&self, identity_id: &str) -> Result<()> {
+        if !self.inner.store.delete_identity(identity_id)? {
+            return Err(Error::invalid("Addresses from the mail server are managed there."));
+        }
+        Ok(())
+    }
+
+    /// The From address for a message: the chosen identity of the account, or its own address.
+    fn sender_for(&self, account: &AccountRecord, from_email: Option<&str>) -> Result<Address> {
+        let Some(email) = from_email.filter(|email| !email.eq_ignore_ascii_case(&account.email)) else {
+            return Ok(sender(account));
+        };
+        let identity = self
+            .inner
+            .store
+            .identities()?
+            .into_iter()
+            .find(|i| i.account_id == account.id && i.email.eq_ignore_ascii_case(email))
+            .ok_or_else(|| Error::invalid("This sender address isn't set up for this mailbox."))?;
+        let name = Some(identity.name).filter(|n| !n.is_empty()).or_else(|| Some(account.display_name.clone()));
+        Ok(Address { name: name.filter(|n| !n.is_empty()), email: identity.email })
     }
 
     pub async fn discover_settings(&self, email: &str) -> Result<DiscoveredSettings> {
@@ -582,7 +675,7 @@ impl Engine {
             None => smtp::new_message_id(&account.email),
         };
         let threading = self.threading_for(draft.in_reply_to.as_deref())?;
-        let from = sender(&account);
+        let from = self.sender_for(&account, draft.from_email.as_deref())?;
         let message = smtp::build(&smtp::Mail {
             from: &from,
             to: &draft.to,
@@ -693,6 +786,7 @@ impl Engine {
         let html =
             parsed.html.clone().unwrap_or_else(|| mime::text_to_html(parsed.text.as_deref().unwrap_or_default()));
         Ok(DraftContent {
+            from_email: parsed.from.as_ref().map(|from| from.email.clone()),
             account_id: location.account_id,
             draft_key: parsed.message_id.filter(|id| smtp::is_draft_key(id)),
             to: parsed.to,
@@ -710,7 +804,7 @@ impl Engine {
     pub fn queue_send(&self, outgoing: OutgoingMessage, delay_seconds: u64) -> Result<QueuedSend> {
         let account = self.inner.store.account(&outgoing.account_id)?;
         // Mistakes like a broken address show now, not after the wait.
-        let from = sender(&account);
+        let from = self.sender_for(&account, outgoing.from_email.as_deref())?;
         smtp::build(&smtp::Mail {
             from: &from,
             to: &outgoing.to,
@@ -786,7 +880,7 @@ impl Engine {
     pub async fn send(&self, outgoing: OutgoingMessage) -> Result<()> {
         let account = self.inner.store.account(&outgoing.account_id)?;
         let threading = self.threading_for(outgoing.in_reply_to.as_deref())?;
-        let from = sender(&account);
+        let from = self.sender_for(&account, outgoing.from_email.as_deref())?;
         let message = smtp::build(&smtp::Mail {
             from: &from,
             to: &outgoing.to,
@@ -805,7 +899,7 @@ impl Engine {
         if account.protocol == Protocol::Jmap {
             let client = self.inner.jmap_client(&account.id).await?;
             let envelope: Vec<String> = recipients.iter().map(|a| a.email.clone()).collect();
-            jmap_sync::send(&client, &self.inner.store, &account.id, message.formatted(), &account.email, &envelope)
+            jmap_sync::send(&client, &self.inner.store, &account.id, message.formatted(), &from.email, &envelope)
                 .await?;
         } else {
             let auth = match self.inner.credential(&account).await? {
@@ -1153,6 +1247,22 @@ impl Inner {
     }
 
     async fn sync_jmap(&self, client: &JmapClient, account_id: &str) -> Result<()> {
+        let identities_due = {
+            let mut checked = self.identities_checked.lock().unwrap();
+            let due = checked.get(account_id).is_none_or(|at| at.elapsed() >= IDENTITIES_EVERY);
+            if due {
+                checked.insert(account_id.to_string(), Instant::now());
+            }
+            due
+        };
+        if identities_due {
+            match jmap_sync::identities(client).await {
+                Ok(found) => {
+                    self.store.replace_server_identities(account_id, &found)?;
+                }
+                Err(error) => tracing::warn!("Couldn't load the sending identities: {error}"),
+            }
+        }
         let keep = self.recently_created(account_id);
         let folders_changed = jmap_sync::sync_mailboxes(client, &self.store, account_id, &keep).await?;
         let result = jmap_sync::sync_emails(client, &self.store, account_id, self.full_after()).await?;

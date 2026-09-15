@@ -8,6 +8,7 @@ import type {
   DraftSaveResult,
   FlagChange,
   Folder,
+  Identity,
   MailtoDraft,
   NewAccount,
   OutgoingMessage,
@@ -38,6 +39,11 @@ export interface Backend {
   readonly kind: "tauri" | "demo";
 
   listAccounts(): Promise<Account[]>;
+  /** Each mailbox's own address first, then its aliases. */
+  listIdentities(): Promise<Identity[]>;
+  addIdentity(accountId: string, email: string, name: string): Promise<Identity>;
+  renameIdentity(identityId: string, name: string): Promise<void>;
+  removeIdentity(identityId: string): Promise<void>;
   discoverSettings(email: string): Promise<DiscoveredSettings>;
   addAccount(account: NewAccount): Promise<Account>;
   removeAccount(accountId: string): Promise<void>;

@@ -11,6 +11,7 @@ import type {
   DraftSaveResult,
   FlagChange,
   Folder,
+  Identity,
   MailtoDraft,
   NewAccount,
   OutgoingMessage,
@@ -56,6 +57,22 @@ export class TauriBackend implements Backend {
 
   listAccounts() {
     return call<Account[]>("list_accounts");
+  }
+
+  listIdentities() {
+    return call<Identity[]>("list_identities");
+  }
+
+  addIdentity(accountId: string, email: string, name: string) {
+    return call<Identity>("add_identity", { accountId, email, name });
+  }
+
+  renameIdentity(identityId: string, name: string) {
+    return call<void>("rename_identity", { identityId, name });
+  }
+
+  removeIdentity(identityId: string) {
+    return call<void>("remove_identity", { identityId });
   }
 
   discoverSettings(email: string) {

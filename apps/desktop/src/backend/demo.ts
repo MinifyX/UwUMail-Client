@@ -14,6 +14,7 @@ import type {
   DraftSaveResult,
   FlagChange,
   Folder,
+  Identity,
   MailtoDraft,
   Message,
   NewAccount,
@@ -71,6 +72,16 @@ export class DemoBackend implements Backend {
   private mailtoTaken = false;
   /** Draft key → the demo message that holds the draft, and what the composer sent. */
   private drafts = new Map<string, { messageId: string; draft: OutgoingMessage }>();
+  private identities: Identity[] = [
+    {
+      id: "id-studio",
+      accountId: DEMO_ACCOUNTS[0]!.id,
+      email: "hallo@uwumail.dev",
+      name: "Mini vom Studio",
+      primary: false,
+      fromServer: true,
+    },
+  ];
   private queued = new Map<string, { timer: ReturnType<typeof setTimeout>; message: OutgoingMessage }>();
 
   constructor() {
@@ -85,6 +96,55 @@ export class DemoBackend implements Backend {
   async listAccounts() {
     await wait(80);
     return structuredClone(this.accounts);
+  }
+
+  async listIdentities(): Promise<Identity[]> {
+    await wait(60);
+    const own = this.accounts.map((a) => ({
+      id: a.id,
+      accountId: a.id,
+      email: a.email,
+      name: a.displayName,
+      primary: true,
+      fromServer: false,
+    }));
+    return structuredClone(own.flatMap((o) => [o, ...this.identities.filter((i) => i.accountId === o.accountId)]));
+  }
+
+  async addIdentity(accountId: string, email: string, name: string): Promise<Identity> {
+    await wait(120);
+    const account = this.accounts.find((a) => a.id === accountId);
+    if (!account) throw new BackendError("not_found", "Account not found");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      throw new BackendError("invalid_input", `"${email}" isn't a valid email address.`);
+    }
+    const taken = [account.email, ...this.identities.filter((i) => i.accountId === accountId).map((i) => i.email)];
+    if (taken.some((e) => e.toLowerCase() === email.trim().toLowerCase())) {
+      throw new BackendError("invalid_input", "This address is already set up.");
+    }
+    const identity = {
+      id: `id-${this.nextId++}`,
+      accountId,
+      email: email.trim(),
+      name: name.trim(),
+      primary: false,
+      fromServer: false,
+    };
+    this.identities.push(identity);
+    return structuredClone(identity);
+  }
+
+  async renameIdentity(identityId: string, name: string) {
+    await wait(80);
+    const account = this.accounts.find((a) => a.id === identityId);
+    if (account) account.displayName = name.trim();
+    const identity = this.identities.find((i) => i.id === identityId);
+    if (identity) identity.name = name.trim();
+  }
+
+  async removeIdentity(identityId: string) {
+    await wait(80);
+    this.identities = this.identities.filter((i) => i.id !== identityId);
   }
 
   async discoverSettings(email: string): Promise<DiscoveredSettings> {
@@ -290,7 +350,7 @@ export class DemoBackend implements Backend {
       threadId: original?.threadId ?? `thr-${id}`,
       accountId: account.id,
       folderId: `${account.id}:drafts`,
-      from: { name: account.displayName, email: account.email },
+      from: this.senderOf(account, draft.fromEmail),
       to: draft.to,
       cc: draft.cc,
       replyTo: [],
@@ -328,6 +388,7 @@ export class DemoBackend implements Backend {
     const draft = entry?.draft;
     return {
       accountId: message.accountId,
+      fromEmail: draft?.fromEmail ?? null,
       draftKey: draft?.draftKey ?? null,
       to: message.to,
       cc: message.cc,
@@ -337,6 +398,15 @@ export class DemoBackend implements Backend {
       inReplyTo: draft?.inReplyTo ?? null,
       attachments: draft?.attachments ?? [],
     };
+  }
+
+  private senderOf(account: Account, fromEmail?: string): Address {
+    const identity = this.identities.find(
+      (i) => i.accountId === account.id && i.email.toLowerCase() === fromEmail?.toLowerCase(),
+    );
+    return identity
+      ? { name: identity.name || account.displayName, email: identity.email }
+      : { name: account.displayName, email: account.email };
   }
 
   private removeDraftMessage(draftKey: string) {
@@ -362,7 +432,7 @@ export class DemoBackend implements Backend {
       threadId: original?.threadId ?? `thr-${id}`,
       accountId: account.id,
       folderId: `${account.id}:sent`,
-      from: { name: account.displayName, email: account.email },
+      from: this.senderOf(account, outgoing.fromEmail),
       to: outgoing.to,
       cc: outgoing.cc,
       replyTo: [],

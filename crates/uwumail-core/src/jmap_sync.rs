@@ -541,6 +541,22 @@ pub async fn ensure_mailbox(
     store.folder(&folder_id)
 }
 
+/// The sending identities of the account: (server id, email, name).
+pub async fn identities(client: &Client) -> Result<Vec<(String, String, String)>> {
+    let Some(account) = client.session.submission_account_id.clone() else { return Ok(Vec::new()) };
+    let responses = client.call(vec![("Identity/get", json!({ "accountId": account, "ids": null }))]).await?;
+    Ok(list(responses.get(0, "Identity/get")?)
+        .iter()
+        .filter_map(|identity| {
+            let id = text(identity, "id")?;
+            let email = text(identity, "email")?.trim();
+            // "*@domain" identities allow any address there; UwUMail can't offer those as a choice.
+            (!email.is_empty() && !email.starts_with('*'))
+                .then(|| (id.to_string(), email.to_string(), text(identity, "name").unwrap_or_default().to_string()))
+        })
+        .collect())
+}
+
 /// Emails in the Drafts mailbox with this Message-ID (without angle brackets). The mailbox is
 /// read page by page and compared here, because servers don't reliably support a header filter.
 async fn drafts_with_message_id(client: &Client, mailbox_id: &str, message_id: &str) -> Result<Vec<String>> {

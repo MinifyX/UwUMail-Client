@@ -25,6 +25,26 @@ fn list_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<Account>> {
 }
 
 #[tauri::command]
+fn list_identities(engine: State<'_, Engine>) -> CommandResult<Vec<Identity>> {
+    engine.list_identities()
+}
+
+#[tauri::command]
+fn add_identity(engine: State<'_, Engine>, account_id: String, email: String, name: String) -> CommandResult<Identity> {
+    engine.add_identity(&account_id, &email, &name)
+}
+
+#[tauri::command]
+fn rename_identity(engine: State<'_, Engine>, identity_id: String, name: String) -> CommandResult<()> {
+    engine.rename_identity(&identity_id, &name)
+}
+
+#[tauri::command]
+fn remove_identity(engine: State<'_, Engine>, identity_id: String) -> CommandResult<()> {
+    engine.remove_identity(&identity_id)
+}
+
+#[tauri::command]
 async fn discover_settings(engine: State<'_, Engine>, email: String) -> CommandResult<DiscoveredSettings> {
     engine.discover_settings(&email).await
 }
@@ -296,6 +316,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_accounts,
+            list_identities,
+            add_identity,
+            rename_identity,
+            remove_identity,
             discover_settings,
             add_account,
             remove_account,

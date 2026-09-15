@@ -328,6 +328,24 @@ pub struct OutgoingMessage {
     /// The Message-ID of the draft this was written in. Saving replaces that draft; sending removes it.
     #[serde(default)]
     pub draft_key: Option<String>,
+    /// Which of the account's addresses it comes from; the account's own when empty.
+    #[serde(default)]
+    pub from_email: Option<String>,
+}
+
+/// An address a mailbox can send from: its own, aliases the server knows (JMAP), or ones added by hand.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Identity {
+    /// The account id for the mailbox's own address.
+    pub id: String,
+    pub account_id: String,
+    pub email: String,
+    pub name: String,
+    /// The mailbox's own address; it can be renamed but not removed.
+    pub primary: bool,
+    /// Comes from the mail server and is managed there.
+    pub from_server: bool,
 }
 
 /// A message waiting for its "undo send" time.
@@ -350,6 +368,8 @@ pub struct SavedDraft {
 #[serde(rename_all = "camelCase")]
 pub struct DraftContent {
     pub account_id: String,
+    /// The address it was written from, if that's one of the account's.
+    pub from_email: Option<String>,
     pub draft_key: Option<String>,
     pub to: Vec<Address>,
     pub cc: Vec<Address>,

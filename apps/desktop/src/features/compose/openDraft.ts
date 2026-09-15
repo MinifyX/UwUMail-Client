@@ -20,6 +20,7 @@ export async function openDraftMessage(messageId: string) {
         html: draft.html,
         inReplyTo: draft.inReplyTo ?? undefined,
         draftKey: draft.draftKey ?? undefined,
+        fromEmail: draft.fromEmail ?? undefined,
         savedToServer: true,
       },
       attachments: draft.attachments,

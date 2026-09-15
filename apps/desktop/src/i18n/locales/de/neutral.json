@@ -332,7 +332,18 @@
     "undoSendDesc": "So lange kannst du eine gesendete Mail noch zurückholen. Sie geht auch raus, wenn du das Fenster in der Zeit schließt.",
     "undoSendOff": "Aus",
     "seconds_one": "{{count}} Sekunde",
-    "seconds_other": "{{count}} s"
+    "seconds_other": "{{count}} s",
+    "senders": "Absenderadressen",
+    "sendersDesc": "Von diesen Adressen kannst du schreiben. Bei JMAP-Postfächern kommen weitere Adressen vom Server, sonst trägst du deine Aliase hier ein. Antworten gehen automatisch von der Adresse raus, an die die Mail ging.",
+    "senderOwn": "Adresse des Postfachs",
+    "senderFromServer": "Vom Mailserver",
+    "senderManual": "Selbst eingetragen",
+    "senderName": "Name",
+    "senderNameFor": "Name für {{email}}",
+    "senderEmail": "Adresse",
+    "addSender": "Adresse hinzufügen",
+    "removeSender": "{{email}} entfernen",
+    "senderAdded": "Du kannst jetzt von {{email}} schreiben"
   },
   "theme": {
     "system": "System",

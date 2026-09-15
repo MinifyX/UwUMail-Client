@@ -27,11 +27,11 @@ import { useT } from "@/i18n";
 import { formatSize } from "@/lib/format";
 import { modKey } from "@/lib/platform";
 import { htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
-import { useAccounts, useMessageActions } from "@/lib/queries";
+import { useAccounts, useIdentities, useMessageActions } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi, type ComposeRequest } from "@/state/ui";
-import { initialDraft, type DraftState } from "./draft";
+import { initialDraft, replyFrom, type DraftState } from "./draft";
 import { RecipientInput } from "./RecipientInput";
 import { undoSend } from "./undoSend";
 
@@ -60,13 +60,14 @@ export function Composer() {
 function ComposerWindow({ request }: { request: ComposeRequest }) {
   const { t, i18n } = useT();
   const { data: accounts = [] } = useAccounts();
+  const { data: identities } = useIdentities();
   const closeCompose = useUi((s) => s.closeCompose);
   const minimized = useUi((s) => s.composeMinimized);
   const setMinimized = useUi((s) => s.setComposeMinimized);
   const { refresh } = useMessageActions();
 
   // The draft is created once per compose request (the component is keyed by it).
-  const [initial] = useState(() => initialDraft(request, accounts, t, i18n.language));
+  const [initial] = useState(() => initialDraft(request, accounts, identities ?? [], t, i18n.language));
   const [draft, setDraft] = useState<DraftState>(initial);
   const accountId = draft.accountId || accounts[0]?.id || "";
   const [showCc, setShowCc] = useState(initial.cc.length > 0);
@@ -93,9 +94,11 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   /** Sent or thrown away: nothing may save the draft again. */
   const finished = useRef(false);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
-  const latest = useRef({ draft, accountId, attachments });
+  // Until someone picks a sender, a reply comes from the address it was sent to (also once the addresses load).
+  const fromEmail = draft.fromEmail ?? (request.source ? replyFrom(request.source, identities ?? []) : "");
+  const latest = useRef({ draft, accountId, attachments, fromEmail });
   useEffect(() => {
-    latest.current = { draft, accountId, attachments };
+    latest.current = { draft, accountId, attachments, fromEmail };
   });
 
   const localCopy = useCallback(
@@ -104,6 +107,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       saveLocalDraft({
         mode: request.mode,
         accountId: latest.current.accountId,
+        fromEmail: latest.current.fromEmail || undefined,
         to: current.to,
         cc: current.cc,
         bcc: current.bcc,
@@ -129,6 +133,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       try {
         const saved = await backend().saveDraft({
           accountId: account,
+          fromEmail: latest.current.fromEmail || undefined,
           to: current.to,
           cc: current.cc,
           bcc: current.bcc,
@@ -236,6 +241,18 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
     }
   }, [initial, request.mode]);
 
+  // Every address to send from; before they load, each mailbox's own.
+  const senders =
+    identities ??
+    accounts.map((a) => ({
+      id: a.id,
+      accountId: a.id,
+      email: a.email,
+      name: a.displayName,
+      primary: true,
+      fromServer: false,
+    }));
+
   const update = (patch: Partial<DraftState>) => {
     setError(null);
     changed();
@@ -265,6 +282,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       await saving.current;
       const message = {
         accountId,
+        fromEmail: fromEmail || undefined,
         to: draft.to,
         cc: draft.cc,
         bcc: draft.bcc,
@@ -419,7 +437,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         </button>
       </header>
 
-      {accounts.length > 1 && (
+      {senders.length > 1 && (
         <div className="flex h-11 items-center gap-2 border-b border-hairline px-4">
           <label htmlFor="compose-from" className="w-12 shrink-0 text-[13px] font-semibold text-muted">
             {t("compose.from")}
@@ -427,13 +445,18 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           {account && <AccountDot color={account.color} />}
           <select
             id="compose-from"
-            value={accountId}
-            onChange={(event) => update({ accountId: event.target.value })}
+            value={senderKey(accountId, fromEmail)}
+            onChange={(event) => {
+              const sender = senders.find(
+                (s) => senderKey(s.accountId, s.primary ? "" : s.email) === event.target.value,
+              );
+              if (sender) update({ accountId: sender.accountId, fromEmail: sender.primary ? "" : sender.email });
+            }}
             className="h-9 min-w-0 flex-1 bg-transparent text-[14px] outline-none"
           >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.displayName} &lt;{a.email}&gt;
+            {senders.map((s) => (
+              <option key={s.id} value={senderKey(s.accountId, s.primary ? "" : s.email)}>
+                {s.name || accounts.find((a) => a.id === s.accountId)?.displayName} &lt;{s.email}&gt;
               </option>
             ))}
           </select>
@@ -619,4 +642,8 @@ function DraftStatus({ state }: { state: SaveState }) {
       <span className="truncate">{text}</span>
     </span>
   );
+}
+
+function senderKey(accountId: string, fromEmail: string) {
+  return `${accountId}|${fromEmail.toLowerCase()}`;
 }

@@ -124,6 +124,17 @@ CREATE TABLE outbox (
     send_at INTEGER NOT NULL
 );
 "#,
+    r#"
+-- More addresses to send from: aliases from the server (server_id set) or added by hand.
+CREATE TABLE identities (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    email TEXT NOT NULL COLLATE NOCASE,
+    name TEXT NOT NULL DEFAULT '',
+    server_id TEXT,
+    UNIQUE (account_id, email)
+);
+"#,
 ];
 
 /// A stable positive stand-in for IMAP's uid, so JMAP emails fit the same table.
@@ -330,6 +341,11 @@ impl Store {
                 account.jmap_url,
             ],
         )?;
+        Ok(())
+    }
+
+    pub fn set_account_display_name(&self, id: &str, display_name: &str) -> Result<()> {
+        self.conn().execute("UPDATE accounts SET display_name = ?1 WHERE id = ?2", params![display_name, id])?;
         Ok(())
     }
 
@@ -1235,6 +1251,82 @@ impl Store {
         Ok(row.and_then(|(message_id, refs)| message_id.map(|mid| (mid, refs))))
     }
 
+    // -------------------------------------------------------------- identities
+
+    /// Stored identities (not the accounts' own addresses), by account.
+    pub fn identities(&self) -> Result<Vec<Identity>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT i.id, i.account_id, i.email, i.name, i.server_id IS NOT NULL FROM identities i
+             JOIN accounts a ON a.id = i.account_id
+             WHERE i.email != a.email COLLATE NOCASE ORDER BY a.created_at, i.email",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(Identity {
+                    id: row.get(0)?,
+                    account_id: row.get(1)?,
+                    email: row.get(2)?,
+                    name: row.get(3)?,
+                    primary: false,
+                    from_server: row.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
+    /// Adds an address typed in by hand. Returns `None` when the account already has it.
+    pub fn insert_identity(&self, account_id: &str, email: &str, name: &str) -> Result<Option<String>> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let inserted = self.conn().execute(
+            "INSERT OR IGNORE INTO identities (id, account_id, email, name) VALUES (?1, ?2, ?3, ?4)",
+            params![id, account_id, email, name],
+        )?;
+        Ok((inserted > 0).then_some(id))
+    }
+
+    pub fn rename_identity(&self, id: &str, name: &str) -> Result<bool> {
+        Ok(self.conn().execute("UPDATE identities SET name = ?1 WHERE id = ?2", params![name, id])? > 0)
+    }
+
+    /// Removes an address added by hand; the server's own ones stay.
+    pub fn delete_identity(&self, id: &str) -> Result<bool> {
+        Ok(self.conn().execute("DELETE FROM identities WHERE id = ?1 AND server_id IS NULL", [id])? > 0)
+    }
+
+    /// Makes the server's identities of an account match `found` (server id, email, name).
+    /// An address that was added by hand becomes the server's; names typed here stay.
+    pub fn replace_server_identities(&self, account_id: &str, found: &[(String, String, String)]) -> Result<bool> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let mut changed = 0;
+        for (server_id, email, name) in found {
+            changed += tx.execute(
+                "INSERT INTO identities (id, account_id, email, name, server_id) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (account_id, email) DO UPDATE SET server_id = excluded.server_id,
+                    name = CASE WHEN identities.name = '' THEN excluded.name ELSE identities.name END
+                 WHERE identities.server_id IS NOT excluded.server_id OR identities.name = ''",
+                params![uuid::Uuid::new_v4().to_string(), account_id, email, name, server_id],
+            )?;
+        }
+        let keep: Vec<&str> = found.iter().map(|(server_id, _, _)| server_id.as_str()).collect();
+        let stale: Vec<String> = {
+            let mut stmt =
+                tx.prepare("SELECT id, server_id FROM identities WHERE account_id = ?1 AND server_id IS NOT NULL")?;
+            let rows = stmt.query_map([account_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+            rows.filter_map(|row| row.ok())
+                .filter(|(_, server_id)| !keep.contains(&server_id.as_str()))
+                .map(|(id, _)| id)
+                .collect()
+        };
+        for id in &stale {
+            changed += tx.execute("DELETE FROM identities WHERE id = ?1", [id])?;
+        }
+        tx.commit()?;
+        Ok(changed > 0)
+    }
+
     // ------------------------------------------------------------------ outbox
 
     /// Queues a message; `send_at` in Unix milliseconds.
@@ -1643,6 +1735,34 @@ mod tests {
         let contacts = store.search_contacts("len", &["mini@uwumail.dev".into()]).unwrap();
         assert_eq!(contacts.len(), 1);
         assert_eq!(contacts[0].name.as_deref(), Some("Leni Wanders"));
+    }
+
+    #[test]
+    fn keeps_hand_made_and_server_identities_apart() {
+        let (store, account, _, _) = store_with_account();
+        assert!(store.insert_identity(&account, "hallo@uwumail.dev", "Mini vom Studio").unwrap().is_some());
+        assert!(store.insert_identity(&account, "HALLO@uwumail.dev", "doppelt").unwrap().is_none());
+        // The own address never shows up twice.
+        store.insert_identity(&account, "mini@uwumail.dev", "Mini").unwrap();
+        assert_eq!(store.identities().unwrap().len(), 1);
+
+        let server = |list: &[(&str, &str, &str)]| -> Vec<(String, String, String)> {
+            list.iter().map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string())).collect()
+        };
+        store
+            .replace_server_identities(
+                &account,
+                &server(&[("s1", "hallo@uwumail.dev", "Server"), ("s2", "news@uwumail.dev", "News")]),
+            )
+            .unwrap();
+        let identities = store.identities().unwrap();
+        let hallo = identities.iter().find(|i| i.email == "hallo@uwumail.dev").unwrap();
+        assert!(hallo.from_server, "the server now manages the address typed in before");
+        assert_eq!(hallo.name, "Mini vom Studio", "but the name typed here stays");
+        assert!(!store.delete_identity(&hallo.id).unwrap(), "server identities can't be removed here");
+
+        store.replace_server_identities(&account, &server(&[("s1", "hallo@uwumail.dev", "Server")])).unwrap();
+        assert!(store.identities().unwrap().iter().all(|i| i.email != "news@uwumail.dev"));
     }
 
     #[test]

@@ -14,10 +14,16 @@ export const queryKeys = {
   folders: ["folders"] as const,
   threads: ["threads"] as const,
   thread: ["thread"] as const,
+  identities: ["identities"] as const,
 };
 
 export function useAccounts() {
   return useQuery({ queryKey: queryKeys.accounts, queryFn: () => backend().listAccounts() });
+}
+
+/** Every address the mailboxes can send from. */
+export function useIdentities() {
+  return useQuery({ queryKey: queryKeys.identities, queryFn: () => backend().listIdentities() });
 }
 
 export function useFolders() {

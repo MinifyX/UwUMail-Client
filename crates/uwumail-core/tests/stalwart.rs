@@ -175,6 +175,7 @@ async fn jmap_sync_send_push_flags_and_trash() {
                 source: AttachmentSource::Base64 { data: "SGFsbG8=".into() },
             }],
             draft_key: None,
+            from_email: None,
         })
         .await
         .expect("message can be sent over JMAP");
@@ -256,6 +257,7 @@ async fn jmap_sync_send_push_flags_and_trash() {
             in_reply_to: Some(message.id.clone()),
             attachments: vec![],
             draft_key: None,
+            from_email: None,
         })
         .await
         .unwrap();
@@ -350,6 +352,7 @@ async fn jmap_drafts_are_saved_replaced_and_removed_on_send() {
         in_reply_to: None,
         attachments: vec![],
         draft_key,
+        from_email: None,
     };
 
     let first = engine.save_draft(draft(vec![], "<p>Hi</p>", None)).await.unwrap();

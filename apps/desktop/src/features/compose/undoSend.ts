@@ -19,6 +19,7 @@ export function composeAgain(message: OutgoingMessage) {
       html: message.html,
       inReplyTo: message.inReplyTo,
       draftKey: message.draftKey,
+      fromEmail: message.fromEmail,
       // Saved again as a draft right away, so nothing depends on this window staying open.
       savedToServer: false,
     },
