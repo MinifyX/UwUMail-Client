@@ -17,6 +17,10 @@ object Launch {
     /** Bigger shared files don't fit a mail; copying stops here (the engine applies the same limit). */
     private const val MAX_SHARED_BYTES = 25L * 1024 * 1024
 
+    /** `app.uwumail://oauth?…`, where signing in with Microsoft or Google comes back to. */
+    private const val OAUTH_SCHEME = "app.uwumail"
+    private const val OAUTH_HOST = "oauth"
+
     fun handle(context: Context, intent: Intent?) {
         intent ?: return
         val action = intent.action ?: return
@@ -27,6 +31,15 @@ object Launch {
                 val threadId = intent.getStringExtra(MainActivity.EXTRA_THREAD_ID) ?: return
                 val messageId = intent.getStringExtra(MainActivity.EXTRA_MESSAGE_ID) ?: return
                 report(JSONObject().put("kind", "open").put("threadId", threadId).put("messageId", messageId))
+            }
+            action == Intent.ACTION_VIEW && intent.data?.scheme == OAUTH_SCHEME && intent.data?.host == OAUTH_HOST -> {
+                // Only the address counts, no extras. The engine gives it to the sign-in that is waiting,
+                // which checks that it belongs to it; any other link is ignored.
+                try {
+                    UwuNative.call("oauthRedirect", JSONObject().put("url", intent.dataString).toString())
+                } catch (error: Exception) {
+                    Log.w("UwUMail", "Couldn't hand over the sign-in", error)
+                }
             }
             (action == Intent.ACTION_VIEW || action == Intent.ACTION_SENDTO) && intent.data?.scheme == "mailto" ->
                 report(JSONObject().put("kind", "mailto").put("url", intent.dataString))

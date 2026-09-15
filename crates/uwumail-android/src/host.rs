@@ -20,6 +20,9 @@ use crate::{bridge, launch, secrets::KeystoreSecrets};
 /// Android gives a broadcast about ten seconds.
 const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(8);
 
+/// Where the provider sends the browser after signing in. Registered in the OAuth apps too (docs/oauth.md).
+const OAUTH_REDIRECT: &str = "app.uwumail://oauth";
+
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -76,6 +79,9 @@ pub(crate) fn start_engine(data_dir: PathBuf, cache_dir: PathBuf) -> Result<()> 
     });
     let _entered = runtime().enter();
     let engine = Engine::new(EngineOptions { data_dir, secrets: Arc::new(KeystoreSecrets), open_url })?;
+    // Signing in with Microsoft or Google comes back through this link (see AndroidManifest.xml),
+    // because a phone browser can't reach a listener on the phone's localhost.
+    engine.use_oauth_app_link(OAUTH_REDIRECT);
     // Phones keep the last 90 days complete unless Settings say otherwise.
     let days =
         bridge::call("offlineDays", &json!({})).ok().flatten().and_then(|days| days.parse::<u32>().ok()).unwrap_or(90);
@@ -166,6 +172,15 @@ pub(crate) fn handle(method: &str, payload: &str) -> Result<Option<String>> {
         "launch" => {
             launch::deliver(payload)?;
             Ok(None)
+        }
+        // The browser came back from signing in. Only the waiting sign-in can use the link: it
+        // checks `state` and needs its PKCE verifier, so a link from anywhere else changes nothing.
+        "oauthRedirect" => {
+            let url = payload["url"].as_str().unwrap_or_default();
+            let accepted = ENGINE.get().is_some_and(|engine| engine.finish_sign_in(url));
+            // Never the link itself: it carries the authorization code.
+            crate::native::log(if accepted { "sign-in link handed over" } else { "sign-in link ignored" });
+            Ok(Some(accepted.to_string()))
         }
         // How far the start got, for the log.
         "status" => Ok(Some(

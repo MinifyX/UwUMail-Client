@@ -17,6 +17,8 @@ use crate::bridge;
 const FEED: &str = "https://raw.githubusercontent.com/MinifyX/UwUMail-Releases/main";
 const FIRST_CHECK_AFTER: Duration = Duration::from_secs(20);
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
+/// A phone often starts without network; one quick second try instead of waiting hours.
+const RETRY_AFTER: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -141,14 +143,25 @@ pub fn start(on_ready: impl Fn(&ReadyUpdate) + Send + Sync + 'static) {
     }
     crate::host::runtime().spawn(async {
         tokio::time::sleep(FIRST_CHECK_AFTER).await;
+        let mut retried = false;
         loop {
             // In logcat too: the emulator test reads it to know HTTPS works.
-            match check().await {
-                Ok(Some(update)) => crate::native::log(&format!("update check: {} is ready", update.version)),
-                Ok(None) => crate::native::log("update check: nothing new"),
-                Err(error) => crate::native::log(&format!("update check failed: {error}")),
-            }
-            tokio::time::sleep(CHECK_EVERY).await;
+            let wait = match check().await {
+                Ok(Some(update)) => {
+                    crate::native::log(&format!("update check: {} is ready", update.version));
+                    CHECK_EVERY
+                }
+                Ok(None) => {
+                    crate::native::log("update check: nothing new");
+                    CHECK_EVERY
+                }
+                Err(error) => {
+                    crate::native::log(&format!("update check failed: {error}"));
+                    if retried { CHECK_EVERY } else { RETRY_AFTER }
+                }
+            };
+            retried = wait == RETRY_AFTER;
+            tokio::time::sleep(wait).await;
         }
     });
 }

@@ -105,6 +105,10 @@ checked in because it carries UwUMail's own Kotlin code.
   the Android Keystore (passwords), notifications with actions, shares and
   `mailto:` intents, opening files, Downloads, the APK installer and the
   system bars.
+- **Sign-in with Microsoft or Google:** the browser comes back through
+  `app.uwumail://oauth`. `Launch.kt` passes only that URL to
+  `Engine::finish_sign_in`, which hands it to the waiting sign-in (state and
+  PKCE checked there); the link itself is never logged.
 - **TLS:** IMAP, SMTP, JMAP and HTTPS check certificates against Mozilla's
   root list (`uwumail_core::tls`), because Android's own check needs Java
   classes loaded before the first connection. Certificates a user installed

@@ -49,6 +49,14 @@ adb shell input keyevent KEYCODE_BACK
 sleep 4
 [ -n "$(adb shell pidof "$package" | tr -d '\r')" ] || fail "Back closed UwUMail"
 
+# The link a browser opens after signing in with Microsoft or Google reaches the engine. Nothing is
+# waiting for it here, so the engine must ignore it (and never log the link itself).
+adb shell "am start -W -a android.intent.action.VIEW -d 'app.uwumail://oauth?code=smoke&state=smoke'"
+sleep 4
+adb logcat -d > "$out/logcat.txt"
+grep -q "UwUMail : sign-in link ignored" "$out/logcat.txt" || fail "The sign-in link didn't reach the engine"
+if grep -q "code=smoke" "$out/logcat.txt"; then fail "The sign-in link ended up in the log"; fi
+
 # Window gone while the service keeps the process (like swiping UwUMail away
 # in Recents): it must come back in a fresh process and draw its UI again.
 adb shell am start -W -n "$package/.MainActivity"
@@ -71,10 +79,14 @@ after=$(adb shell pidof "$package" | tr -d '\r')
 [ -n "$after" ] || fail "UwUMail isn't running after the relaunch"
 [ "$after" != "$before" ] || echo "::warning::Relaunch reused the old process"
 
-# The first update check (20 s after the start) proves HTTPS certificate checks work.
+# An update check (20 s after each start, again 30 s after a failure) proves HTTPS certificate checks
+# work. The emulator's network sometimes comes up late, so one success is enough.
 adb logcat -d > "$out/logcat.txt"
 grep -q "UwUMail : update check" "$out/logcat.txt" || fail "The update check didn't run"
-if grep "UwUMail : update check failed" "$out/logcat.txt"; then fail "HTTPS failed on Android"; fi
+if ! grep -Eq "UwUMail : update check: (nothing new|.* is ready)" "$out/logcat.txt"; then
+  grep "UwUMail : update check failed" "$out/logcat.txt"
+  fail "HTTPS failed on Android"
+fi
 
 adb logcat -d > "$out/logcat.txt"
 grep -q "UwUMail : engine running" "$out/logcat.txt" || fail "The mail engine didn't start (see uwumail-log.txt)"
