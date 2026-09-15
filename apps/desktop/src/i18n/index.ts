@@ -35,4 +35,9 @@ export function useT() {
   return useTranslation(tone);
 }
 
+/** `t` for the active tone, for code outside components (toasts from actions, events). */
+export function translate(key: string, options?: Record<string, unknown>): string {
+  return i18n.t(key, { ...options, ns: useSettings.getState().tone });
+}
+
 export { i18n };

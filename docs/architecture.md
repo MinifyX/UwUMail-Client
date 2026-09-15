@@ -161,6 +161,16 @@ Next to the server copy the composer keeps one local copy (local storage):
 drafts that never reached the server come back on the next start, and on the
 phone the open draft always comes back as its bar.
 
+### Undo send
+
+With undo send on (Settings → Writing, 10 seconds by default) the composer
+hands the message to `Engine::queue_send`, which checks it can be built,
+stores it in the `outbox` table and sends it when its time comes. `cancel_send`
+and the sender both take the row with one `DELETE … RETURNING`, so a mail is
+either taken back or sent, never both. Queued mail survives closing UwUMail and
+goes out on the next start. The result arrives as `send:done` or
+`send:failed`; a failed mail is kept as a draft.
+
 ### Addons
 
 See [addons.md](addons.md). In short: each addon runs in its own sandboxed

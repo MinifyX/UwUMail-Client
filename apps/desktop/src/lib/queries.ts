@@ -7,6 +7,7 @@ import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { useUpdates } from "@/state/updates";
+import { composeAgain } from "@/features/compose/undoSend";
 
 export const queryKeys = {
   accounts: ["accounts"] as const,
@@ -206,6 +207,17 @@ export function useBackendEvents() {
           // The open conversation too: a reply or a draft may have joined it. Unchanged data keeps its objects.
           void client.invalidateQueries({ queryKey: queryKeys.thread });
           void client.invalidateQueries({ queryKey: queryKeys.folders });
+          break;
+        case "send:done":
+          toast(t("toast.sent"), "success", "sent");
+          void client.invalidateQueries({ queryKey: queryKeys.threads });
+          break;
+        case "send:failed":
+          toast(t("toast.sendFailedKept", { reason: event.reason }), "error", undefined, {
+            duration: 15_000,
+            action: { label: t("toast.open"), run: () => composeAgain(event.message) },
+          });
+          void client.invalidateQueries({ queryKey: queryKeys.threads });
           break;
         case "mail:received":
           toast(t("toast.newMail", { count: event.messageIds.length }), "info");

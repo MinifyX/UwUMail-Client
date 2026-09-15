@@ -431,3 +431,76 @@ async fn drafts_are_saved_replaced_continued_and_removed_on_send() {
 
     engine.remove_account(&account.id).await.unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn undo_send_takes_mail_back_and_otherwise_sends_it() {
+    let Some(host) = server() else {
+        eprintln!("UWUMAIL_TEST_MAILSERVER not set, skipping");
+        return;
+    };
+    let data = tempfile::tempdir().unwrap();
+    let engine = Engine::new(EngineOptions {
+        data_dir: data.path().to_path_buf(),
+        secrets: Arc::new(MemorySecrets::default()),
+        open_url: Arc::new(|_| {}),
+    })
+    .unwrap();
+    let mut events = engine.subscribe();
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("undo-{}@uwumail.test", &unique[..8]);
+    let account = engine
+        .add_account(NewAccount {
+            display_name: "Mini".into(),
+            email: email.clone(),
+            auth: AuthKind::Password,
+            password: Some("uwu".into()),
+            imap: ServerSettings { host: host.clone(), port: 3143, security: Security::None },
+            smtp: ServerSettings { host, port: 3025, security: Security::None },
+            username: email.clone(),
+            color: AccountColor::Pink,
+            protocol: Protocol::Imap,
+            jmap_url: None,
+        })
+        .await
+        .unwrap();
+    let message = |subject: &str| OutgoingMessage {
+        account_id: account.id.clone(),
+        to: vec![Address { name: None, email: email.clone() }],
+        cc: vec![],
+        bcc: vec![],
+        subject: subject.into(),
+        html: "<p>Hi</p>".into(),
+        text: "Hi".into(),
+        in_reply_to: None,
+        attachments: vec![],
+        draft_key: None,
+    };
+
+    // Taken back in time: the composer gets it again, nothing goes out.
+    let oops = format!("Ups {unique}");
+    let queued = engine.queue_send(message(&oops), 30).unwrap();
+    let back = engine.cancel_send(&queued.id).unwrap();
+    assert_eq!(back.subject, oops);
+    assert!(engine.cancel_send(&queued.id).is_err());
+
+    // Broken addresses are refused right away.
+    let broken = OutgoingMessage { to: vec![Address { name: None, email: "nope".into() }], ..message("Kaputt") };
+    assert!(engine.queue_send(broken, 30).is_err());
+
+    // Left alone, it goes out after the wait and says so.
+    let fine = format!("Klappt {unique}");
+    let queued = engine.queue_send(message(&fine), 1).unwrap();
+    wait_for("the queued message in the inbox", async || {
+        engine.sync_now(Some(&account.id));
+        engine.list_threads(&inbox_query(None)).unwrap().threads.into_iter().find(|t| t.subject == fine)
+    })
+    .await;
+    let mut done = false;
+    while let Ok(event) = events.try_recv() {
+        done |= matches!(event, EngineEvent::SendDone { ref send_id, .. } if *send_id == queued.id);
+    }
+    assert!(done, "the UI hears that it went out");
+    assert!(engine.list_threads(&inbox_query(None)).unwrap().threads.iter().all(|t| t.subject != oops));
+
+    engine.remove_account(&account.id).await.unwrap();
+}

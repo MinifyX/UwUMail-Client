@@ -115,6 +115,15 @@ CREATE TABLE sync_state (
     PRIMARY KEY (account_id, kind)
 );
 "#,
+    r#"
+-- Mail waiting for its "undo send" time. It survives a restart and goes out then.
+CREATE TABLE outbox (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    message_json TEXT NOT NULL,
+    send_at INTEGER NOT NULL
+);
+"#,
 ];
 
 /// A stable positive stand-in for IMAP's uid, so JMAP emails fit the same table.
@@ -1226,6 +1235,35 @@ impl Store {
         Ok(row.and_then(|(message_id, refs)| message_id.map(|mid| (mid, refs))))
     }
 
+    // ------------------------------------------------------------------ outbox
+
+    /// Queues a message; `send_at` in Unix milliseconds.
+    pub fn insert_outbox(&self, id: &str, account_id: &str, message_json: &str, send_at: i64) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO outbox (id, account_id, message_json, send_at) VALUES (?1, ?2, ?3, ?4)",
+            params![id, account_id, message_json, send_at],
+        )?;
+        Ok(())
+    }
+
+    /// Removes a queued message and hands it over, once: to whoever sends it or undoes it first.
+    pub fn take_outbox(&self, id: &str) -> Result<Option<(String, String)>> {
+        Ok(self
+            .conn()
+            .query_row("DELETE FROM outbox WHERE id = ?1 RETURNING account_id, message_json", [id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .optional()?)
+    }
+
+    /// Every queued message with its send time.
+    pub fn outbox(&self) -> Result<Vec<(String, i64)>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT id, send_at FROM outbox ORDER BY send_at")?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
     // ---------------------------------------------------------------- contacts
 
     pub fn remember_contacts(&self, addresses: &[Address]) -> Result<()> {
@@ -1605,5 +1643,17 @@ mod tests {
         let contacts = store.search_contacts("len", &["mini@uwumail.dev".into()]).unwrap();
         assert_eq!(contacts.len(), 1);
         assert_eq!(contacts[0].name.as_deref(), Some("Leni Wanders"));
+    }
+
+    #[test]
+    fn a_queued_message_is_taken_only_once() {
+        let (store, account, _, _) = store_with_account();
+        store.insert_outbox("q1", &account, "{}", 1_000).unwrap();
+        store.insert_outbox("q2", &account, "{}", 500).unwrap();
+        assert_eq!(store.outbox().unwrap(), vec![("q2".to_string(), 500), ("q1".to_string(), 1_000)]);
+        assert_eq!(store.take_outbox("q1").unwrap(), Some((account.clone(), "{}".to_string())));
+        assert_eq!(store.take_outbox("q1").unwrap(), None, "undo and sending can never both get it");
+        store.delete_account(&account).unwrap();
+        assert!(store.outbox().unwrap().is_empty(), "removing the mailbox empties its outbox");
     }
 }

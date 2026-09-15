@@ -56,7 +56,11 @@
     "newMail_other": "{{count}} new mails! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
     "accountAdded": "{{email}} moved in! ٩(◕‿◕)۶",
     "draftSaved": "Draft tucked away safely (˘ω˘)",
-    "draftDiscarded": "Poof, as if it never happened (・ω・)"
+    "draftDiscarded": "Poof, as if it never happened (・ω・)",
+    "sending": "Nyu is about to dash off … ✉︎",
+    "sendUndone": "Wait, stop! Nyu is back (・ω・) Keep writing.",
+    "undoTooLate": "Too late, Nyu is already over the hills (；・∀・)",
+    "sendFailedKept": "Sending didn't work (╥﹏╥) {{reason}} The mail is waiting in Drafts."
   },
   "status": {
     "syncing": "Fetching fresh mail…",

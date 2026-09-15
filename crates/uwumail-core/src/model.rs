@@ -330,6 +330,14 @@ pub struct OutgoingMessage {
     pub draft_key: Option<String>,
 }
 
+/// A message waiting for its "undo send" time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueuedSend {
+    pub id: String,
+    pub send_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedDraft {
@@ -459,6 +467,12 @@ pub enum EngineEvent {
     MailReceived { account_id: String, message_ids: Vec<String> },
     #[serde(rename = "account:status", rename_all = "camelCase")]
     AccountStatus { account_id: String, status: AccountStatus },
+    /// A queued message went out.
+    #[serde(rename = "send:done", rename_all = "camelCase")]
+    SendDone { send_id: String, account_id: String },
+    /// A queued message couldn't be sent; it was kept as a draft where possible.
+    #[serde(rename = "send:failed", rename_all = "camelCase")]
+    SendFailed { send_id: String, account_id: String, reason: String, message: Box<OutgoingMessage> },
 }
 
 impl EngineEvent {
@@ -467,6 +481,8 @@ impl EngineEvent {
             Self::MailChanged { .. } => "mail:changed",
             Self::MailReceived { .. } => "mail:received",
             Self::AccountStatus { .. } => "account:status",
+            Self::SendDone { .. } => "send:done",
+            Self::SendFailed { .. } => "send:failed",
         }
     }
 }

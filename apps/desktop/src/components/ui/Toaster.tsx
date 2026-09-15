@@ -39,6 +39,18 @@ export function Toaster() {
               )}
             </span>
             <span className="flex-1">{item.message}</span>
+            {item.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  dismiss(item.id);
+                  item.action?.run();
+                }}
+                className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-bold text-[#ff7fac] hover:bg-white/10 dark:text-pink-ink dark:hover:bg-black/5"
+              >
+                {item.action.label}
+              </button>
+            )}
             <button
               type="button"
               aria-label={t("common.close")}

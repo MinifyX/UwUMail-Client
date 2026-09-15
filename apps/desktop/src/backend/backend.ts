@@ -12,6 +12,7 @@ import type {
   NewAccount,
   OutgoingMessage,
   Protocol,
+  QueuedSend,
   SenderPicture,
   ThreadDetail,
   ThreadPage,
@@ -52,6 +53,10 @@ export interface Backend {
   archive(messageIds: string[]): Promise<void>;
   trash(messageIds: string[]): Promise<void>;
   send(message: OutgoingMessage): Promise<void>;
+  /** Sends after `delaySeconds` unless `cancelSend` comes first; the result arrives as send:done or send:failed. */
+  queueSend(message: OutgoingMessage, delaySeconds: number): Promise<QueuedSend>;
+  /** Takes a queued mail back and returns it for the composer. */
+  cancelSend(sendId: string): Promise<OutgoingMessage>;
   /** Saves into the account's Drafts folder, replacing the draft's earlier version. */
   saveDraft(draft: OutgoingMessage): Promise<DraftSaveResult>;
   deleteDraft(accountId: string, draftKey: string): Promise<void>;

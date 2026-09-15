@@ -35,7 +35,7 @@ export interface SavedDraft {
   savedToServer?: boolean;
 }
 
-export type SettingsSection = "appearance" | "mail" | "security" | "accounts" | "addons" | "about";
+export type SettingsSection = "appearance" | "mail" | "compose" | "security" | "accounts" | "addons" | "about";
 
 interface UiState {
   view: MailboxView;

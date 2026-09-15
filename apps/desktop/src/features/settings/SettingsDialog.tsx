@@ -8,6 +8,7 @@ import {
   Lock,
   Mail,
   Palette,
+  PenLine,
   Plus,
   Puzzle,
   Upload,
@@ -15,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import pkg from "../../../package.json";
 import { backend } from "@/backend/backend";
@@ -41,6 +42,8 @@ import {
   type SwipeAction,
 } from "@/state/settings";
 import { toast } from "@/state/toasts";
+import { Row } from "./Row";
+import { Writing } from "./Writing";
 import { useUi, type SettingsSection } from "@/state/ui";
 
 const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
@@ -48,23 +51,12 @@ const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
 const SECTIONS: { id: SettingsSection; icon: LucideIcon; androidOnly?: boolean }[] = [
   { id: "appearance", icon: Palette },
   { id: "mail", icon: Mail },
+  { id: "compose", icon: PenLine },
   { id: "security", icon: Lock, androidOnly: true },
   { id: "accounts", icon: Users },
   { id: "addons", icon: Puzzle },
   { id: "about", icon: Info },
 ];
-
-function Row({ label, description, children }: { label: ReactNode; description?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2.5 border-b border-hairline py-4 last:border-0">
-      <div>
-        <p className="text-sm font-semibold">{label}</p>
-        {description && <p className="text-[13px] text-muted">{description}</p>}
-      </div>
-      {children}
-    </div>
-  );
-}
 
 function Appearance() {
   const { t } = useT();
@@ -579,6 +571,7 @@ export function SettingsDialog() {
         <div className="min-w-0 flex-1">
           {section === "appearance" && <Appearance />}
           {section === "mail" && <Reading />}
+          {section === "compose" && <Writing />}
           {section === "security" && <Security />}
           {section === "accounts" && <Accounts />}
           {section === "addons" && <Addons />}

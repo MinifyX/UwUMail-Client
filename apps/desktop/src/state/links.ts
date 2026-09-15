@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { isOpenableLink, misleadingLink, type Misleading } from "@/lib/links";
 import { openExternal } from "@/lib/platform";
 import { toast } from "@/state/toasts";
-import { i18n } from "@/i18n";
+import { translate } from "@/i18n";
 
 interface LinkState {
   /** A link that needs a second look before it opens. */
@@ -20,7 +20,7 @@ export async function openLinkNow(url: string) {
     await openExternal(url);
   } catch (reason) {
     const detail = reason instanceof Error ? reason.message : String(reason);
-    toast(i18n.t("link.failed", { reason: detail }), "error");
+    toast(translate("link.failed", { reason: detail }), "error");
   }
 }
 

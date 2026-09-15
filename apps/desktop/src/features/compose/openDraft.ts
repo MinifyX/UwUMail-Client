@@ -1,5 +1,5 @@
 import { backend } from "@/backend/backend";
-import { i18n } from "@/i18n";
+import { translate } from "@/i18n";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 
@@ -26,7 +26,7 @@ export async function openDraftMessage(messageId: string) {
     });
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : String(reason);
-    toast(i18n.t("toast.draftOpenFailed", { reason: message }), "error");
+    toast(translate("toast.draftOpenFailed", { reason: message }), "error");
   }
 }
 
@@ -38,6 +38,6 @@ export async function openDraftThread(threadId: string) {
     if (draft) await openDraftMessage(draft.id);
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : String(reason);
-    toast(i18n.t("toast.draftOpenFailed", { reason: message }), "error");
+    toast(translate("toast.draftOpenFailed", { reason: message }), "error");
   }
 }

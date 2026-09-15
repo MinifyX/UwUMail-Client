@@ -103,6 +103,16 @@ async fn send_message(engine: State<'_, Engine>, message: OutgoingMessage) -> Co
 }
 
 #[tauri::command]
+fn queue_send(engine: State<'_, Engine>, message: OutgoingMessage, delay_seconds: u64) -> CommandResult<QueuedSend> {
+    engine.queue_send(message, delay_seconds)
+}
+
+#[tauri::command]
+fn cancel_send(engine: State<'_, Engine>, send_id: String) -> CommandResult<OutgoingMessage> {
+    engine.cancel_send(&send_id)
+}
+
+#[tauri::command]
 async fn save_draft(engine: State<'_, Engine>, draft: OutgoingMessage) -> CommandResult<SavedDraft> {
     engine.save_draft(draft).await
 }
@@ -300,6 +310,8 @@ pub fn run() {
             archive_messages,
             trash_messages,
             send_message,
+            queue_send,
+            cancel_send,
             save_draft,
             delete_draft,
             open_draft,

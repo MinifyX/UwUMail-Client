@@ -29,9 +29,11 @@ import { modKey } from "@/lib/platform";
 import { htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { useAccounts, useMessageActions } from "@/lib/queries";
 import { toast } from "@/state/toasts";
+import { useSettings } from "@/state/settings";
 import { useUi, type ComposeRequest } from "@/state/ui";
 import { initialDraft, type DraftState } from "./draft";
 import { RecipientInput } from "./RecipientInput";
+import { undoSend } from "./undoSend";
 
 /** Quiet for this long after the last change, then the draft goes to the server. */
 const DRAFT_SAVE_DELAY = 2500;
@@ -261,7 +263,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
     finished.current = true;
     try {
       await saving.current;
-      await backend().send({
+      const message = {
         accountId,
         to: draft.to,
         cc: draft.cc,
@@ -272,17 +274,28 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         inReplyTo,
         attachments,
         draftKey: savedAccount.current === accountId ? draftKey.current : undefined,
-      });
+      };
+      const delay = useSettings.getState().undoSendSeconds;
+      const queued = delay > 0 ? await backend().queueSend(message, delay) : null;
+      if (!queued) await backend().send(message);
       // Written in another mailbox before: sending there doesn't remove that copy.
       if (draftKey.current && savedAccount.current && savedAccount.current !== accountId) {
         void backend()
           .deleteDraft(savedAccount.current, draftKey.current)
           .catch(() => {});
       }
-      toast(t("toast.sent"), "success", "sent");
       clearLocalDraft();
       closeCompose();
-      void refresh();
+      if (queued) {
+        // It goes out when the toast does; "sent" follows from the engine (send:done).
+        toast(t("toast.sending"), "info", undefined, {
+          duration: delay * 1000,
+          action: { label: t("toast.undo"), run: () => void undoSend(queued.id) },
+        });
+      } else {
+        toast(t("toast.sent"), "success", "sent");
+        void refresh();
+      }
     } catch (reason) {
       finished.current = false;
       setError(t("toast.sendFailed", { reason: reason instanceof Error ? reason.message : String(reason) }));

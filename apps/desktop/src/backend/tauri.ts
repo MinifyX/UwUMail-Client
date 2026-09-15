@@ -15,6 +15,7 @@ import type {
   NewAccount,
   OutgoingMessage,
   Protocol,
+  QueuedSend,
   SenderPicture,
   ThreadDetail,
   ThreadPage,
@@ -40,7 +41,15 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   }
 }
 
-const EVENT_NAMES = ["mail:changed", "mail:received", "account:status", "compose:mailto", "update:ready"] as const;
+const EVENT_NAMES = [
+  "mail:changed",
+  "mail:received",
+  "account:status",
+  "send:done",
+  "send:failed",
+  "compose:mailto",
+  "update:ready",
+] as const;
 
 export class TauriBackend implements Backend {
   readonly kind = "tauri";
@@ -95,6 +104,14 @@ export class TauriBackend implements Backend {
 
   send(message: OutgoingMessage) {
     return call<void>("send_message", { message });
+  }
+
+  queueSend(message: OutgoingMessage, delaySeconds: number) {
+    return call<QueuedSend>("queue_send", { message, delaySeconds });
+  }
+
+  cancelSend(sendId: string) {
+    return call<OutgoingMessage>("cancel_send", { sendId });
   }
 
   saveDraft(draft: OutgoingMessage) {

@@ -15,6 +15,9 @@ export type RemoteImages = "ask" | "always";
 export type UpdateChannel = "stable" | "beta";
 /** How HTML mail looks while the app is dark. */
 export type MailAppearance = "auto" | "light" | "dark";
+/** Seconds a sent mail waits so it can still be taken back; 0 sends right away. */
+export const UNDO_SEND_CHOICES = [0, 5, 10, 20, 30] as const;
+export type UndoSendSeconds = (typeof UNDO_SEND_CHOICES)[number];
 /** What swiping a mail in the phone list does. */
 export type SwipeAction = "read" | "archive" | "trash" | "flag" | "none";
 /** Minutes in the background before the app lock asks again; 0 locks right away. */
@@ -44,6 +47,7 @@ export interface Settings {
   /** Closing the window keeps UwUMail running in the tray. */
   runInBackground: boolean;
   updateChannel: UpdateChannel;
+  undoSendSeconds: UndoSendSeconds;
   /** Phone list: swiping right and left. */
   swipeRight: SwipeAction;
   swipeLeft: SwipeAction;
@@ -81,6 +85,7 @@ export const DEFAULT_SETTINGS: Settings = {
   runInBackground: true,
   // Someone who installed a beta wants the next beta too.
   updateChannel: pkg.version.includes("-") ? "beta" : "stable",
+  undoSendSeconds: 10,
   swipeRight: "read",
   swipeLeft: "archive",
   appLock: false,

@@ -146,7 +146,13 @@
     "draftSaved": "Entwurf gespeichert",
     "draftLocal": "Der Entwurf ist nur auf diesem Gerät gespeichert. UwUMail versucht es später erneut.",
     "draftDiscarded": "Entwurf verworfen",
-    "draftOpenFailed": "Der Entwurf konnte nicht geöffnet werden. {{reason}}"
+    "draftOpenFailed": "Der Entwurf konnte nicht geöffnet werden. {{reason}}",
+    "sending": "Mail wird gesendet …",
+    "undo": "Rückgängig",
+    "sendUndone": "Senden abgebrochen. Du kannst weiterschreiben.",
+    "undoTooLate": "Zu spät, die Mail ist schon unterwegs.",
+    "sendFailedKept": "Die Mail konnte nicht gesendet werden: {{reason}} Sie liegt in den Entwürfen.",
+    "open": "Öffnen"
   },
   "status": {
     "syncing": "Suche nach neuen Mails",
@@ -320,7 +326,13 @@
     "offlineDays30": "30 Tage",
     "offlineDays90": "90 Tage",
     "offlineDaysYear": "1 Jahr",
-    "offlineDaysAll": "Alles"
+    "offlineDaysAll": "Alles",
+    "compose": "Schreiben",
+    "undoSend": "Senden rückgängig machen",
+    "undoSendDesc": "So lange kannst du eine gesendete Mail noch zurückholen. Sie geht auch raus, wenn du das Fenster in der Zeit schließt.",
+    "undoSendOff": "Aus",
+    "seconds_one": "{{count}} Sekunde",
+    "seconds_other": "{{count}} s"
   },
   "theme": {
     "system": "System",

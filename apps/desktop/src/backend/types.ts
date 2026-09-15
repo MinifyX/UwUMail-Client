@@ -150,6 +150,12 @@ export interface OutgoingMessage {
   draftKey?: string;
 }
 
+/** A mail waiting for its "undo send" time. */
+export interface QueuedSend {
+  id: string;
+  sendAt: string;
+}
+
 export interface DraftSaveResult {
   draftKey: string;
   savedAt: string;
@@ -245,5 +251,7 @@ export type BackendEvent =
   | { type: "mail:changed"; accountId: string }
   | { type: "mail:received"; accountId: string; messageIds: string[] }
   | { type: "account:status"; accountId: string; status: AccountStatus }
+  | { type: "send:done"; sendId: string; accountId: string }
+  | { type: "send:failed"; sendId: string; accountId: string; reason: string; message: OutgoingMessage }
   | { type: "compose:mailto" }
   | ({ type: "update:ready" } & UpdateInfo);

@@ -28,6 +28,15 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const JMAP_POLL_EVERY: Duration = Duration::from_secs(60);
 /// Server search over IMAP asks at most this many folders per mailbox.
 const SEARCH_FOLDERS: usize = 25;
+/// The longest "undo send" wait the page may ask for.
+const MAX_SEND_DELAY: u64 = 60;
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
+}
 
 pub type UrlOpener = Arc<dyn Fn(&str) + Send + Sync>;
 
@@ -145,10 +154,14 @@ impl Engine {
         self.inner.events.subscribe()
     }
 
-    /// Starts background sync for every saved account.
+    /// Starts background sync for every saved account, and sends what was
+    /// still waiting in the outbox when UwUMail last stopped.
     pub fn start(&self) -> Result<()> {
         for account in self.inner.store.accounts()? {
             self.inner.spawn_sync(&account.id);
+        }
+        for (id, send_at) in self.inner.store.outbox()? {
+            self.schedule_send(id, send_at);
         }
         Ok(())
     }
@@ -690,6 +703,84 @@ impl Engine {
             in_reply_to,
             attachments: parts.attachments,
         })
+    }
+
+    /// Sends after `delay_seconds`, unless [`Engine::cancel_send`] comes first. The message
+    /// waits in the database, so closing the window or even UwUMail doesn't lose it.
+    pub fn queue_send(&self, outgoing: OutgoingMessage, delay_seconds: u64) -> Result<QueuedSend> {
+        let account = self.inner.store.account(&outgoing.account_id)?;
+        // Mistakes like a broken address show now, not after the wait.
+        let from = sender(&account);
+        smtp::build(&smtp::Mail {
+            from: &from,
+            to: &outgoing.to,
+            cc: &outgoing.cc,
+            bcc: &outgoing.bcc,
+            subject: &outgoing.subject,
+            text: &outgoing.text,
+            html: &outgoing.html,
+            threading: None,
+            attachments: &outgoing.attachments,
+            message_id: None,
+            draft: false,
+        })?;
+        let id = uuid::Uuid::new_v4().to_string();
+        let delay = i64::try_from(delay_seconds.min(MAX_SEND_DELAY)).unwrap_or(0) * 1000;
+        let send_at = now_millis() + delay;
+        self.inner.store.insert_outbox(&id, &account.id, &serde_json::to_string(&outgoing)?, send_at)?;
+        self.schedule_send(id.clone(), send_at);
+        Ok(QueuedSend { id, send_at: mime::iso8601(send_at / 1000) })
+    }
+
+    /// Takes a queued message back before it goes out.
+    pub fn cancel_send(&self, send_id: &str) -> Result<OutgoingMessage> {
+        match self.inner.store.take_outbox(send_id)? {
+            Some((_, json)) => Ok(serde_json::from_str(&json)?),
+            None => Err(Error::invalid("This mail is already on its way.")),
+        }
+    }
+
+    fn schedule_send(&self, send_id: String, send_at: i64) {
+        let engine = self.clone();
+        self.inner.runtime.spawn(async move {
+            let wait = u64::try_from(send_at - now_millis()).unwrap_or(0);
+            tokio::time::sleep(Duration::from_millis(wait)).await;
+            engine.deliver(&send_id).await;
+        });
+    }
+
+    async fn deliver(&self, send_id: &str) {
+        let (account_id, json) = match self.inner.store.take_outbox(send_id) {
+            Ok(Some(taken)) => taken,
+            // Undone in the meantime.
+            Ok(None) => return,
+            Err(error) => {
+                tracing::warn!("Couldn't read the outbox: {error}");
+                return;
+            }
+        };
+        let message: OutgoingMessage = match serde_json::from_str(&json) {
+            Ok(message) => message,
+            Err(error) => {
+                tracing::warn!("A queued message couldn't be read: {error}");
+                return;
+            }
+        };
+        match self.send(message.clone()).await {
+            Ok(()) => self.inner.emit(EngineEvent::SendDone { send_id: send_id.to_string(), account_id }),
+            Err(error) => {
+                // Nothing written gets lost: it waits in Drafts.
+                if let Err(draft_error) = self.save_draft(message.clone()).await {
+                    tracing::warn!("Couldn't keep the unsent message as a draft: {draft_error}");
+                }
+                self.inner.emit(EngineEvent::SendFailed {
+                    send_id: send_id.to_string(),
+                    account_id,
+                    reason: error.message,
+                    message: Box::new(message),
+                });
+            }
+        }
     }
 
     pub async fn send(&self, outgoing: OutgoingMessage) -> Result<()> {
