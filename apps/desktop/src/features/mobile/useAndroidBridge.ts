@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { mobile, nativeAndroid } from "@/backend/mobile";
 import { resolveLanguage, useT } from "@/i18n";
@@ -6,6 +7,7 @@ import { useAccounts } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
+import { revealWorkspaceOf } from "../workspaces/workspaces";
 
 const ASKED_FOR_NOTIFICATIONS = "uwumail.askedNotifications";
 
@@ -19,6 +21,7 @@ export function useAndroidBridge() {
   const offlineDays = useSettings((s) => s.offlineDays);
   const appLock = useSettings((s) => s.appLock);
   const { data: accounts = [] } = useAccounts();
+  const client = useQueryClient();
   const told = useRef(false);
 
   // Status and navigation bars take the color of the screen behind them.
@@ -71,6 +74,8 @@ export function useAndroidBridge() {
       if (action.kind === "open") {
         ui.setFolderDrawerOpen(false);
         ui.selectThread(action.threadId);
+        // Notifications come for every mailbox; the list behind the mail follows to its workspace.
+        void revealWorkspaceOf(client, action.threadId);
         return;
       }
       ui.openCompose({ mode: "new", ...action.draft, attachments: action.attachments });
@@ -78,5 +83,5 @@ export function useAndroidBridge() {
     };
     void take();
     return mobile.onLaunchAction(() => void take());
-  }, [t]);
+  }, [client, t]);
 }

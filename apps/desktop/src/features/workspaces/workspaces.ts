@@ -1,6 +1,9 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { BriefcaseBusiness, House, type LucideIcon } from "lucide-react";
 import { useEffect } from "react";
+import { backend } from "@/backend/backend";
 import { useT } from "@/i18n";
+import { queryKeys } from "@/lib/queries";
 import { workspaceOf } from "@/lib/workspaces";
 import { useSettings, type Workspace } from "@/state/settings";
 import { useUi } from "@/state/ui";
@@ -42,4 +45,26 @@ export function useWorkspaceGuard() {
   useEffect(() => {
     if (hidden) useUi.getState().setView({ kind: "unified", role: "inbox" });
   }, [hidden]);
+}
+
+/**
+ * Brings up the workspace of a conversation opened from outside the list, e.g. a tapped notification.
+ * The conversation stays open; it loads the same data anyway.
+ */
+export async function revealWorkspaceOf(client: QueryClient, threadId: string) {
+  const { workspaces, businessAccounts, conversations } = useSettings.getState();
+  if (!workspaces) return;
+  try {
+    const detail = await client.fetchQuery({
+      queryKey: [...queryKeys.thread, threadId, conversations],
+      queryFn: () => backend().getThread(threadId, conversations),
+    });
+    const accountId = detail.thread.accountIds[0];
+    if (!accountId) return;
+    const open = useUi.getState().selectedThreadId === threadId;
+    switchWorkspace(workspaceOf(accountId, businessAccounts));
+    if (open) useUi.getState().selectThread(threadId);
+  } catch {
+    // The open conversation tells what went wrong.
+  }
 }
