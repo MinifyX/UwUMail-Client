@@ -210,3 +210,122 @@ found one advisory (RUSTSEC-2026-0285 in rustls), fixed by updating rustls to 0.
 3. Proxying sender pictures, or loading them only for senders the user has written to (I6).
 4. A dedicated review of the addon host before it ships (I11).
 5. Repeating this audit before 1.0 and after larger features (drafts on the server, multiple identities).
+
+---
+
+# Addendum — the Android app and changes after 0.2.0-beta.1
+
+September 2026, after the first Android APK. Scope: everything added since the audit above — the Android app
+(`apps/desktop/src-tauri/gen/android`, the JNI bridge and engine host in `crates/uwumail-android`, `android.rs`),
+the phone UI (`features/mobile`, app lock, share and `mailto:` handling), the shared TLS setup
+(`uwumail_core::tls`), server search and the offline window, remote-image trust per sender, and the Android build
+in CI.
+
+## Summary
+
+| Severity | Found | Fixed | Accepted |
+| --- | --- | --- | --- |
+| Medium | 4 | 4 | 0 |
+| Low | 8 | 8 | 0 |
+| Informational | 8 | — | 8 |
+
+## Threat model additions
+
+On a phone two more attackers matter: **other apps on the same phone**, which can send UwUMail shares, links and
+intents, and **someone holding the unlocked phone**, which is what the optional app lock is for. A phone that is
+rooted or already runs malware with elevated rights is out of scope.
+
+## Findings
+
+### Medium
+
+**AM1 — The app lock could be passed through open dialogs and switched off without unlocking.** *Fixed.*
+Dialogs use the browser's modal `<dialog>`, which is drawn above every other element, the lock screen included.
+A dialog that was open when the lock kicked in (settings, the attachment viewer) stayed usable on top of it, and
+Settings turned the lock off without asking. A native yes/no question left open in the background could also be
+answered past the lock.
+Fix: while locked, dialogs close and reopen after unlocking (`state/lock.ts`, `Dialog.tsx`). Turning the lock off
+or choosing a longer delay asks for fingerprint, face or PIN first. Native questions count as "no" when UwUMail
+goes to the background. The phone's own unlock screen no longer re-locks UwUMail when it returns.
+
+**AM2 — Sharing to UwUMail could attach UwUMail's own private files.** *Fixed.*
+UwUMail reads shared files with its own permissions. A share pointing at a `file://` path or at UwUMail's own file
+provider would have put the mail cache or saved attachments into a new draft, one tap away from being sent.
+Fix: only `content://` files offered by other apps are accepted (`Launch.kt`).
+
+**AM3 — App packages from mail went straight to the installer.** *Fixed.*
+APK files weren't on the dangerous list, and the type claimed in the mail decided which app opened an attachment,
+so an app package could also arrive named like a PDF.
+Fix: on Android, app packages (`apk`, `apks`, `apkm`, `xapk`, `aab`) from mail are never opened; they can only be
+saved to Downloads, and the viewer explains why. The engine refuses them by name and by type (`check_openable`),
+and Android picks the app from the file name, never from the mail's claim alone (`Files.kt`). On every platform
+they are now marked as dangerous.
+
+**AM4 — The signing key was present while third-party build code ran.** *Fixed.*
+CI decoded the Android signing key before the build, so every npm, Cargo and Gradle build script could have read
+it. Whoever holds the key can publish an APK that installs over UwUMail.
+Fix: the APK is built unsigned; a separate step signs it with Android's own tools, removes the key right away and
+checks that the certificate matches UwUMail's pinned fingerprint.
+
+### Low
+
+**AL1 — Notifications showed who wrote and what about, with the app lock on too.** *Fixed.* With the app lock on,
+notifications only say that new mail arrived and in which mailbox. All mail notifications carry a neutral version
+for secure lock screens that hide sensitive content.
+
+**AL2 — Recents showed the last screen although the app lock was on.** *Fixed.* With the app lock on, Recents
+shows an empty card (Android 13 and newer). Screenshots stay allowed.
+
+**AL3 — "Archive" worked from the lock screen.** *Fixed.* It asks to unlock the phone first; "Mark as read" still
+works directly.
+
+**AL4 — Other apps could open UwUMail at a message of their choosing.** *Fixed.* Only UwUMail's own notifications
+carry a random token that opening a message requires.
+
+**AL5 — Shared files were copied without a size limit.** *Fixed.* Copying stops at 25 MB per file, and all shared
+files together have to fit that limit too, so a share can't fill storage or memory.
+
+**AL6 — Attachment names with line breaks could reword the warning dialog.** *Fixed.* Control characters are
+removed from names for display and storage, including in the "can run programs" dialog. Names that are only dots
+fall back to "attachment" on Android.
+
+**AL7 — Line breaks in a server search could end the IMAP command.** *Fixed.* Control characters in search text
+become spaces before quoting (`imap.rs`).
+
+**AL8 — Build and update supply chain.** *Fixed.* An unused certificate-check library that Gradle fetched as
+`latest.release` is gone; the Gradle distribution is pinned by checksum and CI validates the checked-in wrapper
+jar; the Android update client only follows HTTPS.
+
+### Informational (accepted for now)
+
+- **AI1 — Certificates on Android** are checked against Mozilla's root list (`uwumail_core::tls`). Certificate
+  authorities installed on the phone by the user aren't trusted, and there is no revocation check.
+- **AI2 — Passwords can be decrypted while the phone is locked.** Background push needs them to reconnect. They
+  are encrypted with a key in the Android Keystore; app data sits in the app sandbox under Android's file-based
+  encryption and is excluded from backups and device transfers.
+- **AI3 — The app lock protects the screen, not the engine.** Mail keeps syncing and notifications keep arriving;
+  "Mark as read" works from a notification. The lock is only as strong as the phone's fingerprint, face or PIN.
+- **AI4 — Hiding the Recents preview needs Android 13.** Older phones (Android 10–12) still show it.
+- **AI5 — The WebView's IPC bridge is visible to every frame.** Tauri only accepts calls carrying the key that the
+  main page gets, and mail frames can't run scripts. This matters for the addon review (I11).
+- **AI6 — APKs are installed by hand for now.** Integrity of updates rests on Android's rule that an update must
+  carry the same signing certificate; the key backup outside CI has to live in a password manager.
+- **AI7 — Remote-image trust follows the From address,** which a sender can forge. The worst case is loaded remote
+  images for that mail (tracking), not running code.
+- **AI8 — Shared files UwUMail may read anyway** (for example its own saves in Downloads) can still be attached by
+  another app's share. The draft shows every attachment and nothing is sent without the user.
+
+## Verification
+
+- New unit tests: control characters in names, app packages (engine and UI), IMAP search quoting and the share size
+  budget. `cargo clippy -D warnings`, `cargo test`, `pnpm test`, `cargo audit` and `pnpm audit --prod`: clean.
+- In the UI, dialogs were checked to close while locked and to come back after unlocking.
+- The Android CI builds, signs and checks the certificate, and the emulator test starts the app, the background
+  service, HTTPS and the relaunch after swiping UwUMail away.
+
+## Recommendations for later
+
+1. Trust remote images only for senders whose domain authenticated the mail (DMARC pass) (AI7).
+2. An opt-in to trust user-installed certificate authorities, for self-hosted servers (AI1).
+3. When background push is off, bind the Keystore key to the unlocked phone (AI2).
+4. Include the Android IPC bridge in the addon host review (AI5, I11).

@@ -113,8 +113,12 @@ checked in because it carries UwUMail's own Kotlin code.
   (`Engine::set_offline_days`); older mail is stored with headers and a
   preview, and `Engine::search_server` finds and adds mail that never came
   down.
-- **Signing:** CI signs every APK with the key in the
-  `UWUMAIL_ANDROID_KEYSTORE_*` secrets so newer builds install over older ones.
+- **Signing:** CI builds the APK unsigned, then signs it in a separate step
+  with the key in the `UWUMAIL_ANDROID_KEYSTORE_*` secrets and checks the
+  pinned certificate, so newer builds install over older ones and the key is
+  never around while third-party build code runs.
+- **App lock:** covers the UI (dialogs close while locked); with it on,
+  notifications leave out sender and subject and Recents shows no preview.
 
 ### `apps/desktop/src` — the UI
 
