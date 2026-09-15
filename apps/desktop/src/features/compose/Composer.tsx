@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
-import type { OutgoingAttachment, Signature } from "@/backend/types";
+import type { Identity, OutgoingAttachment, Signature } from "@/backend/types";
 import { Menu } from "@/components/ui/Menu";
 import { defaultSignature, withSignature, withoutSignatureMarker } from "@/lib/signatures";
 import { useBackLayer } from "@/lib/backStack";
@@ -31,9 +31,11 @@ import { formatSize } from "@/lib/format";
 import { modKey } from "@/lib/platform";
 import { htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { useAccounts, useIdentities, useMessageActions, useSignatures } from "@/lib/queries";
+import { activeFirst, sendersByWorkspace } from "@/lib/workspaces";
 import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi, type ComposeRequest } from "@/state/ui";
+import { useWorkspaceName } from "../workspaces/workspaces";
 import { initialDraft, replyFrom, type DraftState } from "./draft";
 import { RecipientInput } from "./RecipientInput";
 import { undoSend } from "./undoSend";
@@ -62,7 +64,13 @@ export function Composer() {
 
 function ComposerWindow({ request }: { request: ComposeRequest }) {
   const { t, i18n } = useT();
-  const { data: accounts = [] } = useAccounts();
+  const { data: allAccounts = [] } = useAccounts();
+  const workspaces = useSettings((s) => s.workspaces);
+  const activeWorkspace = useSettings((s) => s.activeWorkspace);
+  const businessAccounts = useSettings((s) => s.businessAccounts);
+  const workspaceName = useWorkspaceName();
+  // New mail starts from the first mailbox of the workspace that's open.
+  const accounts = workspaces ? activeFirst(allAccounts, activeWorkspace, businessAccounts) : allAccounts;
   const { data: identities } = useIdentities();
   const closeCompose = useUi((s) => s.closeCompose);
   const minimized = useUi((s) => s.composeMinimized);
@@ -291,6 +299,11 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       primary: true,
       fromServer: false,
     }));
+  const senderOption = (s: Identity) => (
+    <option key={s.id} value={senderKey(s.accountId, s.primary ? "" : s.email)}>
+      {s.name || accounts.find((a) => a.id === s.accountId)?.displayName} &lt;{s.email}&gt;
+    </option>
+  );
 
   const pickSignature = (signature: Signature | null) => {
     autoSignature.current = false;
@@ -508,11 +521,13 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             }}
             className="h-9 min-w-0 flex-1 bg-transparent text-[14px] outline-none"
           >
-            {senders.map((s) => (
-              <option key={s.id} value={senderKey(s.accountId, s.primary ? "" : s.email)}>
-                {s.name || accounts.find((a) => a.id === s.accountId)?.displayName} &lt;{s.email}&gt;
-              </option>
-            ))}
+            {workspaces
+              ? sendersByWorkspace(senders, activeWorkspace, businessAccounts).map((group) => (
+                  <optgroup key={group.workspace} label={workspaceName(group.workspace)}>
+                    {group.senders.map(senderOption)}
+                  </optgroup>
+                ))
+              : senders.map(senderOption)}
           </select>
         </div>
       )}

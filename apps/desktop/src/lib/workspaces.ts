@@ -1,7 +1,7 @@
 // Private and business workspaces: every mailbox belongs to one of them, and
 // while the feature is on the app only shows the active workspace's mailboxes.
 
-import type { Folder } from "@/backend/types";
+import type { Folder, Identity } from "@/backend/types";
 import type { Workspace } from "@/state/settings";
 
 export const WORKSPACES: readonly Workspace[] = ["private", "business"];
@@ -27,4 +27,29 @@ export function unreadInboxes(folders: readonly Folder[], businessAccounts: read
     if (folder.role === "inbox") unread[workspaceOf(folder.accountId, businessAccounts)] += folder.unread;
   }
   return unread;
+}
+
+/** The given workspace's mailboxes first, then the others, each keeping its order. */
+export function activeFirst<T extends { id: string }>(
+  accounts: readonly T[],
+  active: Workspace,
+  businessAccounts: readonly string[],
+): T[] {
+  const other = active === "private" ? "business" : "private";
+  return [...inWorkspace(accounts, active, businessAccounts), ...inWorkspace(accounts, other, businessAccounts)];
+}
+
+/** Addresses to send from, grouped by workspace with the active one first; empty groups are left out. */
+export function sendersByWorkspace(
+  senders: readonly Identity[],
+  active: Workspace,
+  businessAccounts: readonly string[],
+): { workspace: Workspace; senders: Identity[] }[] {
+  const order: Workspace[] = active === "private" ? ["private", "business"] : ["business", "private"];
+  return order
+    .map((workspace) => ({
+      workspace,
+      senders: senders.filter((sender) => workspaceOf(sender.accountId, businessAccounts) === workspace),
+    }))
+    .filter((group) => group.senders.length > 0);
 }
