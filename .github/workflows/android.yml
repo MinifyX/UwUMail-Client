@@ -2,11 +2,11 @@ name: Android
 
 # Builds the signed UwUMail APK for phones (arm64). Every build is signed with
 # the same key, so a newer APK installs over the one on the phone.
+#
+# Started by hand only: the emulator run uses up the private repo's free
+# Actions minutes quickly.
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ["docs/**", "brand/**", "README.md", "CONTRIBUTING.md", "release-notes/**"]
   workflow_dispatch:
 
 concurrency:

@@ -11,6 +11,7 @@
     "tauri": "pnpm --filter @uwumail/desktop tauri",
     "build": "pnpm -r build",
     "build:setup": "node scripts/build-setup.mjs",
+    "release": "node scripts/release.mjs",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
