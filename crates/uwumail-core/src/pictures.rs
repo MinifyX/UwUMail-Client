@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn uses_the_main_domain_of_company_addresses() {
-        assert_eq!(picture_domain("news@socix.org").as_deref(), Some("socix.org"));
+        assert_eq!(picture_domain("news@example.org").as_deref(), Some("example.org"));
         assert_eq!(picture_domain("noreply@em.mail.shop.example.co.uk").as_deref(), Some("example.co.uk"));
         assert_eq!(picture_domain("Hallo@Bright-Labs.DE").as_deref(), Some("bright-labs.de"));
         assert_eq!(picture_domain("info@müller.de").as_deref(), Some("xn--mller-kva.de"));

@@ -14,7 +14,7 @@ async fn fetches_pictures_from_real_domains() {
     let path = std::env::var("UWUMAIL_TEST_PICTURES_DIR").map(Into::into).unwrap_or_else(|_| dir.path().to_path_buf());
     let pictures = SenderPictures::new(&path).unwrap();
 
-    for email in ["news@socix.org", "noreply@github.com", "service@paypal.de", "no-reply@accounts.google.com"] {
+    for email in ["news@mozilla.org", "noreply@github.com", "service@paypal.de", "no-reply@accounts.google.com"] {
         let picture = pictures.get(email).await.unwrap();
         match &picture {
             Some(found) => {
