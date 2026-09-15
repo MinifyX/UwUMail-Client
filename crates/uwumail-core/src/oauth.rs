@@ -92,15 +92,42 @@ pub(crate) fn pkce_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
-/// Pulls `code` and `state` out of `GET /?code=…&state=… HTTP/1.1`.
-pub(crate) fn parse_redirect(request: &str) -> Result<(String, String)> {
+/// The URL of `GET /?code=…&state=… HTTP/1.1`.
+fn request_url(request: &str) -> Result<url::Url> {
     let target = request
         .lines()
         .next()
         .and_then(|line| line.split_whitespace().nth(1))
         .ok_or_else(|| Error::auth("The sign-in page sent an invalid response."))?;
-    let url = url::Url::parse(&format!("http://localhost{target}")).map_err(|_| Error::auth("Invalid redirect."))?;
-    redirect_parameters(&url)
+    url::Url::parse(&format!("http://localhost{target}")).map_err(|_| Error::auth("Invalid redirect."))
+}
+
+/// Pulls `code` and `state` out of `GET /?code=…&state=… HTTP/1.1`.
+#[cfg(test)]
+fn parse_redirect(request: &str) -> Result<(String, String)> {
+    redirect_parameters(&request_url(request)?)
+}
+
+/// Whether a redirect answers this sign-in. Anything on the device can send one (a local program
+/// to the loopback port, any app or web page to the app link), so only the matching `state`
+/// counts, for a code as well as for an error. Everything else is ignored instead of ending the sign-in.
+fn belongs_to(url: &url::Url, state: &str) -> bool {
+    url.query_pairs().any(|(key, value)| key == "state" && value == state)
+}
+
+/// Waits for the app link that answers this sign-in, skipping any other.
+async fn wait_for_app_link(
+    incoming: &mut tokio::sync::mpsc::Receiver<String>,
+    state: &str,
+) -> Result<(String, String)> {
+    loop {
+        let url = incoming.recv().await.ok_or_else(|| Error::auth("The sign-in was cancelled."))?;
+        if let Ok(url) = url::Url::parse(&url)
+            && belongs_to(&url, state)
+        {
+            return redirect_parameters(&url);
+        }
+    }
 }
 
 /// `code` and `state` of a redirect URL, or the error the provider reported.
@@ -132,8 +159,8 @@ pub enum Redirect {
     /// A one-shot HTTP listener on 127.0.0.1 (desktop).
     Loopback,
     /// The app's own link, e.g. `app.uwumail://oauth` on Android: the platform hands
-    /// the URL it was opened with to the waiting sign-in.
-    App { uri: String, incoming: tokio::sync::oneshot::Receiver<String> },
+    /// every URL it was opened with to the waiting sign-in, which picks its own.
+    App { uri: String, incoming: tokio::sync::mpsc::Receiver<String> },
 }
 
 /// Runs the whole browser sign-in. `open_url` must open the system browser.
@@ -172,16 +199,10 @@ pub async fn sign_in(
 
     let listener = match receiver {
         Receiver::Loopback(listener) => listener,
-        Receiver::App(incoming) => {
-            let url = tokio::time::timeout(SIGN_IN_TIMEOUT, incoming)
+        Receiver::App(mut incoming) => {
+            let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_app_link(&mut incoming, &state))
                 .await
-                .map_err(|_| Error::auth("Sign-in took too long. Please try again."))?
-                .map_err(|_| Error::auth("The sign-in was cancelled."))?;
-            let url = url::Url::parse(&url).map_err(|_| Error::auth("Invalid redirect."))?;
-            let (code, returned) = redirect_parameters(&url)?;
-            if returned != state {
-                return Err(Error::auth("The sign-in response didn't belong to this sign-in. Please try again."));
-            }
+                .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
             return exchange_code(http, &config, code, redirect_uri, verifier).await;
         }
     };
@@ -196,13 +217,14 @@ pub async fn sign_in(
                 let _ = socket.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n").await;
                 continue;
             }
-            let result = parse_redirect(&request);
-            // Anything on this machine can call the port; only the answer to our own
-            // request (matching state) counts, the rest is ignored instead of ending the sign-in.
-            if matches!(&result, Ok((_, returned)) if *returned != state) {
-                let _ = socket.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n").await;
-                continue;
-            }
+            let url = match request_url(&request) {
+                Ok(url) if belongs_to(&url, &state) => url,
+                _ => {
+                    let _ = socket.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n").await;
+                    continue;
+                }
+            };
+            let result = redirect_parameters(&url);
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{DONE_PAGE}",
                 DONE_PAGE.len()
@@ -218,7 +240,7 @@ pub async fn sign_in(
 
 enum Receiver {
     Loopback(TcpListener),
-    App(tokio::sync::oneshot::Receiver<String>),
+    App(tokio::sync::mpsc::Receiver<String>),
 }
 
 async fn exchange_code(
@@ -305,6 +327,26 @@ mod tests {
         assert_eq!(redirect_parameters(&url).unwrap(), ("abc".to_string(), "xyz".to_string()));
         let cancelled = url::Url::parse("app.uwumail://oauth?error=access_denied&state=xyz").unwrap();
         assert!(redirect_parameters(&cancelled).is_err());
+    }
+
+    #[tokio::test]
+    async fn foreign_links_dont_end_the_sign_in() {
+        let (sender, mut incoming) = tokio::sync::mpsc::channel(8);
+        for forged in [
+            "app.uwumail://oauth?code=evil&state=guess",
+            "app.uwumail://oauth?error=access_denied",
+            "app.uwumail://oauth?error=access_denied&state=guess",
+            "not a url",
+        ] {
+            sender.send(forged.to_string()).await.unwrap();
+        }
+        sender.send("app.uwumail://oauth?code=real&state=ours".to_string()).await.unwrap();
+        assert_eq!(wait_for_app_link(&mut incoming, "ours").await.unwrap(), ("real".into(), "ours".into()));
+
+        sender.send("app.uwumail://oauth?error=access_denied&state=ours".to_string()).await.unwrap();
+        assert!(wait_for_app_link(&mut incoming, "ours").await.is_err(), "a cancel with our state counts");
+        drop(sender);
+        assert!(wait_for_app_link(&mut incoming, "ours").await.is_err(), "a replaced sign-in ends");
     }
 
     #[test]

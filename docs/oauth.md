@@ -42,7 +42,9 @@ secret either, it ends up in every build.
 On Android the engine is told `Engine::use_oauth_app_link("app.uwumail://oauth")`;
 the activity that receives the link passes the URL to `Engine::finish_sign_in`,
 which only accepts that link and hands it to the sign-in that is waiting. The
-sign-in checks `state` and uses PKCE, so a forged link can't complete it.
+sign-in checks `state` and uses PKCE, so a forged link can't complete it; it is
+ignored and the sign-in keeps waiting for its own link, like the loopback
+listener on desktop ignores requests with the wrong `state`.
 
 ## Google
 

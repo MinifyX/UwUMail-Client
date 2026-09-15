@@ -32,6 +32,8 @@ const SEARCH_FOLDERS: usize = 25;
 const MAX_SEND_DELAY: u64 = 60;
 /// JMAP identities are asked for at most this often per account.
 const IDENTITIES_EVERY: Duration = Duration::from_secs(10 * 60);
+/// Sign-in links waiting to be looked at; more at once only comes from someone flooding the link.
+const SIGN_IN_LINK_QUEUE: usize = 8;
 
 fn now_millis() -> i64 {
     std::time::SystemTime::now()
@@ -93,8 +95,8 @@ struct Inner {
     identities_checked: Mutex<HashMap<String, Instant>>,
     /// The app link OAuth providers send the browser back to (Android); loopback when unset.
     oauth_redirect: Mutex<Option<String>>,
-    /// The sign-in waiting for that link.
-    pending_sign_in: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
+    /// The sign-in waiting for that link. It gets every such link and picks its own by `state`.
+    pending_sign_in: Mutex<Option<tokio::sync::mpsc::Sender<String>>>,
 }
 
 enum Credential {
@@ -168,14 +170,16 @@ impl Engine {
     }
 
     /// Hands the URL the app was opened with to the waiting sign-in. Returns false when it isn't
-    /// the sign-in link or nothing is waiting; the sign-in itself checks that it belongs to it.
+    /// the sign-in link or nothing is waiting. Any app or web page can open the link, so the
+    /// sign-in keeps waiting until a link with its own `state` arrives (see `oauth::sign_in`).
     pub fn finish_sign_in(&self, url: &str) -> bool {
         let expected = self.inner.oauth_redirect.lock().unwrap().clone();
         if !expected.is_some_and(|uri| url.starts_with(&format!("{uri}?"))) {
             return false;
         }
-        match self.inner.pending_sign_in.lock().unwrap().take() {
-            Some(waiting) => waiting.send(url.to_string()).is_ok(),
+        match self.inner.pending_sign_in.lock().unwrap().as_ref() {
+            // A full queue means someone is flooding the link; the real one comes with the browser.
+            Some(waiting) => waiting.try_send(url.to_string()).is_ok(),
             None => false,
         }
     }
@@ -419,10 +423,12 @@ impl Engine {
             AuthKind::Microsoft | AuthKind::Google => {
                 let provider =
                     if new.auth == AuthKind::Microsoft { OAuthProvider::Microsoft } else { OAuthProvider::Google };
+                let mut waiting = None;
                 let redirect = match self.inner.oauth_redirect.lock().unwrap().clone() {
                     Some(uri) => {
-                        let (sender, incoming) = tokio::sync::oneshot::channel();
+                        let (sender, incoming) = tokio::sync::mpsc::channel(SIGN_IN_LINK_QUEUE);
                         // A newer sign-in replaces an abandoned one.
+                        waiting = Some(sender.clone());
                         *self.inner.pending_sign_in.lock().unwrap() = Some(sender);
                         oauth::Redirect::App { uri, incoming }
                     }
@@ -430,7 +436,15 @@ impl Engine {
                 };
                 let tokens =
                     oauth::sign_in(&self.inner.http, provider, &record.email, self.inner.open_url.as_ref(), redirect)
-                        .await?;
+                        .await;
+                if let Some(ours) = waiting {
+                    let mut pending = self.inner.pending_sign_in.lock().unwrap();
+                    // Done either way; a sign-in started meanwhile keeps its slot.
+                    if pending.as_ref().is_some_and(|sender| sender.same_channel(&ours)) {
+                        *pending = None;
+                    }
+                }
+                let tokens = tokens?;
                 let refresh_token = tokens
                     .refresh_token
                     .clone()
@@ -1784,13 +1798,18 @@ mod tests {
         .unwrap();
         assert!(!engine.finish_sign_in("app.uwumail://oauth?code=1&state=2"), "no app link set up");
         engine.use_oauth_app_link("app.uwumail://oauth");
-        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(SIGN_IN_LINK_QUEUE);
         *engine.inner.pending_sign_in.lock().unwrap() = Some(sender);
         assert!(!engine.finish_sign_in("https://evil.example/?code=1"));
         assert!(!engine.finish_sign_in("app.uwumail://oauthx?code=1"));
+        // A forged link doesn't use up the slot: the real one still gets through afterwards.
+        assert!(engine.finish_sign_in("app.uwumail://oauth?code=evil&state=guess"));
         assert!(engine.finish_sign_in("app.uwumail://oauth?code=1&state=2"));
-        assert_eq!(receiver.await.unwrap(), "app.uwumail://oauth?code=1&state=2");
-        assert!(!engine.finish_sign_in("app.uwumail://oauth?code=1&state=2"), "only once");
+        assert_eq!(receiver.recv().await.unwrap(), "app.uwumail://oauth?code=evil&state=guess");
+        assert_eq!(receiver.recv().await.unwrap(), "app.uwumail://oauth?code=1&state=2");
+        // Flooding only fills the small queue.
+        let flood = (0..100).filter(|_| engine.finish_sign_in("app.uwumail://oauth?state=x")).count();
+        assert_eq!(flood, SIGN_IN_LINK_QUEUE);
     }
 
     #[test]
