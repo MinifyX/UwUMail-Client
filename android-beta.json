@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-beta.2",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.2.0-beta.2/UwUMail-0.2.0-beta.2-20000026.apk",
+  "sha256": "1e0ba6c2f9f8aaed8bd0d1f82a5a5eed2030d996791444b6edda4896566b91f9",
+  "notes": {
+    "de": "- Entwürfe werden automatisch am Server gespeichert, weiterschreiben auf PC und Handy\n- „Senden rückgängig“: 10 Sekunden Zeit (einstellbar)\n- Signaturen pro Absender, auch mit Bildern\n- Mehrere Absenderadressen pro Postfach, Antworten gehen von der richtigen raus\n- Newsletter mit einem Klick abbestellen\n- Spam-Knopf und Absender blockieren\n- Mails verschieben (auch per Ziehen) und mehrere auf einmal auswählen\n- Drucken und als Datei speichern\n- Eingebettete Bilder in Mails werden angezeigt\n- Neue Tastenkürzel (? zeigt alle)",
+    "en": "- Drafts are saved to the server automatically, keep writing on your PC or phone\n- “Undo send”: 10 seconds to change your mind (adjustable)\n- Signatures per sender address, with pictures too\n- Several sender addresses per mailbox, replies go out from the right one\n- Unsubscribe from newsletters with one click\n- Spam button and blocking senders\n- Move mail (also by dragging) and select several at once\n- Print mail and save it as a file\n- Embedded pictures in mail show up\n- New keyboard shortcuts (? shows them all)"
+  }
+}

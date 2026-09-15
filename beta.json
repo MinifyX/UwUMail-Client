@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0-beta.2",
+  "notes": "{\"de\":\"- Entwürfe werden automatisch am Server gespeichert, weiterschreiben auf PC und Handy\\n- „Senden rückgängig“: 10 Sekunden Zeit (einstellbar)\\n- Signaturen pro Absender, auch mit Bildern\\n- Mehrere Absenderadressen pro Postfach, Antworten gehen von der richtigen raus\\n- Newsletter mit einem Klick abbestellen\\n- Spam-Knopf und Absender blockieren\\n- Mails verschieben (auch per Ziehen) und mehrere auf einmal auswählen\\n- Drucken und als Datei speichern\\n- Eingebettete Bilder in Mails werden angezeigt\\n- Neue Tastenkürzel (? zeigt alle)\",\"en\":\"- Drafts are saved to the server automatically, keep writing on your PC or phone\\n- “Undo send”: 10 seconds to change your mind (adjustable)\\n- Signatures per sender address, with pictures too\\n- Several sender addresses per mailbox, replies go out from the right one\\n- Unsubscribe from newsletters with one click\\n- Spam button and blocking senders\\n- Move mail (also by dragging) and select several at once\\n- Print mail and save it as a file\\n- Embedded pictures in mail show up\\n- New keyboard shortcuts (? shows them all)\"}",
+  "pub_date": "2026-09-15T16:23:11Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3RCbmhxMkkzTnNmZW5SczB4OWk2RVZlamJzaVBKd0MrbEdzTmdYc0I3YzFaWWl4TVlmSVRVK2trS3RDb29vZ0lpSnp4dHkxNFBHZGJxVTMrUFF1R1FjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NDgzOTI3CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjIuMC1iZXRhLjIuZXhlCkV4SDlaeWg1R05tS0ZNNFZiWis4RFRveVlCYTVDUUh0WWpvVS9DaEU0KzZLWjhrZnBVVGJjSm8vdmpJbkhqUFBUcVlPMFVoMHgwYWZQd1VWMlZhcEFBPT0K",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.2.0-beta.2/UwUMail-Setup-0.2.0-beta.2.exe"
+    }
+  }
+}
