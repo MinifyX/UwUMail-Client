@@ -39,6 +39,40 @@ repository secrets with the same names.
 No client secret is needed; the app is a public client. The client id isn't
 secret either, it ends up in every build.
 
+### Microsoft 365 and Exchange Online
+
+Company mailboxes are not called `outlook.com`, so UwUMail asks Entra ID whether
+a domain belongs to a tenant: every verified domain serves an OpenID
+configuration under
+`login.microsoftonline.com/<domain>/v2.0/.well-known/openid-configuration`, and
+every other domain answers with an error. Autodiscover v2 is no help here, as
+it stopped answering for IMAP and SMTP. The MX record decides when it names a
+provider, which keeps a company that only uses Entra for sign-in on its real
+mail host; a spam filter in front of Microsoft 365 hides the MX, and the tenant
+lookup is what still finds those. Recognised mailboxes get Exchange Online's
+fixed hosts, `outlook.office365.com:993` and `smtp.office365.com:587`.
+
+When that lands wrong — a hybrid setup, an on-premises Exchange, a domain whose
+autoconfig file says otherwise — the setup dialog switches between Microsoft and
+a password by hand, in both directions.
+
+Two tenant settings decide whether it can work at all, and neither is ours to
+change. IMAP is per mailbox (`Set-CASMailbox -Identity <address> -ImapEnabled $true`),
+SMTP submission is per mailbox and per tenant
+(`Set-CASMailbox -Identity <address> -SmtpClientAuthenticationDisabled $false`,
+`Set-TransportConfig -SmtpClientAuthenticationDisabled $false`). Security defaults in
+Entra switch SMTP submission off on their own. UwUMail recognises both refusals
+and says which command an administrator needs, instead of blaming a password.
+
+Basic authentication for SMTP submission is on its way out: disabled by default
+for existing tenants at the end of December 2026, unavailable for tenants
+created after that, with a removal date to be announced in the second half of
+2027. OAuth is unaffected, and IMAP itself is not being retired.
+
+A shared mailbox has no sign-in of its own. Add it under its own address and
+give "Sign in as" the address that has access to it: the sign-in page then asks
+for that person, and their token opens the shared address over XOAUTH2.
+
 On Android the engine is told `Engine::use_oauth_app_link("app.uwumail://oauth")`;
 the activity that receives the link passes the URL to `Engine::finish_sign_in`,
 which only accepts that link and hands it to the sign-in that is waiting. The

@@ -30,6 +30,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Offline reading and local full-text search
 - [x] Contacts from mail history with autocomplete
 - [x] Sign in with Microsoft (OAuth 2) — needs a registered client id, see [oauth.md](oauth.md)
+- [x] Microsoft 365 and Exchange Online: company domains recognised through their Entra tenant, switch to Microsoft by hand, shared mailboxes, and a plain explanation when the tenant blocks IMAP or SMTP ([oauth.md](oauth.md#microsoft-365-and-exchange-online))
 - [x] Sign in with Google (OAuth 2) — needs a registered client id, see [oauth.md](oauth.md)
 - [x] System notifications for new mail
 - [ ] Addon host: permissions dialog, sandbox frames, RPC bridge, install from file
