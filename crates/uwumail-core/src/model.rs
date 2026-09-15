@@ -532,6 +532,12 @@ pub struct NewAccount {
     pub protocol: Protocol,
     #[serde(default)]
     pub jmap_url: Option<String>,
+    /// The address to sign in with, when it is not the mailbox itself. A shared
+    /// mailbox has no sign-in of its own: someone with access to it signs in as
+    /// themselves, and their token then opens the shared address. Only used
+    /// while adding the mailbox; the refresh token carries it afterwards.
+    #[serde(default)]
+    pub sign_in_as: Option<String>,
 }
 
 /// Events pushed to the UI.

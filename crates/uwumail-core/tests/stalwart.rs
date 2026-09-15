@@ -96,6 +96,7 @@ async fn jmap_sync_send_push_flags_and_trash() {
                 color: AccountColor::Pink,
                 protocol: Protocol::Jmap,
                 jmap_url: Some(session_url.clone()),
+                sign_in_as: None,
             })
             .await
             .expect("a JMAP account can be added")
@@ -119,6 +120,7 @@ async fn jmap_sync_send_push_flags_and_trash() {
             color: AccountColor::Pink,
             protocol: Protocol::Jmap,
             jmap_url: Some(session_url.clone()),
+            sign_in_as: None,
         })
         .await;
     assert_eq!(wrong.unwrap_err().code, uwumail_core::ErrorCode::AuthFailed);
@@ -334,6 +336,7 @@ async fn jmap_drafts_are_saved_replaced_and_removed_on_send() {
             color: AccountColor::Pink,
             protocol: Protocol::Jmap,
             jmap_url: Some(session_url.clone()),
+            sign_in_as: None,
         })
         .await
         .unwrap();

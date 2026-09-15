@@ -434,8 +434,12 @@ impl Engine {
                     }
                     None => oauth::Redirect::Loopback,
                 };
+                // Whose sign-in page to show: the mailbox owner, or the person who has
+                // access to a shared mailbox.
+                let sign_in_as =
+                    new.sign_in_as.as_deref().map(str::trim).filter(|a| !a.is_empty()).unwrap_or(&record.email);
                 let tokens =
-                    oauth::sign_in(&self.inner.http, provider, &record.email, self.inner.open_url.as_ref(), redirect)
+                    oauth::sign_in(&self.inner.http, provider, sign_in_as, self.inner.open_url.as_ref(), redirect)
                         .await;
                 if let Some(ours) = waiting {
                     let mut pending = self.inner.pending_sign_in.lock().unwrap();
@@ -451,7 +455,10 @@ impl Engine {
                     .ok_or_else(|| Error::auth("The provider didn't allow offline access. Please try again."))?;
                 let mut session = imap::login(
                     &record.imap,
-                    Login::OAuth { username: &record.email, access_token: &tokens.access_token },
+                    Login::OAuth {
+                        username: oauth_mailbox(&record.username, &record.email),
+                        access_token: &tokens.access_token,
+                    },
                 )
                 .await?;
                 let _ = session.logout().await;
@@ -1086,8 +1093,10 @@ impl Engine {
                 Credential::Password(password) => SmtpAuth::Password(password),
                 Credential::Token(token) => SmtpAuth::OAuth(token),
             };
-            let username =
-                if account.auth == AuthKind::Password { account.username.clone() } else { account.email.clone() };
+            let username = match &auth {
+                SmtpAuth::Password(_) => account.username.clone(),
+                SmtpAuth::OAuth(_) => oauth_mailbox(&account.username, &account.email).to_string(),
+            };
             smtp::send(&account.smtp, &username, auth, &message).await?;
 
             // Gmail and Microsoft file sent mail themselves.
@@ -1240,6 +1249,14 @@ impl Engine {
     }
 }
 
+/// The mailbox an OAuth login opens, which is not always the account that signed
+/// in: a shared mailbox in Microsoft 365 is opened with its own address and the
+/// token of the person who has access to it. The username carries that address;
+/// older accounts whose username is a bare login name keep using their own.
+fn oauth_mailbox<'a>(username: &'a str, email: &'a str) -> &'a str {
+    if username.contains('@') { username } else { email }
+}
+
 fn sender(account: &AccountRecord) -> Address {
     Address { name: Some(account.display_name.clone()).filter(|n| !n.is_empty()), email: account.email.clone() }
 }
@@ -1374,7 +1391,8 @@ impl Inner {
                 imap::login(&account.imap, Login::Password { username: &account.username, password: &password }).await
             }
             Credential::Token(token) => {
-                imap::login(&account.imap, Login::OAuth { username: &account.email, access_token: &token }).await
+                let mailbox = oauth_mailbox(&account.username, &account.email);
+                imap::login(&account.imap, Login::OAuth { username: mailbox, access_token: &token }).await
             }
         }
     }
@@ -1789,6 +1807,15 @@ async fn run_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn shared_mailboxes_sign_in_under_their_own_address() {
+        // A shared mailbox in Microsoft 365: opened with its address, someone else"s token.
+        assert_eq!(oauth_mailbox("team@example-company.de", "alex@example-company.de"), "team@example-company.de");
+        // Accounts whose username is a bare login name keep using their own address,
+        // because XOAUTH2 needs an address there.
+        assert_eq!(oauth_mailbox("alex", "alex@example-company.de"), "alex@example-company.de");
+    }
     use super::*;
 
     #[tokio::test]

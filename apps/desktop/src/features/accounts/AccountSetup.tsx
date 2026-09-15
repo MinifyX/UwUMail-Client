@@ -29,6 +29,16 @@ interface AccountSetupProps {
 
 const PROVIDER_NAMES = { microsoft: "Microsoft", google: "Google" } as const;
 
+/**
+ * Exchange Online's fixed hosts, for switching a mailbox to Microsoft by hand
+ * when discovery got it wrong. Keep in step with `microsoft_settings` in
+ * crates/uwumail-core/src/autoconfig.rs.
+ */
+const MICROSOFT_SERVERS = {
+  imap: { host: "outlook.office365.com", port: 993, security: "tls" },
+  smtp: { host: "smtp.office365.com", port: 587, security: "starttls" },
+} as const satisfies { imap: ServerSettings; smtp: ServerSettings };
+
 function ServerFields({
   label,
   value,
@@ -90,6 +100,9 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
   const [settings, setSettings] = useState<DiscoveredSettings | null>(null);
   const [protocol, setProtocol] = useState<Protocol>("imap");
   const [showServers, setShowServers] = useState(false);
+  // A shared mailbox is opened with someone else's sign-in.
+  const [signInAs, setSignInAs] = useState("");
+  const [showSharedMailbox, setShowSharedMailbox] = useState(false);
   const [busy, setBusy] = useState<"discover" | "connect" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const workspaces = useSettings((s) => s.workspaces);
@@ -148,6 +161,7 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
         color,
         protocol: jmapPossible ? protocol : "imap",
         jmapUrl: settings.oauth ? undefined : settings.jmap?.trim() || undefined,
+        signInAs: settings.oauth ? signInAs.trim() || undefined : undefined,
       });
       if (useSettings.getState().workspaces) {
         useSettings.getState().setAccountWorkspace(account.id, workspace);
@@ -164,6 +178,36 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
     } finally {
       setBusy(null);
     }
+  };
+
+  // Discovery can miss a company mailbox: a hybrid setup, an on-premises
+  // Exchange, a domain whose autoconfig file says otherwise. Both directions
+  // stay one click away so nobody gets stuck on a password that cannot work.
+  const switchToMicrosoft = () => {
+    if (!settings) return;
+    setSettings({
+      ...settings,
+      providerName: "Microsoft 365",
+      oauth: "microsoft",
+      source: "microsoft",
+      imap: { ...MICROSOFT_SERVERS.imap },
+      smtp: { ...MICROSOFT_SERVERS.smtp },
+      username: email.trim(),
+      jmap: undefined,
+    });
+    setPassword("");
+    setProtocol("imap");
+    setError(null);
+  };
+
+  const switchToPassword = () => {
+    if (!settings) return;
+    setSettings({ ...settings, oauth: undefined });
+    setSignInAs("");
+    setShowSharedMailbox(false);
+    // The Microsoft hosts are almost certainly wrong now, so show them.
+    setShowServers(true);
+    setError(null);
   };
 
   if (!settings) {
@@ -265,30 +309,80 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
       )}
 
       {provider ? (
-        <p className="flex gap-2 rounded-2xl bg-pink-tint/60 px-4 py-3 text-[13px] text-pink-ink">
-          <KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />
-          {t("account.oauthHint", { provider })}
-        </p>
-      ) : (
-        <Field
-          label={t("account.password")}
-          hint={usesJmap && isFastmail ? t("account.fastmailTokenHint") : t("account.appPasswordHint")}
-          error={error}
-        >
-          {(id) => (
-            <TextInput
-              id={id}
-              type="password"
-              autoFocus
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setError(null);
-              }}
-            />
+        <div className="flex flex-col gap-3">
+          <p className="flex gap-2 rounded-2xl bg-pink-tint/60 px-4 py-3 text-[13px] text-pink-ink">
+            <KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />
+            {t("account.oauthHint", { provider })}
+          </p>
+          {settings.oauth === "microsoft" && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowSharedMailbox(!showSharedMailbox)}
+                aria-expanded={showSharedMailbox}
+                className="flex items-center gap-1.5 self-start text-[13px] font-semibold text-muted hover:text-ink"
+              >
+                <ChevronDown
+                  className={clsx("size-4 transition-transform", !showSharedMailbox && "-rotate-90")}
+                  aria-hidden
+                />
+                {t("account.sharedMailbox")}
+              </button>
+              {showSharedMailbox && (
+                <div className="animate-fade">
+                  <Field label={t("account.signInAs")} hint={t("account.signInAsHint")}>
+                    {(id) => (
+                      <TextInput
+                        id={id}
+                        type="email"
+                        autoComplete="email"
+                        placeholder={t("account.emailPlaceholder")}
+                        value={signInAs}
+                        onChange={(e) => setSignInAs(e.target.value)}
+                      />
+                    )}
+                  </Field>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={switchToPassword}
+                className="self-start text-[12.5px] text-muted underline underline-offset-2 hover:text-ink"
+              >
+                {t("account.usePasswordInstead")}
+              </button>
+            </>
           )}
-        </Field>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <Field
+            label={t("account.password")}
+            hint={usesJmap && isFastmail ? t("account.fastmailTokenHint") : t("account.appPasswordHint")}
+            error={error}
+          >
+            {(id) => (
+              <TextInput
+                id={id}
+                type="password"
+                autoFocus
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError(null);
+                }}
+              />
+            )}
+          </Field>
+          <button
+            type="button"
+            onClick={switchToMicrosoft}
+            className="self-start text-[12.5px] text-muted underline underline-offset-2 hover:text-ink"
+          >
+            {t("account.useMicrosoft")}
+          </button>
+        </div>
       )}
 
       <div className="flex flex-col gap-2">

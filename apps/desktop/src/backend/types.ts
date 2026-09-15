@@ -278,6 +278,11 @@ export interface NewAccount {
   color: AccountColor;
   protocol: Protocol;
   jmapUrl?: string;
+  /**
+   * The address to sign in with, when it is not the mailbox itself: a shared
+   * mailbox is opened by someone who has access to it.
+   */
+  signInAs?: string;
 }
 
 /** What a mailto: link asks for. */

@@ -72,6 +72,7 @@ async fn sync_send_reply_flag_and_trash() {
             color: AccountColor::Pink,
             protocol: Protocol::Imap,
             jmap_url: None,
+            sign_in_as: None,
         })
         .await
         .expect("account can be added");
@@ -297,6 +298,7 @@ async fn old_mail_becomes_previews_and_server_search_finds_the_rest() {
             color: AccountColor::Violet,
             protocol: Protocol::Imap,
             jmap_url: None,
+            sign_in_as: None,
         })
         .await
         .unwrap();
@@ -354,6 +356,7 @@ async fn drafts_are_saved_replaced_continued_and_removed_on_send() {
             color: AccountColor::Pink,
             protocol: Protocol::Imap,
             jmap_url: None,
+            sign_in_as: None,
         })
         .await
         .unwrap();
@@ -464,6 +467,7 @@ async fn undo_send_takes_mail_back_and_otherwise_sends_it() {
             color: AccountColor::Pink,
             protocol: Protocol::Imap,
             jmap_url: None,
+            sign_in_as: None,
         })
         .await
         .unwrap();
@@ -590,6 +594,7 @@ async fn move_spam_and_blocked_senders() {
             color: AccountColor::Pink,
             protocol: Protocol::Imap,
             jmap_url: None,
+            sign_in_as: None,
         })
         .await
         .unwrap();
@@ -736,6 +741,7 @@ async fn unsubscribes_from_a_newsletter_by_mail() {
             color: AccountColor::Sky,
             protocol: Protocol::Imap,
             jmap_url: None,
+            sign_in_as: None,
         })
         .await
         .unwrap();
