@@ -560,3 +560,138 @@ async fn undo_send_takes_mail_back_and_otherwise_sends_it() {
 
     engine.remove_account(&account.id).await.unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn move_spam_and_blocked_senders() {
+    let Some(host) = server() else {
+        eprintln!("UWUMAIL_TEST_MAILSERVER not set, skipping");
+        return;
+    };
+    let data = tempfile::tempdir().unwrap();
+    let engine = Engine::new(EngineOptions {
+        data_dir: data.path().to_path_buf(),
+        secrets: Arc::new(MemorySecrets::default()),
+        open_url: Arc::new(|_| {}),
+    })
+    .unwrap();
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("sort-{}@uwumail.test", &unique[..8]);
+    let imap = ServerSettings { host: host.clone(), port: 3143, security: Security::None };
+    let account = engine
+        .add_account(NewAccount {
+            display_name: "Mini".into(),
+            email: email.clone(),
+            auth: AuthKind::Password,
+            password: Some("uwu".into()),
+            imap: imap.clone(),
+            smtp: ServerSettings { host, port: 3025, security: Security::None },
+            username: email.clone(),
+            color: AccountColor::Pink,
+            protocol: Protocol::Imap,
+            jmap_url: None,
+        })
+        .await
+        .unwrap();
+    let folder =
+        |role: FolderRole| engine.list_folders(Some(&account.id)).unwrap().into_iter().find(|f| f.role == Some(role));
+    wait_for("the inbox", async || folder(FolderRole::Inbox)).await;
+    let mut other = imap::login(&imap, imap::Login::Password { username: &email, password: "uwu" }).await.unwrap();
+    other.create("Projekte").await.unwrap();
+    let _ = other.logout().await;
+    let projects = wait_for("the Projekte folder", async || {
+        engine.sync_now(Some(&account.id));
+        engine.list_folders(Some(&account.id)).unwrap().into_iter().find(|f| f.path == "Projekte")
+    })
+    .await;
+
+    let send = async |subject: &str, from: Option<String>| {
+        engine
+            .send(OutgoingMessage {
+                account_id: account.id.clone(),
+                to: vec![Address { name: None, email: email.clone() }],
+                cc: vec![],
+                bcc: vec![],
+                subject: subject.into(),
+                html: "<p>Hi</p>".into(),
+                text: "Hi".into(),
+                in_reply_to: None,
+                attachments: vec![],
+                draft_key: None,
+                from_email: from,
+            })
+            .await
+            .unwrap();
+    };
+    let find = async |subject: &str| {
+        wait_for(subject, async || {
+            engine.sync_now(Some(&account.id));
+            let query = ThreadQuery { conversations: false, ..inbox_query(None) };
+            engine.list_threads(&query).unwrap().threads.into_iter().find(|t| t.subject == subject)
+        })
+        .await
+    };
+    let first_message =
+        async |thread: &ThreadSummary| engine.get_thread(&thread.id, false).await.unwrap().messages.remove(0);
+
+    // Moving into a folder of the same mailbox.
+    let plan = format!("Plan {unique}");
+    send(&plan, None).await;
+    let message = first_message(&find(&plan).await).await;
+    engine.move_messages(std::slice::from_ref(&message.id), &projects.id).await.unwrap();
+    let in_projects = ThreadQuery {
+        view: MailboxView::Folder { account_id: account.id.clone(), folder_id: projects.id.clone() },
+        conversations: false,
+        ..inbox_query(None)
+    };
+    wait_for("the mail in Projekte", async || {
+        engine.sync_now(Some(&account.id));
+        engine.list_threads(&in_projects).unwrap().threads.into_iter().find(|t| t.subject == plan)
+    })
+    .await;
+
+    // Spam and back.
+    let offer = format!("Angebot {unique}");
+    send(&offer, None).await;
+    let message = first_message(&find(&offer).await).await;
+    engine.mark_spam(std::slice::from_ref(&message.id), true).await.unwrap();
+    let junk = folder(FolderRole::Junk).expect("a junk folder exists now");
+    let in_junk = ThreadQuery {
+        view: MailboxView::Folder { account_id: account.id.clone(), folder_id: junk.id.clone() },
+        conversations: false,
+        ..inbox_query(None)
+    };
+    let spam = wait_for("the mail in junk", async || {
+        engine.sync_now(Some(&account.id));
+        engine.list_threads(&in_junk).unwrap().threads.into_iter().find(|t| t.subject == offer)
+    })
+    .await;
+    let message = first_message(&spam).await;
+    engine.mark_spam(std::slice::from_ref(&message.id), false).await.unwrap();
+    find(&offer).await;
+
+    // Mail from a blocked address never stays in the inbox.
+    let spammer = format!("werbung-{}@uwumail.test", &unique[..8]);
+    engine.add_identity(&account.id, &spammer, "Werbung").unwrap();
+    assert!(engine.block_sender("kein @ding").is_err());
+    engine.block_sender(&spammer.to_uppercase()).unwrap();
+    assert_eq!(engine.blocked_senders().unwrap(), std::slice::from_ref(&spammer));
+    let blocked = format!("Kauf jetzt {unique}");
+    send(&blocked, Some(spammer.clone())).await;
+    let trash_query = |trash: &Folder| ThreadQuery {
+        view: MailboxView::Folder { account_id: account.id.clone(), folder_id: trash.id.clone() },
+        conversations: false,
+        ..inbox_query(None)
+    };
+    wait_for("the blocked mail in the trash", async || {
+        engine.sync_now(Some(&account.id));
+        let trash = folder(FolderRole::Trash)?;
+        engine.list_threads(&trash_query(&trash)).unwrap().threads.into_iter().find(|t| t.subject == blocked)
+    })
+    .await;
+    let inbox_now = engine.list_threads(&ThreadQuery { conversations: false, ..inbox_query(None) }).unwrap();
+    assert!(inbox_now.threads.iter().all(|t| t.subject != blocked));
+    engine.unblock_sender(&spammer).unwrap();
+    assert!(engine.blocked_senders().unwrap().is_empty());
+
+    engine.remove_account(&account.id).await.unwrap();
+}

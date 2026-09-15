@@ -3,11 +3,14 @@ import {
   Archive,
   ArrowLeft,
   EllipsisVertical,
+  FolderInput,
   Forward,
   MailOpen,
   RefreshCw,
   Reply,
   ReplyAll,
+  ShieldAlert,
+  ShieldCheck,
   Star,
   Trash,
 } from "lucide-react";
@@ -17,9 +20,10 @@ import type { Message } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
-import { useAccounts, useMessageActions, useThread } from "@/lib/queries";
+import { useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
 import { useUi } from "@/state/ui";
 import { MessageView } from "../mail/MessageView";
+import { requestMove } from "../mail/selection";
 
 /** Messages that start expanded: the newest one plus every unread one. */
 function initiallyExpanded(messages: Message[]) {
@@ -49,6 +53,7 @@ export function MobileReader({ threadId }: { threadId: string }) {
   const openCompose = useUi((s) => s.openCompose);
   const { data, isPending, isError, refetch, isRefetching } = useThread(threadId);
   const { data: accounts = [] } = useAccounts();
+  const { data: folders = [] } = useFolders();
   const actions = useMessageActions();
   const [menuOpen, setMenuOpen] = useState(false);
   const [barHidden, setBarHidden] = useState(false);
@@ -115,6 +120,7 @@ export function MobileReader({ threadId }: { threadId: string }) {
   const flagged = data.thread.flagged;
   const hiddenCount = all.filter((m) => !expanded.has(m.id)).length;
   const leaveAfter = (work: Promise<void>) => void work.then(back);
+  const inJunk = all.every((m) => folders.find((f) => f.id === m.folderId)?.role === "junk");
 
   return (
     <section className="flex h-full min-w-0 flex-col bg-canvas" aria-label={data.thread.subject}>
@@ -144,6 +150,29 @@ export function MobileReader({ threadId }: { threadId: string }) {
               onClick={() => setMenuOpen(false)}
             />
             <div className="absolute top-12 right-2 z-30 min-w-[220px] animate-pop overflow-hidden rounded-2xl border border-hairline bg-elevated py-1 shadow-float">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  requestMove(all, back);
+                }}
+                className="flex h-12 w-full items-center gap-3 px-4 text-left text-[14px] font-medium active:bg-pink-tint"
+              >
+                <FolderInput className="size-[18px] text-muted" aria-hidden />
+                {t("reader.move")}
+              </button>
+              <button
+                type="button"
+                onClick={() => leaveAfter(actions.spam(ids, !inJunk))}
+                className="flex h-12 w-full items-center gap-3 px-4 text-left text-[14px] font-medium active:bg-pink-tint"
+              >
+                {inJunk ? (
+                  <ShieldCheck className="size-[18px] text-muted" aria-hidden />
+                ) : (
+                  <ShieldAlert className="size-[18px] text-muted" aria-hidden />
+                )}
+                {inJunk ? t("reader.notSpam") : t("reader.spam")}
+              </button>
               <button
                 type="button"
                 onClick={() => leaveAfter(actions.setFlags([latest.id], { seen: false }))}

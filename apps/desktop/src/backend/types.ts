@@ -178,6 +178,12 @@ export interface OutgoingMessage {
   fromEmail?: string;
 }
 
+/** A moved message and the folder it came from, for undoing. */
+export interface MovedMessage {
+  id: string;
+  fromFolderId: string;
+}
+
 /** A mail waiting for its "undo send" time. */
 export interface QueuedSend {
   id: string;

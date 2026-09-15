@@ -147,6 +147,13 @@ CREATE TABLE signatures (
     created_at INTEGER NOT NULL
 );
 "#,
+    r#"
+-- Addresses and @domains whose new mail goes straight to the trash.
+CREATE TABLE blocked_senders (
+    entry TEXT PRIMARY KEY COLLATE NOCASE,
+    created_at INTEGER NOT NULL
+);
+"#,
 ];
 
 /// A stable positive stand-in for IMAP's uid, so JMAP emails fit the same table.
@@ -1339,6 +1346,28 @@ impl Store {
         }
         tx.commit()?;
         Ok(changed > 0)
+    }
+
+    // --------------------------------------------------------- blocked senders
+
+    pub fn blocked_senders(&self) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT entry FROM blocked_senders ORDER BY entry")?;
+        let rows = stmt.query_map([], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
+    pub fn block_sender(&self, entry: &str) -> Result<()> {
+        self.conn().execute(
+            "INSERT OR IGNORE INTO blocked_senders (entry, created_at) VALUES (?1, ?2)",
+            params![entry, crate::mime::now()],
+        )?;
+        Ok(())
+    }
+
+    pub fn unblock_sender(&self, entry: &str) -> Result<()> {
+        self.conn().execute("DELETE FROM blocked_senders WHERE entry = ?1", [entry])?;
+        Ok(())
     }
 
     // -------------------------------------------------------------- signatures

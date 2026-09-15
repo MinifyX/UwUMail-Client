@@ -50,7 +50,10 @@
       }
     },
     "count_one": "{{count}} Mail",
-    "count_other": "{{count}} Mails"
+    "count_other": "{{count}} Mails",
+    "selected_one": "{{count}} ausgewählt",
+    "selected_other": "{{count}} ausgewählt",
+    "clearSelection": "Auswahl aufheben"
   },
   "reader": {
     "empty": {
@@ -101,7 +104,13 @@
       "retry": "Nochmal versuchen"
     },
     "draft": "Entwurf",
-    "continueDraft": "Weiterschreiben"
+    "continueDraft": "Weiterschreiben",
+    "move": "Verschieben",
+    "spam": "Spam",
+    "notSpam": "Kein Spam",
+    "more": "Mehr",
+    "blockSender": "{{email}} blockieren",
+    "blockDomain": "Alles von @{{domain}} blockieren"
   },
   "compose": {
     "new": "Neue Mail",
@@ -155,7 +164,13 @@
     "sendUndone": "Senden abgebrochen. Du kannst weiterschreiben.",
     "undoTooLate": "Zu spät, die Mail ist schon unterwegs.",
     "sendFailedKept": "Die Mail konnte nicht gesendet werden: {{reason}} Sie liegt in den Entwürfen.",
-    "open": "Öffnen"
+    "open": "Öffnen",
+    "moved": "Nach „{{folder}}“ verschoben",
+    "markedSpam": "Als Spam markiert",
+    "markedNotSpam": "Zurück im Posteingang",
+    "moveUndone": "Rückgängig gemacht",
+    "blocked": "{{entry}} ist blockiert. Neue Mails von dort landen im Papierkorb.",
+    "unblocked": "{{entry}} ist nicht mehr blockiert"
   },
   "status": {
     "syncing": "Suche nach neuen Mails",
@@ -364,7 +379,11 @@
     "signatureDefaultNew": "Neue Mails",
     "signatureDefaultReplies": "Antworten",
     "signatureSaved": "Signatur gespeichert",
-    "signatureUntitled": "Signatur"
+    "signatureUntitled": "Signatur",
+    "blockedSenders": "Blockierte Absender",
+    "blockedSendersDesc": "Neue Mails von diesen Adressen und Domains landen direkt im Papierkorb. Blockieren kannst du über „Mehr“ in einer Mail.",
+    "blockedSendersEmpty": "Niemand ist blockiert.",
+    "unblockSender": "{{entry}} freigeben"
   },
   "theme": {
     "system": "System",
@@ -394,7 +413,17 @@
     "flag": "Markieren oder Markierung entfernen",
     "unread": "Als ungelesen markieren",
     "palette": "Befehlspalette",
-    "close": "Schließen oder zurück"
+    "close": "Schließen oder zurück",
+    "move": "Verschieben",
+    "spam": "Als Spam markieren",
+    "select": "Mail auswählen",
+    "undo": "Letzte Aktion rückgängig",
+    "goInbox": "Zum Posteingang",
+    "goSent": "Zu Gesendet",
+    "goDrafts": "Zu Entwürfe",
+    "goFlagged": "Zu Markiert",
+    "send": "Senden (beim Schreiben)",
+    "discardDraft": "Entwurf verwerfen (beim Schreiben)"
   },
   "palette": {
     "placeholder": "Befehl eingeben",
@@ -508,5 +537,11 @@
       "nothingMore": "Auf dem Server gibt es keine weiteren Treffer.",
       "failed": "Die Suche auf dem Server hat nicht geklappt. {{reason}}"
     }
+  },
+  "move": {
+    "title": "Verschieben nach …",
+    "search": "Ordner suchen",
+    "empty": "Kein passender Ordner",
+    "mixedAccounts": "Mails aus verschiedenen Postfächern können nur einzeln verschoben werden."
   }
 }

@@ -1,5 +1,17 @@
 import clsx from "clsx";
-import { Menu, Plus, RefreshCw, Search, X } from "lucide-react";
+import {
+  Archive,
+  FolderInput,
+  MailOpen,
+  Menu,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  Star,
+  Trash,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ListFilter } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
@@ -11,6 +23,7 @@ import { flattenThreads, useAccounts, useMessageActions, useThreadActions, useTh
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { openDraftThread } from "../compose/openDraft";
+import { useSelectionActions } from "./selection";
 import { ThreadRow } from "./ThreadRow";
 import { useViewInfo } from "./view";
 
@@ -45,6 +58,11 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   const threadActions = useThreadActions();
   const density = useSettings((s) => s.listDensity);
   const [refreshing, setRefreshing] = useState(false);
+  const checked = useUi((s) => s.checkedThreadIds);
+  const setChecked = useUi((s) => s.setCheckedThreadIds);
+  const selection = useSelectionActions();
+  // Where a Shift+click range starts.
+  const anchor = useRef<string | null>(null);
 
   const [draft, setDraft] = useState(search);
   useEffect(() => {
@@ -68,6 +86,14 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   }, [selectedThreadId]);
 
   const showAccount = accounts.length > 1 && view.kind === "unified";
+  const checkedThreads = threads.filter((thread) => checked.includes(thread.id));
+  const anyUnread = checkedThreads.some((thread) => thread.unreadCount > 0);
+  const allFlagged = checkedThreads.length > 0 && checkedThreads.every((thread) => thread.flagged);
+  const runOnChecked = (action: (threadIds: string[]) => Promise<unknown>) => {
+    const ids = checked;
+    setChecked([]);
+    void action(ids);
+  };
   const empty =
     accountsLoaded && accounts.length === 0
       ? "noAccount"
@@ -132,13 +158,62 @@ export function ThreadList({ variant, className }: ThreadListProps) {
           )}
         </div>
 
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="toolbar" aria-label={t("list.search")}>
-          {FILTERS.map((item) => (
-            <Pill key={item} active={filter === item} onClick={() => setFilter(item)}>
-              {t(`filter.${item}`)}
-            </Pill>
-          ))}
-        </div>
+        {checked.length > 0 ? (
+          <div
+            className="flex h-9 items-center gap-0.5 rounded-full bg-pink-tint pr-1 pl-1 text-pink-ink"
+            role="toolbar"
+            aria-label={t("list.selected", { count: checked.length })}
+          >
+            <IconButton icon={X} size="sm" label={t("list.clearSelection")} onClick={() => setChecked([])} />
+            <span className="min-w-0 flex-1 truncate px-1 text-[13px] font-bold">
+              {t("list.selected", { count: checked.length })}
+            </span>
+            <IconButton
+              icon={Archive}
+              size="sm"
+              label={t("reader.archive")}
+              onClick={() => runOnChecked(selection.archive)}
+            />
+            <IconButton
+              icon={Trash}
+              size="sm"
+              label={t("reader.trash")}
+              onClick={() => runOnChecked(selection.trash)}
+            />
+            <IconButton
+              icon={MailOpen}
+              size="sm"
+              label={anyUnread ? t("list.markRead") : t("reader.markUnread")}
+              onClick={() => runOnChecked((ids) => selection.read(ids, anyUnread))}
+            />
+            <IconButton
+              icon={Star}
+              size="sm"
+              label={t("reader.flag")}
+              onClick={() => runOnChecked((ids) => selection.flag(ids, !allFlagged))}
+            />
+            <IconButton
+              icon={FolderInput}
+              size="sm"
+              label={t("reader.move")}
+              onClick={() => runOnChecked(selection.move)}
+            />
+            <IconButton
+              icon={ShieldAlert}
+              size="sm"
+              label={t("reader.spam")}
+              onClick={() => runOnChecked((ids) => selection.spam(ids, true))}
+            />
+          </div>
+        ) : (
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="toolbar" aria-label={t("list.search")}>
+            {FILTERS.map((item) => (
+              <Pill key={item} active={filter === item} onClick={() => setFilter(item)}>
+                {t(`filter.${item}`)}
+              </Pill>
+            ))}
+          </div>
+        )}
       </header>
 
       <div
@@ -178,7 +253,29 @@ export function ThreadList({ variant, className }: ThreadListProps) {
                 accounts={accounts}
                 showAccount={showAccount}
                 actions={threadActions}
-                onSelect={() => (info.isDrafts ? void openDraftThread(thread.id) : selectThread(thread.id))}
+                checked={checked.includes(thread.id)}
+                dragIds={checked.includes(thread.id) ? checked : [thread.id]}
+                onSelect={(event) => {
+                  if (event.ctrlKey || event.metaKey) {
+                    anchor.current = thread.id;
+                    setChecked(
+                      checked.includes(thread.id) ? checked.filter((id) => id !== thread.id) : [...checked, thread.id],
+                    );
+                  } else if (event.shiftKey && anchor.current) {
+                    const order = threads.map((item) => item.id);
+                    const start = order.indexOf(anchor.current);
+                    const end = order.indexOf(thread.id);
+                    if (start >= 0) {
+                      const range = order.slice(Math.min(start, end), Math.max(start, end) + 1);
+                      setChecked([...new Set([...checked, ...range])]);
+                    }
+                  } else if (info.isDrafts) {
+                    void openDraftThread(thread.id);
+                  } else {
+                    anchor.current = thread.id;
+                    selectThread(thread.id);
+                  }
+                }}
               />
             ))}
             {query.hasNextPage && (

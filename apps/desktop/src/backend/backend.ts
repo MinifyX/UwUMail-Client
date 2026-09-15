@@ -10,6 +10,7 @@ import type {
   Folder,
   Identity,
   MailtoDraft,
+  MovedMessage,
   NewAccount,
   OutgoingMessage,
   Protocol,
@@ -60,8 +61,17 @@ export interface Backend {
   getThread(threadId: string, conversations: boolean): Promise<ThreadDetail>;
 
   setFlags(messageIds: string[], change: FlagChange): Promise<void>;
-  archive(messageIds: string[]): Promise<void>;
-  trash(messageIds: string[]): Promise<void>;
+  /** These return what moved and from where, for undoing. Deleting from the trash returns nothing. */
+  archive(messageIds: string[]): Promise<MovedMessage[]>;
+  trash(messageIds: string[]): Promise<MovedMessage[]>;
+  /** Into another folder of the same mailbox. */
+  moveMessages(messageIds: string[], folderId: string): Promise<MovedMessage[]>;
+  /** Spam goes into the junk folder; not spam back to the inbox. */
+  markSpam(messageIds: string[], spam: boolean): Promise<MovedMessage[]>;
+  /** Addresses and `@domains` whose new mail goes straight to the trash. */
+  blockedSenders(): Promise<string[]>;
+  blockSender(entry: string): Promise<string>;
+  unblockSender(entry: string): Promise<void>;
   send(message: OutgoingMessage): Promise<void>;
   /** Sends after `delaySeconds` unless `cancelSend` comes first; the result arrives as send:done or send:failed. */
   queueSend(message: OutgoingMessage, delaySeconds: number): Promise<QueuedSend>;

@@ -13,6 +13,7 @@ import type {
   Folder,
   Identity,
   MailtoDraft,
+  MovedMessage,
   NewAccount,
   OutgoingMessage,
   Protocol,
@@ -125,11 +126,31 @@ export class TauriBackend implements Backend {
   }
 
   archive(messageIds: string[]) {
-    return call<void>("archive_messages", { messageIds });
+    return call<MovedMessage[]>("archive_messages", { messageIds });
   }
 
   trash(messageIds: string[]) {
-    return call<void>("trash_messages", { messageIds });
+    return call<MovedMessage[]>("trash_messages", { messageIds });
+  }
+
+  moveMessages(messageIds: string[], folderId: string) {
+    return call<MovedMessage[]>("move_messages", { messageIds, folderId });
+  }
+
+  markSpam(messageIds: string[], spam: boolean) {
+    return call<MovedMessage[]>("mark_spam", { messageIds, spam });
+  }
+
+  blockedSenders() {
+    return call<string[]>("blocked_senders");
+  }
+
+  blockSender(entry: string) {
+    return call<string>("block_sender", { entry });
+  }
+
+  unblockSender(entry: string) {
+    return call<void>("unblock_sender", { entry });
   }
 
   send(message: OutgoingMessage) {

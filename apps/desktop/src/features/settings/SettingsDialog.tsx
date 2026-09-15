@@ -42,6 +42,7 @@ import {
   type SwipeAction,
 } from "@/state/settings";
 import { toast } from "@/state/toasts";
+import { BlockedSenders } from "./BlockedSenders";
 import { Row } from "./Row";
 import { Writing } from "./Writing";
 import { useUi, type SettingsSection } from "@/state/ui";
@@ -279,6 +280,7 @@ function Reading() {
         />
       </Row>
       <TrustedSenders />
+      <BlockedSenders />
       <Row label={t("settings.mailAppearance")} description={t("settings.mailAppearanceDesc")}>
         <Segmented
           label={t("settings.mailAppearance")}

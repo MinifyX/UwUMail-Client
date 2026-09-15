@@ -421,6 +421,10 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           event.preventDefault();
           void send();
         }
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "d") {
+          event.preventDefault();
+          discard();
+        }
         if (event.key === "Escape") setMinimized(true);
       }}
       className={clsx(

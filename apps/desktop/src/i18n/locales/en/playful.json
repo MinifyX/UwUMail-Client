@@ -60,7 +60,10 @@
     "sending": "Nyu is about to dash off … ✉︎",
     "sendUndone": "Wait, stop! Nyu is back (・ω・) Keep writing.",
     "undoTooLate": "Too late, Nyu is already over the hills (；・∀・)",
-    "sendFailedKept": "Sending didn't work (╥﹏╥) {{reason}} The mail is waiting in Drafts."
+    "sendFailedKept": "Sending didn't work (╥﹏╥) {{reason}} The mail is waiting in Drafts.",
+    "markedSpam": "Off to the spam corner (｀へ´)",
+    "moveUndone": "Poof, back as it was (・ω・)",
+    "blocked": "{{entry}} can't get in anymore (｀・ω・´) New mail goes to the trash."
   },
   "status": {
     "syncing": "Fetching fresh mail…",

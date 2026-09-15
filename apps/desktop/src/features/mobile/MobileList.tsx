@@ -3,6 +3,7 @@ import {
   Archive,
   Check,
   CloudDownload,
+  FolderInput,
   MailCheck,
   Menu,
   PenLine,
@@ -36,6 +37,7 @@ import { useUi } from "@/state/ui";
 import { ThreadRow } from "../mail/ThreadRow";
 import { useViewInfo } from "../mail/view";
 import { openDraftThread } from "../compose/openDraft";
+import { useSelectionActions } from "../mail/selection";
 import { PullToRefresh } from "./PullToRefresh";
 import { SwipeRow } from "./SwipeRow";
 import { useThreadActions } from "./threadActions";
@@ -74,6 +76,7 @@ export function MobileList() {
   const { data: accounts = [], isSuccess: accountsLoaded } = useAccounts();
   const { refresh } = useMessageActions();
   const threadActions = useThreadActions();
+  const selectionActions = useSelectionActions();
   // The card's own quick actions only show on hover, so they stay out of the way on touch.
   const cardActions = useCardActions();
   const [draftSearch, setDraftSearch] = useState(search);
@@ -161,6 +164,10 @@ export function MobileList() {
     void threadActions.run(action, chosen);
     setSelected(new Set());
   };
+  const moveSelection = () => {
+    void selectionActions.move(chosen.map((thread) => thread.id));
+    setSelected(new Set());
+  };
 
   return (
     <section className="flex h-full min-w-0 flex-col bg-surface" aria-label={info.title}>
@@ -175,6 +182,7 @@ export function MobileList() {
             <IconButton icon={Star} label={t("reader.flag")} onClick={() => runOnSelection("flag")} />
             <IconButton icon={Archive} label={t("reader.archive")} onClick={() => runOnSelection("archive")} />
             <IconButton icon={Trash} label={t("reader.trash")} onClick={() => runOnSelection("trash")} />
+            <IconButton icon={FolderInput} label={t("reader.move")} onClick={moveSelection} />
           </div>
         ) : (
           <div className="flex h-12 items-center gap-1">

@@ -37,6 +37,14 @@ export interface SavedDraft {
   savedToServer?: boolean;
 }
 
+/** Mail waiting for "Move to…". */
+export interface MoveRequest {
+  messageIds: string[];
+  accountIds: string[];
+  /** Runs once moved, e.g. to close the conversation. */
+  onMoved?: () => void;
+}
+
 export type SettingsSection = "appearance" | "mail" | "compose" | "security" | "accounts" | "addons" | "about";
 
 interface UiState {
@@ -53,6 +61,9 @@ interface UiState {
   addAccountOpen: boolean;
   paletteOpen: boolean;
   shortcutsOpen: boolean;
+  /** Conversations ticked in the list (Ctrl/Shift+click or x). */
+  checkedThreadIds: string[];
+  moving: MoveRequest | null;
 
   setView: (view: MailboxView) => void;
   setFilter: (filter: ListFilter) => void;
@@ -69,6 +80,9 @@ interface UiState {
   setAddAccountOpen: (open: boolean) => void;
   setPaletteOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
+  setCheckedThreadIds: (ids: string[]) => void;
+  openMove: (request: MoveRequest) => void;
+  closeMove: () => void;
 }
 
 export const useUi = create<UiState>()((set, get) => ({
@@ -84,9 +98,11 @@ export const useUi = create<UiState>()((set, get) => ({
   addAccountOpen: false,
   paletteOpen: false,
   shortcutsOpen: false,
+  checkedThreadIds: [],
+  moving: null,
 
-  setView: (view) => set({ view, selectedThreadId: null, folderDrawerOpen: false }),
-  setFilter: (filter) => set({ filter, selectedThreadId: null }),
+  setView: (view) => set({ view, selectedThreadId: null, folderDrawerOpen: false, checkedThreadIds: [] }),
+  setFilter: (filter) => set({ filter, selectedThreadId: null, checkedThreadIds: [] }),
   setSearch: (search) => set({ search }),
   selectThread: (id) => set({ selectedThreadId: id }),
   setVisibleThreadIds: (ids) => set({ visibleThreadIds: ids }),
@@ -106,4 +122,7 @@ export const useUi = create<UiState>()((set, get) => ({
   setAddAccountOpen: (open) => set({ addAccountOpen: open }),
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
+  setCheckedThreadIds: (ids) => set({ checkedThreadIds: ids }),
+  openMove: (request) => set({ moving: request }),
+  closeMove: () => set({ moving: null }),
 }));

@@ -50,7 +50,10 @@
       }
     },
     "count_one": "{{count}} message",
-    "count_other": "{{count}} messages"
+    "count_other": "{{count}} messages",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "clearSelection": "Clear selection"
   },
   "reader": {
     "empty": {
@@ -101,7 +104,13 @@
       "retry": "Try again"
     },
     "draft": "Draft",
-    "continueDraft": "Continue writing"
+    "continueDraft": "Continue writing",
+    "move": "Move",
+    "spam": "Spam",
+    "notSpam": "Not spam",
+    "more": "More",
+    "blockSender": "Block {{email}}",
+    "blockDomain": "Block everything from @{{domain}}"
   },
   "compose": {
     "new": "New message",
@@ -155,7 +164,13 @@
     "sendUndone": "Sending stopped. You can keep writing.",
     "undoTooLate": "Too late, the mail is already on its way.",
     "sendFailedKept": "The mail couldn't be sent: {{reason}} It's waiting in Drafts.",
-    "open": "Open"
+    "open": "Open",
+    "moved": "Moved to “{{folder}}”",
+    "markedSpam": "Marked as spam",
+    "markedNotSpam": "Back in the inbox",
+    "moveUndone": "Undone",
+    "blocked": "{{entry}} is blocked. New mail from there goes to the trash.",
+    "unblocked": "{{entry}} isn't blocked anymore"
   },
   "status": {
     "syncing": "Checking for mail",
@@ -364,7 +379,11 @@
     "signatureDefaultNew": "New mail",
     "signatureDefaultReplies": "Replies",
     "signatureSaved": "Signature saved",
-    "signatureUntitled": "Signature"
+    "signatureUntitled": "Signature",
+    "blockedSenders": "Blocked senders",
+    "blockedSendersDesc": "New mail from these addresses and domains goes straight to the trash. Block someone from “More” in a mail.",
+    "blockedSendersEmpty": "Nobody is blocked.",
+    "unblockSender": "Unblock {{entry}}"
   },
   "theme": {
     "system": "System",
@@ -394,7 +413,17 @@
     "flag": "Flag or unflag",
     "unread": "Mark as unread",
     "palette": "Command palette",
-    "close": "Close or go back"
+    "close": "Close or go back",
+    "move": "Move",
+    "spam": "Mark as spam",
+    "select": "Select mail",
+    "undo": "Undo the last action",
+    "goInbox": "Go to inbox",
+    "goSent": "Go to sent",
+    "goDrafts": "Go to drafts",
+    "goFlagged": "Go to flagged",
+    "send": "Send (while writing)",
+    "discardDraft": "Discard draft (while writing)"
   },
   "palette": {
     "placeholder": "Type a command",
@@ -508,5 +537,11 @@
       "nothingMore": "The server has no further matches.",
       "failed": "Searching the server didn't work. {{reason}}"
     }
+  },
+  "move": {
+    "title": "Move to …",
+    "search": "Search folders",
+    "empty": "No matching folder",
+    "mixedAccounts": "Mail from different mailboxes can only be moved one mailbox at a time."
   }
 }

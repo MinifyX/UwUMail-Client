@@ -1,13 +1,27 @@
 import clsx from "clsx";
-import { Archive, ArrowLeft, Forward, MailOpen, RefreshCw, Reply, ReplyAll, Star, Trash } from "lucide-react";
+import {
+  Archive,
+  ArrowLeft,
+  FolderInput,
+  Forward,
+  MailOpen,
+  RefreshCw,
+  Reply,
+  ReplyAll,
+  ShieldAlert,
+  ShieldCheck,
+  Star,
+  Trash,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Message } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
-import { useAccounts, useMessageActions, useThread } from "@/lib/queries";
+import { useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
 import { useUi } from "@/state/ui";
 import { MessageView } from "./MessageView";
+import { requestMove } from "./selection";
 
 interface ThreadReaderProps {
   variant: "simple" | "pro";
@@ -29,6 +43,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const openCompose = useUi((s) => s.openCompose);
   const { data, isPending, isError, refetch, isRefetching } = useThread(threadId);
   const { data: accounts = [] } = useAccounts();
+  const { data: folders = [] } = useFolders();
   const actions = useMessageActions();
   const messages = data?.messages;
   const loadedThreadId = data?.thread.id;
@@ -97,6 +112,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const ids = all.map((m) => m.id);
   const flagged = data.thread.flagged;
   const hiddenCount = all.filter((m) => !expanded.has(m.id)).length;
+  const inJunk = all.every((m) => folders.find((f) => f.id === m.folderId)?.role === "junk");
 
   return (
     <section className={clsx("flex h-full min-w-0 flex-col bg-canvas", className)} aria-label={data.thread.subject}>
@@ -129,6 +145,16 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
           icon={Trash}
           label={t("reader.trash")}
           onClick={() => void actions.trash(ids).then(() => selectThread(null))}
+        />
+        <IconButton
+          icon={FolderInput}
+          label={t("reader.move")}
+          onClick={() => requestMove(all, () => selectThread(null))}
+        />
+        <IconButton
+          icon={inJunk ? ShieldCheck : ShieldAlert}
+          label={inJunk ? t("reader.notSpam") : t("reader.spam")}
+          onClick={() => void actions.spam(ids, !inJunk).then(() => selectThread(null))}
         />
         <IconButton
           icon={Star}

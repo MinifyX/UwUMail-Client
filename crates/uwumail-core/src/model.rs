@@ -368,6 +368,14 @@ pub struct Signature {
     pub for_replies: bool,
 }
 
+/// A message that was moved, with the folder it came from, so the move can be undone.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MovedMessage {
+    pub id: String,
+    pub from_folder_id: String,
+}
+
 /// A message waiting for its "undo send" time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

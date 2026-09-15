@@ -152,7 +152,7 @@ pub(crate) fn handle(method: &str, payload: &str) -> Result<Option<String>> {
             let work = async {
                 match payload["action"].as_str() {
                     Some("read") => engine.set_flags(&ids, FlagChange { seen: Some(true), flagged: None }).await,
-                    Some("archive") => engine.archive(&ids).await,
+                    Some("archive") => engine.archive(&ids).await.map(|_| ()),
                     other => Err(Error::invalid(format!("Unknown notification action {other:?}"))),
                 }
             };

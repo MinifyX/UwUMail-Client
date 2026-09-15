@@ -60,7 +60,10 @@
     "sending": "Nyu flitzt gleich los … ✉︎",
     "sendUndone": "Halt, stopp! Nyu ist zurück (・ω・) Schreib ruhig weiter.",
     "undoTooLate": "Zu spät, Nyu ist schon über alle Berge (；・∀・)",
-    "sendFailedKept": "Senden hat nicht geklappt (╥﹏╥) {{reason}} Die Mail wartet in den Entwürfen."
+    "sendFailedKept": "Senden hat nicht geklappt (╥﹏╥) {{reason}} Die Mail wartet in den Entwürfen.",
+    "markedSpam": "Ab in die Spam-Ecke (｀へ´)",
+    "moveUndone": "Zack, alles wie vorher (・ω・)",
+    "blocked": "{{entry}} kommt nicht mehr rein (｀・ω・´) Neue Mails landen im Papierkorb."
   },
   "status": {
     "syncing": "Hole frische Mails…",

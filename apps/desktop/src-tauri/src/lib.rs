@@ -123,13 +123,46 @@ async fn set_flags(engine: State<'_, Engine>, message_ids: Vec<String>, change: 
 }
 
 #[tauri::command]
-async fn archive_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<()> {
+async fn archive_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<Vec<MovedMessage>> {
     engine.archive(&message_ids).await
 }
 
 #[tauri::command]
-async fn trash_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<()> {
+async fn trash_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<Vec<MovedMessage>> {
     engine.trash(&message_ids).await
+}
+
+#[tauri::command]
+async fn move_messages(
+    engine: State<'_, Engine>,
+    message_ids: Vec<String>,
+    folder_id: String,
+) -> CommandResult<Vec<MovedMessage>> {
+    engine.move_messages(&message_ids, &folder_id).await
+}
+
+#[tauri::command]
+async fn mark_spam(
+    engine: State<'_, Engine>,
+    message_ids: Vec<String>,
+    spam: bool,
+) -> CommandResult<Vec<MovedMessage>> {
+    engine.mark_spam(&message_ids, spam).await
+}
+
+#[tauri::command]
+fn blocked_senders(engine: State<'_, Engine>) -> CommandResult<Vec<String>> {
+    engine.blocked_senders()
+}
+
+#[tauri::command]
+fn block_sender(engine: State<'_, Engine>, entry: String) -> CommandResult<String> {
+    engine.block_sender(&entry)
+}
+
+#[tauri::command]
+fn unblock_sender(engine: State<'_, Engine>, entry: String) -> CommandResult<()> {
+    engine.unblock_sender(&entry)
 }
 
 #[tauri::command]
@@ -351,6 +384,11 @@ pub fn run() {
             set_flags,
             archive_messages,
             trash_messages,
+            move_messages,
+            mark_spam,
+            blocked_senders,
+            block_sender,
+            unblock_sender,
             send_message,
             queue_send,
             cancel_send,

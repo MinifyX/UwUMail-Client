@@ -18,7 +18,8 @@
 - [x] Several sender addresses per mailbox: aliases from the JMAP server or added by hand, replies from the address the mail went to
 - [x] Signatures per sender address: formatted with pictures, several per address, defaults for new mail and replies, switchable while writing
 - [x] Embedded images (cid:) in received mail; pictures in sent mail travel as inline parts
-- [ ] Unsubscribe button, spam and blocked senders, move to folder, print and save as file, multi-select, more shortcuts
+- [x] Move to folder (menu with search, v, drag and drop), multi-select (Ctrl/Shift+click, x), spam and not spam, blocked senders, undo for moves (toast and z), shortcuts g i / g s / g d / g f, ! and Ctrl+Shift+D
+- [ ] Unsubscribe button, print and save as file
 - [x] Unified inbox across all mailboxes
 - [x] Conversation view (can be turned off)
 - [x] Offline reading and local full-text search

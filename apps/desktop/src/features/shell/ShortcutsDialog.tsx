@@ -4,7 +4,9 @@ import { modKey } from "@/lib/platform";
 import { useUi } from "@/state/ui";
 
 export function KeyHint({ combo }: { combo: string }) {
-  const keys = combo.split("+").map((key) => (key === "mod" ? modKey : key === "Delete" ? "Del" : key.toUpperCase()));
+  const keys = combo
+    .split(/[+ ]/)
+    .map((key) => (key === "mod" ? modKey : key === "Delete" ? "Del" : key === "shift" ? "⇧" : key.toUpperCase()));
   return (
     <span className="flex gap-1">
       {keys.map((key) => (
@@ -29,8 +31,18 @@ const SHORTCUTS: [string, string][] = [
   ["f", "forward"],
   ["e", "archive"],
   ["#", "trash"],
+  ["v", "move"],
+  ["!", "spam"],
   ["s", "flag"],
   ["u", "unread"],
+  ["x", "select"],
+  ["z", "undo"],
+  ["g i", "goInbox"],
+  ["g s", "goSent"],
+  ["g d", "goDrafts"],
+  ["g f", "goFlagged"],
+  ["mod+Enter", "send"],
+  ["mod+shift+d", "discardDraft"],
   ["mod+k", "palette"],
   ["Escape", "close"],
 ];

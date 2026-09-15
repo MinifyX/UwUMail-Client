@@ -1,12 +1,13 @@
 import clsx from "clsx";
 import type { LucideIcon } from "lucide-react";
-import { Archive, Mail, MailOpen, Paperclip, Star, Trash } from "lucide-react";
+import { Archive, Check, Mail, MailOpen, Paperclip, Star, Trash } from "lucide-react";
 import type { Account, ThreadSummary } from "@/backend/types";
 import { AccountDot, Avatar } from "@/components/ui/Avatar";
 import { useT } from "@/i18n";
 import { displayName, formatListDate } from "@/lib/format";
 import type { useThreadActions } from "@/lib/queries";
 import type { ListDensity } from "@/state/settings";
+import { THREAD_DRAG_TYPE } from "./selection";
 
 interface ThreadRowProps {
   thread: ThreadSummary;
@@ -16,7 +17,11 @@ interface ThreadRowProps {
   accounts: Account[];
   showAccount: boolean;
   actions: ReturnType<typeof useThreadActions>;
-  onSelect: () => void;
+  onSelect: (event: React.MouseEvent) => void;
+  /** Ticked for actions on several conversations. */
+  checked?: boolean;
+  /** Thread ids a drag from this row carries (desktop), or none to not drag. */
+  dragIds?: string[];
 }
 
 function QuickAction({
@@ -60,6 +65,8 @@ export function ThreadRow({
   showAccount,
   actions,
   onSelect,
+  checked = false,
+  dragIds,
 }: ThreadRowProps) {
   const { t, i18n } = useT();
   const compact = density === "compact";
@@ -78,10 +85,17 @@ export function ThreadRow({
   return (
     <div
       data-thread-id={thread.id}
+      draggable={dragIds !== undefined}
+      onDragStart={(event) => {
+        if (!dragIds) return;
+        event.dataTransfer.setData(THREAD_DRAG_TYPE, JSON.stringify(dragIds));
+        event.dataTransfer.effectAllowed = "move";
+      }}
       className={clsx(
         "group relative flex text-left transition-colors",
         compact ? "gap-2.5 rounded-xl py-2 pr-3 pl-1.5" : "gap-3 rounded-2xl py-3 pr-3 pl-1.5",
-        selected ? "bg-pink-tint" : "hover:bg-pink-tint/45",
+        selected || checked ? "bg-pink-tint" : "hover:bg-pink-tint/45",
+        checked && "ring-1 ring-pink/40",
       )}
     >
       {/* The whole card opens the thread; the quick actions sit above this button. */}
@@ -89,6 +103,7 @@ export function ThreadRow({
         type="button"
         onClick={onSelect}
         aria-current={selected ? "true" : undefined}
+        aria-pressed={checked || undefined}
         aria-label={[unread && t("list.unread"), thread.hasDraft && t("reader.draft"), names, subject, date]
           .filter(Boolean)
           .join(", ")}
@@ -107,6 +122,11 @@ export function ThreadRow({
 
       <span className="pointer-events-none relative flex h-fit shrink-0">
         <Avatar address={lead} size={compact ? "sm" : variant === "pro" ? "list" : "md"} />
+        {checked && (
+          <span className="absolute inset-0 grid place-items-center rounded-full bg-pink text-white">
+            <Check className="size-4" strokeWidth={3} aria-hidden />
+          </span>
+        )}
         {account && (
           <AccountDot
             color={account.color}

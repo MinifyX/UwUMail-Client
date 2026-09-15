@@ -9,7 +9,8 @@ function isTyping(target: EventTarget | null) {
 
 /**
  * Keys use the format "mod+k", "shift+3" or plain "j". "mod" is Cmd on macOS
- * and Ctrl elsewhere. Single keys are ignored while the user types.
+ * and Ctrl elsewhere. Single keys are ignored while the user types. "g i" is
+ * a sequence: g, then i within a second.
  */
 function comboOf(event: KeyboardEvent) {
   const parts: string[] = [];
@@ -19,6 +20,8 @@ function comboOf(event: KeyboardEvent) {
   return parts.join("+");
 }
 
+const SEQUENCE_WAIT = 1000;
+
 export function useHotkeys(map: HotkeyMap, enabled = true) {
   const latest = useRef(map);
   useEffect(() => {
@@ -27,13 +30,23 @@ export function useHotkeys(map: HotkeyMap, enabled = true) {
 
   useEffect(() => {
     if (!enabled) return;
+    let pending: { key: string; at: number } | null = null;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return;
       const combo = comboOf(event);
-      const handler = latest.current[combo];
-      if (!handler) return;
       if (!combo.startsWith("mod+") && isTyping(event.target)) return;
       if (document.querySelector("dialog[open]") && combo !== "mod+k") return;
+      const started = pending && event.timeStamp - pending.at < SEQUENCE_WAIT ? pending.key : null;
+      pending = null;
+      const handler = (started && latest.current[`${started} ${combo}`]) || latest.current[combo];
+      if (!handler) {
+        // The first key of a sequence waits for the second one.
+        if (Object.keys(latest.current).some((key) => key.startsWith(`${combo} `))) {
+          pending = { key: combo, at: event.timeStamp };
+          event.preventDefault();
+        }
+        return;
+      }
       event.preventDefault();
       handler(event);
     };

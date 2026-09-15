@@ -171,6 +171,16 @@ either taken back or sent, never both. Queued mail survives closing UwUMail and
 goes out on the next start. The result arrives as `send:done` or
 `send:failed`; a failed mail is kept as a draft.
 
+### Moving, spam and blocked senders
+
+Archive, trash, move and spam share one engine path (`Inner::move_to`) and
+return every moved message with the folder it came from; the UI's "Undo"
+(toast or `z`) moves them back. Spam and not spam set the `$Junk` /
+`$NotJunk` keywords first where the server takes them, then move to the junk
+folder or the inbox. Blocked addresses and `@domains` live in
+`blocked_senders`; new inbox mail from them is moved to the trash during sync,
+before any notification.
+
 ### Senders and signatures
 
 Every mailbox can send from its own address and from identities: JMAP

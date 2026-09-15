@@ -16,6 +16,7 @@ import type {
   Folder,
   Identity,
   MailtoDraft,
+  MovedMessage,
   Message,
   NewAccount,
   OutgoingMessage,
@@ -73,6 +74,7 @@ export class DemoBackend implements Backend {
   private mailtoTaken = false;
   /** Draft key → the demo message that holds the draft, and what the composer sent. */
   private drafts = new Map<string, { messageId: string; draft: OutgoingMessage }>();
+  private blocked = new Set<string>();
   private signatures: Signature[] = [
     {
       id: "sig-demo",
@@ -338,11 +340,52 @@ export class DemoBackend implements Backend {
   }
 
   async archive(messageIds: string[]) {
-    this.moveToRole(messageIds, "archive");
+    return this.moveToRole(messageIds, "archive");
   }
 
   async trash(messageIds: string[]) {
-    this.moveToRole(messageIds, "trash");
+    return this.moveToRole(messageIds, "trash");
+  }
+
+  async moveMessages(messageIds: string[], folderId: string) {
+    await wait(120);
+    const folder = this.folders.find((f) => f.id === folderId);
+    if (!folder) throw new BackendError("not_found", "This folder no longer exists.");
+    const moved: MovedMessage[] = [];
+    for (const message of this.messages) {
+      if (!messageIds.includes(message.id) || message.folderId === folderId) continue;
+      if (message.accountId !== folder.accountId) {
+        throw new BackendError("invalid_input", "Mail can only move to folders of its own mailbox.");
+      }
+      moved.push({ id: message.id, fromFolderId: message.folderId });
+      message.folderId = folderId;
+    }
+    this.emitChanged(messageIds);
+    return moved;
+  }
+
+  async markSpam(messageIds: string[], spam: boolean) {
+    return this.moveToRole(messageIds, spam ? "junk" : "inbox");
+  }
+
+  async blockedSenders() {
+    await wait(40);
+    return [...this.blocked];
+  }
+
+  async blockSender(entry: string) {
+    await wait(80);
+    const normalized = entry.trim().toLowerCase();
+    if (!/^(@[^@\s]+\.[^@\s]+|[^@\s]+@[^@\s]+\.[^@\s]+)$/.test(normalized)) {
+      throw new BackendError("invalid_input", `"${entry}" isn't an address or @domain.`);
+    }
+    this.blocked.add(normalized);
+    return normalized;
+  }
+
+  async unblockSender(entry: string) {
+    await wait(60);
+    this.blocked.delete(entry);
   }
 
   async queueSend(message: OutgoingMessage, delaySeconds: number): Promise<QueuedSend> {
@@ -626,11 +669,16 @@ export class DemoBackend implements Backend {
     for (const accountId of accounts) this.emit({ type: "mail:changed", accountId });
   }
 
-  private moveToRole(messageIds: string[], role: "archive" | "trash") {
+  private moveToRole(messageIds: string[], role: "archive" | "trash" | "junk" | "inbox") {
+    const moved: MovedMessage[] = [];
     for (const message of this.messages) {
-      if (messageIds.includes(message.id)) message.folderId = `${message.accountId}:${role}`;
+      const target = `${message.accountId}:${role}`;
+      if (!messageIds.includes(message.id) || message.folderId === target) continue;
+      moved.push({ id: message.id, fromFolderId: message.folderId });
+      message.folderId = target;
     }
     this.emitChanged(messageIds);
+    return moved;
   }
 
   private roleOf(message: Message) {

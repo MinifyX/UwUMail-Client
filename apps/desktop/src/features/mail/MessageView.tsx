@@ -1,13 +1,15 @@
 import clsx from "clsx";
-import { ChevronDown, ImageIcon, ImageOff, Moon, PenLine, Sun } from "lucide-react";
+import { Ban, ChevronDown, ImageIcon, ImageOff, Moon, MoreHorizontal, PenLine, Sun } from "lucide-react";
 import { useState } from "react";
 import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
 import { useT } from "@/i18n";
 import { displayName, formatFullDate, formatListDate } from "@/lib/format";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCompanyDomain } from "@/lib/queries";
+import { useUi } from "@/state/ui";
 import { useResolvedTheme } from "@/lib/theme";
 import { domainEntry, isDomainEntry, matchingEntries } from "@/lib/trustedSenders";
 import { useSettings } from "@/state/settings";
@@ -15,6 +17,7 @@ import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
 import { openDraftMessage } from "../compose/openDraft";
 import { useInlineImages } from "./useInlineImages";
+import { blockSender } from "./selection";
 import { MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
 
 interface AppearanceToggleProps {
@@ -218,6 +221,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
               </>
             )}
             {theme === "dark" && <AppearanceToggle message={message} appearance={appearance} autoDark={autoDark} />}
+            {!message.flags.draft && <MessageMenu message={message} accounts={accounts} />}
             <time dateTime={message.date} className="text-[12.5px] text-muted">
               {formatFullDate(message.date, i18n.language)}
             </time>
@@ -247,5 +251,59 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
         sender={message.from}
       />
     </article>
+  );
+}
+
+/** Less common actions for one message. */
+function MessageMenu({ message, accounts }: { message: Message; accounts: Account[] }) {
+  const { t } = useT();
+  const client = useQueryClient();
+  const email = message.from.email;
+  const domain = useCompanyDomain(email);
+  const own = accounts.some((account) => account.email.toLowerCase() === email.toLowerCase());
+  const refresh = () => client.invalidateQueries();
+  const block = (entry: string) => {
+    useUi.getState().selectThread(null);
+    void blockSender(entry, [message.id], refresh);
+  };
+  const items = own
+    ? []
+    : [
+        { label: <MenuLabel icon={Ban} text={t("reader.blockSender", { email })} />, onSelect: () => block(email) },
+        ...(domain
+          ? [
+              {
+                label: <MenuLabel icon={Ban} text={t("reader.blockDomain", { domain })} />,
+                onSelect: () => block(`@${domain}`),
+              },
+            ]
+          : []),
+      ];
+  if (items.length === 0) return null;
+  return (
+    <Menu
+      align="end"
+      items={items}
+      trigger={(menu) => (
+        <IconButton
+          icon={MoreHorizontal}
+          size="sm"
+          label={t("reader.more")}
+          onClick={menu.toggle}
+          aria-haspopup={menu["aria-haspopup"]}
+          aria-expanded={menu["aria-expanded"]}
+          aria-controls={menu["aria-controls"]}
+        />
+      )}
+    />
+  );
+}
+
+function MenuLabel({ icon: Icon, text }: { icon: typeof Ban; text: string }) {
+  return (
+    <span className="flex items-center gap-2.5">
+      <Icon className="size-4 shrink-0 text-muted" aria-hidden />
+      {text}
+    </span>
   );
 }

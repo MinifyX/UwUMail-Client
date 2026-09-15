@@ -1,7 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Archive,
+  CheckSquare,
   Columns3,
+  FolderInput,
   Forward,
   Keyboard,
   Mailbox,
@@ -12,17 +14,21 @@ import {
   ReplyAll,
   Search,
   Settings,
+  ShieldAlert,
   Sparkles,
   Star,
   Trash,
+  Undo2,
 } from "lucide-react";
 import { backend } from "@/backend/backend";
 import { i18n } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
+import { announceMove, runLastUndo } from "@/state/undo";
 import { useUi } from "@/state/ui";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadDetail } from "@/backend/types";
+import { requestMove } from "../mail/selection";
 import { SEARCH_INPUT_ID } from "../mail/ThreadList";
 
 export interface Command {
@@ -109,7 +115,7 @@ export function buildCommands(client: QueryClient, t: (key: string) => string): 
       needsThread: true,
       run: withThread(async (thread) => {
         ui.selectRelative(1);
-        await backend().archive(ids(thread));
+        announceMove(await backend().archive(ids(thread)), t("toast.archived"), () => afterChange(client));
         await afterChange(client);
       }),
     },
@@ -121,9 +127,54 @@ export function buildCommands(client: QueryClient, t: (key: string) => string): 
       needsThread: true,
       run: withThread(async (thread) => {
         ui.selectRelative(1);
-        await backend().trash(ids(thread));
+        announceMove(await backend().trash(ids(thread)), t("toast.trashed"), () => afterChange(client));
         await afterChange(client);
       }),
+    },
+    {
+      id: "move",
+      title: t("shortcuts.move"),
+      icon: FolderInput,
+      keys: ["v"],
+      needsThread: true,
+      run: withThread((thread) => requestMove(thread.messages, () => ui.selectThread(null))),
+    },
+    {
+      id: "spam",
+      title: t("shortcuts.spam"),
+      icon: ShieldAlert,
+      keys: ["!"],
+      needsThread: true,
+      run: withThread(async (thread) => {
+        ui.selectRelative(1);
+        announceMove(await backend().markSpam(ids(thread), true), t("toast.markedSpam"), () => afterChange(client));
+        await afterChange(client);
+      }),
+    },
+    {
+      id: "select",
+      title: t("shortcuts.select"),
+      icon: CheckSquare,
+      keys: ["x"],
+      needsThread: true,
+      run: () => {
+        const { selectedThreadId, checkedThreadIds, setCheckedThreadIds } = useUi.getState();
+        if (!selectedThreadId) return;
+        setCheckedThreadIds(
+          checkedThreadIds.includes(selectedThreadId)
+            ? checkedThreadIds.filter((id) => id !== selectedThreadId)
+            : [...checkedThreadIds, selectedThreadId],
+        );
+      },
+    },
+    {
+      id: "undo",
+      title: t("shortcuts.undo"),
+      icon: Undo2,
+      keys: ["z"],
+      run: () => {
+        runLastUndo();
+      },
     },
     {
       id: "flag",
@@ -148,7 +199,34 @@ export function buildCommands(client: QueryClient, t: (key: string) => string): 
         await afterChange(client);
       }),
     },
-    { id: "inbox", title: t("nav.unified"), icon: Mailbox, run: () => ui.setView({ kind: "unified", role: "inbox" }) },
+    {
+      id: "inbox",
+      title: t("nav.unified"),
+      icon: Mailbox,
+      keys: ["g i"],
+      run: () => ui.setView({ kind: "unified", role: "inbox" }),
+    },
+    {
+      id: "goSent",
+      title: t("shortcuts.goSent"),
+      icon: Mailbox,
+      keys: ["g s"],
+      run: () => ui.setView({ kind: "unified", role: "sent" }),
+    },
+    {
+      id: "goDrafts",
+      title: t("shortcuts.goDrafts"),
+      icon: Mailbox,
+      keys: ["g d"],
+      run: () => ui.setView({ kind: "unified", role: "drafts" }),
+    },
+    {
+      id: "goFlagged",
+      title: t("shortcuts.goFlagged"),
+      icon: Star,
+      keys: ["g f"],
+      run: () => ui.setView({ kind: "unified", role: "flagged" }),
+    },
     {
       id: "layout",
       title: `${t("settings.layout")}: ${i18n.t(`layout.${settings.layout === "pro" ? "simple" : "pro"}.name`)}`,

@@ -19,10 +19,12 @@ import { Button } from "@/components/ui/Button";
 import { Wordmark } from "@/components/ui/Logo";
 import { Badge } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
-import { useAccounts, useFolders } from "@/lib/queries";
+import { useAccounts, useFolders, useMessageActions } from "@/lib/queries";
+import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
+import { THREAD_DRAG_TYPE, useSelectionActions } from "./selection";
 import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
 
 const UNIFIED_ROLES = ["inbox", "unread", "flagged", "drafts", "sent"] as const;
@@ -75,13 +77,43 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   // A collapsed folder also shows what's unread inside it.
   const count = hasChildren && collapsed ? node.unreadInside : countsUnread(folder) ? folder.unread : 0;
   const label = folder.role ? t(`folder.${folder.role}`) : folder.name;
+  const selection = useSelectionActions();
+  const actions = useMessageActions();
+  const [dropping, setDropping] = useState(false);
+  const accepts = (event: React.DragEvent) => folder.selectable && event.dataTransfer.types.includes(THREAD_DRAG_TYPE);
 
   return (
     <li role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined} aria-selected={active}>
       <div
+        onDragOver={(event) => {
+          if (!accepts(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          setDropping(true);
+        }}
+        onDragLeave={() => setDropping(false)}
+        onDrop={(event) => {
+          setDropping(false);
+          if (!accepts(event)) return;
+          event.preventDefault();
+          const threadIds = JSON.parse(event.dataTransfer.getData(THREAD_DRAG_TYPE) || "[]") as string[];
+          void selection.messagesOf(threadIds).then((messages) => {
+            const here = messages.filter((message) => message.accountId === account.id).map((message) => message.id);
+            if (here.length === 0) {
+              toast(t("move.mixedAccounts"), "error");
+              return;
+            }
+            useUi.getState().setCheckedThreadIds([]);
+            return actions.move(here, { id: folder.id, name: label });
+          });
+        }}
         className={clsx(
           "group relative flex h-9 items-center rounded-xl transition-colors",
-          active ? "bg-pink-tint font-semibold text-pink-ink" : "text-ink/85 hover:bg-pink-tint/50",
+          dropping
+            ? "bg-pink-tint-strong text-pink-ink ring-2 ring-pink"
+            : active
+              ? "bg-pink-tint font-semibold text-pink-ink"
+              : "text-ink/85 hover:bg-pink-tint/50",
         )}
         style={{ paddingLeft: 6 + depth * INDENT }}
       >

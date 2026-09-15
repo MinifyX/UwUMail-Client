@@ -1,10 +1,11 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { backend } from "@/backend/backend";
-import type { FlagChange, ListFilter, MailboxView, Message, ThreadSummary } from "@/backend/types";
+import type { FlagChange, ListFilter, MailboxView, Message, MovedMessage, ThreadSummary } from "@/backend/types";
 import { useT } from "@/i18n";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
+import { announceMove } from "@/state/undo";
 import { useUi } from "@/state/ui";
 import { useUpdates } from "@/state/updates";
 import { composeAgain } from "@/features/compose/undoSend";
@@ -121,10 +122,25 @@ export function useMessageActions() {
     }
   };
 
+  /** Moves mail and offers to put it back (also with "z"). */
+  const moveWithUndo = async (move: () => Promise<MovedMessage[]>, success: string) => {
+    try {
+      announceMove(await move(), success, invalidate);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      await invalidate();
+    }
+  };
+
   return {
     setFlags: (ids: string[], change: FlagChange) => run(() => backend().setFlags(ids, change)),
-    archive: (ids: string[]) => run(() => backend().archive(ids), t("toast.archived")),
-    trash: (ids: string[]) => run(() => backend().trash(ids), t("toast.trashed")),
+    archive: (ids: string[]) => moveWithUndo(() => backend().archive(ids), t("toast.archived")),
+    trash: (ids: string[]) => moveWithUndo(() => backend().trash(ids), t("toast.trashed")),
+    move: (ids: string[], folder: { id: string; name: string }) =>
+      moveWithUndo(() => backend().moveMessages(ids, folder.id), t("toast.moved", { folder: folder.name })),
+    spam: (ids: string[], spam: boolean) =>
+      moveWithUndo(() => backend().markSpam(ids, spam), t(spam ? "toast.markedSpam" : "toast.markedNotSpam")),
     refresh: () => run(() => backend().syncNow()),
   };
 }

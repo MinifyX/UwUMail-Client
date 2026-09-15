@@ -638,52 +638,69 @@ impl Engine {
         Ok(())
     }
 
-    pub async fn archive(&self, message_ids: &[String]) -> Result<()> {
-        self.move_to_role(message_ids, FolderRole::Archive).await
+    /// Moves mail into the archive. Returns what moved and from where, for undoing.
+    pub async fn archive(&self, message_ids: &[String]) -> Result<Vec<MovedMessage>> {
+        self.inner.move_to(message_ids, MoveTarget::Role(FolderRole::Archive)).await
     }
 
-    pub async fn trash(&self, message_ids: &[String]) -> Result<()> {
-        self.move_to_role(message_ids, FolderRole::Trash).await
+    /// Moves mail into the trash; what's already there is deleted for good and isn't returned.
+    pub async fn trash(&self, message_ids: &[String]) -> Result<Vec<MovedMessage>> {
+        self.inner.move_to(message_ids, MoveTarget::Role(FolderRole::Trash)).await
     }
 
-    async fn move_to_role(&self, message_ids: &[String], role: FolderRole) -> Result<()> {
+    /// Moves mail into another folder of the same mailbox.
+    pub async fn move_messages(&self, message_ids: &[String], folder_id: &str) -> Result<Vec<MovedMessage>> {
+        self.inner.move_to(message_ids, MoveTarget::Folder(folder_id.to_string())).await
+    }
+
+    /// "Spam" moves mail into the junk folder, "not spam" back to the inbox. Servers that learn
+    /// from it get the `$Junk` / `$NotJunk` keywords too.
+    pub async fn mark_spam(&self, message_ids: &[String], spam: bool) -> Result<Vec<MovedMessage>> {
         let locations = self.inner.store.locations(message_ids)?;
-        let mut by_account: HashMap<String, Vec<MessageLocation>> = HashMap::new();
-        for location in &locations {
-            by_account.entry(location.account_id.clone()).or_default().push(location.clone());
+        for (account_id, remote_ids) in group_remote(&locations) {
+            let client = self.inner.jmap_client(&account_id).await?;
+            let _ = jmap_sync::set_keywords(&client, &remote_ids, &[("$junk", spam), ("$notjunk", !spam)]).await;
         }
-        for (account_id, messages) in by_account {
-            if self.inner.store.account(&account_id)?.protocol == Protocol::Jmap {
-                self.inner.move_jmap(&account_id, messages, role).await?;
-                continue;
-            }
-            let target = self.inner.ensure_folder(&account_id, role).await?;
-            let (already_there, to_move): (Vec<_>, Vec<_>) =
-                messages.into_iter().partition(|m| m.folder_id == target.id);
-
-            if role == FolderRole::Trash && !already_there.is_empty() {
-                // Deleting from the trash deletes for real.
-                let ids: Vec<String> = already_there.iter().map(|m| m.id.clone()).collect();
-                self.inner.store.delete_messages(&ids)?;
-                for ((account, path), uids) in group_by_folder(&already_there) {
-                    with_session!(self.inner, &account, |session| imap::delete_permanently(session, &path, &uids))?;
-                }
-            }
-
-            let ids: Vec<String> = to_move.iter().map(|m| m.id.clone()).collect();
-            self.inner.store.move_local(&ids, &target.id)?;
-            for ((account, path), uids) in group_by_folder(&to_move) {
-                with_session!(self.inner, &account, |session| imap::move_messages(
-                    session,
-                    &path,
-                    &uids,
-                    &target.path
-                ))?;
-            }
-            self.inner.wake(&account_id);
+        for ((account_id, path), uids) in group_by_folder(&locations) {
+            let (add, remove) = if spam { ("$Junk", "$NotJunk") } else { ("$NotJunk", "$Junk") };
+            // Servers without custom keywords refuse this; moving still works.
+            let _ = with_session!(self.inner, &account_id, |session| imap::store_flags(
+                session,
+                &path,
+                &uids,
+                &format!("+FLAGS.SILENT ({add})")
+            ));
+            let _ = with_session!(self.inner, &account_id, |session| imap::store_flags(
+                session,
+                &path,
+                &uids,
+                &format!("-FLAGS.SILENT ({remove})")
+            ));
         }
-        self.inner.emit_changed(&locations);
-        Ok(())
+        let role = if spam { FolderRole::Junk } else { FolderRole::Inbox };
+        self.inner.move_to(message_ids, MoveTarget::Role(role)).await
+    }
+
+    /// Addresses and `@domains` whose new mail goes straight to the trash.
+    pub fn blocked_senders(&self) -> Result<Vec<String>> {
+        self.inner.store.blocked_senders()
+    }
+
+    pub fn block_sender(&self, entry: &str) -> Result<String> {
+        let entry = entry.trim().to_lowercase();
+        let valid = match entry.strip_prefix('@') {
+            Some(domain) => domain.contains('.') && matches!(url::Host::parse(domain), Ok(url::Host::Domain(_))),
+            None => entry.parse::<lettre::Address>().is_ok(),
+        };
+        if !valid {
+            return Err(Error::invalid(format!("\"{entry}\" isn't an address or @domain.")));
+        }
+        self.inner.store.block_sender(&entry)?;
+        Ok(entry)
+    }
+
+    pub fn unblock_sender(&self, entry: &str) -> Result<()> {
+        self.inner.store.unblock_sender(entry)
     }
 
     fn threading_for(&self, in_reply_to: Option<&str>) -> Result<Option<Threading>> {
@@ -1069,6 +1086,23 @@ fn sender(account: &AccountRecord) -> Address {
     Address { name: Some(account.display_name.clone()).filter(|n| !n.is_empty()), email: account.email.clone() }
 }
 
+enum MoveTarget {
+    /// The account's folder for a role, created when missing. Trashing what's already in the trash deletes it.
+    Role(FolderRole),
+    /// A folder by its local id.
+    Folder(String),
+}
+
+/// Whether mail from `email` is blocked by an address or `@domain` entry (subdomains included).
+pub fn is_blocked(entries: &[String], email: &str) -> bool {
+    let email = email.trim().to_lowercase();
+    let domain = email.rsplit_once('@').map(|(_, d)| d).unwrap_or_default();
+    entries.iter().any(|entry| match entry.strip_prefix('@') {
+        Some(blocked) => domain == blocked || domain.ends_with(&format!(".{blocked}")),
+        None => *entry == email,
+    })
+}
+
 /// JMAP email ids by account.
 fn group_remote(locations: &[MessageLocation]) -> HashMap<String, Vec<String>> {
     let mut groups: HashMap<String, Vec<String>> = HashMap::new();
@@ -1204,15 +1238,100 @@ impl Inner {
     }
 
     /// Archive or trash over JMAP. Trashing what's already in the trash deletes it.
-    async fn move_jmap(&self, account_id: &str, messages: Vec<MessageLocation>, role: FolderRole) -> Result<()> {
+    async fn move_to(&self, message_ids: &[String], target: MoveTarget) -> Result<Vec<MovedMessage>> {
+        let locations = self.store.locations(message_ids)?;
+        let mut moved = Vec::new();
+        let mut by_account: HashMap<String, Vec<MessageLocation>> = HashMap::new();
+        for location in &locations {
+            by_account.entry(location.account_id.clone()).or_default().push(location.clone());
+        }
+        for (account_id, messages) in by_account {
+            let jmap = self.store.account(&account_id)?.protocol == Protocol::Jmap;
+            let (folder, deleting) = match &target {
+                MoveTarget::Role(role) if jmap => {
+                    let client = self.jmap_client(&account_id).await?;
+                    let folder = jmap_sync::ensure_mailbox(&client, &self.store, &account_id, *role).await?;
+                    self.created_folders
+                        .lock()
+                        .unwrap()
+                        .insert((account_id.clone(), folder.path.clone()), Instant::now());
+                    (folder, *role == FolderRole::Trash)
+                }
+                MoveTarget::Role(role) => (self.ensure_folder(&account_id, *role).await?, *role == FolderRole::Trash),
+                MoveTarget::Folder(id) => {
+                    let folder = self.store.folder(id)?;
+                    if folder.account_id != account_id {
+                        return Err(Error::invalid("Mail can only move to folders of its own mailbox."));
+                    }
+                    if !folder.selectable {
+                        return Err(Error::invalid("This folder can't hold mail."));
+                    }
+                    (folder, false)
+                }
+            };
+            moved.extend(
+                messages
+                    .iter()
+                    .filter(|m| m.folder_id != folder.id)
+                    .map(|m| MovedMessage { id: m.id.clone(), from_folder_id: m.folder_id.clone() }),
+            );
+            if jmap {
+                self.move_jmap(&account_id, messages, &folder, deleting).await?;
+                continue;
+            }
+            let (already_there, to_move): (Vec<_>, Vec<_>) =
+                messages.into_iter().partition(|m| m.folder_id == folder.id);
+
+            if deleting && !already_there.is_empty() {
+                // Deleting from the trash deletes for real.
+                let ids: Vec<String> = already_there.iter().map(|m| m.id.clone()).collect();
+                self.store.delete_messages(&ids)?;
+                for ((account, path), uids) in group_by_folder(&already_there) {
+                    with_session!(self, &account, |session| imap::delete_permanently(session, &path, &uids))?;
+                }
+            }
+
+            let ids: Vec<String> = to_move.iter().map(|m| m.id.clone()).collect();
+            self.store.move_local(&ids, &folder.id)?;
+            for ((account, path), uids) in group_by_folder(&to_move) {
+                with_session!(self, &account, |session| imap::move_messages(session, &path, &uids, &folder.path))?;
+            }
+            self.wake(&account_id);
+        }
+        self.emit_changed(&locations);
+        Ok(moved)
+    }
+
+    /// New inbox mail from blocked senders goes straight to the trash; returns the rest.
+    async fn drop_blocked(&self, messages: Vec<Message>) -> Vec<Message> {
+        let blocked = match self.store.blocked_senders() {
+            Ok(blocked) if !blocked.is_empty() => blocked,
+            _ => return messages,
+        };
+        let (dropped, kept): (Vec<_>, Vec<_>) =
+            messages.into_iter().partition(|message| is_blocked(&blocked, &message.from.email));
+        if !dropped.is_empty() {
+            let ids: Vec<String> = dropped.into_iter().map(|message| message.id).collect();
+            if let Err(error) = Box::pin(self.move_to(&ids, MoveTarget::Role(FolderRole::Trash))).await {
+                tracing::warn!("Couldn't move mail from blocked senders to the trash: {error}");
+            }
+        }
+        kept
+    }
+
+    async fn move_jmap(
+        &self,
+        account_id: &str,
+        messages: Vec<MessageLocation>,
+        target: &FolderRecord,
+        deleting: bool,
+    ) -> Result<()> {
         let client = self.jmap_client(account_id).await?;
-        let target = jmap_sync::ensure_mailbox(&client, &self.store, account_id, role).await?;
-        self.created_folders.lock().unwrap().insert((account_id.to_string(), target.path.clone()), Instant::now());
         let (already_there, to_move): (Vec<_>, Vec<_>) = messages.into_iter().partition(|m| m.folder_id == target.id);
         let remote = |list: &[MessageLocation]| list.iter().filter_map(|m| m.remote_id.clone()).collect::<Vec<_>>();
         let ids = |list: &[MessageLocation]| list.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
 
-        if role == FolderRole::Trash && !already_there.is_empty() {
+        if deleting && !already_there.is_empty() {
             jmap_sync::destroy_emails(&client, &remote(&already_there)).await?;
             self.store.delete_messages(&ids(&already_there))?;
         }
@@ -1305,15 +1424,17 @@ impl Inner {
         let keep = self.recently_created(account_id);
         let folders_changed = jmap_sync::sync_mailboxes(client, &self.store, account_id, &keep).await?;
         let result = jmap_sync::sync_emails(client, &self.store, account_id, self.full_after()).await?;
-        if result.had_messages && !result.new_message_ids.is_empty() {
+        if !result.new_message_ids.is_empty() {
             let inbox = self.store.folder_by_role(account_id, FolderRole::Inbox)?.map(|f| f.id);
-            let unseen: Vec<String> = self
+            let arrived: Vec<Message> = self
                 .store
                 .messages_by_ids(&result.new_message_ids)?
                 .into_iter()
-                .filter(|m| !m.flags.seen && Some(&m.folder_id) == inbox.as_ref())
-                .map(|m| m.id)
+                .filter(|m| Some(&m.folder_id) == inbox.as_ref())
                 .collect();
+            let arrived = self.drop_blocked(arrived).await;
+            let unseen: Vec<String> =
+                arrived.into_iter().filter(|m| !m.flags.seen && result.had_messages).map(|m| m.id).collect();
             if !unseen.is_empty() {
                 self.emit(EngineEvent::MailReceived { account_id: account_id.to_string(), message_ids: unseen });
             }
@@ -1360,14 +1481,10 @@ impl Inner {
 
     async fn sync_one(&self, session: &mut ImapSession, folder: &FolderRecord) -> Result<bool> {
         let result = imap::sync_folder(session, &self.store, folder, self.full_after()).await?;
-        if folder.role == Some(FolderRole::Inbox) && result.had_messages && !result.new_message_ids.is_empty() {
-            let unseen: Vec<String> = self
-                .store
-                .messages_by_ids(&result.new_message_ids)?
-                .into_iter()
-                .filter(|m| !m.flags.seen)
-                .map(|m| m.id)
-                .collect();
+        if folder.role == Some(FolderRole::Inbox) && !result.new_message_ids.is_empty() {
+            let arrived = self.drop_blocked(self.store.messages_by_ids(&result.new_message_ids)?).await;
+            let unseen: Vec<String> =
+                arrived.into_iter().filter(|m| !m.flags.seen && result.had_messages).map(|m| m.id).collect();
             if !unseen.is_empty() {
                 self.emit(EngineEvent::MailReceived { account_id: folder.account_id.clone(), message_ids: unseen });
             }
@@ -1509,5 +1626,20 @@ async fn run_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<(
         } else if inner.sync_one(&mut session, &inbox).await? {
             inner.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocks_addresses_and_whole_domains() {
+        let blocked = vec!["spam@shop.example".to_string(), "@werbung.example".to_string()];
+        assert!(is_blocked(&blocked, "Spam@Shop.example"));
+        assert!(!is_blocked(&blocked, "hilfe@shop.example"));
+        assert!(is_blocked(&blocked, "news@werbung.example"));
+        assert!(is_blocked(&blocked, "news@mail.werbung.example"), "subdomains too");
+        assert!(!is_blocked(&blocked, "leni@keinewerbung.example"));
     }
 }

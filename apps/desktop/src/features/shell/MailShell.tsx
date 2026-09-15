@@ -14,6 +14,7 @@ import { AccountSetup } from "../accounts/AccountSetup";
 import { Composer } from "../compose/Composer";
 import { loadLocalDraft } from "../compose/localDraft";
 import { MailboxNav } from "../mail/MailboxNav";
+import { MoveDialog } from "../mail/MoveDialog";
 import { MobileShell } from "../mobile/MobileShell";
 import { ThreadList } from "../mail/ThreadList";
 import { ThreadReader } from "../mail/ThreadReader";
@@ -80,6 +81,7 @@ export function MailShell() {
       Escape: () => {
         const ui = useUi.getState();
         if (ui.folderDrawerOpen) ui.setFolderDrawerOpen(false);
+        else if (ui.checkedThreadIds.length > 0) ui.setCheckedThreadIds([]);
         else if (ui.selectedThreadId) ui.selectThread(null);
       },
     };
@@ -149,6 +151,7 @@ export function MailShell() {
       <AddAccountDialog />
       <CommandPalette commands={commands} />
       <ShortcutsDialog />
+      <MoveDialog />
     </div>
   );
 }
