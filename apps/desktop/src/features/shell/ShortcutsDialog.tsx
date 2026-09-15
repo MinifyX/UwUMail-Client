@@ -1,7 +1,10 @@
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { modKey } from "@/lib/platform";
+import { WORKSPACES } from "@/lib/workspaces";
+import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
+import { useWorkspaceName, WORKSPACE_KEYS } from "../workspaces/workspaces";
 
 export function KeyHint({ combo }: { combo: string }) {
   const keys = combo
@@ -51,15 +54,29 @@ export function ShortcutsDialog() {
   const { t } = useT();
   const open = useUi((s) => s.shortcutsOpen);
   const setOpen = useUi((s) => s.setShortcutsOpen);
+  const workspaces = useSettings((s) => s.workspaces);
+  const nameOf = useWorkspaceName();
+  const shortcuts = SHORTCUTS.flatMap(([combo, key]): [string, string][] => {
+    const row: [string, string] = [combo, t(`shortcuts.${key}`)];
+    // Switching workspaces joins the other "g" shortcuts.
+    if (combo !== "g f" || !workspaces) return [row];
+    return [
+      row,
+      ...WORKSPACES.map((workspace): [string, string] => [
+        WORKSPACE_KEYS[workspace],
+        t("workspace.switchTo", { name: nameOf(workspace) }),
+      ]),
+    ];
+  });
   return (
     <Dialog open={open} onClose={() => setOpen(false)} title={t("settings.shortcuts")} width="sm">
       <ul className="flex flex-col px-6 pb-6">
-        {SHORTCUTS.map(([combo, key]) => (
+        {shortcuts.map(([combo, label]) => (
           <li
             key={combo}
             className="flex h-10 items-center justify-between border-b border-hairline text-[13.5px] last:border-0"
           >
-            <span>{t(`shortcuts.${key}`)}</span>
+            <span>{label}</span>
             <KeyHint combo={combo === "Escape" ? "Esc" : combo} />
           </li>
         ))}

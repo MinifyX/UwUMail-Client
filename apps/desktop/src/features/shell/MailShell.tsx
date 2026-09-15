@@ -19,6 +19,7 @@ import { MobileShell } from "../mobile/MobileShell";
 import { ThreadList } from "../mail/ThreadList";
 import { ThreadReader } from "../mail/ThreadReader";
 import { SettingsDialog } from "../settings/SettingsDialog";
+import { useWorkspaceGuard } from "../workspaces/workspaces";
 import { buildCommands } from "./commands";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
@@ -47,6 +48,8 @@ export function MailShell() {
   const layout = useSettings((s) => s.layout);
   const tone = useSettings((s) => s.tone);
   const theme = useSettings((s) => s.theme);
+  const workspaces = useSettings((s) => s.workspaces);
+  const workspaceNames = useSettings((s) => s.workspaceNames);
   const selectedThreadId = useUi((s) => s.selectedThreadId);
   const drawerOpen = useUi((s) => s.folderDrawerOpen);
   const setDrawerOpen = useUi((s) => s.setFolderDrawerOpen);
@@ -59,6 +62,7 @@ export function MailShell() {
   useIdentities();
   useSignatures();
   useBackendEvents();
+  useWorkspaceGuard();
 
   // A draft that never reached the Drafts folder (offline, or UwUMail was closed) comes back.
   // The phone brings back every kept draft as its bar (MobileShell).
@@ -71,9 +75,12 @@ export function MailShell() {
     ui.setComposeMinimized(true);
   }, [phone]);
 
-  // Titles depend on tone, theme and layout, so rebuild when they change.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const commands = useMemo(() => buildCommands(client, t), [client, t, layout, tone, theme, selectedThreadId]);
+  // Titles depend on tone, theme, layout and the workspaces, so rebuild when they change.
+  const commands = useMemo(
+    () => buildCommands(client, t),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [client, t, layout, tone, theme, selectedThreadId, workspaces, workspaceNames],
+  );
 
   const hotkeys = useMemo(() => {
     const map: HotkeyMap = {
@@ -109,7 +116,7 @@ export function MailShell() {
       ) : pro ? (
         // A minmax(0,1fr) row keeps the columns at window height so each one scrolls on its own.
         <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,420px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
-          <MailboxNav className="min-h-0 bg-canvas" />
+          <MailboxNav workspaceSwitch className="min-h-0 bg-canvas" />
           <ThreadList variant="pro" className="min-h-0 border-x border-hairline" />
           <ThreadReader variant="pro" className="min-h-0" />
         </div>

@@ -12,6 +12,7 @@ import {
   Search,
   Star,
   Trash,
+  Users,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -30,6 +31,7 @@ import {
   useMessageActions,
   useThreadActions as useCardActions,
   useThreads,
+  useVisibleAccounts,
 } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
@@ -38,6 +40,8 @@ import { ThreadRow } from "../mail/ThreadRow";
 import { useViewInfo } from "../mail/view";
 import { openDraftThread } from "../compose/openDraft";
 import { useSelectionActions } from "../mail/selection";
+import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
+import { useWorkspaceName } from "../workspaces/workspaces";
 import { PullToRefresh } from "./PullToRefresh";
 import { SwipeRow } from "./SwipeRow";
 import { useThreadActions } from "./threadActions";
@@ -46,6 +50,7 @@ const FILTERS: ListFilter[] = ["all", "unread", "flagged", "attachments"];
 
 const EMPTY_SCENES = {
   noAccount: "noAccount",
+  workspace: "noAccount",
   offline: "offline",
   search: "search",
   inbox: "inbox",
@@ -67,20 +72,24 @@ export function MobileList() {
     setFolderDrawerOpen,
     setAddAccountOpen,
     openCompose,
+    openSettings,
   } = useUi.getState();
   const layout = useSettings((s) => s.layout);
   const density = useSettings((s) => s.listDensity);
   const swipeRight = useSettings((s) => s.swipeRight);
   const swipeLeft = useSettings((s) => s.swipeLeft);
+  const activeWorkspace = useSettings((s) => s.activeWorkspace);
+  const workspaceName = useWorkspaceName();
   const info = useViewInfo(view);
-  const { data: accounts = [], isSuccess: accountsLoaded } = useAccounts();
+  const { data: accounts = [] } = useAccounts();
+  const { accounts: shown, loaded: accountsLoaded, accountIds } = useVisibleAccounts();
   const { refresh } = useMessageActions();
   const threadActions = useThreadActions();
   const selectionActions = useSelectionActions();
   // The card's own quick actions only show on hover, so they stay out of the way on touch.
   const cardActions = useCardActions();
   const [draftSearch, setDraftSearch] = useState(search);
-  // A selection belongs to one folder, filter and search; switching ends it.
+  // A selection belongs to one folder, filter, search and workspace; switching ends it.
   const [selection, setSelection] = useState<{ key: string; ids: Set<string> }>({ key: "", ids: new Set() });
   const [compact, setCompact] = useState(false);
   // Results from the server search, for the folder, filter and search they were made for.
@@ -97,7 +106,7 @@ export function MobileList() {
 
   const query = useThreads(view, filter, search);
   const local = flattenThreads(query.data?.pages);
-  const searchKey = JSON.stringify([view, filter, search, conversations]);
+  const searchKey = JSON.stringify([view, filter, search, conversations, accountIds]);
   const fromServer = server?.key === searchKey ? server.threads : null;
   // Server matches join the local ones in the same list, newest first.
   const threads = fromServer
@@ -109,7 +118,14 @@ export function MobileList() {
   const askServer = async () => {
     setSearchingServer(true);
     try {
-      const page = await searchServer({ view, filter, search, conversations, limit: 200 });
+      const page = await searchServer({
+        view,
+        filter,
+        search,
+        conversations,
+        accountIds: accountIds ?? undefined,
+        limit: 200,
+      });
       if (page) {
         setServer({ key: searchKey, threads: page.threads });
         if (page.threads.every((thread) => local.some((known) => known.id === thread.id))) {
@@ -133,7 +149,7 @@ export function MobileList() {
     setVisibleThreadIds(ids ? ids.split("|") : []);
   }, [ids, setVisibleThreadIds]);
 
-  const selectionKey = JSON.stringify([view, filter, search]);
+  const selectionKey = JSON.stringify([view, filter, search, accountIds]);
   const selected = selection.key === selectionKey ? selection.ids : new Set<string>();
   const setSelected = (ids: Set<string>) => setSelection({ key: selectionKey, ids });
 
@@ -147,17 +163,19 @@ export function MobileList() {
     setSelected(next);
   };
 
-  const showAccount = accounts.length > 1 && view.kind === "unified";
+  const showAccount = shown.length > 1 && view.kind === "unified";
   const empty =
     accountsLoaded && accounts.length === 0
       ? "noAccount"
-      : search
-        ? "search"
-        : accounts.length > 0 && accounts.every((account) => account.status.state === "offline")
-          ? "offline"
-          : info.isInbox && filter === "all"
-            ? "inbox"
-            : "other";
+      : accountsLoaded && shown.length === 0
+        ? "workspace"
+        : search
+          ? "search"
+          : shown.length > 0 && shown.every((account) => account.status.state === "offline")
+            ? "offline"
+            : info.isInbox && filter === "all"
+              ? "inbox"
+              : "other";
 
   const chosen = threads.filter((thread) => selected.has(thread.id));
   const runOnSelection = (action: "read" | "archive" | "trash" | "flag") => {
@@ -199,6 +217,8 @@ export function MobileList() {
             />
           </div>
         )}
+
+        <WorkspaceSwitch size="lg" />
 
         <div className="relative">
           <Search
@@ -255,12 +275,16 @@ export function MobileList() {
           ) : threads.length === 0 ? (
             <EmptyState
               scene={EMPTY_SCENES[empty]}
-              title={t(`list.empty.${empty}.title`)}
+              title={t(`list.empty.${empty}.title`, { name: workspaceName(activeWorkspace) })}
               body={t(`list.empty.${empty}.body`)}
               action={
                 empty === "noAccount" ? (
                   <Button variant="primary" icon={Plus} onClick={() => setAddAccountOpen(true)}>
                     {t("nav.addAccount")}
+                  </Button>
+                ) : empty === "workspace" ? (
+                  <Button variant="primary" icon={Users} onClick={() => openSettings("accounts")}>
+                    {t("workspace.assign")}
                   </Button>
                 ) : (
                   serverButton

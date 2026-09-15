@@ -21,6 +21,10 @@
       "noAccount": {
         "title": "My mailbox is still empty (・・ )?",
         "body": "Add a mailbox and I'll bring your mail over."
+      },
+      "workspace": {
+        "title": "No mailbox lives in {{name}} yet (・・ )?",
+        "body": "Move one over in Settings under Mailboxes and I'll fetch the mail."
       }
     }
   },
@@ -138,5 +142,9 @@
   },
   "unsubscribe": {
     "title": "Bye bye {{name}}?"
+  },
+  "workspace": {
+    "setupTitle": "Which mailboxes move to {{name}}? (｀・ω・´)ゞ",
+    "enabled": "{{private}} and {{business}} have their own rooms now ✧"
   }
 }

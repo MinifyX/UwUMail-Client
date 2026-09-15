@@ -47,6 +47,10 @@
       "noAccount": {
         "title": "No mailbox yet",
         "body": "Add a mailbox to see your mail."
+      },
+      "workspace": {
+        "title": "No mailbox in {{name}} yet",
+        "body": "Assign one in Settings under Mailboxes."
       }
     },
     "count_one": "{{count}} message",
@@ -559,5 +563,21 @@
     "body": "UwUMail unsubscribes you with the sender directly. After that, no more mail should come from there.",
     "bodyPage": "The sender has its own page for this. UwUMail opens it for you, and you confirm there.",
     "archive": "Archive earlier mail from there"
+  },
+  "workspace": {
+    "label": "Workspace",
+    "private": "Private",
+    "business": "Business",
+    "switchTo": "Switch to {{name}}",
+    "setting": "Keep private and business apart",
+    "settingDesc": "Two workspaces, each with its own inbox. You only see the active workspace's mailboxes and mail, and switch with one click at the top.",
+    "nameOf": "Name for {{name}}",
+    "of": "Workspace of {{email}}",
+    "setupTitle": "Which mailboxes belong to {{name}}?",
+    "setupBody": "All others go to {{name}}. You can change this for each mailbox later.",
+    "setupDone": "Done",
+    "enabled": "{{private}} and {{business}} are apart now",
+    "assign": "Assign mailboxes",
+    "unread": "{{count}} unread"
   }
 }

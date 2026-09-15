@@ -14,6 +14,8 @@ import type { LucideIcon } from "lucide-react";
 import type { Account, Folder, FolderRole, MailboxView } from "@/backend/types";
 import { useT } from "@/i18n";
 import { useAccounts, useFolders } from "@/lib/queries";
+import { useSettings } from "@/state/settings";
+import { useWorkspaceName } from "../workspaces/workspaces";
 
 export const ROLE_ICONS: Record<FolderRole, LucideIcon> = {
   inbox: Inbox,
@@ -55,12 +57,15 @@ export function useViewInfo(view: MailboxView): ViewInfo {
   const { t } = useT();
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
+  const workspaces = useSettings((s) => s.workspaces);
+  const activeWorkspace = useSettings((s) => s.activeWorkspace);
+  const workspaceName = useWorkspaceName();
 
   if (view.kind === "unified") {
     const title = view.role === "inbox" ? t("nav.inbox") : t(`nav.${view.role}`);
     return {
       title,
-      subtitle: accounts.length > 1 ? t("nav.unified") : undefined,
+      subtitle: workspaces ? workspaceName(activeWorkspace) : accounts.length > 1 ? t("nav.unified") : undefined,
       isInbox: view.role === "inbox",
       isDrafts: view.role === "drafts",
     };

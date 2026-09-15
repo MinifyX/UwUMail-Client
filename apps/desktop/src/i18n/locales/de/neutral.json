@@ -47,6 +47,10 @@
       "noAccount": {
         "title": "Noch kein Postfach",
         "body": "Füge ein Postfach hinzu, um deine Mails zu sehen."
+      },
+      "workspace": {
+        "title": "Noch kein Postfach in {{name}}",
+        "body": "Ordne in den Einstellungen unter Postfächer eins zu."
       }
     },
     "count_one": "{{count}} Mail",
@@ -559,5 +563,21 @@
     "body": "UwUMail meldet dich direkt beim Absender ab. Danach sollten keine Mails mehr von dort kommen.",
     "bodyPage": "Der Absender hat dafür eine eigene Seite. UwUMail öffnet sie für dich, dort bestätigst du die Abmeldung.",
     "archive": "Bisherige Mails von dort archivieren"
+  },
+  "workspace": {
+    "label": "Bereich",
+    "private": "Privat",
+    "business": "Business",
+    "switchTo": "Zu {{name}} wechseln",
+    "setting": "Privat & Business trennen",
+    "settingDesc": "Zwei Bereiche mit eigenem Posteingang. Du siehst nur die Postfächer und Mails des aktiven Bereichs und wechselst oben mit einem Klick.",
+    "nameOf": "Name für {{name}}",
+    "of": "Bereich von {{email}}",
+    "setupTitle": "Welche Postfächer gehören zu {{name}}?",
+    "setupBody": "Alle anderen kommen zu {{name}}. Du kannst das später bei jedem Postfach ändern.",
+    "setupDone": "Fertig",
+    "enabled": "{{private}} und {{business}} sind jetzt getrennt",
+    "assign": "Postfächer zuordnen",
+    "unread": "{{count}} ungelesen"
   }
 }

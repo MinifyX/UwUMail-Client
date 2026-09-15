@@ -23,6 +23,7 @@ import {
 import { backend } from "@/backend/backend";
 import { i18n } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
+import { WORKSPACES } from "@/lib/workspaces";
 import { useSettings } from "@/state/settings";
 import { announceMove, runLastUndo } from "@/state/undo";
 import { useUi } from "@/state/ui";
@@ -30,6 +31,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadDetail } from "@/backend/types";
 import { requestMove } from "../mail/selection";
 import { SEARCH_INPUT_ID } from "../mail/ThreadList";
+import { switchWorkspace, WORKSPACE_ICONS, WORKSPACE_KEYS, workspaceName } from "../workspaces/workspaces";
 
 export interface Command {
   id: string;
@@ -57,7 +59,10 @@ async function afterChange(client: QueryClient) {
 }
 
 /** App commands shared by the shortcuts and the command palette. Addons will add their own. */
-export function buildCommands(client: QueryClient, t: (key: string) => string): Command[] {
+export function buildCommands(
+  client: QueryClient,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): Command[] {
   const ui = useUi.getState();
   const settings = useSettings.getState();
 
@@ -201,7 +206,8 @@ export function buildCommands(client: QueryClient, t: (key: string) => string): 
     },
     {
       id: "inbox",
-      title: t("nav.unified"),
+      // With workspaces on, the inbox only holds the open workspace's mail.
+      title: settings.workspaces ? t("shortcuts.goInbox") : t("nav.unified"),
       icon: Mailbox,
       keys: ["g i"],
       run: () => ui.setView({ kind: "unified", role: "inbox" }),
@@ -227,6 +233,15 @@ export function buildCommands(client: QueryClient, t: (key: string) => string): 
       keys: ["g f"],
       run: () => ui.setView({ kind: "unified", role: "flagged" }),
     },
+    ...(settings.workspaces
+      ? WORKSPACES.map((workspace): Command => ({
+          id: `workspace-${workspace}`,
+          title: t("workspace.switchTo", { name: workspaceName(workspace, settings.workspaceNames, t) }),
+          icon: WORKSPACE_ICONS[workspace],
+          keys: [WORKSPACE_KEYS[workspace]],
+          run: () => switchWorkspace(workspace),
+        }))
+      : []),
     {
       id: "layout",
       title: `${t("settings.layout")}: ${i18n.t(`layout.${settings.layout === "pro" ? "simple" : "pro"}.name`)}`,

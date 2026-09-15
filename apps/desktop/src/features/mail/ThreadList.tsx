@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   Star,
   Trash,
+  Users,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -19,10 +20,19 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pill } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
-import { flattenThreads, useAccounts, useMessageActions, useThreadActions, useThreads } from "@/lib/queries";
+import {
+  flattenThreads,
+  useAccounts,
+  useMessageActions,
+  useThreadActions,
+  useThreads,
+  useVisibleAccounts,
+} from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { openDraftThread } from "../compose/openDraft";
+import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
+import { useWorkspaceName } from "../workspaces/workspaces";
 import { useSelectionActions } from "./selection";
 import { ThreadRow } from "./ThreadRow";
 import { useViewInfo } from "./view";
@@ -31,6 +41,7 @@ const FILTERS: ListFilter[] = ["all", "unread", "flagged", "attachments"];
 
 const EMPTY_SCENES = {
   noAccount: "noAccount",
+  workspace: "noAccount",
   offline: "offline",
   search: "search",
   inbox: "inbox",
@@ -50,10 +61,20 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   const filter = useUi((s) => s.filter);
   const search = useUi((s) => s.search);
   const selectedThreadId = useUi((s) => s.selectedThreadId);
-  const { setFilter, setSearch, selectThread, setVisibleThreadIds, setFolderDrawerOpen, setAddAccountOpen } =
-    useUi.getState();
+  const {
+    setFilter,
+    setSearch,
+    selectThread,
+    setVisibleThreadIds,
+    setFolderDrawerOpen,
+    setAddAccountOpen,
+    openSettings,
+  } = useUi.getState();
   const info = useViewInfo(view);
-  const { data: accounts = [], isSuccess: accountsLoaded } = useAccounts();
+  const { data: accounts = [] } = useAccounts();
+  const { accounts: shown, loaded: accountsLoaded } = useVisibleAccounts();
+  const workspaceName = useWorkspaceName();
+  const activeWorkspace = useSettings((s) => s.activeWorkspace);
   const { refresh } = useMessageActions();
   const threadActions = useThreadActions();
   const density = useSettings((s) => s.listDensity);
@@ -85,7 +106,7 @@ export function ThreadList({ variant, className }: ThreadListProps) {
       ?.scrollIntoView({ block: "nearest" });
   }, [selectedThreadId]);
 
-  const showAccount = accounts.length > 1 && view.kind === "unified";
+  const showAccount = shown.length > 1 && view.kind === "unified";
   const checkedThreads = threads.filter((thread) => checked.includes(thread.id));
   const anyUnread = checkedThreads.some((thread) => thread.unreadCount > 0);
   const allFlagged = checkedThreads.length > 0 && checkedThreads.every((thread) => thread.flagged);
@@ -97,13 +118,15 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   const empty =
     accountsLoaded && accounts.length === 0
       ? "noAccount"
-      : search
-        ? "search"
-        : accounts.length > 0 && accounts.every((account) => account.status.state === "offline")
-          ? "offline"
-          : info.isInbox && filter === "all"
-            ? "inbox"
-            : "other";
+      : accountsLoaded && shown.length === 0
+        ? "workspace"
+        : search
+          ? "search"
+          : shown.length > 0 && shown.every((account) => account.status.state === "offline")
+            ? "offline"
+            : info.isInbox && filter === "all"
+              ? "inbox"
+              : "other";
 
   return (
     <section className={clsx("flex h-full min-w-0 flex-col bg-surface", className)} aria-label={info.title}>
@@ -127,6 +150,9 @@ export function ThreadList({ variant, className }: ThreadListProps) {
             }}
           />
         </div>
+
+        {/* Pro has the switch in the sidebar; here the sidebar is folded away. */}
+        {variant === "simple" && <WorkspaceSwitch />}
 
         <div className="relative">
           <Search
@@ -230,13 +256,19 @@ export function ThreadList({ variant, className }: ThreadListProps) {
           <EmptyState
             scene={EMPTY_SCENES[empty]}
             compact={variant === "pro"}
-            title={t(`list.empty.${empty}.title`)}
+            title={t(`list.empty.${empty}.title`, { name: workspaceName(activeWorkspace) })}
             body={t(`list.empty.${empty}.body`)}
             action={
-              empty === "noAccount" && (
+              empty === "noAccount" ? (
                 <Button variant="primary" icon={Plus} onClick={() => setAddAccountOpen(true)}>
                   {t("nav.addAccount")}
                 </Button>
+              ) : (
+                empty === "workspace" && (
+                  <Button variant="primary" icon={Users} onClick={() => openSettings("accounts")}>
+                    {t("workspace.assign")}
+                  </Button>
+                )
               )
             }
             className="h-full"

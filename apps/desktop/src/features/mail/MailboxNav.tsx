@@ -19,10 +19,12 @@ import { Button } from "@/components/ui/Button";
 import { Wordmark } from "@/components/ui/Logo";
 import { Badge } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
-import { useAccounts, useFolders, useMessageActions } from "@/lib/queries";
+import { useFolders, useMessageActions, useVisibleAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
+import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
+import { useWorkspaceName } from "../workspaces/workspaces";
 import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
 import { THREAD_DRAG_TYPE, useSelectionActions } from "./selection";
 import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
@@ -212,24 +214,34 @@ function useNewMailHops() {
   return hops;
 }
 
-export function MailboxNav({ className }: { className?: string }) {
+export function MailboxNav({ className, workspaceSwitch = false }: { className?: string; workspaceSwitch?: boolean }) {
   const { t } = useT();
   const hops = useNewMailHops();
-  const { data: accounts = [] } = useAccounts();
-  const { data: folders = [] } = useFolders();
+  const { accounts } = useVisibleAccounts();
+  const { data: allFolders = [] } = useFolders();
+  const workspaces = useSettings((s) => s.workspaces);
+  const activeWorkspace = useSettings((s) => s.activeWorkspace);
+  const workspaceName = useWorkspaceName();
   const view = useUi((s) => s.view);
   const setView = useUi((s) => s.setView);
   const openCompose = useUi((s) => s.openCompose);
   const openSettings = useUi((s) => s.openSettings);
   const setAddAccountOpen = useUi((s) => s.setAddAccountOpen);
 
+  const folders = allFolders.filter((f) => accounts.some((account) => account.id === f.accountId));
   const unreadInboxes = folders.filter((f) => f.role === "inbox").reduce((sum, f) => sum + f.unread, 0);
+  // Where no switch sits above, the heading tells which workspace this is.
+  const heading = workspaces
+    ? (!workspaceSwitch || accounts.length > 1) && workspaceName(activeWorkspace)
+    : accounts.length > 1 && t("nav.unified");
 
   return (
     <nav className={clsx("flex h-full flex-col gap-4 px-3 pt-4 pb-3", className)}>
       <div className="flex items-center justify-between px-2">
         <Wordmark className="text-[19px]" hop={hops} />
       </div>
+
+      {workspaceSwitch && <WorkspaceSwitch onCanvas className="-mt-1" />}
 
       <Button
         variant="primary"
@@ -243,9 +255,7 @@ export function MailboxNav({ className }: { className?: string }) {
 
       <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1">
         <section className="flex flex-col gap-0.5">
-          {accounts.length > 1 && (
-            <p className="px-3 pb-1 text-[12px] font-bold tracking-wide text-muted uppercase">{t("nav.unified")}</p>
-          )}
+          {heading && <p className="px-3 pb-1 text-[12px] font-bold tracking-wide text-muted uppercase">{heading}</p>}
           {UNIFIED_ROLES.map((role) => {
             const target: MailboxView = { kind: "unified", role };
             return (

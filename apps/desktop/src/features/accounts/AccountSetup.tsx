@@ -18,6 +18,9 @@ import { Field, Segmented, Select, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { isEmail } from "@/lib/format";
 import { queryKeys } from "@/lib/queries";
+import { useSettings, type Workspace } from "@/state/settings";
+import { WorkspacePicker } from "../workspaces/WorkspaceSettings";
+import { switchWorkspace } from "../workspaces/workspaces";
 
 interface AccountSetupProps {
   onDone: (account: Account) => void;
@@ -89,6 +92,9 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
   const [showServers, setShowServers] = useState(false);
   const [busy, setBusy] = useState<"discover" | "connect" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const workspaces = useSettings((s) => s.workspaces);
+  // A new mailbox joins the workspace that's open, unless picked otherwise.
+  const [workspace, setWorkspace] = useState<Workspace>(() => useSettings.getState().activeWorkspace);
 
   const describeError = (reason: unknown) => {
     if (reason instanceof BackendError) {
@@ -141,6 +147,11 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
         protocol: jmapPossible ? protocol : "imap",
         jmapUrl: settings.oauth ? undefined : settings.jmap?.trim() || undefined,
       });
+      if (useSettings.getState().workspaces) {
+        useSettings.getState().setAccountWorkspace(account.id, workspace);
+        // Right where the new mailbox shows up.
+        switchWorkspace(workspace);
+      }
       await Promise.all([
         client.invalidateQueries({ queryKey: queryKeys.accounts }),
         client.invalidateQueries({ queryKey: queryKeys.folders }),
@@ -298,6 +309,13 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
           ))}
         </div>
       </div>
+
+      {workspaces && (
+        <div className="flex flex-col gap-2">
+          <span className="text-[13px] font-semibold text-muted">{t("workspace.label")}</span>
+          <WorkspacePicker label={t("workspace.label")} value={workspace} onChange={setWorkspace} />
+        </div>
+      )}
 
       {!provider && (
         <div className="flex flex-col gap-3">

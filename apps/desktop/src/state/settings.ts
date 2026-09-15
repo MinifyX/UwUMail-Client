@@ -24,6 +24,8 @@ export type SwipeAction = "read" | "archive" | "trash" | "flag" | "none";
 export type LockAfter = 0 | 1 | 5 | 15;
 /** Android: days of mail kept complete on the phone; 0 keeps everything. */
 export type OfflineDays = 30 | 90 | 365 | 0;
+/** Mailboxes shown apart, see lib/workspaces. */
+export type Workspace = "private" | "business";
 
 export interface Settings {
   onboarded: boolean;
@@ -55,6 +57,13 @@ export interface Settings {
   appLock: boolean;
   appLockAfter: LockAfter;
   offlineDays: OfflineDays;
+  /** Private and business mailboxes shown apart, one workspace at a time. */
+  workspaces: boolean;
+  activeWorkspace: Workspace;
+  /** Own names for the workspaces; empty keeps "Private" and "Business". */
+  workspaceNames: Record<Workspace, string>;
+  /** Mailboxes in the business workspace; all others are private. Kept while the feature is off. */
+  businessAccounts: string[];
 }
 
 interface SettingsActions {
@@ -65,6 +74,7 @@ interface SettingsActions {
   rememberAppearance: (email: string, appearance: "light" | "dark") => void;
   forgetAppearances: () => void;
   toggleFolder: (folderId: string) => void;
+  setAccountWorkspace: (accountId: string, workspace: Workspace) => void;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -91,6 +101,10 @@ export const DEFAULT_SETTINGS: Settings = {
   appLock: false,
   appLockAfter: 5,
   offlineDays: 90,
+  workspaces: false,
+  activeWorkspace: "private",
+  workspaceNames: { private: "", business: "" },
+  businessAccounts: [],
 };
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -113,6 +127,11 @@ export const useSettings = create<Settings & SettingsActions>()(
             ? state.collapsedFolders.filter((id) => id !== folderId)
             : [...state.collapsedFolders, folderId],
         })),
+      setAccountWorkspace: (accountId, workspace) =>
+        set((state) => {
+          const others = state.businessAccounts.filter((id) => id !== accountId);
+          return { businessAccounts: workspace === "business" ? [...others, accountId] : others };
+        }),
     }),
     { name: "uwumail.settings", version: 1 },
   ),

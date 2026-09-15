@@ -21,6 +21,10 @@
       "noAccount": {
         "title": "Mein Briefkasten ist noch leer (・・ )?",
         "body": "Füg ein Postfach hinzu und ich hol deine Mails rüber."
+      },
+      "workspace": {
+        "title": "In {{name}} wohnt noch kein Postfach (・・ )?",
+        "body": "Zieh eins in den Einstellungen unter Postfächer rüber, dann hol ich die Mails."
       }
     }
   },
@@ -138,5 +142,9 @@
   },
   "unsubscribe": {
     "title": "Tschüss {{name}}?"
+  },
+  "workspace": {
+    "setupTitle": "Welche Postfächer ziehen zu {{name}}? (｀・ω・´)ゞ",
+    "enabled": "{{private}} und {{business}} haben jetzt eigene Zimmer ✧"
   }
 }

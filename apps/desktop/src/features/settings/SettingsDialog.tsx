@@ -33,6 +33,7 @@ import { useIsPhone } from "@/lib/device";
 import { openLinkNow } from "@/state/links";
 import { useAccounts } from "@/lib/queries";
 import { isDomainEntry, sortEntries } from "@/lib/trustedSenders";
+import { workspaceOf } from "@/lib/workspaces";
 import { confirmIdentity } from "@/state/lock";
 import {
   useSettings,
@@ -46,6 +47,7 @@ import { BlockedSenders } from "./BlockedSenders";
 import { Row } from "./Row";
 import { Writing } from "./Writing";
 import { useUi, type SettingsSection } from "@/state/ui";
+import { WorkspacePicker, WorkspaceSettings } from "../workspaces/WorkspaceSettings";
 
 const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
 
@@ -379,6 +381,9 @@ function Accounts() {
   const { data: accounts = [] } = useAccounts();
   const client = useQueryClient();
   const setAddAccountOpen = useUi((s) => s.setAddAccountOpen);
+  const workspaces = useSettings((s) => s.workspaces);
+  const businessAccounts = useSettings((s) => s.businessAccounts);
+  const setAccountWorkspace = useSettings((s) => s.setAccountWorkspace);
   const [switching, setSwitching] = useState<string | null>(null);
 
   const switchProtocol = async (account: Account, protocol: Protocol) => {
@@ -398,6 +403,7 @@ function Accounts() {
 
   return (
     <div className="flex flex-col gap-3 py-4">
+      <WorkspaceSettings />
       <ul className="flex flex-col gap-2">
         {accounts.map((account) => {
           const other = account.protocols.find((p) => p !== account.protocol);
@@ -430,11 +436,22 @@ function Accounts() {
                 onClick={async () => {
                   if (!window.confirm(t("settings.removeAccountConfirm", { email: account.email }))) return;
                   await backend().removeAccount(account.id);
+                  setAccountWorkspace(account.id, "private");
                   await client.invalidateQueries();
                 }}
               >
                 {t("settings.removeAccount")}
               </Button>
+              {workspaces && (
+                <div className="flex basis-full items-center justify-between gap-3 border-t border-hairline pt-2.5">
+                  <span className="text-[13px] font-semibold text-muted">{t("workspace.label")}</span>
+                  <WorkspacePicker
+                    label={t("workspace.of", { email: account.email })}
+                    value={workspaceOf(account.id, businessAccounts)}
+                    onChange={(workspace) => setAccountWorkspace(account.id, workspace)}
+                  />
+                </div>
+              )}
             </li>
           );
         })}

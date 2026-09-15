@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { backend } from "@/backend/backend";
 import type { FlagChange, ListFilter, MailboxView, Message, MovedMessage, ThreadSummary } from "@/backend/types";
 import { useT } from "@/i18n";
+import { inWorkspace } from "@/lib/workspaces";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { announceMove } from "@/state/undo";
@@ -23,6 +24,21 @@ export function useAccounts() {
   return useQuery({ queryKey: queryKeys.accounts, queryFn: () => backend().listAccounts() });
 }
 
+/** The mailboxes on screen: all of them, or the active workspace's while private and business are apart. */
+export function useVisibleAccounts() {
+  const { data: accounts = [], isSuccess: loaded } = useAccounts();
+  const workspaces = useSettings((s) => s.workspaces);
+  const active = useSettings((s) => s.activeWorkspace);
+  const businessAccounts = useSettings((s) => s.businessAccounts);
+  const visible = workspaces ? inWorkspace(accounts, active, businessAccounts) : accounts;
+  return {
+    accounts: visible,
+    loaded,
+    /** For thread queries: left out while every mailbox shows, null until the mailboxes have loaded. */
+    accountIds: !workspaces ? undefined : loaded ? visible.map((account) => account.id) : null,
+  };
+}
+
 /** Every address the mailboxes can send from. */
 export function useIdentities() {
   return useQuery({ queryKey: queryKeys.identities, queryFn: () => backend().listIdentities() });
@@ -40,13 +56,24 @@ const PAGE_SIZE = 50;
 
 export function useThreads(view: MailboxView, filter: ListFilter, search: string) {
   const conversations = useSettings((s) => s.conversations);
+  const { accountIds } = useVisibleAccounts();
   return useInfiniteQuery({
-    queryKey: [...queryKeys.threads, view, filter, search, conversations],
+    queryKey: [...queryKeys.threads, view, filter, search, conversations, accountIds],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
-      backend().listThreads({ view, filter, search, conversations, cursor: pageParam, limit: PAGE_SIZE }),
+      backend().listThreads({
+        view,
+        filter,
+        search,
+        conversations,
+        accountIds: accountIds ?? undefined,
+        cursor: pageParam,
+        limit: PAGE_SIZE,
+      }),
     getNextPageParam: (page) => page.nextCursor,
     placeholderData: (previous) => previous,
+    // With workspaces on, the list waits for the mailboxes instead of briefly showing none.
+    enabled: accountIds !== null,
   });
 }
 
