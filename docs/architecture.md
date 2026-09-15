@@ -270,8 +270,8 @@ mail data and keychain entries only if asked. Without WebView2 it offers to
 download it first. `UWUMAIL_SETUP_SANDBOX=<folder>` redirects files, shortcuts
 and registry keys for testing.
 
-Updates: the app checks `stable.json` or `beta.json` in the public
-`MinifyX/UwUMail-Releases` repo 20 seconds after start and every six hours
+Updates: the app checks `stable.json` or `beta.json` on the `updates` branch
+of this repo 20 seconds after start and every six hours
 (`tauri-plugin-updater`, signature checked against the public key in
 `tauri.conf.json`). It downloads the new `UwUMail-Setup-<version>.exe` into
 `%LOCALAPPDATA%\app.uwumail.desktop\updates`, shows Nyu's hint, and either
@@ -297,9 +297,13 @@ different site than the target.
 - Every push to `main`: `UwUMail-Setup-<version>.exe` for Windows and the Linux
   packages as workflow artifacts, and the signed Android APK with its emulator
   test.
-- Tags `vX.Y.Z` (or `vX.Y.Z-beta.N`): the signed setup goes to
-  `MinifyX/UwUMail-Releases` as a release and into the update feeds (see
-  `release-notes/README.md`); macOS and Linux get a draft release here. When
-  GitHub can't run the workflow, `pnpm release` on a Windows PC does the
-  Windows part: it builds and signs the setup, checks the signature against the
-  updater key and hands it over the same way.
+- Tags `vX.Y.Z` (or `vX.Y.Z-beta.N`): a GitHub release here with the signed
+  setup and the APK the Android workflow built and tested for that commit, and
+  the update feeds on the `updates` branch (`scripts/release-feeds.mjs`, see
+  `release-notes/README.md`). The branch holds nothing else and is protected
+  against deletion and force pushes. macOS and Linux packages are only workflow
+  artifacts. When GitHub can't run the workflow, `pnpm release` on a Windows PC
+  publishes the setup the same way (without the APK).
+- Until everyone is past 0.2.0-beta.2, releases also update the feeds in the
+  old `MinifyX/UwUMail-Releases` repo, which those versions still ask. After
+  that it is archived.

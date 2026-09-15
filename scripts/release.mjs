@@ -5,22 +5,26 @@
 //   pnpm release --no-build   publish the setup already in target/release
 //
 // Needs a clean tree whose HEAD carries the pushed tag v<version>,
-// release-notes/<version>.json, push access to MinifyX/UwUMail-Releases and the
+// release-notes/<version>.json, the GitHub CLI signed in with write access and the
 // update signing key: TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD,
 // or a folder with uwumail-update.key and PASSWORT.txt in UWUMAIL_UPDATE_KEY_DIR
 // (default: Documents\UwUMail-Update-Schluessel).
 //
-// The setup goes to a short-lived branch incoming/v<version> there; that repo's
-// publish workflow turns it into a release and updates the update feeds.
+// Creates the GitHub release with the setup (no APK: that only comes from the Android
+// workflow) and updates the Windows feeds on the `updates` branch.
 
 import { execFileSync } from "node:child_process";
 import { createHash, createPublicKey, verify } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const RELEASES = "MinifyX/UwUMail-Releases";
+import { FEED_BRANCH, REPOSITORY, releaseFeeds } from "./release-feeds.mjs";
+
+/** Still asked by 0.2.0-beta.2 and older; drop once that repo is archived. */
+const OLD_FEEDS = "MinifyX/UwUMail-Releases";
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const git = (args, cwd = root) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 const fail = (message) => {
@@ -28,12 +32,13 @@ const fail = (message) => {
   process.exit(1);
 };
 
-let token; // GitHub token for polling, looked up once
+let token; // GitHub token for the API, looked up once
 const build = !process.argv.includes("--no-build");
 const conf = JSON.parse(readFileSync(join(root, "apps/desktop/src-tauri/tauri.conf.json"), "utf8"));
 const version = conf.version;
 const tag = `v${version}`;
-const setup = join(root, "target", "release", `UwUMail-Setup-${version}.exe`);
+const setupName = `UwUMail-Setup-${version}.exe`;
+const setup = join(root, "target", "release", setupName);
 
 console.log(`\n▸ Checking UwUMail ${version}`);
 if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(version)) fail(`Unexpected version ${version}`);
@@ -48,9 +53,8 @@ try {
 if (tagged !== head) fail(`HEAD isn't ${tag}. Check out the tag first.`);
 const pushed = git(["ls-remote", "--tags", "origin", `refs/tags/${tag}`]).split(/\s/)[0];
 if (pushed !== git(["rev-parse", `refs/tags/${tag}`])) fail(`Push ${tag} first.`);
-if (git(["ls-remote", "--tags", `https://github.com/${RELEASES}.git`, `refs/tags/${tag}`])) {
-  fail(`${tag} is already published on ${RELEASES}.`);
-}
+if (!ghToken()) fail("Sign in to the GitHub CLI first (gh auth login).");
+if (await github(`releases/tags/${tag}`)) fail(`${tag} is already released.`);
 const notesFile = join(root, "release-notes", `${version}.json`);
 if (!existsSync(notesFile)) fail(`release-notes/${version}.json is missing.`);
 const notes = JSON.parse(readFileSync(notesFile, "utf8"));
@@ -72,49 +76,63 @@ const signature = readFileSync(`${setup}.sig`, "utf8").trim();
 checkSignature(readFileSync(setup), signature, conf.plugins.updater.pubkey);
 console.log("  ✓ matches tauri.conf.json");
 
-console.log(`\n▸ Handing it to ${RELEASES}`);
-const prerelease = version.includes("-");
 const work = mkdtempSync(join(tmpdir(), "uwumail-release-"));
 try {
-  git(["init", "-q"], work);
-  // GitHub only runs workflows that exist in the pushed commit, so the branch builds on main.
-  git(["fetch", "-q", "--depth", "1", `https://github.com/${RELEASES}.git`, "main"], work);
-  git(["checkout", "-q", "-b", `incoming/${tag}`, "FETCH_HEAD"], work);
-  copyFileSync(setup, join(work, `UwUMail-Setup-${version}.exe`));
-  copyFileSync(`${setup}.sig`, join(work, `UwUMail-Setup-${version}.exe.sig`));
-  writeFileSync(join(work, "release.json"), JSON.stringify({ version, prerelease, notes }, null, 2));
-  git(["add", `UwUMail-Setup-${version}.exe`, `UwUMail-Setup-${version}.exe.sig`, "release.json"], work);
-  git(["-c", "user.name=UwUMail Release", "commit", "-qm", `UwUMail ${version}`], work);
+  console.log(`\n▸ Creating the release on ${REPOSITORY}`);
+  const notesPath = join(work, "notes.md");
+  writeFileSync(notesPath, `## Deutsch\n\n${notes.de}\n\n## English\n\n${notes.en}\n`);
+  const channel = version.includes("-") ? "--prerelease" : "--latest";
   execFileSync(
-    "git",
-    ["push", "-q", "--force", `https://github.com/${RELEASES}.git`, `HEAD:refs/heads/incoming/${tag}`],
-    {
-      cwd: work,
-      stdio: "inherit",
-    },
+    "gh",
+    [
+      "release",
+      "create",
+      tag,
+      setup,
+      "--repo",
+      REPOSITORY,
+      "--verify-tag",
+      "--title",
+      `UwUMail ${version}`,
+      "--notes-file",
+      notesPath,
+      channel,
+    ],
+    { stdio: "inherit" },
   );
+
+  const feeds = releaseFeeds({ version, notes, setup: { name: setupName, signature } });
+  const publishFeeds = (repository, branch, message) => {
+    const dir = join(work, repository.replace("/", "-"));
+    git(["clone", "-q", "--depth", "1", "--branch", branch, `https://github.com/${repository}.git`, dir], work);
+    for (const [name, feed] of Object.entries(feeds)) {
+      writeFileSync(join(dir, name), `${JSON.stringify(feed, null, 2)}\n`);
+    }
+    git(["add", "--", ...Object.keys(feeds)], dir);
+    git(["-c", "user.name=UwUMail Release", "commit", "-qm", message], dir);
+    execFileSync("git", ["push", "-q", "origin", `HEAD:${branch}`], { cwd: dir, stdio: "inherit" });
+  };
+  console.log(`\n▸ Updating ${Object.keys(feeds).join(", ")} on ${FEED_BRANCH}`);
+  publishFeeds(REPOSITORY, FEED_BRANCH, `UwUMail ${version}`);
+  console.log(`\n▸ Updating the old feeds in ${OLD_FEEDS}`);
+  publishFeeds(OLD_FEEDS, "main", `UwUMail ${version} (now released in ${REPOSITORY})`);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
 
-console.log("\n▸ Waiting for the release and the update feed");
-const feed = prerelease ? "beta.json" : "stable.json";
-const published = await waitFor(async () => {
-  const release = await github(`releases/tags/${tag}`);
-  const asset = release?.assets?.find((a) => a.name === `UwUMail-Setup-${version}.exe`);
-  if (!asset || asset.state !== "uploaded") return null;
-  const file = await github(`contents/${feed}?ref=main`);
-  if (!file) return null;
-  const update = JSON.parse(Buffer.from(file.content, "base64").toString("utf8"));
-  return update.version === version ? { asset, update } : null;
-});
-if (!published) fail(`Nothing published after 10 minutes: see https://github.com/${RELEASES}/actions`);
-if (published.asset.size !== statSync(setup).size) fail("The published setup has a different size.");
-const platform = published.update.platforms["windows-x86_64"];
-if (platform.signature !== signature) fail(`${feed} carries a different signature.`);
-if (!platform.url.endsWith(`/releases/download/${tag}/UwUMail-Setup-${version}.exe`)) fail(`${feed} points elsewhere.`);
-console.log(`\n✧ UwUMail ${version} is out: ${published.asset.browser_download_url}`);
-console.log(`  ${feed} updated${prerelease ? " (Beta channel)" : ""}`);
+console.log("\n▸ Checking what's online");
+const release = await github(`releases/tags/${tag}`);
+const asset = release?.assets?.find((a) => a.name === setupName);
+if (!asset || asset.state !== "uploaded") fail("The release has no setup.");
+if (asset.size !== statSync(setup).size) fail("The published setup has a different size.");
+const feedName = version.includes("-") ? "beta.json" : "stable.json";
+const file = await github(`contents/${feedName}?ref=${FEED_BRANCH}`);
+const update = file && JSON.parse(Buffer.from(file.content, "base64").toString("utf8"));
+const platform = update?.platforms?.["windows-x86_64"];
+if (update?.version !== version || platform?.signature !== signature) fail(`${feedName} wasn't updated.`);
+if (platform.url !== asset.browser_download_url) fail(`${feedName} points elsewhere.`);
+console.log(`\n✧ UwUMail ${version} is out: ${asset.browser_download_url}`);
+console.log(`  ${feedName} updated${version.includes("-") ? " (Beta channel)" : ""}; no APK in this release`);
 
 /** The update signing key from the environment or the key folder. */
 function signingKey() {
@@ -156,7 +174,7 @@ async function github(path) {
   const headers = { accept: "application/vnd.github+json", "user-agent": "uwumail-release" };
   token ??= process.env.GH_TOKEN || process.env.GITHUB_TOKEN || ghToken();
   if (token) headers.authorization = `Bearer ${token}`;
-  const response = await fetch(`https://api.github.com/repos/${RELEASES}/${path}`, { headers });
+  const response = await fetch(`https://api.github.com/repos/${REPOSITORY}/${path}`, { headers });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`GitHub answered ${response.status} for ${path}`);
   return response.json();
@@ -168,13 +186,4 @@ function ghToken() {
   } catch {
     return "";
   }
-}
-
-async function waitFor(check) {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const result = await check();
-    if (result) return result;
-    await new Promise((resolve) => setTimeout(resolve, 10_000));
-  }
-  return null;
 }

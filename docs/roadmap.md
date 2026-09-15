@@ -37,7 +37,8 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [ ] Addon catalog (`MinifyX/UwUMail-Addons`) with one-click install
 - [x] Installers for Windows and Linux in CI, release workflow with macOS
 - [x] UwUMail's own Windows installer with Nyu: one click, no admin, options, uninstaller that can keep mail
-- [x] Auto-update on Windows: signed, downloaded quietly, Stable and Beta channels, public `UwUMail-Releases` repo
+- [x] Auto-update on Windows: signed, downloaded quietly, Stable and Beta channels
+- [ ] Releases and update feeds in this repo, old `UwUMail-Releases` archived (ships with 0.2.0-beta.3)
 - [x] Keep running in the notification area, start with Windows, default mail app (`mailto:` links)
 - [ ] Auto-update on macOS and Linux
 - [x] Security audit with fixes, `SECURITY.md`, dependency audit in CI ([report](security-audit.md))
@@ -53,8 +54,8 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Passwords in the Android Keystore, optional app lock with fingerprint, face or PIN
 - [x] Last 90 days offline (configurable), older mail as previews; server search for everything
 - [x] Share to UwUMail, `mailto:` links, attachments to Downloads, Nyu splash and themed icon
-- [x] Update check against UwUMail-Releases (starts working with the first Android release)
-- [ ] Android release in UwUMail-Releases with the update feed (`android-stable.json`)
+- [x] Update check (starts working with the first Android release)
+- [ ] APK on every release with the update feed (`android-beta.json`, `android-stable.json`)
 - [ ] Home screen widget
 - [ ] Sign in with Microsoft and Google on Android
 

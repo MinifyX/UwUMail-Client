@@ -46,7 +46,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJBOUExM0JDNkIxNjZCNzQKUldSMGF4WnJ2Qk9hS3BnUnYxV3RmbyszTC9QSTI0MkZaTm5TbmNMSktRZFhjT0lWTXcvK2JXZDMK",
-      "endpoints": ["https://raw.githubusercontent.com/MinifyX/UwUMail-Releases/main/stable.json"]
+      "endpoints": ["https://raw.githubusercontent.com/MinifyX/UwUMail-Client/updates/stable.json"]
     }
   },
   "bundle": {

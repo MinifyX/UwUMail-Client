@@ -50,8 +50,8 @@ Server). It's what I wanted from a mail client:
   SDK exists, the addon host doesn't yet.
 
 > **Status:** beta. It works, but expect rough edges and things that change.
-> Windows builds are on
-> [UwUMail-Releases](https://github.com/MinifyX/UwUMail-Releases/releases); the
+> Windows and Android builds are on the
+> [releases page](https://github.com/MinifyX/UwUMail-Client/releases); the
 > [roadmap](docs/roadmap.md) shows what's done and what I'd like to do next.
 
 ## Project layout

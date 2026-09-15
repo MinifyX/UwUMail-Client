@@ -14,7 +14,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 use uwumail_core::Error;
 
-const FEED: &str = "https://raw.githubusercontent.com/MinifyX/UwUMail-Releases/main";
+/// The `updates` branch of the public repo, written by the release workflow.
+const FEED: &str = "https://raw.githubusercontent.com/MinifyX/UwUMail-Client/updates";
 const FIRST_CHECK_AFTER: Duration = Duration::from_secs(20);
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 const PENDING: &str = "pending.json";

@@ -1,5 +1,5 @@
-//! Updates on Android, like on Windows: look for a new version in the public
-//! UwUMail-Releases repo, download the APK quietly and let the UI offer it.
+//! Updates on Android, like on Windows: look for a new version on the `updates`
+//! branch of the public repo, download the APK quietly and let the UI offer it.
 //! Android itself refuses an APK that isn't signed with UwUMail's key, the
 //! checksum from the feed guards against broken downloads.
 
@@ -14,7 +14,7 @@ use uwumail_core::{Error, Result};
 
 use crate::bridge;
 
-const FEED: &str = "https://raw.githubusercontent.com/MinifyX/UwUMail-Releases/main";
+const FEED: &str = "https://raw.githubusercontent.com/MinifyX/UwUMail-Client/updates";
 const FIRST_CHECK_AFTER: Duration = Duration::from_secs(20);
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 /// A phone often starts without network; one quick second try instead of waiting hours.
@@ -37,7 +37,7 @@ pub struct ReadyUpdate {
     pub file: PathBuf,
 }
 
-/// `android-stable.json` / `android-beta.json` in UwUMail-Releases.
+/// `android-stable.json` / `android-beta.json` on the `updates` branch.
 #[derive(Deserialize)]
 struct Feed {
     version: String,
