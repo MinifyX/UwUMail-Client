@@ -116,7 +116,14 @@ pub(crate) fn deliver(payload: serde_json::Value) -> Result<()> {
         },
         Reported::Share { subject, text, files } => {
             let (mut attachments, mut too_big) = (Vec::new(), Vec::new());
-            for file in files {
+            // Together they have to fit one mail too, so many shared files can't fill the memory.
+            let mut budget = MAX_SHARED_BYTES;
+            for mut file in files {
+                if file.size <= budget {
+                    budget -= file.size;
+                } else {
+                    file.size = u64::MAX;
+                }
                 attach(file, &mut attachments, &mut too_big);
             }
             LaunchAction::Compose {
@@ -172,5 +179,25 @@ mod tests {
         let Some(LaunchAction::Compose { draft, .. }) = take() else { panic!("expected a draft") };
         assert_eq!(draft.to[0].email, "nyu@uwumail.test");
         assert_eq!(draft.subject, "Hi");
+
+        // Two files that fit alone but not together: the second stays out.
+        let (first, second) = (folder.join("one"), folder.join("two"));
+        for part in [&first, &second] {
+            std::fs::create_dir_all(part).unwrap();
+            std::fs::write(part.join("clip.mp4"), "nyu").unwrap();
+        }
+        let twenty_megabytes = 20 * 1024 * 1024;
+        deliver(json!({
+            "kind": "share",
+            "files": [
+                { "path": first.join("clip.mp4"), "filename": "one.mp4", "mimeType": "video/mp4", "size": twenty_megabytes },
+                { "path": second.join("clip.mp4"), "filename": "two.mp4", "mimeType": "video/mp4", "size": twenty_megabytes }
+            ]
+        }))
+        .unwrap();
+        let Some(LaunchAction::Compose { attachments, too_big, .. }) = take() else { panic!("expected a draft") };
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(too_big, ["two.mp4"]);
+        let _ = std::fs::remove_dir_all(&folder);
     }
 }

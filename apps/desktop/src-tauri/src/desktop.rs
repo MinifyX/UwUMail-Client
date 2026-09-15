@@ -72,6 +72,11 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
 
 pub fn on_run_event<R: Runtime>(_app: &AppHandle<R>, _event: RunEvent) {}
 
+/// Every attachment may be opened on desktop; dangerous ones are confirmed first.
+pub fn check_openable(_file: &AttachmentFile) -> Result<(), Error> {
+    Ok(())
+}
+
 pub fn open_file(app: &AppHandle, file: &AttachmentFile) -> Result<(), Error> {
     app.opener()
         .open_path(file.path.to_string_lossy(), None::<&str>)
@@ -125,7 +130,7 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
     None
 }
 
-pub fn set_mobile_prefs(_language: String, _tone: String) -> Result<(), Error> {
+pub fn set_mobile_prefs(_language: String, _tone: String, _app_lock: bool) -> Result<(), Error> {
     Ok(())
 }
 

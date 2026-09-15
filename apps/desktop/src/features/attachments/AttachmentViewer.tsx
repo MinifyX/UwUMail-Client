@@ -1,12 +1,13 @@
 import { ChevronLeft, ChevronRight, Download, ExternalLink, ShieldAlert, X } from "lucide-react";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
+import { nativeAndroid } from "@/backend/mobile";
 import type { Address, Attachment } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
-import { attachmentKind, isDangerous } from "@/lib/attachments";
+import { attachmentKind, isAppPackage, isDangerous } from "@/lib/attachments";
 import { displayName, formatSize } from "@/lib/format";
 import { useAttachment } from "@/lib/queries";
 import { toast } from "@/state/toasts";
@@ -41,6 +42,8 @@ function ViewerBody({ attachments, index, sender, onIndexChange }: AttachmentVie
   const attachment = attachments[index]!;
   const kind = attachmentKind(attachment.filename, attachment.mimeType);
   const dangerous = isDangerous(attachment.filename);
+  // On the phone app packages from mail are only saved; the engine refuses to open them too.
+  const blocked = nativeAndroid && isAppPackage(attachment.filename);
   const needsFile = kind !== "other";
   const { data: file, error, isPending } = useAttachment(needsFile ? attachment.id : null);
   const [busy, setBusy] = useState<"open" | "save" | null>(null);
@@ -85,9 +88,11 @@ function ViewerBody({ attachments, index, sender, onIndexChange }: AttachmentVie
             <IconButton icon={ChevronRight} label={t("attachment.next")} onClick={() => go(1)} />
           </>
         )}
-        <Button icon={ExternalLink} size="sm" busy={busy === "open"} onClick={() => void run("open")}>
-          {t("attachment.open")}
-        </Button>
+        {!blocked && (
+          <Button icon={ExternalLink} size="sm" busy={busy === "open"} onClick={() => void run("open")}>
+            {t("attachment.open")}
+          </Button>
+        )}
         <Button icon={Download} size="sm" busy={busy === "save"} onClick={() => void run("save")}>
           {t("attachment.save")}
         </Button>
@@ -106,6 +111,7 @@ function ViewerBody({ attachments, index, sender, onIndexChange }: AttachmentVie
               sender: `${displayName(sender)} <${sender.email}>`,
             })}
           </p>
+          {blocked && <p className="pt-1 pl-7 text-[13px] font-semibold">{t("attachment.packageBlocked")}</p>}
         </div>
       )}
 

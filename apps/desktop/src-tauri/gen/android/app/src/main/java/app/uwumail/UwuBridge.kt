@@ -60,6 +60,7 @@ object UwuBridge {
             "setPrefs" -> {
                 Prefs.update(app, args)
                 MailWatchService.sync(app)
+                activity.get()?.let { window -> window.runOnUiThread { window.applyPrivacy() } }
                 null
             }
             "offlineDays" -> Prefs.offlineDays(app).toString()

@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
+import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import org.json.JSONObject
 import java.io.File
@@ -21,18 +22,43 @@ object Files {
         context.startActivity(intent)
     }
 
+    private const val PACKAGE_ARCHIVE = "application/vnd.android.package-archive"
+
+    /** App packages; UwUMail never hands these from a mail to the installer. */
+    private val PACKAGE_EXTENSIONS = setOf("apk", "apks", "apkm", "xapk", "aab")
+
+    private fun extensionOf(name: String) = name.substringAfterLast('.', "").lowercase()
+
+    /**
+     * The type another app sees. It follows the file name, never only what the mail claims:
+     * otherwise an app package named "invoice.pdf" would be offered to the installer.
+     */
+    private fun typeFor(filename: String, claimed: String): String {
+        val byName = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extensionOf(filename))
+        return when {
+            byName != null -> byName
+            claimed.isBlank() || claimed.equals(PACKAGE_ARCHIVE, ignoreCase = true) -> "application/octet-stream"
+            else -> claimed
+        }
+    }
+
     /**
      * Opens a file with another app. The attachment cache is private, so the
      * file is copied into the shared part of the cache first.
      */
     fun open(context: Context, path: String, filename: String, mimeType: String) {
+        val name = safeName(filename)
+        val type = typeFor(name, mimeType)
+        check(extensionOf(name) !in PACKAGE_EXTENSIONS && type != PACKAGE_ARCHIVE) {
+            "App packages from mails can't be opened"
+        }
         val folder = File(context.cacheDir, "open").apply { mkdirs() }
         folder.listFiles()?.forEach { it.delete() }
-        val copy = File(folder, safeName(filename))
+        val copy = File(folder, name)
         File(path).copyTo(copy, overwrite = true)
         val uri = FileProvider.getUriForFile(context, authority(context), copy)
         val view = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, mimeType.ifEmpty { "application/octet-stream" })
+            .setDataAndType(uri, type)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         val chooser = Intent.createChooser(view, filename).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
@@ -47,7 +73,7 @@ object Files {
         val folder = "${Environment.DIRECTORY_DOWNLOADS}/UwUMail"
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, safeName(filename))
-            put(MediaStore.Downloads.MIME_TYPE, mimeType.ifEmpty { "application/octet-stream" })
+            put(MediaStore.Downloads.MIME_TYPE, typeFor(safeName(filename), mimeType))
             put(MediaStore.Downloads.RELATIVE_PATH, folder)
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
@@ -84,6 +110,11 @@ object Files {
         )
     }
 
+    /** A plain file name: no folders, no control characters, never "." or "..". */
     fun safeName(name: String): String =
-        name.replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]"), "_").trim().ifEmpty { "attachment" }.take(120)
+        name.replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001f\\u007f]"), "_")
+            .trim()
+            .take(120)
+            .takeUnless { it.isEmpty() || it.all { char -> char == '.' } }
+            ?: "attachment"
 }

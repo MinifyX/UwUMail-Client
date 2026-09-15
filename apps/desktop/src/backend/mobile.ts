@@ -31,8 +31,12 @@ export async function searchServer(query: ThreadQuery): Promise<ThreadPage | nul
 
 /** Android-only pieces of the app shell. Safe to call anywhere. */
 export const mobile = {
-  /** Language and tone for notifications shown while no window is open. */
-  setPrefs: (language: string, tone: string) => call<void>("set_mobile_prefs", { language, tone }),
+  /**
+   * Language and tone for notifications shown while no window is open. With the app lock on,
+   * notifications leave out what the mail says and Recents shows no preview.
+   */
+  setPrefs: (language: string, tone: string, appLock: boolean) =>
+    call<void>("set_mobile_prefs", { language, tone, appLock }),
   /** Colors behind the status and navigation bars. */
   setSystemBars: (dark: boolean, background: string) => call<void>("set_system_bars", { dark, background }),
   requestNotifications: () => call<void>("mobile_action", { action: "requestNotifications" }),

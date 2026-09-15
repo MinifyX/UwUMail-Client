@@ -26,6 +26,7 @@ class MainActivity : TauriActivity() {
         const val ACTION_OPEN_MESSAGE = "app.uwumail.OPEN_MESSAGE"
         const val EXTRA_THREAD_ID = "threadId"
         const val EXTRA_MESSAGE_ID = "messageId"
+        const val EXTRA_TOKEN = "token"
         private const val SPLASH_AT_MOST_MS = 4000L
 
         /** Whether a window was already created in this process. */
@@ -39,6 +40,9 @@ class MainActivity : TauriActivity() {
 
     @Volatile
     private var uiReady = false
+
+    /** The yes/no question on screen, if any. */
+    private var question: AlertDialog? = null
 
     @SuppressLint("MissingSuperCall")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,6 +61,7 @@ class MainActivity : TauriActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         UwuBridge.attach(this)
+        applyPrivacy()
 
         // Keep the web view between the status bar, the navigation bar and the keyboard.
         val content = findViewById<View>(android.R.id.content)
@@ -97,10 +102,21 @@ class MainActivity : TauriActivity() {
         super.onPause()
     }
 
+    override fun onStop() {
+        // A question left open in the background counts as "no", so it can't be answered past the app lock.
+        question?.dismiss()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         visible = false
         UwuBridge.attach(null)
         super.onDestroy()
+    }
+
+    /** With the app lock on, Recents shows an empty card instead of the last screen (Android 13+). Main thread only. */
+    fun applyPrivacy() {
+        if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(!Prefs.appLock(this))
     }
 
     /** The UI has drawn its first screen: let the splash go. */
@@ -136,12 +152,19 @@ class MainActivity : TauriActivity() {
         val answer = AtomicBoolean(false)
         val done = CountDownLatch(1)
         runOnUiThread {
-            AlertDialog.Builder(this)
+            if (isFinishing || isDestroyed) {
+                done.countDown()
+                return@runOnUiThread
+            }
+            question = AlertDialog.Builder(this)
                 .setTitle(title)
                 .setMessage(message)
                 .setPositiveButton(ok) { _, _ -> answer.set(true) }
                 .setNegativeButton(cancel, null)
-                .setOnDismissListener { done.countDown() }
+                .setOnDismissListener {
+                    question = null
+                    done.countDown()
+                }
                 .show()
         }
         done.await()

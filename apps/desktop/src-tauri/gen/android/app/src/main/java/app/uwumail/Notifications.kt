@@ -48,6 +48,7 @@ object Notifications {
                 action = MainActivity.ACTION_OPEN_MESSAGE
                 putExtra(MainActivity.EXTRA_THREAD_ID, threadId)
                 putExtra(MainActivity.EXTRA_MESSAGE_ID, messageId)
+                putExtra(MainActivity.EXTRA_TOKEN, Prefs.launchToken(context))
             }
         }
         return PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -62,10 +63,23 @@ object Notifications {
         return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    /** New mail, one notification per message, grouped per mailbox. Silent while UwUMail is on screen. */
+    /** What a secure lock screen shows when the phone hides sensitive content. */
+    private fun lockScreenVersion(context: Context, text: Context): Notification =
+        NotificationCompat.Builder(context, CHANNEL_MAIL)
+            .setSmallIcon(R.drawable.ic_stat_nyu)
+            .setColor(PINK)
+            .setContentTitle(text.getString(R.string.hidden_mail_title))
+            .setContentText(text.getString(R.string.hidden_mail_text))
+            .build()
+
+    /**
+     * New mail, one notification per message, grouped per mailbox. Silent while UwUMail is on screen.
+     * With the app lock on, it doesn't say who wrote or what about.
+     */
     fun showMail(context: Context, args: JSONObject) {
         if (MainActivity.visible || !allowed(context)) return
         val text = Prefs.localized(context)
+        val hideContent = Prefs.appLock(context)
         val accountId = args.getString("accountId")
         val account = args.optString("accountEmail", "")
         val group = "mail:$accountId"
@@ -75,23 +89,39 @@ object Notifications {
         for (index in 0 until messages.length()) {
             val message = messages.getJSONObject(index)
             val id = message.getString("id")
-            val subject = message.optString("subject").ifEmpty { text.getString(R.string.no_subject) }
             val code = id.hashCode()
-            val notification = NotificationCompat.Builder(context, CHANNEL_MAIL)
+            val archive = NotificationCompat.Action.Builder(
+                0,
+                text.getString(R.string.action_archive),
+                actionIntent(context, "archive", listOf(id), code + 2),
+            )
+                // Archiving from the lock screen asks to unlock the phone first; "read" doesn't.
+                .setAuthenticationRequired(true)
+                .build()
+            val builder = NotificationCompat.Builder(context, CHANNEL_MAIL)
                 .setSmallIcon(R.drawable.ic_stat_nyu)
                 .setColor(PINK)
-                .setContentTitle(message.getString("from"))
-                .setContentText(subject)
-                .setStyle(NotificationCompat.BigTextStyle().bigText("$subject\n${message.optString("snippet")}"))
                 .setSubText(account)
                 .setCategory(NotificationCompat.CATEGORY_EMAIL)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .setPublicVersion(lockScreenVersion(context, text))
                 .setGroup(group)
                 .setAutoCancel(true)
                 .setContentIntent(openIntent(context, code, message.getString("threadId"), id))
                 .addAction(0, text.getString(R.string.action_read), actionIntent(context, "read", listOf(id), code + 1))
-                .addAction(0, text.getString(R.string.action_archive), actionIntent(context, "archive", listOf(id), code + 2))
-                .build()
-            manager.notify(TAG_MAIL, code, notification)
+                .addAction(archive)
+            if (hideContent) {
+                builder
+                    .setContentTitle(text.getString(R.string.hidden_mail_title))
+                    .setContentText(text.getString(R.string.hidden_mail_text))
+            } else {
+                val subject = message.optString("subject").ifEmpty { text.getString(R.string.no_subject) }
+                builder
+                    .setContentTitle(message.getString("from"))
+                    .setContentText(subject)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText("$subject\n${message.optString("snippet")}"))
+            }
+            manager.notify(TAG_MAIL, code, builder.build())
         }
 
         val inGroup = context.getSystemService(NotificationManager::class.java).activeNotifications
@@ -102,6 +132,8 @@ object Notifications {
                 .setColor(PINK)
                 .setContentTitle(text.resources.getQuantityString(R.plurals.new_mail, inGroup.size, inGroup.size))
                 .setSubText(account)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .setPublicVersion(lockScreenVersion(context, text))
                 .setGroup(group)
                 .setGroupSummary(true)
                 .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)

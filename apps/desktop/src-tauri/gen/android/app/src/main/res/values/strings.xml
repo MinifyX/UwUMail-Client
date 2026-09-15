@@ -12,6 +12,8 @@
     <string name="action_archive">Archive</string>
     <string name="action_hide">Hide</string>
     <string name="no_subject">(no subject)</string>
+    <string name="hidden_mail_title">New mail</string>
+    <string name="hidden_mail_text">Open UwUMail to read it</string>
     <plurals name="new_mail">
         <item quantity="one">%d new mail</item>
         <item quantity="other">%d new mails</item>

@@ -125,6 +125,8 @@ pub fn start(on_ready: impl Fn(&ReadyUpdate) + Send + Sync + 'static) {
         builder
             .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION"), " (Android)"))
             .timeout(Duration::from_secs(60))
+            // The feed and the APK only come over HTTPS, redirects included.
+            .https_only(true)
             .build()
             .map_err(|e| Error::internal(format!("HTTP client setup failed: {e}")))
     }) {

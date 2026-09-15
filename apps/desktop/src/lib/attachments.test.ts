@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachmentKind, isDangerous, parseCsv, parseIcalDate, parseIcs, parseVcf } from "./attachments";
+import { attachmentKind, isAppPackage, isDangerous, parseCsv, parseIcalDate, parseIcs, parseVcf } from "./attachments";
 
 describe("attachmentKind", () => {
   it("uses the MIME type first and the extension as fallback", () => {
@@ -15,6 +15,12 @@ describe("attachmentKind", () => {
     expect(isDangerous("Rechnung_2026.pdf.exe")).toBe(true);
     expect(isDangerous("makro.XLSM")).toBe(true);
     expect(isDangerous("rechnung.pdf")).toBe(false);
+  });
+
+  it("knows Android app packages", () => {
+    expect(isDangerous("Update.APK")).toBe(true);
+    expect(isAppPackage("spiel.xapk. ")).toBe(true);
+    expect(isAppPackage("apk.pdf")).toBe(false);
   });
 });
 

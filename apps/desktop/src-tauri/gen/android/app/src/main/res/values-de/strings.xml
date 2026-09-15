@@ -10,6 +10,8 @@
     <string name="action_archive">Archivieren</string>
     <string name="action_hide">Ausblenden</string>
     <string name="no_subject">(kein Betreff)</string>
+    <string name="hidden_mail_title">Neue Mail</string>
+    <string name="hidden_mail_text">Öffne UwUMail, um sie zu lesen</string>
     <plurals name="new_mail">
         <item quantity="one">%d neue Mail</item>
         <item quantity="other">%d neue Mails</item>

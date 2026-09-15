@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { X } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 import { useT } from "@/i18n";
+import { useAppLock } from "@/state/lock";
 import { IconButton } from "./Button";
 
 interface DialogProps {
@@ -17,13 +18,15 @@ interface DialogProps {
 export function Dialog({ open, onClose, title, children, width = "md", className }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const { t } = useT();
+  // A modal <dialog> sits above everything, the app lock included, so it waits until UwUMail is unlocked.
+  const shown = useAppLock((s) => open && !s.locked);
 
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
+    if (shown && !dialog.open) dialog.showModal();
+    if (!shown && dialog.open) dialog.close();
+  }, [shown]);
 
   return (
     <dialog

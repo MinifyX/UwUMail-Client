@@ -94,16 +94,35 @@ const DANGEROUS: &[&str] = &[
     "shtml",
     "mht",
     "mhtml",
+    "apk",
+    "apks",
+    "apkm",
+    "xapk",
+    "aab",
 ];
+
+/// Android app packages. On Android UwUMail never hands these to the installer.
+const APP_PACKAGES: &[&str] = &["apk", "apks", "apkm", "xapk", "aab"];
 
 /// Characters that reverse how text is displayed, e.g. to show `rechnung\u{202E}fdp.exe` as "rechnungexe.pdf".
 fn is_bidi_control(c: char) -> bool {
     matches!(c, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
-/// An attachment name as it should be shown and stored: no invisible direction tricks.
+/// An attachment name as it should be shown and stored: no invisible direction tricks, and no line
+/// breaks or other control characters that could make a warning dialog say something else.
 pub fn clean_display_name(name: &str) -> String {
-    name.chars().filter(|c| !is_bidi_control(*c)).collect()
+    name.chars().filter(|c| !is_bidi_control(*c)).map(|c| if c.is_control() { ' ' } else { c }).collect()
+}
+
+fn extension(filename: &str) -> Option<String> {
+    let name = clean_display_name(filename);
+    let name = name.trim_end_matches(['.', ' ']);
+    name.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase())
+}
+
+pub fn is_app_package(filename: &str) -> bool {
+    extension(filename).is_some_and(|ext| APP_PACKAGES.contains(&ext.as_str()))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -118,9 +137,7 @@ pub struct AttachmentFile {
 
 pub fn is_dangerous(filename: &str) -> bool {
     // Windows ignores trailing dots and spaces, so "tool.exe. " still runs as tool.exe.
-    let name = clean_display_name(filename);
-    let name = name.trim_end_matches(['.', ' ']);
-    name.rsplit_once('.').is_some_and(|(_, ext)| DANGEROUS.contains(&ext.to_ascii_lowercase().as_str()))
+    extension(filename).is_some_and(|ext| DANGEROUS.contains(&ext.as_str()))
 }
 
 /// A file name that is safe on every OS: no paths, no reserved names, not too long.
@@ -266,6 +283,9 @@ mod tests {
         assert!(is_dangerous("login.html"));
         assert!(is_dangerous("rechnung\u{202E}fdp.exe"));
         assert_eq!(clean_display_name("rechnung\u{202E}fdp.exe"), "rechnungfdp.exe");
+        assert_eq!(clean_display_name("bild.png\n\nGeprüft ✓"), "bild.png  Geprüft ✓");
+        assert!(is_dangerous("Update.APK") && is_app_package("Update.APK"));
+        assert!(is_app_package("game.xapk. ") && !is_app_package("apk.pdf"));
     }
 
     #[test]

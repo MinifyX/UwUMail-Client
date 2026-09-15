@@ -54,17 +54,12 @@ jobs:
             console.log(`code=${code}`);
           ' >> "$GITHUB_OUTPUT"
 
-      - name: Signing key
-        env:
-          KEYSTORE: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_BASE64 }}
-        run: printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/uwumail-android.p12"
+      # The checked-in wrapper jar runs first in the build; it must be an official Gradle release.
+      - uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
+      # Built without the signing key: thousands of third-party build scripts run here.
       - name: Build
         env:
-          UWUMAIL_ANDROID_KEYSTORE: ${{ runner.temp }}/uwumail-android.p12
-          UWUMAIL_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_PASSWORD }}
-          UWUMAIL_ANDROID_KEY_ALIAS: uwumail
-          UWUMAIL_ANDROID_KEY_PASSWORD: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_PASSWORD }}
           UWUMAIL_ANDROID_VERSION_CODE: ${{ steps.version.outputs.code }}
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
@@ -73,14 +68,28 @@ jobs:
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           pnpm tauri android build --apk --target aarch64 --ci
 
-      - name: Collect
+      # Only Android's own build tools see the key, and it's gone again right after.
+      - name: Sign
+        env:
+          KEYSTORE: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_PASSWORD }}
+          # The certificate every UwUMail APK is signed with; a different key must never slip in.
+          CERTIFICATE_SHA256: de1cd496582140c9004e05ff087656cdb0b0f575a98dc664e809b5f9b510e301
         run: |
           apk=$(find apps/desktop/src-tauri/gen/android/app/build/outputs/apk -name '*release*.apk' | head -n 1)
           test -n "$apk" || { echo "::error::No APK was built"; exit 1; }
+          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+          keystore="$RUNNER_TEMP/uwumail-android.p12"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$KEYSTORE" | base64 -d > "$keystore"
           mkdir -p out
-          cp "$apk" "out/UwUMail-${{ steps.version.outputs.version }}-${{ steps.version.outputs.code }}.apk"
-          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
-          "$apksigner" verify --print-certs out/*.apk | grep -i "SHA-256"
+          "$tools/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
+          signed="out/UwUMail-${{ steps.version.outputs.version }}-${{ steps.version.outputs.code }}.apk"
+          "$tools/apksigner" sign --ks "$keystore" --ks-type PKCS12 --ks-key-alias uwumail \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD --out "$signed" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" verify --print-certs "$signed" | tee "$RUNNER_TEMP/certs.txt" | grep -i "SHA-256"
+          grep -qi "certificate SHA-256 digest: $CERTIFICATE_SHA256" "$RUNNER_TEMP/certs.txt" \
+            || { echo "::error::The APK isn't signed with UwUMail's certificate"; exit 1; }
           ls -la out
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

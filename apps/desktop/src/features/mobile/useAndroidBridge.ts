@@ -17,6 +17,7 @@ export function useAndroidBridge() {
   const language = useSettings((s) => s.language);
   const onboarded = useSettings((s) => s.onboarded);
   const offlineDays = useSettings((s) => s.offlineDays);
+  const appLock = useSettings((s) => s.appLock);
   const { data: accounts = [] } = useAccounts();
   const told = useRef(false);
 
@@ -34,8 +35,8 @@ export function useAndroidBridge() {
   }, [theme, onboarded]);
 
   useEffect(() => {
-    void mobile.setPrefs(resolveLanguage(language), tone);
-  }, [language, tone]);
+    void mobile.setPrefs(resolveLanguage(language), tone, appLock);
+  }, [language, tone, appLock]);
 
   useEffect(() => {
     void mobile.setOfflineDays(offlineDays);

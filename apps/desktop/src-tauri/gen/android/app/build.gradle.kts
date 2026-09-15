@@ -1,4 +1,3 @@
-import groovy.json.JsonSlurper
 import java.util.Properties
 
 plugins {
@@ -14,30 +13,8 @@ val tauriProperties = Properties().apply {
     }
 }
 
-/** The Kotlin half of rustls-platform-verifier ships inside its Rust crate as a local Maven repo. */
-fun rustlsPlatformVerifierRepo(): File {
-    val metadata = providers.exec {
-        workingDir = file("../../../")
-        commandLine(
-            "cargo", "metadata", "--format-version", "1",
-            "--filter-platform", "aarch64-linux-android",
-            "--manifest-path", "Cargo.toml",
-        )
-    }.standardOutput.asText.get()
-    @Suppress("UNCHECKED_CAST")
-    val packages = (JsonSlurper().parseText(metadata) as Map<String, Any>)["packages"] as List<Map<String, Any>>
-    val manifest = packages.first { it["name"] == "rustls-platform-verifier-android" }["manifest_path"] as String
-    return File(File(manifest).parentFile, "maven")
-}
-
-repositories {
-    maven {
-        url = uri(rustlsPlatformVerifierRepo())
-        metadataSources.artifact()
-    }
-}
-
-// Release builds are signed with UwUMail's key from CI secrets, so updates install over each other.
+// Local release builds can be signed with UwUMail's key. CI builds unsigned and signs in a separate step,
+// so the key is never around while third-party build code runs.
 val keystorePath: String? = System.getenv("UWUMAIL_ANDROID_KEYSTORE")
 
 android {
@@ -108,7 +85,6 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
-    implementation("rustls:rustls-platform-verifier:latest.release")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")

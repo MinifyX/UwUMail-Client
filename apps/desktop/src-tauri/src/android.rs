@@ -79,6 +79,19 @@ fn call(method: &str, payload: serde_json::Value) -> Result<Option<String>, Erro
     uwumail_android::call(method, &payload)
 }
 
+/// App packages from mail never go to Android's installer, whatever the mail
+/// claims the file is. Saving them to Downloads still works.
+pub fn check_openable(file: &AttachmentFile) -> Result<(), Error> {
+    if uwumail_core::attachments::is_app_package(&file.filename)
+        || file.mime_type.eq_ignore_ascii_case("application/vnd.android.package-archive")
+    {
+        return Err(Error::invalid(
+            "UwUMail doesn't open app packages from mails. Save the file if you expected it and trust the sender.",
+        ));
+    }
+    Ok(())
+}
+
 pub fn open_file(_app: &AppHandle, file: &AttachmentFile) -> Result<(), Error> {
     call("openFile", json!({ "path": file.path, "filename": file.filename, "mimeType": file.mime_type }))?;
     Ok(())
@@ -124,8 +137,8 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
     uwumail_android::launch::take().and_then(|action| serde_json::to_value(action).ok())
 }
 
-pub fn set_mobile_prefs(language: String, tone: String) -> Result<(), Error> {
-    call("setPrefs", json!({ "language": language, "tone": tone }))?;
+pub fn set_mobile_prefs(language: String, tone: String, app_lock: bool) -> Result<(), Error> {
+    call("setPrefs", json!({ "language": language, "tone": tone, "appLock": app_lock }))?;
     Ok(())
 }
 

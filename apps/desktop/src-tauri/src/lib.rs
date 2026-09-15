@@ -123,13 +123,16 @@ fn german() -> bool {
 #[tauri::command]
 async fn open_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_id: String) -> CommandResult<bool> {
     let file = engine.attachment(&attachment_id).await?;
+    platform::check_openable(&file)?;
     if file.dangerous {
+        // Names saved by older versions may still carry line breaks that could reword the dialog.
+        let name = uwumail_core::attachments::clean_display_name(&file.filename);
         let (title, text, open, cancel) = if german() {
             (
                 "Diese Datei kann Programme ausführen",
                 format!(
                     "„{}“ kann Programme auf deinem Gerät starten. Öffne die Datei nur, wenn du sie erwartet hast und dem Absender vertraust.",
-                    file.filename
+                    name
                 ),
                 "Trotzdem öffnen",
                 "Nicht öffnen",
@@ -139,7 +142,7 @@ async fn open_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_i
                 "This file can run programs",
                 format!(
                     "“{}” can start programs on your device. Only open it if you expected it and trust the sender.",
-                    file.filename
+                    name
                 ),
                 "Open anyway",
                 "Don't open",
@@ -197,10 +200,11 @@ fn take_launch_action() -> Option<serde_json::Value> {
     platform::take_launch_action()
 }
 
-/// Android: language and tone for notifications shown while no window is open.
+/// Android: language and tone for notifications shown while no window is open,
+/// and whether the app lock is on (notifications without content, no Recents preview).
 #[tauri::command]
-fn set_mobile_prefs(language: String, tone: String) -> CommandResult<()> {
-    platform::set_mobile_prefs(language, tone)
+fn set_mobile_prefs(language: String, tone: String, app_lock: bool) -> CommandResult<()> {
+    platform::set_mobile_prefs(language, tone, app_lock)
 }
 
 /// Android: colors behind the status and navigation bars.

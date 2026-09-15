@@ -32,6 +32,7 @@ import { useIsPhone } from "@/lib/device";
 import { openLinkNow } from "@/state/links";
 import { useAccounts } from "@/lib/queries";
 import { isDomainEntry, sortEntries } from "@/lib/trustedSenders";
+import { confirmIdentity } from "@/state/lock";
 import {
   useSettings,
   type LanguageSetting,
@@ -224,10 +225,9 @@ function Security() {
         <Toggle
           checked={appLock}
           onChange={async (enabled) => {
-            if (!enabled) return update({ appLock: false });
-            if (!(await mobile.canLock())) return toast(t("settings.appLockUnavailable"), "error");
-            // Only turn it on once the phone confirmed it can unlock.
-            if (await mobile.unlock(t("mobile.lock.reason"), t("mobile.lock.prompt"))) update({ appLock: true });
+            if (enabled && !(await mobile.canLock())) return toast(t("settings.appLockUnavailable"), "error");
+            // Turning it on proves the phone can unlock; turning it off needs the same proof as getting past it.
+            if (await confirmIdentity(t("mobile.lock.reason"), t("mobile.lock.prompt"))) update({ appLock: enabled });
           }}
           label={t("settings.appLock")}
           description={t("settings.appLockDesc")}
@@ -238,7 +238,17 @@ function Security() {
           <Segmented
             label={t("settings.appLockAfter")}
             value={String(appLockAfter)}
-            onChange={(value) => update({ appLockAfter: Number(value) as LockAfter })}
+            onChange={async (value) => {
+              const minutes = Number(value) as LockAfter;
+              // A longer wait weakens the lock, so it's confirmed like turning it off.
+              if (
+                minutes > appLockAfter &&
+                !(await confirmIdentity(t("mobile.lock.reason"), t("mobile.lock.prompt")))
+              ) {
+                return;
+              }
+              update({ appLockAfter: minutes });
+            }}
             options={LOCK_AFTER.map((minutes) => ({
               value: String(minutes),
               label: minutes === 0 ? t("settings.lockNow") : t("settings.lockMinutes", { count: minutes }),

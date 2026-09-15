@@ -500,8 +500,9 @@ pub async fn sync_folder(
     Ok(result)
 }
 
-/// An IMAP quoted string.
+/// An IMAP quoted string. Line breaks can't be quoted and would end the command, so they become spaces.
 fn quoted(text: &str) -> String {
+    let text: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
@@ -598,6 +599,12 @@ pub async fn append(session: &mut ImapSession, folder_path: &str, raw: &[u8], se
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_text_stays_one_command() {
+        assert_eq!(quoted("Rechnung \"März\""), "\"Rechnung \\\"März\\\"\"");
+        assert_eq!(quoted("a\r\nb2 LOGOUT"), "\"a  b2 LOGOUT\"");
+    }
 
     #[test]
     fn decodes_modified_utf7_folder_names() {

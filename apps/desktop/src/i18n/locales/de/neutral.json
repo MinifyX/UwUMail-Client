@@ -388,7 +388,8 @@
     "phone": "Telefon",
     "notPdf": "Diese Datei gibt sich als PDF aus, ist aber keins, deshalb wird sie hier nicht angezeigt. Speichere sie oder öffne sie mit einer App, wenn du ihr vertraust.",
     "dangerOpen": "Trotzdem öffnen",
-    "dangerCancel": "Nicht öffnen"
+    "dangerCancel": "Nicht öffnen",
+    "packageBlocked": "App-Pakete aus Mails öffnet UwUMail nicht. Speichere die Datei in Downloads, wenn du sie erwartet hast und dem Absender vertraust."
   },
   "update": {
     "readyTitle": "Neue Version bereit",

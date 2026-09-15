@@ -388,7 +388,8 @@
     "phone": "Phone",
     "notPdf": "This file says it's a PDF but isn't one, so it isn't shown here. Save it or open it with an app if you trust it.",
     "dangerOpen": "Open anyway",
-    "dangerCancel": "Don't open"
+    "dangerCancel": "Don't open",
+    "packageBlocked": "UwUMail doesn't open app packages from mails. Save the file to Downloads if you expected it and trust the sender."
   },
   "update": {
     "readyTitle": "A new version is ready",
