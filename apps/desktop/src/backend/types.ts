@@ -262,7 +262,7 @@ export interface DiscoveredSettings {
   imap: ServerSettings;
   smtp: ServerSettings;
   username: string;
-  source: "ispdb" | "autoconfig" | "srv" | "mx" | "guess";
+  source: "ispdb" | "autoconfig" | "microsoft" | "srv" | "mx" | "guess";
   /** The JMAP session URL, when the server offers JMAP. */
   jmap?: string;
 }

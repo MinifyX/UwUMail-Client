@@ -492,6 +492,8 @@ pub enum OAuthProvider {
 pub enum DiscoverySource {
     Ispdb,
     Autoconfig,
+    /// Recognised as a Microsoft mailbox, personal or in a company tenant.
+    Microsoft,
     Srv,
     Mx,
     Guess,

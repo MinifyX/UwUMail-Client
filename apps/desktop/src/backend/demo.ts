@@ -213,12 +213,12 @@ export class DemoBackend implements Backend {
     if (oauth === "microsoft") {
       return {
         email,
-        providerName: "Outlook.com",
+        providerName: "Microsoft 365",
         oauth,
         imap: { host: "outlook.office365.com", port: 993, security: "tls" },
         smtp: { host: "smtp.office365.com", port: 587, security: "starttls" },
         username: email,
-        source: "ispdb",
+        source: "microsoft",
       };
     }
     if (JMAP_DOMAINS.includes(domain)) {

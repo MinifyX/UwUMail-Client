@@ -1,8 +1,8 @@
 //! Finds IMAP/SMTP settings from nothing but an email address.
 //!
-//! Order: the domain's own autoconfig file, the Thunderbird ISPDB, the
-//! provider behind the MX record, RFC 6186 SRV records, and finally probing
-//! the usual host names.
+//! Order: the domain's own autoconfig file, a Microsoft 365 tenant, the
+//! Thunderbird ISPDB, the provider behind the MX record, RFC 6186 SRV
+//! records, and finally probing the usual host names.
 
 use std::time::Duration;
 
@@ -88,6 +88,42 @@ pub fn oauth_provider_for(host_or_domain: &str) -> Option<OAuthProvider> {
     }
 }
 
+/// Exchange Online's IMAP and SMTP hosts. Every mailbox in Microsoft 365 uses
+/// these two, no matter what the company's domain is called.
+const MICROSOFT_IMAP: &str = "outlook.office365.com";
+const MICROSOFT_SMTP: &str = "smtp.office365.com";
+
+/// Settings for a mailbox that Microsoft hosts, personal or company.
+pub(crate) fn microsoft_settings(email: &str, source: DiscoverySource) -> DiscoveredSettings {
+    DiscoveredSettings {
+        email: email.to_string(),
+        provider_name: Some("Microsoft 365".into()),
+        oauth: Some(OAuthProvider::Microsoft),
+        imap: ServerSettings { host: MICROSOFT_IMAP.into(), port: 993, security: Security::Tls },
+        // Exchange Online only submits on 587 with STARTTLS; it has no implicit-TLS port.
+        smtp: ServerSettings { host: MICROSOFT_SMTP.into(), port: 587, security: Security::Starttls },
+        username: email.to_string(),
+        source,
+        jmap: None,
+    }
+}
+
+/// Whether a domain belongs to a Microsoft 365 tenant.
+///
+/// Autodiscover v2 stopped answering for IMAP and SMTP, so we ask Entra ID
+/// instead: every domain a tenant has verified serves an OpenID configuration,
+/// and every other domain answers with an error. This is what finds companies
+/// whose mail sits behind a spam filter, where the MX record gives Microsoft
+/// away nowhere.
+async fn microsoft_tenant(http: &reqwest::Client, domain: &str) -> bool {
+    // split_email already made sure this is a bare host name, but it goes into
+    // a URL path, so encode it anyway.
+    let encoded: String = url::form_urlencoded::byte_serialize(domain.as_bytes()).collect();
+    let url = format!("https://login.microsoftonline.com/{encoded}/v2.0/.well-known/openid-configuration");
+    let Ok(Ok(response)) = timeout(HTTP_TIMEOUT, http.get(&url).send()).await else { return false };
+    response.status().is_success()
+}
+
 pub(crate) fn parse_client_config(xml: &str, email: &str, source: DiscoverySource) -> Option<DiscoveredSettings> {
     let config: ClientConfig = quick_xml::de::from_str(xml).ok()?;
     let provider = config.email_provider;
@@ -160,7 +196,8 @@ pub(crate) async fn resolver() -> Option<hickory_resolver::TokioResolver> {
     hickory_resolver::Resolver::builder_tokio().ok()?.build().ok()
 }
 
-async fn from_mx(http: &reqwest::Client, email: &str, domain: &str) -> Option<DiscoveredSettings> {
+/// The mail host a domain points at, i.e. its most preferred MX record.
+async fn mx_host(domain: &str) -> Option<String> {
     let resolver = resolver().await?;
     let lookup = timeout(HTTP_TIMEOUT, resolver.mx_lookup(domain)).await.ok()?.ok()?;
     let mut records: Vec<_> = lookup
@@ -172,7 +209,26 @@ async fn from_mx(http: &reqwest::Client, email: &str, domain: &str) -> Option<Di
         })
         .collect();
     records.sort_by_key(|mx| mx.preference);
-    let host = records.first()?.exchange.to_utf8();
+    Some(records.first()?.exchange.to_utf8())
+}
+
+/// Whether Microsoft hosts the mail for a domain.
+///
+/// The MX record is the sure sign, but a spam filter in front of Microsoft 365
+/// hides it, so an Entra tenant counts as well — except when the MX names a
+/// provider we know to be someone else, which is what a company looks like
+/// that uses Entra for sign-in but keeps its mail elsewhere.
+async fn hosted_by_microsoft(http: &reqwest::Client, domain: &str) -> bool {
+    let (tenant, mx) = tokio::join!(microsoft_tenant(http, domain), mx_host(domain));
+    match mx.as_deref().and_then(oauth_provider_for) {
+        Some(OAuthProvider::Microsoft) => true,
+        Some(_) => false,
+        None => tenant,
+    }
+}
+
+async fn from_mx(http: &reqwest::Client, email: &str, domain: &str) -> Option<DiscoveredSettings> {
+    let host = mx_host(domain).await?;
     let provider_domain = base_domain(&host);
     if provider_domain.eq_ignore_ascii_case(domain) {
         return None;
@@ -287,8 +343,21 @@ pub async fn discover(http: &reqwest::Client, email: &str) -> Result<DiscoveredS
 }
 
 async fn discover_imap(http: &reqwest::Client, email: &str, domain: &str) -> DiscoveredSettings {
-    if let Some(found) = from_autoconfig(http, email, domain).await {
-        return found;
+    // Microsoft's own domains are known and need no lookup.
+    if oauth_provider_for(domain) == Some(OAuthProvider::Microsoft) {
+        return microsoft_settings(email, DiscoverySource::Microsoft);
+    }
+    let (found, microsoft) = tokio::join!(from_autoconfig(http, email, domain), hosted_by_microsoft(http, domain));
+    if let Some(found) = found {
+        // A file the domain publishes itself wins: whoever wrote it knows where the
+        // mail really lives, hybrid setups included. A shared ISPDB entry loses
+        // against a tenant, because the password login it describes cannot work there.
+        if found.source == DiscoverySource::Autoconfig || !microsoft {
+            return found;
+        }
+    }
+    if microsoft {
+        return microsoft_settings(email, DiscoverySource::Microsoft);
     }
     if let Some(found) = from_mx(http, email, domain).await {
         return found;
@@ -355,6 +424,23 @@ mod tests {
         assert_eq!(oauth_provider_for("example-com.mail.protection.outlook.com"), Some(OAuthProvider::Microsoft));
         assert_eq!(oauth_provider_for("aspmx.l.google.com"), Some(OAuthProvider::Google));
         assert_eq!(oauth_provider_for("posteo.de"), None);
+    }
+
+    #[test]
+    fn microsoft_mailboxes_get_exchange_onlines_fixed_hosts() {
+        let settings = microsoft_settings("alex@example-company.de", DiscoverySource::Microsoft);
+        assert_eq!(
+            settings.imap,
+            ServerSettings { host: "outlook.office365.com".into(), port: 993, security: Security::Tls }
+        );
+        // Exchange Online submits on 587 only; 465 would fail to connect.
+        assert_eq!(
+            settings.smtp,
+            ServerSettings { host: "smtp.office365.com".into(), port: 587, security: Security::Starttls }
+        );
+        assert_eq!(settings.oauth, Some(OAuthProvider::Microsoft));
+        assert_eq!(settings.username, "alex@example-company.de");
+        assert!(settings.jmap.is_none(), "Microsoft offers no JMAP");
     }
 
     #[test]
