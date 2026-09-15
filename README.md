@@ -5,44 +5,68 @@
 <h1 align="center">UwUMail</h1>
 
 <p align="center">
-  The cute, modern mail client for everyone. (◕‿◕✿)<br/>
-  IMAP · SMTP · JMAP · Addons · Windows · macOS · Linux
+  The mail client I build for myself, because every other one annoyed me. (◕‿◕✿)<br/>
+  IMAP · SMTP · JMAP · Windows · macOS · Linux · Android
 </p>
 
 ---
 
-UwUMail is an open-source desktop mail client that works with any IMAP/SMTP
-mailbox, and speaks JMAP with servers that offer it (Fastmail, Stalwart,
-Cyrus). It is built for people who want it simple, for people who want
-everything in one place, and for everyone in between:
+## Why this exists
+
+I'm building UwUMail for myself. Every mail client and self-hosted mail server I
+tried annoyed me in one way or another, so I started building my own, the way I
+want it. The server half lives in
+[UwUMail Server](https://github.com/MinifyX/UwUMail-Server).
+
+- **Just for fun.** No company, no team, no schedule, no promises. I work on it
+  when I have time and feel like it, so don't expect steady development, and
+  don't be surprised by long breaks.
+- **Written with AI.** Almost all of the code is written with Claude, because
+  I'm honestly not a great programmer. Not your thing? No hard feelings, just
+  pick something else.
+- **Use it, fork it, do what you want with it.** The license only asks one
+  thing: if you pass on a changed version, its source stays open too.
+- **No support.** Issues and pull requests are okay, but I might answer late or
+  not at all, and I mostly build what I need myself.
+
+## What it is
+
+UwUMail is an open-source mail app that works with any IMAP/SMTP mailbox and
+speaks JMAP with servers that offer it (tested with Stalwart and UwUMail
+Server). It's what I wanted from a mail client:
 
 - **Simple or Pro.** Switch between a calm two-column layout and a dense
   three-column layout with keyboard shortcuts, any time.
 - **All your mailboxes.** Add as many accounts as you like and read them in one
-  unified inbox. Setup needs only your address and password (or a Microsoft /
-  Google sign-in).
+  unified inbox. Setup needs only your address and password.
 - **Fast and offline.** Mail is cached locally with full-text search in
   milliseconds.
 - **Private by default.** No telemetry, remote images blocked until you allow
   them, passwords stored in your operating system's keychain.
-- **Extensible.** Addons add features — snooze, PGP, templates, calendars, AI
-  helpers — and can only touch what you allowed them to.
 - **Playful.** UwUMail talks to you with a wink by default. Prefer it plain?
   Settings → Tone → Neutral.
+- **Extensible, one day.** Addons are meant to add things like snooze, PGP,
+  templates, calendars or AI helpers, and to touch only what you allowed. The
+  SDK exists, the addon host doesn't yet.
 
-> **Status:** early development, not yet usable for daily mail. See the
-> [roadmap](docs/roadmap.md).
+> **Status:** beta. It works, but expect rough edges and things that change.
+> Windows builds are on
+> [UwUMail-Releases](https://github.com/MinifyX/UwUMail-Releases/releases); the
+> [roadmap](docs/roadmap.md) shows what's done and what I'd like to do next.
 
 ## Project layout
 
 | Path | What lives there |
 | --- | --- |
-| `apps/desktop` | The Tauri 2 desktop app (React UI + Rust shell) |
+| `apps/desktop` | The Tauri 2 app for desktop and Android (React UI + Rust shell) |
+| `apps/setup` | UwUMail's own installer, updater and uninstaller for Windows |
 | `crates/uwumail-core` | Mail engine: accounts, IMAP and JMAP sync, sending, local store, search |
+| `crates/uwumail-android` | Android side of the engine: background service, keystore, notifications |
 | `packages/addon-sdk` | `@uwumail/addon-sdk` — types and runtime for addon authors (MIT) |
 | `addons/` | Official example addons |
 | `brand/` | Logo and icon sources |
 | `docs/` | Vision, architecture, addon API, design system |
+| `release-notes/` | "What's new" texts per version |
 
 ## Development
 
@@ -75,15 +99,18 @@ docker compose -f dev/mailserver.compose.yml up -d
 
 ## Documentation
 
-- [Vision](docs/vision.md) — who UwUMail is for and what it will never do
+- [Vision](docs/vision.md) — what I want UwUMail to be and what it will never do
 - [Architecture](docs/architecture.md) — how the pieces fit together
 - [Addons](docs/addons.md) — manifest, permissions and the addon API
 - [Design](docs/design.md) — colors, type, tone of voice
-- [Roadmap](docs/roadmap.md)
-- [Contributing](CONTRIBUTING.md)
+- [Roadmap](docs/roadmap.md) — my wish list, without dates
+- [Contributing](CONTRIBUTING.md) — worth a look before you open an issue or a pull request
+- [Security](SECURITY.md)
 
 ## License
 
-UwUMail is free software under the [GNU GPL v3.0](LICENSE).
-The addon SDK in `packages/addon-sdk` is [MIT-licensed](packages/addon-sdk/LICENSE),
-so addon authors can pick any license they like.
+UwUMail is free software under the [GNU GPL v3.0](LICENSE): use it, change it,
+fork it, share it. If you pass on a changed version, its source has to stay
+open too. The addon SDK in `packages/addon-sdk` is
+[MIT-licensed](packages/addon-sdk/LICENSE), so addon authors can pick any
+license they like.

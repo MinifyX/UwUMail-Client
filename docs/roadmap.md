@@ -1,5 +1,9 @@
 # Roadmap
 
+This is my to-do and wish list, not a promise. There are no dates: things get
+built when I need them or feel like it, the order changes, and some of it may
+never happen. See [Why this exists](../README.md#why-this-exists).
+
 ## v0.1 — MVP
 
 - [x] Project foundation: monorepo, docs, brand, CI
