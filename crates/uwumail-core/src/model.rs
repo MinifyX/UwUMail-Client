@@ -208,6 +208,9 @@ pub struct ThreadQuery {
     #[serde(default)]
     pub search: Option<String>,
     pub conversations: bool,
+    /// Only mail from these mailboxes, e.g. the business ones; every mailbox when left out.
+    #[serde(default)]
+    pub account_ids: Option<Vec<String>>,
     #[serde(default)]
     pub cursor: Option<String>,
     pub limit: u32,
@@ -571,6 +574,16 @@ mod tests {
         let folder: MailboxView =
             serde_json::from_str(r#"{"kind":"folder","accountId":"a1","folderId":"f1"}"#).unwrap();
         assert!(matches!(folder, MailboxView::Folder { ref account_id, .. } if account_id == "a1"));
+    }
+
+    #[test]
+    fn thread_queries_limit_mailboxes_only_when_asked() {
+        let view = r#""view":{"kind":"unified","role":"inbox"},"filter":"all","conversations":true,"limit":50"#;
+        let every: ThreadQuery = serde_json::from_str(&format!("{{{view}}}")).unwrap();
+        assert_eq!(every.account_ids, None);
+
+        let some: ThreadQuery = serde_json::from_str(&format!(r#"{{{view},"accountIds":["a1"]}}"#)).unwrap();
+        assert_eq!(some.account_ids, Some(vec!["a1".to_string()]));
     }
 
     #[test]

@@ -572,12 +572,16 @@ impl Engine {
 
     /// Searches on the servers for `query.search`, also in mail that was never
     /// downloaded, which then joins the local store as previews. Looks in the
-    /// view's folder, or everywhere but trash and junk for unified views.
+    /// view's folder, or everywhere but trash and junk for unified views, and
+    /// only in the query's mailboxes when it names some.
     pub async fn search_server(&self, query: &ThreadQuery) -> Result<ThreadPage> {
         let text = query.search.as_deref().map(str::trim).filter(|text| !text.is_empty());
         let Some(text) = text else { return Err(Error::invalid("Enter something to search for.")) };
         let mut found = Vec::new();
         for account in self.inner.store.accounts()? {
+            if query.account_ids.as_ref().is_some_and(|ids| !ids.contains(&account.id)) {
+                continue;
+            }
             let folder_view = match &query.view {
                 MailboxView::Folder { account_id, folder_id } if *account_id == account.id => Some(folder_id.clone()),
                 MailboxView::Folder { .. } => continue,

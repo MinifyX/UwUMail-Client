@@ -34,6 +34,7 @@ fn inbox_query(search: Option<&str>) -> ThreadQuery {
         filter: ListFilter::All,
         search: search.map(String::from),
         conversations: true,
+        account_ids: None,
         cursor: None,
         limit: 50,
     }

@@ -86,6 +86,8 @@ export interface ThreadQuery {
   filter: ListFilter;
   search?: string;
   conversations: boolean;
+  /** Only mail from these mailboxes, e.g. the business ones; every mailbox when left out. */
+  accountIds?: string[];
   cursor?: string;
   limit: number;
 }

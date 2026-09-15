@@ -34,6 +34,7 @@ fn folder_query(account_id: &str, folder_id: &str) -> ThreadQuery {
         filter: ListFilter::All,
         search: None,
         conversations: true,
+        account_ids: None,
         cursor: None,
         limit: 50,
     }

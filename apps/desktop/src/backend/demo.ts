@@ -729,6 +729,7 @@ export class DemoBackend implements Backend {
 
   private inView(message: Message, query: ThreadQuery) {
     const { view } = query;
+    if (query.accountIds && !query.accountIds.includes(message.accountId)) return false;
     if (view.kind === "folder") return message.folderId === view.folderId;
     const role = this.roleOf(message);
     switch (view.role) {

@@ -1138,24 +1138,30 @@ impl Store {
         self.threads(query, Some(message_ids))
     }
 
+    /// `?n, ?n+1, …` for each id, whose values join `values`.
+    fn placeholders(ids: &[String], values: &mut Vec<Value>) -> String {
+        ids.iter()
+            .map(|id| {
+                values.push(Value::Text(id.clone()));
+                format!("?{}", values.len())
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     fn threads(&self, query: &ThreadQuery, only: Option<&[String]>) -> Result<ThreadPage> {
+        let nothing = || Ok(ThreadPage { threads: Vec::new(), next_cursor: None });
         let mut values: Vec<Value> = Vec::new();
         let mut clauses = Vec::new();
         match only {
-            Some(ids) => {
-                if ids.is_empty() {
-                    return Ok(ThreadPage { threads: Vec::new(), next_cursor: None });
-                }
-                let placeholders: Vec<String> = ids
-                    .iter()
-                    .map(|id| {
-                        values.push(Value::Text(id.clone()));
-                        format!("?{}", values.len())
-                    })
-                    .collect();
-                clauses.push(format!("m.id IN ({})", placeholders.join(", ")));
-            }
+            Some([]) => return nothing(),
+            Some(ids) => clauses.push(format!("m.id IN ({})", Self::placeholders(ids, &mut values))),
             None => clauses.push(Self::view_clause(&query.view, &mut values)),
+        }
+        match query.account_ids.as_deref() {
+            Some([]) => return nothing(),
+            Some(ids) => clauses.push(format!("m.account_id IN ({})", Self::placeholders(ids, &mut values))),
+            None => {}
         }
         match query.filter {
             ListFilter::All => {}
@@ -1714,6 +1720,7 @@ mod tests {
                 filter: ListFilter::All,
                 search: None,
                 conversations: true,
+                account_ids: None,
                 cursor: None,
                 limit: 50,
             })
@@ -1766,6 +1773,7 @@ mod tests {
                     filter: ListFilter::All,
                     search: Some(text.into()),
                     conversations: false,
+                    account_ids: None,
                     cursor: None,
                     limit: 50,
                 })
@@ -1775,6 +1783,67 @@ mod tests {
         assert_eq!(query("snack").len(), 1);
         assert_eq!(query("konto").first().map(|t| t.subject.as_str()), Some("Rechnung"));
         assert!(query("\"unbalanced").is_empty());
+    }
+
+    #[test]
+    fn unified_views_can_leave_out_mailboxes() {
+        let (store, _, inbox, _) = store_with_account();
+        store
+            .insert_account(&AccountRecord {
+                id: "biz".into(),
+                name: "Studio".into(),
+                email: "mini@studio.example".into(),
+                display_name: "Mini".into(),
+                color: AccountColor::Violet,
+                auth: AuthKind::Password,
+                username: "mini@studio.example".into(),
+                imap: ServerSettings { host: "imap.example".into(), port: 993, security: Security::Tls },
+                smtp: ServerSettings { host: "smtp.example".into(), port: 465, security: Security::Tls },
+                protocol: Protocol::Imap,
+                jmap_url: None,
+            })
+            .unwrap();
+        let studio_inbox = store
+            .upsert_folder(
+                "biz",
+                &FolderInfo {
+                    path: "INBOX",
+                    name: "INBOX",
+                    role: Some(FolderRole::Inbox),
+                    delimiter: Some("."),
+                    selectable: true,
+                    parent_ref: None,
+                },
+            )
+            .unwrap();
+        insert(
+            &store,
+            &inbox,
+            1,
+            &raw("a@x", "Spieleabend", "noah@x.example", None, "Freitag?", "Mon, 14 Sep 2026 09:00:00 +0000"),
+        );
+        let offer = raw("b@x", "Angebot", "emma@x.example", None, "Freitag passt", "Mon, 14 Sep 2026 10:00:00 +0000");
+        store
+            .insert_message("biz", &studio_inbox, 1, MessageFlags::default(), offer.len() as u64, None, &parse(&offer))
+            .unwrap();
+
+        let subjects = |account_ids: Option<Vec<String>>, search: Option<&str>| -> Vec<String> {
+            let query = ThreadQuery {
+                view: MailboxView::Unified { role: UnifiedRole::Inbox },
+                filter: ListFilter::All,
+                search: search.map(Into::into),
+                conversations: true,
+                account_ids,
+                cursor: None,
+                limit: 50,
+            };
+            store.list_threads(&query).unwrap().threads.into_iter().map(|t| t.subject).collect()
+        };
+        assert_eq!(subjects(None, None), vec!["Angebot", "Spieleabend"]);
+        assert_eq!(subjects(Some(vec!["biz".into()]), None), vec!["Angebot"]);
+        assert_eq!(subjects(Some(vec!["acc".into()]), Some("freitag")), vec!["Spieleabend"]);
+        // A workspace without mailboxes shows nothing rather than everything.
+        assert!(subjects(Some(Vec::new()), None).is_empty());
     }
 
     #[test]
