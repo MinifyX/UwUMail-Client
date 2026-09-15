@@ -15,6 +15,7 @@ import type {
   Protocol,
   QueuedSend,
   SenderPicture,
+  Signature,
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
@@ -44,6 +45,9 @@ export interface Backend {
   addIdentity(accountId: string, email: string, name: string): Promise<Identity>;
   renameIdentity(identityId: string, name: string): Promise<void>;
   removeIdentity(identityId: string): Promise<void>;
+  listSignatures(): Promise<Signature[]>;
+  saveSignature(signature: Signature): Promise<Signature>;
+  deleteSignature(signatureId: string): Promise<void>;
   discoverSettings(email: string): Promise<DiscoveredSettings>;
   addAccount(account: NewAccount): Promise<Account>;
   removeAccount(accountId: string): Promise<void>;

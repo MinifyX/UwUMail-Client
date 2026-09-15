@@ -133,7 +133,10 @@
     "removeAttachment": "Remove {{name}}",
     "draftSaving": "Saving …",
     "draftSaved": "Draft saved · {{time}}",
-    "draftLocal": "Only saved on this device"
+    "draftLocal": "Only saved on this device",
+    "signature": "Signature",
+    "noSignature": "No signature",
+    "editSignatures": "Edit signatures …"
   },
   "toast": {
     "sent": "Message sent",
@@ -343,7 +346,25 @@
     "senderEmail": "Address",
     "addSender": "Add address",
     "removeSender": "Remove {{email}}",
-    "senderAdded": "You can write from {{email}} now"
+    "senderAdded": "You can write from {{email}} now",
+    "signatures": "Signatures",
+    "signaturesDesc": "Per sender address, with bold, links and pictures. Add several and choose which one is added to new mail and which one to replies.",
+    "signatureFor": "Sender address",
+    "signaturesEmpty": "There's no signature for this address yet.",
+    "newSignature": "New signature",
+    "editSignature": "Edit {{name}}",
+    "deleteSignature": "Delete {{name}}",
+    "signatureName": "Signature name",
+    "signatureNamePlaceholder": "Name, e.g. “Long” or “Short”",
+    "signaturePlaceholder": "Kind regards …",
+    "signatureImage": "Insert picture",
+    "signatureImageFailed": "The picture couldn't be added. Use a PNG, JPG, GIF or WebP under 8 MB.",
+    "signatureForNew": "Add to new mail",
+    "signatureForReplies": "Add to replies and forwards",
+    "signatureDefaultNew": "New mail",
+    "signatureDefaultReplies": "Replies",
+    "signatureSaved": "Signature saved",
+    "signatureUntitled": "Signature"
   },
   "theme": {
     "system": "System",
@@ -384,7 +405,8 @@
     "close": "Close",
     "remove": "Remove",
     "retry": "Try again",
-    "yesterday": "Yesterday"
+    "yesterday": "Yesterday",
+    "save": "Save"
   },
   "folder": {
     "inbox": "Inbox",

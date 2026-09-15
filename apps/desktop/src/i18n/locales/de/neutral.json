@@ -133,7 +133,10 @@
     "removeAttachment": "{{name}} entfernen",
     "draftSaving": "Speichert …",
     "draftSaved": "Entwurf gespeichert · {{time}}",
-    "draftLocal": "Nur auf diesem Gerät gespeichert"
+    "draftLocal": "Nur auf diesem Gerät gespeichert",
+    "signature": "Signatur",
+    "noSignature": "Keine Signatur",
+    "editSignatures": "Signaturen bearbeiten …"
   },
   "toast": {
     "sent": "Mail gesendet",
@@ -343,7 +346,25 @@
     "senderEmail": "Adresse",
     "addSender": "Adresse hinzufügen",
     "removeSender": "{{email}} entfernen",
-    "senderAdded": "Du kannst jetzt von {{email}} schreiben"
+    "senderAdded": "Du kannst jetzt von {{email}} schreiben",
+    "signatures": "Signaturen",
+    "signaturesDesc": "Pro Absenderadresse, mit Fett, Links und Bildern. Du kannst mehrere anlegen und festlegen, welche bei neuen Mails und welche bei Antworten automatisch dazukommt.",
+    "signatureFor": "Absenderadresse",
+    "signaturesEmpty": "Für diese Adresse gibt es noch keine Signatur.",
+    "newSignature": "Neue Signatur",
+    "editSignature": "{{name}} bearbeiten",
+    "deleteSignature": "{{name}} löschen",
+    "signatureName": "Name der Signatur",
+    "signatureNamePlaceholder": "Name, z. B. „Lang“ oder „Kurz“",
+    "signaturePlaceholder": "Liebe Grüße …",
+    "signatureImage": "Bild einfügen",
+    "signatureImageFailed": "Das Bild konnte nicht eingefügt werden. Nimm ein PNG, JPG, GIF oder WebP unter 8 MB.",
+    "signatureForNew": "Automatisch bei neuen Mails",
+    "signatureForReplies": "Automatisch bei Antworten und Weiterleitungen",
+    "signatureDefaultNew": "Neue Mails",
+    "signatureDefaultReplies": "Antworten",
+    "signatureSaved": "Signatur gespeichert",
+    "signatureUntitled": "Signatur"
   },
   "theme": {
     "system": "System",
@@ -384,7 +405,8 @@
     "close": "Schließen",
     "remove": "Entfernen",
     "retry": "Nochmal versuchen",
-    "yesterday": "Gestern"
+    "yesterday": "Gestern",
+    "save": "Speichern"
   },
   "folder": {
     "inbox": "Posteingang",

@@ -18,6 +18,7 @@ import type {
   Protocol,
   QueuedSend,
   SenderPicture,
+  Signature,
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
@@ -73,6 +74,18 @@ export class TauriBackend implements Backend {
 
   removeIdentity(identityId: string) {
     return call<void>("remove_identity", { identityId });
+  }
+
+  listSignatures() {
+    return call<Signature[]>("list_signatures");
+  }
+
+  saveSignature(signature: Signature) {
+    return call<Signature>("save_signature", { signature });
+  }
+
+  deleteSignature(signatureId: string) {
+    return call<void>("delete_signature", { signatureId });
   }
 
   discoverSettings(email: string) {

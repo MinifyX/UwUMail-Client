@@ -12,6 +12,8 @@ pub struct ParsedAttachment {
     pub mime_type: String,
     pub size: u64,
     pub inline: bool,
+    /// For images the HTML shows through `cid:`, without angle brackets.
+    pub content_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -106,12 +108,15 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
                     None => ct.ctype().to_string(),
                 })
                 .unwrap_or_else(|| "application/octet-stream".into());
-            let inline = part.content_disposition().is_some_and(|d| d.is_inline()) && part.content_id().is_some();
+            let content_id = part.content_id().map(|id| id.trim().trim_matches(['<', '>']).to_string());
+            // Parts with a Content-ID belong into the HTML unless they say they're attachments.
+            let inline = content_id.is_some() && !part.content_disposition().is_some_and(|d| d.is_attachment());
             ParsedAttachment {
                 filename: crate::attachments::clean_display_name(part.attachment_name().unwrap_or("attachment")),
                 mime_type,
                 size: part.contents().len() as u64,
                 inline,
+                content_id,
             }
         })
         .collect();

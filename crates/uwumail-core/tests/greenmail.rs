@@ -526,5 +526,37 @@ async fn undo_send_takes_mail_back_and_otherwise_sends_it() {
     engine.remove_identity(&identity.id).unwrap();
     assert!(engine.list_identities().unwrap().iter().all(|i| i.email != alias));
 
+    // Signatures belong to a sender address that exists.
+    let signature = engine
+        .save_signature(Signature {
+            id: String::new(),
+            email: email.to_uppercase(),
+            name: "Lang".into(),
+            html: "<p>Liebe Grüße</p>".into(),
+            for_new: true,
+            for_replies: false,
+        })
+        .unwrap();
+    assert_eq!(signature.email, email, "stored with the address as it is set up");
+    assert!(engine.save_signature(Signature { email: "fremd@uwumail.test".into(), ..signature.clone() }).is_err());
+    assert_eq!(engine.list_signatures().unwrap().len(), 1);
+
+    // A picture in the signature travels as an embedded part and comes back as one.
+    let pictured = format!("Mit Logo {unique}");
+    let html = r#"<p>Hi</p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" alt="Logo">"#;
+    engine.send(OutgoingMessage { html: html.into(), ..message(&pictured) }).await.unwrap();
+    let thread = wait_for("the mail with the logo", async || {
+        engine.sync_now(Some(&account.id));
+        engine.list_threads(&inbox_query(None)).unwrap().threads.into_iter().find(|t| t.subject == pictured)
+    })
+    .await;
+    let received = engine.get_thread(&thread.id, true).await.unwrap().messages.remove(0);
+    let logo = received.attachments.iter().find(|a| a.inline).expect("the logo is an inline part");
+    let cid = logo.content_id.clone().expect("with a Content-ID");
+    assert!(received.body_html.unwrap_or_default().contains(&format!("cid:{cid}")));
+    let file = engine.attachment(&logo.id).await.unwrap();
+    assert!(std::fs::read(&file.path).unwrap().starts_with(b"\x89PNG"));
+    engine.delete_signature(&signature.id).unwrap();
+
     engine.remove_account(&account.id).await.unwrap();
 }

@@ -6,7 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { isAndroid, PRO_QUERY, useIsPhone, useMediaQuery } from "@/lib/device";
 import { useHotkeys, type HotkeyMap } from "@/lib/hotkeys";
-import { useAccounts, useBackendEvents, useIdentities } from "@/lib/queries";
+import { useAccounts, useBackendEvents, useIdentities, useSignatures } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
@@ -54,8 +54,9 @@ export function MailShell() {
   // Android tablets in portrait lack the room for three columns.
   const pro = layout === "pro" && (roomForPro || !isAndroid);
   useAccounts();
-  // Loaded early, so a reply opens with the right sender address.
+  // Loaded early, so a reply opens with the right sender address and signature.
   useIdentities();
+  useSignatures();
   useBackendEvents();
 
   // A draft that never reached the Drafts folder (offline, or UwUMail was closed) comes back.

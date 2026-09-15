@@ -99,7 +99,9 @@
     "runInBackgroundDesc": "Closing the window lets Nyu nap next to the clock and keep watch for new mail. Quit from the icon there.",
     "upToDate": "All fresh, nothing to do ✧",
     "backgroundPushDesc": "Nyu stays awake and watches your mailbox. Android shows a quiet notification for that, which you can hide ♡",
-    "senderAdded": "{{email}} is ready to go (｀・ω・´)ゞ"
+    "senderAdded": "{{email}} is ready to go (｀・ω・´)ゞ",
+    "signatureSaved": "Signature looks great ✧",
+    "signaturePlaceholder": "Kind regards ✿"
   },
   "attachment": {
     "loading": "Unpacking the attachment…",

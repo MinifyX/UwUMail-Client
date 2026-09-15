@@ -22,6 +22,7 @@ import type {
   Protocol,
   QueuedSend,
   SenderPicture,
+  Signature,
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
@@ -72,6 +73,19 @@ export class DemoBackend implements Backend {
   private mailtoTaken = false;
   /** Draft key → the demo message that holds the draft, and what the composer sent. */
   private drafts = new Map<string, { messageId: string; draft: OutgoingMessage }>();
+  private signatures: Signature[] = [
+    {
+      id: "sig-demo",
+      email: DEMO_ACCOUNTS[0]!.email,
+      name: lang() === "de" ? "Lang" : "Long",
+      html:
+        lang() === "de"
+          ? "<p>Liebe Grüße<br><b>Mini</b> · UwUMail-Team</p>"
+          : "<p>Kind regards<br><b>Mini</b> · UwUMail team</p>",
+      forNew: true,
+      forReplies: true,
+    },
+  ];
   private identities: Identity[] = [
     {
       id: "id-studio",
@@ -145,6 +159,31 @@ export class DemoBackend implements Backend {
   async removeIdentity(identityId: string) {
     await wait(80);
     this.identities = this.identities.filter((i) => i.id !== identityId);
+  }
+
+  async listSignatures() {
+    await wait(60);
+    return structuredClone(this.signatures);
+  }
+
+  async saveSignature(signature: Signature) {
+    await wait(120);
+    const saved = { ...signature, id: signature.id || `sig-${this.nextId++}` };
+    const email = saved.email.toLowerCase();
+    this.signatures = this.signatures.map((s) =>
+      s.email.toLowerCase() === email && s.id !== saved.id
+        ? { ...s, forNew: saved.forNew ? false : s.forNew, forReplies: saved.forReplies ? false : s.forReplies }
+        : s,
+    );
+    const index = this.signatures.findIndex((s) => s.id === saved.id);
+    if (index >= 0) this.signatures[index] = saved;
+    else this.signatures.push(saved);
+    return structuredClone(saved);
+  }
+
+  async deleteSignature(signatureId: string) {
+    await wait(80);
+    this.signatures = this.signatures.filter((s) => s.id !== signatureId);
   }
 
   async discoverSettings(email: string): Promise<DiscoveredSettings> {

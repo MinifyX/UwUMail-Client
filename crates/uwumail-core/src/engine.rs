@@ -274,6 +274,38 @@ impl Engine {
         Ok(())
     }
 
+    pub fn list_signatures(&self) -> Result<Vec<Signature>> {
+        self.inner.store.signatures()
+    }
+
+    /// Adds or updates a signature for one of the sender addresses.
+    pub fn save_signature(&self, mut signature: Signature) -> Result<Signature> {
+        const MAX_SIGNATURE: usize = 1024 * 1024;
+        if signature.html.len() > MAX_SIGNATURE {
+            return Err(Error::invalid("This signature is too big. Try a smaller picture."));
+        }
+        let email = signature.email.trim().to_string();
+        let identity = self
+            .list_identities()?
+            .into_iter()
+            .find(|identity| identity.email.eq_ignore_ascii_case(&email))
+            .ok_or_else(|| Error::invalid("This sender address isn't set up."))?;
+        signature.email = identity.email;
+        signature.name = signature.name.trim().to_string();
+        if signature.id.is_empty() {
+            signature.id = uuid::Uuid::new_v4().to_string();
+        }
+        self.inner.store.save_signature(&signature)?;
+        Ok(signature)
+    }
+
+    pub fn delete_signature(&self, signature_id: &str) -> Result<()> {
+        if !self.inner.store.delete_signature(signature_id)? {
+            return Err(Error::not_found("This signature no longer exists."));
+        }
+        Ok(())
+    }
+
     /// The From address for a message: the chosen identity of the account, or its own address.
     fn sender_for(&self, account: &AccountRecord, from_email: Option<&str>) -> Result<Address> {
         let Some(email) = from_email.filter(|email| !email.eq_ignore_ascii_case(&account.email)) else {
@@ -985,7 +1017,14 @@ impl Engine {
             .pop()
             .ok_or_else(|| Error::not_found("This message no longer exists."))?;
         let raw = self.inner.raw_message(&location).await?;
-        self.inner.attachments.store_from_raw(&message_id, index, &raw)
+        let file = self.inner.attachments.store_from_raw(&message_id, index, &raw)?;
+        // A mail's other embedded images are asked for right after; one download for all of them.
+        for (other, attachment) in message.attachments.iter().enumerate() {
+            if other != index && attachment.inline && self.inner.attachments.cached(&message_id, other).is_none() {
+                let _ = self.inner.attachments.store_from_raw(&message_id, other, &raw);
+            }
+        }
+        Ok(file)
     }
 
     /// Copies an attachment to a place the user picked.

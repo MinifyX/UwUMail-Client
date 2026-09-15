@@ -15,6 +15,7 @@ export const queryKeys = {
   threads: ["threads"] as const,
   thread: ["thread"] as const,
   identities: ["identities"] as const,
+  signatures: ["signatures"] as const,
 };
 
 export function useAccounts() {
@@ -24,6 +25,10 @@ export function useAccounts() {
 /** Every address the mailboxes can send from. */
 export function useIdentities() {
   return useQuery({ queryKey: queryKeys.identities, queryFn: () => backend().listIdentities() });
+}
+
+export function useSignatures() {
+  return useQuery({ queryKey: queryKeys.signatures, queryFn: () => backend().listSignatures() });
 }
 
 export function useFolders() {

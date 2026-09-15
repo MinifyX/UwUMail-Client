@@ -11,6 +11,7 @@ import { queryKeys, useAccounts, useIdentities } from "@/lib/queries";
 import { UNDO_SEND_CHOICES, useSettings, type UndoSendSeconds } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { Row } from "./Row";
+import { Signatures } from "./Signatures";
 
 export function Writing() {
   const { t } = useT();
@@ -30,6 +31,7 @@ export function Writing() {
         />
       </Row>
       <Senders />
+      <Signatures />
     </>
   );
 }

@@ -82,6 +82,50 @@ pub struct Mail<'a> {
     pub draft: bool,
 }
 
+/// Images pasted into a mail or its signature arrive as `data:` URLs, which many mail programs
+/// don't show. They travel as inline parts instead, referenced by `cid:`.
+fn inline_images(html: &str) -> (String, Vec<(String, ContentType, Vec<u8>)>) {
+    const MARKER: &str = "data:image/";
+    let mut out = String::with_capacity(html.len());
+    let mut images = Vec::new();
+    let mut rest = html;
+    while let Some(start) = rest.find(MARKER) {
+        let (before, from) = rest.split_at(start);
+        // Only whole attribute values: src="data:…" or src='data:…'.
+        let Some(quote) = before.chars().last().filter(|c| matches!(c, '"' | '\'')) else {
+            out.push_str(&rest[..start + MARKER.len()]);
+            rest = &rest[start + MARKER.len()..];
+            continue;
+        };
+        let Some(end) = from.find(quote) else { break };
+        out.push_str(before);
+        match data_image(&from[..end]) {
+            Some((content_type, bytes)) => {
+                let cid = format!("img{}.{}@uwumail", images.len() + 1, uuid::Uuid::new_v4().simple());
+                out.push_str("cid:");
+                out.push_str(&cid);
+                images.push((cid, content_type, bytes));
+            }
+            None => out.push_str(&from[..end]),
+        }
+        rest = &from[end..];
+    }
+    out.push_str(rest);
+    (out, images)
+}
+
+/// A base64 `data:` URL of a common image type.
+fn data_image(url: &str) -> Option<(ContentType, Vec<u8>)> {
+    let (meta, data) = url.strip_prefix("data:")?.split_once(',')?;
+    let mime = meta.strip_suffix(";base64")?.to_ascii_lowercase();
+    if !["image/png", "image/jpeg", "image/gif", "image/webp"].contains(&mime.as_str()) {
+        return None;
+    }
+    let data: String = data.chars().filter(|c| !c.is_whitespace()).collect();
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data).ok()?;
+    Some((ContentType::parse(&mime).ok()?, bytes))
+}
+
 pub fn build(mail: &Mail<'_>) -> Result<Message> {
     let Mail { from, to, cc, bcc, subject, text, html, threading, attachments, message_id, draft } = *mail;
     if to.len() + cc.len() + bcc.len() == 0 && !draft {
@@ -126,7 +170,17 @@ pub fn build(mail: &Mail<'_>) -> Result<Message> {
         builder = builder.in_reply_to(parent).references(references);
     }
 
-    let body = MultiPart::alternative_plain_html(text.to_string(), html.to_string());
+    // Drafts keep their images as they are, so writing continues with them.
+    let (html, images) = if draft { (html.to_string(), Vec::new()) } else { inline_images(html) };
+    let body = if images.is_empty() {
+        MultiPart::alternative_plain_html(text.to_string(), html)
+    } else {
+        let mut related = MultiPart::related().singlepart(SinglePart::html(html));
+        for (cid, content_type, bytes) in images {
+            related = related.singlepart(Attachment::new_inline(cid).body(bytes, content_type));
+        }
+        MultiPart::alternative().singlepart(SinglePart::plain(text.to_string())).multipart(related)
+    };
     let message = if attachments.is_empty() {
         builder.multipart(body)
     } else {
@@ -262,6 +316,37 @@ mod tests {
         assert!(raw.contains("Message-ID: <abc@uwumail.dev>"));
         assert!(raw.contains("secret@uwumail.dev"), "a draft remembers Bcc");
         assert!(build(&Mail { draft: true, ..mail(&from, &[], "") }).is_ok(), "an empty draft can be saved");
+    }
+
+    #[test]
+    fn embeds_pasted_images() {
+        let from = Address { name: None, email: "mini@uwumail.dev".into() };
+        let to = [Address { name: None, email: "leni@wanders.example".into() }];
+        let html = r#"<p>Liebe Grüße</p><img src="data:image/png;base64,iVBORw0KGgo=" alt="Logo"><img src='https://x.example/a.png'>"#;
+        let message = build(&Mail { html, ..mail(&from, &to, "Hi") }).unwrap();
+        let raw = String::from_utf8(message.formatted()).unwrap();
+        assert!(raw.contains("multipart/related"));
+        assert!(raw.contains("Content-ID: <img1."));
+        assert!(raw.contains("cid:img1."));
+        assert!(!raw.contains("data:image"), "the image travels as a part, not inside the HTML");
+        assert!(raw.contains("https://x.example/a.png"), "other images stay untouched");
+
+        let draft = build(&Mail { html, draft: true, ..mail(&from, &to, "Hi") }).unwrap();
+        assert!(String::from_utf8(draft.formatted()).unwrap().contains("data:image/png"));
+        let broken =
+            build(&Mail { html: r#"<img src="data:image/svg+xml;base64,PHN2Zz4=">"#, ..mail(&from, &to, "Hi") })
+                .unwrap();
+        assert!(
+            !String::from_utf8(broken.formatted()).unwrap().contains("multipart/related"),
+            "only plain image types"
+        );
+
+        // What arrives: the HTML points at an inline part the reader can show.
+        let parsed = crate::mime::parse(&message.formatted());
+        let image = &parsed.attachments[0];
+        assert!(image.inline);
+        let cid = image.content_id.as_deref().unwrap();
+        assert!(parsed.html.unwrap().contains(&format!("cid:{cid}")));
     }
 
     #[test]

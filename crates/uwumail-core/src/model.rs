@@ -254,6 +254,9 @@ pub struct Attachment {
     pub mime_type: String,
     pub size: u64,
     pub inline: bool,
+    /// For images the HTML shows through `cid:`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -346,6 +349,23 @@ pub struct Identity {
     pub primary: bool,
     /// Comes from the mail server and is managed there.
     pub from_server: bool,
+}
+
+/// A signature for one sender address. There can be several; one may be the default for new
+/// mail and one for replies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Signature {
+    /// Empty when saving a new one.
+    #[serde(default)]
+    pub id: String,
+    pub email: String,
+    pub name: String,
+    pub html: String,
+    #[serde(default)]
+    pub for_new: bool,
+    #[serde(default)]
+    pub for_replies: bool,
 }
 
 /// A message waiting for its "undo send" time.

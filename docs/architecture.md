@@ -171,6 +171,23 @@ either taken back or sent, never both. Queued mail survives closing UwUMail and
 goes out on the next start. The result arrives as `send:done` or
 `send:failed`; a failed mail is kept as a draft.
 
+### Senders and signatures
+
+Every mailbox can send from its own address and from identities: JMAP
+mailboxes bring theirs from the server (`Identity/get`, checked every ten
+minutes), and aliases can be added by hand. The engine refuses a From address
+that isn't set up for that mailbox. Signatures are kept on this device per
+sender address (`signatures` table); one can be the default for new mail and
+one for replies. The composer marks the inserted block with
+`data-uwu-signature`, so switching the sender or picking another signature
+replaces it; the marker is removed before sending.
+
+Pictures in the HTML (`data:` URLs from signatures or pasting) become inline
+parts in a `multipart/related` body with `cid:` links, because many mail
+programs don't show `data:` images. Received mail works the other way round:
+attachments keep their Content-ID, and the reader turns `cid:` links into blob
+URLs of the cached files, which the mail frame's policy already allows.
+
 ### Addons
 
 See [addons.md](addons.md). In short: each addon runs in its own sandboxed

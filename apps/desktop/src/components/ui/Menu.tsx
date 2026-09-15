@@ -17,11 +17,13 @@ interface MenuProps {
   }) => ReactNode;
   items: MenuItem[];
   align?: "start" | "end";
+  /** Opens upwards, e.g. from a toolbar at the bottom. */
+  side?: "below" | "above";
   className?: string;
 }
 
 /** A small popup list of actions. Closes on selection, Escape and clicks outside. */
-export function Menu({ trigger, items, align = "start", className }: MenuProps) {
+export function Menu({ trigger, items, align = "start", side = "below", className }: MenuProps) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -75,7 +77,8 @@ export function Menu({ trigger, items, align = "start", className }: MenuProps) 
             }
           }}
           className={clsx(
-            "absolute top-[calc(100%+6px)] z-40 flex w-max max-w-[min(360px,calc(100vw-48px))] min-w-[200px] animate-pop flex-col rounded-2xl border border-line bg-surface p-1.5 text-ink shadow-float",
+            "absolute z-40 flex w-max max-w-[min(360px,calc(100vw-48px))] min-w-[200px] animate-pop flex-col rounded-2xl border border-line bg-surface p-1.5 text-ink shadow-float",
+            side === "above" ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]",
             align === "end" ? "right-0" : "left-0",
           )}
         >

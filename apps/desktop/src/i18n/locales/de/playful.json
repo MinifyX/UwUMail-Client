@@ -99,7 +99,9 @@
     "runInBackgroundDesc": "Beim Schließen macht Nyu neben der Uhr ein Nickerchen und passt weiter auf neue Mails auf. Beenden über das Symbol dort.",
     "upToDate": "Alles frisch, nichts zu tun ✧",
     "backgroundPushDesc": "Nyu bleibt wach und passt auf dein Postfach auf. Android zeigt dafür eine stille Mitteilung, die du ausblenden kannst ♡",
-    "senderAdded": "{{email}} ist startklar (｀・ω・´)ゞ"
+    "senderAdded": "{{email}} ist startklar (｀・ω・´)ゞ",
+    "signatureSaved": "Signatur sitzt ✧",
+    "signaturePlaceholder": "Liebe Grüße ✿"
   },
   "attachment": {
     "loading": "Ich pack den Anhang aus…",

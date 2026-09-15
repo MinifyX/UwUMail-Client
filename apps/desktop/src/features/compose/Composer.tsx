@@ -12,12 +12,15 @@ import {
   Paperclip,
   PenLine,
   Send,
+  Signature as SignatureIcon,
   Trash,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
-import type { OutgoingAttachment } from "@/backend/types";
+import type { OutgoingAttachment, Signature } from "@/backend/types";
+import { Menu } from "@/components/ui/Menu";
+import { defaultSignature, withSignature, withoutSignatureMarker } from "@/lib/signatures";
 import { useBackLayer } from "@/lib/backStack";
 import { useIsPhone } from "@/lib/device";
 import { clearLocalDraft, markLocalDraftSaved, saveLocalDraft } from "./localDraft";
@@ -27,7 +30,7 @@ import { useT } from "@/i18n";
 import { formatSize } from "@/lib/format";
 import { modKey } from "@/lib/platform";
 import { htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
-import { useAccounts, useIdentities, useMessageActions } from "@/lib/queries";
+import { useAccounts, useIdentities, useMessageActions, useSignatures } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi, type ComposeRequest } from "@/state/ui";
@@ -77,8 +80,27 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const [error, setError] = useState<string | null>(null);
   const editor = useRef<HTMLDivElement | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Signatures: the address's default goes in when the draft starts, or once they've loaded.
+  const { data: signatures } = useSignatures();
+  const signatureKind = request.mode === "new" ? "new" : "reply";
+  const placement = request.mode === "new" ? "end" : "beforeQuote";
+  const emailOf = (account: string, from: string) => from || accounts.find((a) => a.id === account)?.email || "";
+  const [signedAtStart] = useState(() => !request.restore && signatures !== undefined && identities !== undefined);
+  const [initialBody] = useState(() => {
+    if (!signedAtStart || !signatures) return initial.html;
+    const from = initial.fromEmail ?? (request.source ? replyFrom(request.source, identities ?? []) : "");
+    const signature = defaultSignature(
+      signatures,
+      emailOf(initial.accountId || accounts[0]?.id || "", from),
+      signatureKind,
+    );
+    return signature ? withSignature(initial.html, signature, placement) : initial.html;
+  });
+  const signatureAdded = useRef(signedAtStart);
+  /** Still the automatic signature, so changing the sender changes it too. */
+  const autoSignature = useRef(true);
   // The body lives outside React, so it survives minimizing (the editor unmounts meanwhile).
-  const body = useRef(initial.html);
+  const body = useRef(initialBody);
   const [edits, setEdits] = useState(0);
   const phone = useIsPhone();
   // On the phone the back gesture shrinks the draft to a bar instead of losing it.
@@ -94,8 +116,25 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   /** Sent or thrown away: nothing may save the draft again. */
   const finished = useRef(false);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  /** Puts `signature` in place of the current one (null removes it). Only touches the editor, not React state. */
+  const applySignature = useCallback(
+    (signature: Signature | null) => {
+      const next = withSignature(editor.current?.innerHTML ?? body.current, signature, placement);
+      body.current = next;
+      if (editor.current) editor.current.innerHTML = next;
+    },
+    [placement],
+  );
   // Until someone picks a sender, a reply comes from the address it was sent to (also once the addresses load).
   const fromEmail = draft.fromEmail ?? (request.source ? replyFrom(request.source, identities ?? []) : "");
+  const senderEmail = emailOf(accountId, fromEmail);
+  useEffect(() => {
+    if (signatureAdded.current || request.restore || !signatures || !identities || dirty.current) return;
+    signatureAdded.current = true;
+    const signature = defaultSignature(signatures, senderEmail, signatureKind);
+    if (signature) applySignature(signature);
+  }, [signatures, identities, senderEmail, signatureKind, request.restore, applySignature]);
   const latest = useRef({ draft, accountId, attachments, fromEmail });
   useEffect(() => {
     latest.current = { draft, accountId, attachments, fromEmail };
@@ -253,6 +292,13 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       fromServer: false,
     }));
 
+  const pickSignature = (signature: Signature | null) => {
+    autoSignature.current = false;
+    applySignature(signature);
+    changed();
+    setEdits((count) => count + 1);
+  };
+
   const update = (patch: Partial<DraftState>) => {
     setError(null);
     changed();
@@ -275,7 +321,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       return;
     }
     // What people paste can carry forms or remote content; send only the safe part.
-    const html = quotableHtml(editor.current?.innerHTML ?? body.current);
+    const html = withoutSignatureMarker(quotableHtml(editor.current?.innerHTML ?? body.current));
     setSending(true);
     finished.current = true;
     try {
@@ -450,7 +496,11 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
               const sender = senders.find(
                 (s) => senderKey(s.accountId, s.primary ? "" : s.email) === event.target.value,
               );
-              if (sender) update({ accountId: sender.accountId, fromEmail: sender.primary ? "" : sender.email });
+              if (!sender) return;
+              if (autoSignature.current && signatures) {
+                applySignature(defaultSignature(signatures, sender.email, signatureKind) ?? null);
+              }
+              update({ accountId: sender.accountId, fromEmail: sender.primary ? "" : sender.email });
             }}
             className="h-9 min-w-0 flex-1 bg-transparent text-[14px] outline-none"
           >
@@ -591,6 +641,28 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           onClick={() => format("createLink")}
         />
         <IconButton icon={Paperclip} size="sm" label={t("compose.attach")} onClick={() => fileInput.current?.click()} />
+        <Menu
+          side="above"
+          items={[
+            ...(signatures ?? [])
+              .filter((signature) => signature.email.toLowerCase() === senderEmail.toLowerCase())
+              .map((signature) => ({ label: signature.name, onSelect: () => pickSignature(signature) })),
+            { label: t("compose.noSignature"), onSelect: () => pickSignature(null) },
+            { label: t("compose.editSignatures"), onSelect: () => useUi.getState().openSettings("compose") },
+          ]}
+          trigger={(menu) => (
+            <IconButton
+              icon={SignatureIcon}
+              size="sm"
+              label={t("compose.signature")}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={menu.toggle}
+              aria-haspopup={menu["aria-haspopup"]}
+              aria-expanded={menu["aria-expanded"]}
+              aria-controls={menu["aria-controls"]}
+            />
+          )}
+        />
         <input
           ref={fileInput}
           type="file"

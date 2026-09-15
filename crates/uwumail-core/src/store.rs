@@ -135,6 +135,18 @@ CREATE TABLE identities (
     UNIQUE (account_id, email)
 );
 "#,
+    r#"
+-- Signatures per sender address; kept on this device.
+CREATE TABLE signatures (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL COLLATE NOCASE,
+    name TEXT NOT NULL,
+    html TEXT NOT NULL,
+    for_new INTEGER NOT NULL DEFAULT 0,
+    for_replies INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+"#,
 ];
 
 /// A stable positive stand-in for IMAP's uid, so JMAP emails fit the same table.
@@ -714,6 +726,7 @@ impl Store {
                 mime_type: a.mime_type.clone(),
                 size: a.size,
                 inline: a.inline,
+                content_id: a.content_id.clone(),
             })
             .collect();
 
@@ -871,6 +884,7 @@ impl Store {
                 mime_type: a.mime_type.clone(),
                 size: a.size,
                 inline: a.inline,
+                content_id: a.content_id.clone(),
             })
             .collect();
         tx.execute(
@@ -1327,6 +1341,61 @@ impl Store {
         Ok(changed > 0)
     }
 
+    // -------------------------------------------------------------- signatures
+
+    pub fn signatures(&self) -> Result<Vec<Signature>> {
+        let conn = self.conn();
+        let mut stmt = conn
+            .prepare("SELECT id, email, name, html, for_new, for_replies FROM signatures ORDER BY email, created_at")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(Signature {
+                    id: row.get(0)?,
+                    email: row.get(1)?,
+                    name: row.get(2)?,
+                    html: row.get(3)?,
+                    for_new: row.get(4)?,
+                    for_replies: row.get(5)?,
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
+    /// Adds or updates a signature; being the default for new mail or replies moves over from
+    /// the address's other signatures.
+    pub fn save_signature(&self, signature: &Signature) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        if signature.for_new {
+            tx.execute("UPDATE signatures SET for_new = 0 WHERE email = ?1", [&signature.email])?;
+        }
+        if signature.for_replies {
+            tx.execute("UPDATE signatures SET for_replies = 0 WHERE email = ?1", [&signature.email])?;
+        }
+        tx.execute(
+            "INSERT INTO signatures (id, email, name, html, for_new, for_replies, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT (id) DO UPDATE SET email = excluded.email, name = excluded.name, html = excluded.html,
+                for_new = excluded.for_new, for_replies = excluded.for_replies",
+            params![
+                signature.id,
+                signature.email,
+                signature.name,
+                signature.html,
+                signature.for_new,
+                signature.for_replies,
+                crate::mime::now()
+            ],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn delete_signature(&self, id: &str) -> Result<bool> {
+        Ok(self.conn().execute("DELETE FROM signatures WHERE id = ?1", [id])? > 0)
+    }
+
     // ------------------------------------------------------------------ outbox
 
     /// Queues a message; `send_at` in Unix milliseconds.
@@ -1763,6 +1832,32 @@ mod tests {
 
         store.replace_server_identities(&account, &server(&[("s1", "hallo@uwumail.dev", "Server")])).unwrap();
         assert!(store.identities().unwrap().iter().all(|i| i.email != "news@uwumail.dev"));
+    }
+
+    #[test]
+    fn one_default_signature_per_address() {
+        let store = Store::open_in_memory().unwrap();
+        let signature = |id: &str, email: &str, for_new: bool, for_replies: bool| Signature {
+            id: id.into(),
+            email: email.into(),
+            name: id.into(),
+            html: format!("<p>{id}</p>"),
+            for_new,
+            for_replies,
+        };
+        store.save_signature(&signature("lang", "mini@uwumail.dev", true, true)).unwrap();
+        store.save_signature(&signature("studio", "hallo@uwumail.dev", true, false)).unwrap();
+        store.save_signature(&signature("kurz", "MINI@uwumail.dev", false, true)).unwrap();
+        let all = store.signatures().unwrap();
+        let get = |id: &str| all.iter().find(|s| s.id == id).unwrap().clone();
+        assert!(get("lang").for_new && !get("lang").for_replies, "replies moved to the short one");
+        assert!(get("kurz").for_replies);
+        assert!(get("studio").for_new, "other addresses keep their defaults");
+
+        store.save_signature(&Signature { html: "<p>Neu</p>".into(), ..get("lang") }).unwrap();
+        assert_eq!(store.signatures().unwrap().len(), 3, "saving again updates");
+        assert!(store.delete_signature("kurz").unwrap());
+        assert_eq!(store.signatures().unwrap().len(), 2);
     }
 
     #[test]

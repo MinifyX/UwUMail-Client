@@ -25,6 +25,21 @@ fn list_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<Account>> {
 }
 
 #[tauri::command]
+fn list_signatures(engine: State<'_, Engine>) -> CommandResult<Vec<Signature>> {
+    engine.list_signatures()
+}
+
+#[tauri::command]
+fn save_signature(engine: State<'_, Engine>, signature: Signature) -> CommandResult<Signature> {
+    engine.save_signature(signature)
+}
+
+#[tauri::command]
+fn delete_signature(engine: State<'_, Engine>, signature_id: String) -> CommandResult<()> {
+    engine.delete_signature(&signature_id)
+}
+
+#[tauri::command]
 fn list_identities(engine: State<'_, Engine>) -> CommandResult<Vec<Identity>> {
     engine.list_identities()
 }
@@ -317,6 +332,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_accounts,
             list_identities,
+            list_signatures,
+            save_signature,
+            delete_signature,
             add_identity,
             rename_identity,
             remove_identity,

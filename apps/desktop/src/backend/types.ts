@@ -42,6 +42,17 @@ export interface Identity {
   fromServer: boolean;
 }
 
+/** A signature for one sender address; one can be the default for new mail and one for replies. */
+export interface Signature {
+  /** Empty when saving a new one. */
+  id: string;
+  email: string;
+  name: string;
+  html: string;
+  forNew: boolean;
+  forReplies: boolean;
+}
+
 export type FolderRole = "inbox" | "sent" | "drafts" | "archive" | "trash" | "junk";
 
 export interface Folder {
@@ -112,6 +123,8 @@ export interface Attachment {
   mimeType: string;
   size: number;
   inline: boolean;
+  /** For images the HTML shows through `cid:`. */
+  contentId?: string;
 }
 
 export interface Message {

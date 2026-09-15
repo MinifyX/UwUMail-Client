@@ -14,6 +14,7 @@ import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
 import { openDraftMessage } from "../compose/openDraft";
+import { useInlineImages } from "./useInlineImages";
 import { MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
 
 interface AppearanceToggleProps {
@@ -154,6 +155,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const mailAppearance = useSettings((s) => s.mailAppearance);
   const senderChoice = useSettings((s) => s.senderAppearance[message.from.email.toLowerCase()]);
   const [loadRemote, setLoadRemote] = useState(false);
+  const inlineImages = useInlineImages(message);
   const [autoDecision, setAutoDecision] = useState<{ key: string; dark: boolean } | null>(null);
 
   const myAddresses = new Set(accounts.map((a) => a.email.toLowerCase()));
@@ -236,10 +238,14 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           allowRemote={allowRemote}
           appearance={appearance}
           onAutoDecision={(dark) => setAutoDecision({ key: decisionKey, dark })}
+          inlineImages={inlineImages.urls}
         />
       </div>
 
-      <AttachmentTiles attachments={message.attachments} sender={message.from} />
+      <AttachmentTiles
+        attachments={message.attachments.filter((attachment) => !inlineImages.shown.has(attachment.id))}
+        sender={message.from}
+      />
     </article>
   );
 }

@@ -2,6 +2,7 @@ import DOMPurify from "dompurify";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "@/backend/types";
 import { textToHtml } from "@/lib/format";
+import { replaceContentIds } from "@/lib/inlineImages";
 import { requestOpenLink } from "@/state/links";
 import type { MailAppearance } from "@/state/settings";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
@@ -60,11 +61,18 @@ export function fixViewportHeightUnits(html: string): string {
  * `dark` for plain text means app colors; for HTML it means the mail's own
  * dark mode styles (only used when the mail declares them).
  */
-export function buildDocument(message: Message, allowRemote: boolean, variant: "light" | "dark") {
+export function buildDocument(
+  message: Message,
+  allowRemote: boolean,
+  variant: "light" | "dark",
+  inlineImages: ReadonlyMap<string, string> = new Map(),
+) {
   const isHtml = message.bodyHtml !== null;
   const dark = variant === "dark";
   const body = isHtml
-    ? fixViewportHeightUnits(forceColorSchemeQueries(sanitize(message.bodyHtml!), dark))
+    ? fixViewportHeightUnits(
+        forceColorSchemeQueries(sanitize(replaceContentIds(message.bodyHtml!, inlineImages)), dark),
+      )
     : linkify(textToHtml(message.bodyText ?? ""));
   const imageSources = allowRemote ? "data: cid: blob: https: http:" : "data: cid: blob:";
   const csp = `default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:; media-src data:`;
@@ -136,15 +144,21 @@ interface MessageBodyProps {
   appearance: Appearance;
   /** Reports the result of the automatic decision. */
   onAutoDecision?: (dark: boolean) => void;
+  /** Blob URLs of embedded images by Content-ID. */
+  inlineImages?: ReadonlyMap<string, string>;
 }
 
-export function MessageBody({ message, allowRemote, appearance, onAutoDecision }: MessageBodyProps) {
+export function MessageBody({ message, allowRemote, appearance, onAutoDecision, inlineImages }: MessageBodyProps) {
   const [height, setHeight] = useState(120);
   const variant = appearance.kind === "dark" ? "dark" : "light";
-  const html = useMemo(() => buildDocument(message, allowRemote, variant), [message, allowRemote, variant]);
+  const html = useMemo(
+    () => buildDocument(message, allowRemote, variant, inlineImages),
+    [message, allowRemote, variant, inlineImages],
+  );
   // Remount the frame whenever the look changes: recoloring happens in the
-  // loaded document, so an unchanged srcdoc alone wouldn't undo it.
-  const signature = `${message.id}|${appearance.kind}|${allowRemote}`;
+  // loaded document, so an unchanged srcdoc alone wouldn't undo it. Embedded
+  // images arriving count as a change too.
+  const signature = `${message.id}|${appearance.kind}|${allowRemote}|${inlineImages?.size ?? 0}`;
   const needsPass = appearance.kind === "auto" || appearance.kind === "darken";
   const [finished, setFinished] = useState<{ signature: string; dark: boolean } | null>(null);
   const done = finished?.signature === signature ? finished : null;

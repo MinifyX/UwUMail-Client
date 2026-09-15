@@ -100,7 +100,7 @@ function Tile({ attachment, onOpen }: { attachment: Attachment; onOpen: () => vo
 export function AttachmentTiles({ attachments, sender }: { attachments: Attachment[]; sender: Address }) {
   const { t } = useT();
   const [viewing, setViewing] = useState<number | null>(null);
-  // Inline images are listed too until the reader shows them in the body.
+  // Embedded images the body already shows are left out by the reader.
   const visible = attachments;
   if (visible.length === 0) return null;
 
