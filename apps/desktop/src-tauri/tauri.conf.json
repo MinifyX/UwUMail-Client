@@ -55,7 +55,7 @@
     "publisher": "UwUMail contributors",
     "homepage": "https://github.com/MinifyX/UwUMail-Client",
     "category": "Productivity",
-    "shortDescription": "The cute, modern mail client for everyone",
+    "shortDescription": "A cute, modern mail client, built just for fun",
     "longDescription": "UwUMail is an open-source IMAP/SMTP mail client with a simple and a pro layout, a unified inbox, offline search and addons with permissions.",
     "copyright": "GPL-3.0-only",
     "license": "GPL-3.0-only",

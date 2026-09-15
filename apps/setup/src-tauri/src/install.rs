@@ -358,7 +358,7 @@ fn register(layout: &Layout, dir: &Path, options: &Options, version: &str) -> Re
         )?;
         let capabilities = layout.create(CAPABILITIES_KEY)?;
         write(&capabilities, "ApplicationName", "UwUMail")?;
-        write(&capabilities, "ApplicationDescription", "The cute, modern mail client for everyone")?;
+        write(&capabilities, "ApplicationDescription", "A cute, modern mail client, built just for fun")?;
         write(&capabilities, "ApplicationIcon", &format!("{},0", app.display()))?;
         write(&layout.create(&format!(r"{CAPABILITIES_KEY}\URLAssociations"))?, "mailto", "UwUMail.mailto")?;
         write(&layout.create(REGISTERED_APPS)?, "UwUMail", &layout.key(CAPABILITIES_KEY))?;
