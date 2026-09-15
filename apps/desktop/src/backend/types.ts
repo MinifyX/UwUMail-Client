@@ -127,6 +127,16 @@ export interface Attachment {
   contentId?: string;
 }
 
+/** How a newsletter says to unsubscribe. */
+export interface Unsubscribe {
+  /** The HTTPS link takes one POST, no page. */
+  oneClick: boolean;
+  url?: string;
+  mailto?: string;
+}
+
+export type UnsubscribeOutcome = { kind: "done" } | { kind: "openPage"; url: string };
+
 export interface Message {
   id: string;
   threadId: string;
@@ -145,6 +155,7 @@ export interface Message {
   bodyText: string | null;
   hasRemoteContent: boolean;
   attachments: Attachment[];
+  unsubscribe?: Unsubscribe;
 }
 
 export interface ThreadDetail {

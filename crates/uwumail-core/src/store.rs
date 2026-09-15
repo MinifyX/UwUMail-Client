@@ -154,6 +154,10 @@ CREATE TABLE blocked_senders (
     created_at INTEGER NOT NULL
 );
 "#,
+    r#"
+-- How newsletters say to unsubscribe, as JSON.
+ALTER TABLE messages ADD COLUMN unsubscribe_json TEXT;
+"#,
 ];
 
 /// A stable positive stand-in for IMAP's uid, so JMAP emails fit the same table.
@@ -740,9 +744,9 @@ impl Store {
         tx.execute(
             "INSERT INTO messages (id, account_id, folder_id, uid, message_id, in_reply_to, refs, thread_id, subject,
                 from_json, to_json, cc_json, reply_to_json, date, seen, flagged, answered, draft, snippet, size,
-                has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id)
+                has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id, unsubscribe_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
-                ?21, ?22, ?23, ?24, ?25, ?26, ?27)",
+                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)",
             params![
                 id,
                 account_id,
@@ -771,6 +775,7 @@ impl Store {
                 json(&attachments)?,
                 remote.map(|(remote_id, _)| remote_id),
                 remote.map(|(_, blob_id)| blob_id),
+                parsed.unsubscribe.as_ref().map(json).transpose()?,
             ],
         )?;
 
@@ -896,8 +901,16 @@ impl Store {
             .collect();
         tx.execute(
             "UPDATE messages SET has_body = 1, body_html = ?1, body_text = ?2, has_remote = ?3, snippet = ?4,
-                attachments_json = ?5 WHERE id = ?6",
-            params![parsed.html, parsed.text, parsed.has_remote_content, parsed.snippet, json(&attachments)?, id],
+                attachments_json = ?5, unsubscribe_json = COALESCE(?7, unsubscribe_json) WHERE id = ?6",
+            params![
+                parsed.html,
+                parsed.text,
+                parsed.has_remote_content,
+                parsed.snippet,
+                json(&attachments)?,
+                id,
+                parsed.unsubscribe.as_ref().map(json).transpose()?
+            ],
         )?;
         let from: Address = serde_json::from_str(&from_json)?;
         Self::index(&tx, rowid, parsed, &from)?;
@@ -968,6 +981,17 @@ impl Store {
                 |row| row.get(0),
             )
             .optional()?)
+    }
+
+    /// Inbox mail from an address, e.g. to archive a newsletter's old issues.
+    pub fn inbox_messages_from(&self, email: &str) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT m.id FROM messages m JOIN folders f ON f.id = m.folder_id
+             WHERE f.role = 'inbox' AND lower(json_extract(m.from_json, '$.email')) = lower(?1)",
+        )?;
+        let ids = stmt.query_map([email.trim()], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        Ok(ids)
     }
 
     /// Local ids of the messages in a folder with this Message-ID header.
@@ -1196,7 +1220,7 @@ impl Store {
     const MESSAGE_COLUMNS: &'static str =
         "m.id, m.thread_id, m.account_id, m.folder_id, m.from_json, m.to_json, m.cc_json,
         m.reply_to_json, m.subject, m.date, m.seen, m.flagged, m.answered, m.draft, m.snippet, m.body_html,
-        m.body_text, m.has_remote, m.attachments_json, m.message_id";
+        m.body_text, m.has_remote, m.attachments_json, m.message_id, m.unsubscribe_json";
 
     fn message_from_row(row: &Row<'_>) -> rusqlite::Result<Message> {
         Ok(Message {
@@ -1222,6 +1246,7 @@ impl Store {
             body_text: row.get(16)?,
             has_remote_content: row.get(17)?,
             attachments: from_json(&row.get::<_, String>(18)?),
+            unsubscribe: row.get::<_, Option<String>>(20)?.and_then(|text| serde_json::from_str(&text).ok()),
         })
     }
 

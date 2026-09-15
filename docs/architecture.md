@@ -181,6 +181,15 @@ folder or the inbox. Blocked addresses and `@domains` live in
 `blocked_senders`; new inbox mail from them is moved to the trash during sync,
 before any notification.
 
+### Unsubscribing
+
+The engine keeps a mail's `List-Unsubscribe` options. `Engine::unsubscribe`
+sends the one-click POST (`List-Unsubscribe-Post`) itself, but only to HTTPS
+URLs with a public domain and without following redirects, so a header can't
+send requests into the local network. Otherwise it mails the list address from
+the identity the newsletter went to, and as a last resort hands the page URL to
+the app to open.
+
 ### Senders and signatures
 
 Every mailbox can send from its own address and from identities: JMAP

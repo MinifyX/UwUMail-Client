@@ -23,6 +23,7 @@ import type {
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
+  UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
 
@@ -139,6 +140,14 @@ export class TauriBackend implements Backend {
 
   markSpam(messageIds: string[], spam: boolean) {
     return call<MovedMessage[]>("mark_spam", { messageIds, spam });
+  }
+
+  unsubscribe(messageId: string) {
+    return call<UnsubscribeOutcome>("unsubscribe", { messageId });
+  }
+
+  inboxMessagesFrom(email: string) {
+    return call<string[]>("inbox_messages_from", { email });
   }
 
   blockedSenders() {

@@ -151,6 +151,16 @@ async fn mark_spam(
 }
 
 #[tauri::command]
+async fn unsubscribe(engine: State<'_, Engine>, message_id: String) -> CommandResult<UnsubscribeOutcome> {
+    engine.unsubscribe(&message_id).await
+}
+
+#[tauri::command]
+fn inbox_messages_from(engine: State<'_, Engine>, email: String) -> CommandResult<Vec<String>> {
+    engine.inbox_messages_from(&email)
+}
+
+#[tauri::command]
 fn blocked_senders(engine: State<'_, Engine>) -> CommandResult<Vec<String>> {
     engine.blocked_senders()
 }
@@ -387,6 +397,8 @@ pub fn run() {
             move_messages,
             mark_spam,
             blocked_senders,
+            unsubscribe,
+            inbox_messages_from,
             block_sender,
             unblock_sender,
             send_message,

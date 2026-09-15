@@ -28,6 +28,7 @@ import type {
   ThreadPage,
   ThreadQuery,
   ThreadSummary,
+  UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
 
@@ -67,7 +68,12 @@ export class DemoBackend implements Backend {
 
   private accounts: Account[] = structuredClone(DEMO_ACCOUNTS);
   private folders: Folder[] = DEMO_ACCOUNTS.flatMap((a) => buildFolders(a.id, lang()));
-  private messages: Message[] = buildMessages(lang());
+  // Newsletters and offers carry a List-Unsubscribe like the real ones.
+  private messages: Message[] = buildMessages(lang()).map((message) =>
+    /newsletter|aktion|offer|deal/i.test(message.subject)
+      ? { ...message, unsubscribe: { oneClick: true, url: "https://pixelparts.example/unsubscribe" } }
+      : message,
+  );
   private listeners = new Set<(event: BackendEvent) => void>();
   private nextId = 1000;
   private attachmentUrls = new Map<string, string>();
@@ -366,6 +372,23 @@ export class DemoBackend implements Backend {
 
   async markSpam(messageIds: string[], spam: boolean) {
     return this.moveToRole(messageIds, spam ? "junk" : "inbox");
+  }
+
+  async unsubscribe(messageId: string): Promise<UnsubscribeOutcome> {
+    await wait(700);
+    const message = this.messages.find((m) => m.id === messageId);
+    if (!message?.unsubscribe) throw new BackendError("invalid_input", "This mail has no way to unsubscribe.");
+    for (const other of this.messages) {
+      if (other.from.email === message.from.email) delete other.unsubscribe;
+    }
+    return { kind: "done" };
+  }
+
+  async inboxMessagesFrom(email: string) {
+    await wait(60);
+    return this.messages
+      .filter((m) => m.from.email.toLowerCase() === email.toLowerCase() && this.roleOf(m) === "inbox")
+      .map((m) => m.id);
   }
 
   async blockedSenders() {

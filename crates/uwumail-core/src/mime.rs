@@ -35,6 +35,7 @@ pub struct ParsedMessage {
     pub snippet: String,
     pub attachments: Vec<ParsedAttachment>,
     pub has_body: bool,
+    pub unsubscribe: Option<crate::model::Unsubscribe>,
 }
 
 fn addresses(value: Option<&ParsedAddress>) -> Vec<Address> {
@@ -137,7 +138,30 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
         html,
         has_remote_content,
         attachments,
+        unsubscribe: message
+            .header_raw("List-Unsubscribe")
+            .and_then(|value| unsubscribe_options(value, message.header_raw("List-Unsubscribe-Post"))),
     }
+}
+
+/// The ways a List-Unsubscribe header offers: `<https://…>, <mailto:…>`.
+pub fn unsubscribe_options(value: &str, post: Option<&str>) -> Option<crate::model::Unsubscribe> {
+    let mut url = None;
+    let mut mailto = None;
+    for part in value.split(',') {
+        // Folded headers carry line breaks and spaces inside the brackets.
+        let uri: String =
+            part.trim().trim_start_matches('<').trim_end_matches('>').chars().filter(|c| !c.is_whitespace()).collect();
+        let lower = uri.to_ascii_lowercase();
+        if (lower.starts_with("https://") || lower.starts_with("http://")) && url.is_none() {
+            url = url::Url::parse(&uri).ok().map(|parsed| parsed.to_string());
+        } else if lower.starts_with("mailto:") && mailto.is_none() {
+            mailto = Some(uri);
+        }
+    }
+    let one_click = post.is_some_and(|post| post.to_ascii_lowercase().contains("list-unsubscribe=one-click"))
+        && url.as_deref().is_some_and(|url| url.starts_with("https://"));
+    (url.is_some() || mailto.is_some()).then_some(crate::model::Unsubscribe { one_click, url, mailto })
 }
 
 /// Plain text as simple HTML paragraphs, for editing a text-only draft.
@@ -366,6 +390,22 @@ pub fn now() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_ways_to_unsubscribe() {
+        let one_click = unsubscribe_options(
+            "<mailto:bye@news.example?subject=unsub>,\r\n <https://news.example/u?id=1>",
+            Some("List-Unsubscribe=One-Click"),
+        )
+        .unwrap();
+        assert!(one_click.one_click);
+        assert_eq!(one_click.url.as_deref(), Some("https://news.example/u?id=1"));
+        assert_eq!(one_click.mailto.as_deref(), Some("mailto:bye@news.example?subject=unsub"));
+
+        let page = unsubscribe_options("<http://news.example/u>", Some("List-Unsubscribe=One-Click")).unwrap();
+        assert!(!page.one_click, "one click only over https");
+        assert!(unsubscribe_options("<javascript:alert(1)>", None).is_none());
+    }
 
     const SAMPLE: &str = "From: Leni Wanders <leni@wanders.example>\r\n\
 To: Mini <mini@uwumail.dev>, noah@zockt.example\r\n\

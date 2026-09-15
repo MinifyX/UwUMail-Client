@@ -695,3 +695,74 @@ async fn move_spam_and_blocked_senders() {
 
     engine.remove_account(&account.id).await.unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn unsubscribes_from_a_newsletter_by_mail() {
+    let Some(host) = server() else {
+        eprintln!("UWUMAIL_TEST_MAILSERVER not set, skipping");
+        return;
+    };
+    let data = tempfile::tempdir().unwrap();
+    let engine = Engine::new(EngineOptions {
+        data_dir: data.path().to_path_buf(),
+        secrets: Arc::new(MemorySecrets::default()),
+        open_url: Arc::new(|_| {}),
+    })
+    .unwrap();
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("leser-{}@uwumail.test", &unique[..8]);
+    let list = format!("liste-{}@uwumail.test", &unique[..8]);
+    let imap = ServerSettings { host: host.clone(), port: 3143, security: Security::None };
+
+    // A newsletter is already waiting.
+    let mut other = imap::login(&imap, imap::Login::Password { username: &email, password: "uwu" }).await.unwrap();
+    let newsletter = format!(
+        "From: Pixel News <{list}>\r\nTo: {email}\r\nSubject: News {unique}\r\nMessage-ID: <{unique}@news.test>\r\n\
+         List-Unsubscribe: <mailto:{list}?subject=raus%20{unique}>\r\nContent-Type: text/plain\r\n\r\nNeue Keycaps!\r\n"
+    );
+    other.append("INBOX", None, None, newsletter).await.unwrap();
+    let _ = other.logout().await;
+
+    let account = engine
+        .add_account(NewAccount {
+            display_name: "Leser".into(),
+            email: email.clone(),
+            auth: AuthKind::Password,
+            password: Some("uwu".into()),
+            imap,
+            smtp: ServerSettings { host: host.clone(), port: 3025, security: Security::None },
+            username: email.clone(),
+            color: AccountColor::Sky,
+            protocol: Protocol::Imap,
+            jmap_url: None,
+        })
+        .await
+        .unwrap();
+    let subject = format!("News {unique}");
+    let thread = wait_for("the newsletter", async || {
+        engine.sync_now(Some(&account.id));
+        engine.list_threads(&inbox_query(None)).unwrap().threads.into_iter().find(|t| t.subject == subject)
+    })
+    .await;
+    let message = engine.get_thread(&thread.id, true).await.unwrap().messages.remove(0);
+    let options = message.unsubscribe.clone().expect("the list says how to unsubscribe");
+    assert!(!options.one_click);
+    assert!(options.mailto.is_some());
+    assert_eq!(engine.inbox_messages_from(&list.to_uppercase()).unwrap(), std::slice::from_ref(&message.id));
+
+    // UwUMail writes to the list address itself.
+    assert!(matches!(engine.unsubscribe(&message.id).await.unwrap(), UnsubscribeOutcome::Done));
+    let list_imap = ServerSettings { host, port: 3143, security: Security::None };
+    let request = format!("raus {unique}");
+    wait_for("the unsubscribe mail at the list", async || {
+        let mut session =
+            imap::login(&list_imap, imap::Login::Password { username: &list, password: "uwu" }).await.ok()?;
+        session.select("INBOX").await.ok()?;
+        let found = session.uid_search(format!("SUBJECT \"{request}\"")).await.ok()?;
+        let _ = session.logout().await;
+        (!found.is_empty()).then_some(())
+    })
+    .await;
+
+    engine.remove_account(&account.id).await.unwrap();
+}

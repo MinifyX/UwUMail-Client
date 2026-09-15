@@ -681,6 +681,84 @@ impl Engine {
         self.inner.move_to(message_ids, MoveTarget::Role(role)).await
     }
 
+    /// Unsubscribes from the list a mail came from: with one click where the sender allows it,
+    /// otherwise by mail, otherwise the sender's page is for the app to open.
+    pub async fn unsubscribe(&self, message_id: &str) -> Result<UnsubscribeOutcome> {
+        let message = self
+            .inner
+            .store
+            .messages_by_ids(&[message_id.to_string()])?
+            .pop()
+            .ok_or_else(|| Error::not_found("This message no longer exists."))?;
+        let options =
+            message.unsubscribe.clone().ok_or_else(|| Error::invalid("This mail has no way to unsubscribe."))?;
+
+        if options.one_click
+            && let Some(url) = options.url.as_deref().and_then(|url| url::Url::parse(url).ok())
+            && crate::pictures::is_public_web_url(&url)
+        {
+            // No redirects: a public link must not be able to send the request into the local network.
+            let client = crate::tls::http_client()?
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(20))
+                .build()
+                .map_err(|e| Error::internal(format!("HTTP client setup failed: {e}")))?;
+            let answer = client
+                .post(url)
+                .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body("List-Unsubscribe=One-Click")
+                .send()
+                .await;
+            match answer {
+                Ok(response) if response.status().is_success() => return Ok(UnsubscribeOutcome::Done),
+                Ok(response) => tracing::warn!("One-click unsubscribe answered {}", response.status()),
+                Err(error) => tracing::warn!("One-click unsubscribe failed: {error}"),
+            }
+        }
+
+        if let Some(mailto) = options.mailto.as_deref().and_then(|mailto| url::Url::parse(mailto).ok()) {
+            let address = percent_encoding::percent_decode_str(mailto.path()).decode_utf8_lossy().to_string();
+            if address.parse::<lettre::Address>().is_ok() {
+                let pairs: HashMap<String, String> =
+                    mailto.query_pairs().map(|(k, v)| (k.to_lowercase(), v.into_owned())).collect();
+                let identities = self.list_identities()?;
+                let addressed: Vec<String> =
+                    message.to.iter().chain(&message.cc).map(|a| a.email.to_lowercase()).collect();
+                // From the address the newsletter was sent to, if that's one of the mailbox's.
+                let from_email = identities
+                    .iter()
+                    .find(|i| i.account_id == message.account_id && addressed.contains(&i.email.to_lowercase()))
+                    .map(|i| i.email.clone());
+                let text = pairs.get("body").cloned().unwrap_or_else(|| "unsubscribe".into());
+                self.send(OutgoingMessage {
+                    account_id: message.account_id.clone(),
+                    to: vec![Address { name: None, email: address }],
+                    cc: vec![],
+                    bcc: vec![],
+                    subject: pairs.get("subject").cloned().unwrap_or_else(|| "unsubscribe".into()),
+                    html: mime::text_to_html(&text),
+                    text,
+                    in_reply_to: None,
+                    attachments: vec![],
+                    draft_key: None,
+                    from_email,
+                })
+                .await?;
+                return Ok(UnsubscribeOutcome::Done);
+            }
+        }
+
+        match options.url {
+            Some(url) => Ok(UnsubscribeOutcome::OpenPage { url }),
+            None => Err(Error::invalid("This mail has no way to unsubscribe that works.")),
+        }
+    }
+
+    /// Inbox mail from an address, e.g. a newsletter's earlier issues.
+    pub fn inbox_messages_from(&self, email: &str) -> Result<Vec<String>> {
+        self.inner.store.inbox_messages_from(email)
+    }
+
     /// Addresses and `@domains` whose new mail goes straight to the trash.
     pub fn blocked_senders(&self) -> Result<Vec<String>> {
         self.inner.store.blocked_senders()

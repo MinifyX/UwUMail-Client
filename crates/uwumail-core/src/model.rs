@@ -259,6 +259,28 @@ pub struct Attachment {
     pub content_id: Option<String>,
 }
 
+/// How a mailing list says to unsubscribe (List-Unsubscribe, RFC 2369 and 8058).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Unsubscribe {
+    /// The HTTPS link takes a POST without any page (List-Unsubscribe-Post).
+    pub one_click: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mailto: Option<String>,
+}
+
+/// What unsubscribing did.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum UnsubscribeOutcome {
+    /// UwUMail unsubscribed on its own (one click or a mail).
+    Done,
+    /// The sender only offers a web page; the app opens it.
+    OpenPage { url: String },
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -278,6 +300,8 @@ pub struct Message {
     pub body_text: Option<String>,
     pub has_remote_content: bool,
     pub attachments: Vec<Attachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unsubscribe: Option<Unsubscribe>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

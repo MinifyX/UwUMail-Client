@@ -63,7 +63,8 @@
     "sendFailedKept": "Sending didn't work (╥﹏╥) {{reason}} The mail is waiting in Drafts.",
     "markedSpam": "Off to the spam corner (｀へ´)",
     "moveUndone": "Poof, back as it was (・ω・)",
-    "blocked": "{{entry}} can't get in anymore (｀・ω・´) New mail goes to the trash."
+    "blocked": "{{entry}} can't get in anymore (｀・ω・´) New mail goes to the trash.",
+    "unsubscribed": "Unsubscribed (≧▽≦) No more mail from {{name}}"
   },
   "status": {
     "syncing": "Fetching fresh mail…",
@@ -133,5 +134,8 @@
       "searching": "Nyu is asking the server (｡･ω･｡)",
       "nothingMore": "The server has nothing else either (・・ )"
     }
+  },
+  "unsubscribe": {
+    "title": "Bye bye {{name}}?"
   }
 }

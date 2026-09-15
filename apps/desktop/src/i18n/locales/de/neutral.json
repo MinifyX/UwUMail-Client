@@ -110,7 +110,8 @@
     "notSpam": "Kein Spam",
     "more": "Mehr",
     "blockSender": "{{email}} blockieren",
-    "blockDomain": "Alles von @{{domain}} blockieren"
+    "blockDomain": "Alles von @{{domain}} blockieren",
+    "unsubscribe": "Abmelden"
   },
   "compose": {
     "new": "Neue Mail",
@@ -170,7 +171,12 @@
     "markedNotSpam": "Zurück im Posteingang",
     "moveUndone": "Rückgängig gemacht",
     "blocked": "{{entry}} ist blockiert. Neue Mails von dort landen im Papierkorb.",
-    "unblocked": "{{entry}} ist nicht mehr blockiert"
+    "unblocked": "{{entry}} ist nicht mehr blockiert",
+    "unsubscribed": "Von {{name}} abgemeldet",
+    "unsubscribePage": "Die Abmeldeseite von {{name}} ist im Browser geöffnet",
+    "unsubscribeArchived_one": "{{count}} Mail archiviert",
+    "unsubscribeArchived_other": "{{count}} Mails archiviert",
+    "unsubscribeFailed": "Das Abmelden hat nicht geklappt. {{reason}}"
   },
   "status": {
     "syncing": "Suche nach neuen Mails",
@@ -543,5 +549,11 @@
     "search": "Ordner suchen",
     "empty": "Kein passender Ordner",
     "mixedAccounts": "Mails aus verschiedenen Postfächern können nur einzeln verschoben werden."
+  },
+  "unsubscribe": {
+    "title": "Von {{name}} abmelden?",
+    "body": "UwUMail meldet dich direkt beim Absender ab. Danach sollten keine Mails mehr von dort kommen.",
+    "bodyPage": "Der Absender hat dafür eine eigene Seite. UwUMail öffnet sie für dich, dort bestätigst du die Abmeldung.",
+    "archive": "Bisherige Mails von dort archivieren"
   }
 }

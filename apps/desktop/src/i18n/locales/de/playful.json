@@ -63,7 +63,8 @@
     "sendFailedKept": "Senden hat nicht geklappt (╥﹏╥) {{reason}} Die Mail wartet in den Entwürfen.",
     "markedSpam": "Ab in die Spam-Ecke (｀へ´)",
     "moveUndone": "Zack, alles wie vorher (・ω・)",
-    "blocked": "{{entry}} kommt nicht mehr rein (｀・ω・´) Neue Mails landen im Papierkorb."
+    "blocked": "{{entry}} kommt nicht mehr rein (｀・ω・´) Neue Mails landen im Papierkorb.",
+    "unsubscribed": "Abgemeldet (≧▽≦) Keine Post mehr von {{name}}"
   },
   "status": {
     "syncing": "Hole frische Mails…",
@@ -133,5 +134,8 @@
       "searching": "Nyu fragt beim Server nach (｡･ω･｡)",
       "nothingMore": "Der Server hat auch nichts Neues für dich (・・ )"
     }
+  },
+  "unsubscribe": {
+    "title": "Tschüss {{name}}?"
   }
 }

@@ -110,7 +110,8 @@
     "notSpam": "Not spam",
     "more": "More",
     "blockSender": "Block {{email}}",
-    "blockDomain": "Block everything from @{{domain}}"
+    "blockDomain": "Block everything from @{{domain}}",
+    "unsubscribe": "Unsubscribe"
   },
   "compose": {
     "new": "New message",
@@ -170,7 +171,12 @@
     "markedNotSpam": "Back in the inbox",
     "moveUndone": "Undone",
     "blocked": "{{entry}} is blocked. New mail from there goes to the trash.",
-    "unblocked": "{{entry}} isn't blocked anymore"
+    "unblocked": "{{entry}} isn't blocked anymore",
+    "unsubscribed": "Unsubscribed from {{name}}",
+    "unsubscribePage": "{{name}}'s unsubscribe page is open in your browser",
+    "unsubscribeArchived_one": "{{count}} mail archived",
+    "unsubscribeArchived_other": "{{count}} mails archived",
+    "unsubscribeFailed": "Unsubscribing didn't work. {{reason}}"
   },
   "status": {
     "syncing": "Checking for mail",
@@ -543,5 +549,11 @@
     "search": "Search folders",
     "empty": "No matching folder",
     "mixedAccounts": "Mail from different mailboxes can only be moved one mailbox at a time."
+  },
+  "unsubscribe": {
+    "title": "Unsubscribe from {{name}}?",
+    "body": "UwUMail unsubscribes you with the sender directly. After that, no more mail should come from there.",
+    "bodyPage": "The sender has its own page for this. UwUMail opens it for you, and you confirm there.",
+    "archive": "Archive earlier mail from there"
   }
 }

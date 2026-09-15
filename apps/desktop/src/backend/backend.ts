@@ -20,6 +20,7 @@ import type {
   ThreadDetail,
   ThreadPage,
   ThreadQuery,
+  UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
 
@@ -70,6 +71,10 @@ export interface Backend {
   markSpam(messageIds: string[], spam: boolean): Promise<MovedMessage[]>;
   /** Addresses and `@domains` whose new mail goes straight to the trash. */
   blockedSenders(): Promise<string[]>;
+  /** One click or a mail where possible; otherwise the page to open. */
+  unsubscribe(messageId: string): Promise<UnsubscribeOutcome>;
+  /** Inbox mail from an address, e.g. a newsletter's earlier issues. */
+  inboxMessagesFrom(email: string): Promise<string[]>;
   blockSender(entry: string): Promise<string>;
   unblockSender(entry: string): Promise<void>;
   send(message: OutgoingMessage): Promise<void>;

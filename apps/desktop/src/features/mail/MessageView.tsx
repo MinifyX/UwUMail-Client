@@ -18,6 +18,7 @@ import { AttachmentTiles } from "../attachments/AttachmentTiles";
 import { openDraftMessage } from "../compose/openDraft";
 import { useInlineImages } from "./useInlineImages";
 import { blockSender } from "./selection";
+import { UnsubscribeButton } from "./Unsubscribe";
 import { MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
 
 interface AppearanceToggleProps {
@@ -219,6 +220,9 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
                   {t("reader.continueDraft")}
                 </Button>
               </>
+            )}
+            {!message.flags.draft && !myAddresses.has(message.from.email.toLowerCase()) && (
+              <UnsubscribeButton message={message} />
             )}
             {theme === "dark" && <AppearanceToggle message={message} appearance={appearance} autoDark={autoDark} />}
             {!message.flags.draft && <MessageMenu message={message} accounts={accounts} />}
