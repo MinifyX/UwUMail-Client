@@ -1122,6 +1122,33 @@ impl Engine {
         Ok(file)
     }
 
+    /// The complete message as an `.eml` file, named after its subject.
+    pub async fn message_file(&self, message_id: &str) -> Result<AttachmentFile> {
+        let message = self
+            .inner
+            .store
+            .messages_by_ids(&[message_id.to_string()])?
+            .pop()
+            .ok_or_else(|| Error::not_found("This message no longer exists."))?;
+        let location = self
+            .inner
+            .store
+            .locations(&[message_id.to_string()])?
+            .pop()
+            .ok_or_else(|| Error::not_found("This message no longer exists."))?;
+        let raw = self.inner.raw_message(&location).await?;
+        let subject = message.subject.trim();
+        let filename = format!("{}.eml", if subject.is_empty() { "Mail" } else { subject });
+        let path = self.inner.attachments.store_message(message_id, &filename, &raw)?;
+        Ok(AttachmentFile {
+            path,
+            filename: attachments::safe_filename(&filename),
+            mime_type: "message/rfc822".into(),
+            size: raw.len() as u64,
+            dangerous: false,
+        })
+    }
+
     /// Copies an attachment to a place the user picked.
     pub async fn save_attachment(&self, attachment_id: &str, destination: &std::path::Path) -> Result<()> {
         let file = self.attachment(attachment_id).await?;

@@ -97,18 +97,15 @@ pub async fn confirm(app: &AppHandle, title: &str, text: String, ok: &str, cance
 }
 
 /// Asks where to save in the native save dialog and copies the attachment there.
-pub async fn save_file(
-    app: &AppHandle,
-    engine: &Engine,
-    attachment_id: &str,
-    file: &AttachmentFile,
-) -> Result<bool, Error> {
+pub async fn save_file(app: &AppHandle, file: &AttachmentFile) -> Result<bool, Error> {
     let dialog = app.dialog().file().set_file_name(uwumail_core::attachments::safe_filename(&file.filename));
     let destination = tauri::async_runtime::spawn_blocking(move || dialog.blocking_save_file())
         .await
         .map_err(|e| Error::internal(format!("The dialog failed: {e}")))?;
     let Some(destination) = destination.and_then(|path| path.into_path().ok()) else { return Ok(false) };
-    engine.save_attachment(attachment_id, &destination).await?;
+    // The file is already in the cache; the page never decides which file gets copied.
+    std::fs::copy(&file.path, &destination)
+        .map_err(|e| Error::invalid(format!("Couldn't save to {}: {e}", destination.display())))?;
     Ok(true)
 }
 

@@ -1,11 +1,22 @@
 import clsx from "clsx";
-import { Ban, ChevronDown, ImageIcon, ImageOff, Moon, MoreHorizontal, PenLine, Sun } from "lucide-react";
+import {
+  Ban,
+  ChevronDown,
+  Download,
+  ImageIcon,
+  ImageOff,
+  Moon,
+  MoreHorizontal,
+  PenLine,
+  Printer,
+  Sun,
+} from "lucide-react";
 import { useState } from "react";
 import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
-import { useT } from "@/i18n";
+import { translate, useT } from "@/i18n";
 import { displayName, formatFullDate, formatListDate } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCompanyDomain } from "@/lib/queries";
@@ -17,9 +28,11 @@ import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
 import { openDraftMessage } from "../compose/openDraft";
 import { useInlineImages } from "./useInlineImages";
+import { nativeAndroid } from "@/backend/mobile";
+import { backend } from "@/backend/backend";
 import { blockSender } from "./selection";
 import { UnsubscribeButton } from "./Unsubscribe";
-import { MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
+import { buildPrintDocument, MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
 
 interface AppearanceToggleProps {
   message: Message;
@@ -225,7 +238,13 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
               <UnsubscribeButton message={message} />
             )}
             {theme === "dark" && <AppearanceToggle message={message} appearance={appearance} autoDark={autoDark} />}
-            {!message.flags.draft && <MessageMenu message={message} accounts={accounts} />}
+            {!message.flags.draft && (
+              <MessageMenu
+                message={message}
+                accounts={accounts}
+                onPrint={() => printMessage(message, allowRemote, inlineImages.urls)}
+              />
+            )}
             <time dateTime={message.date} className="text-[12.5px] text-muted">
               {formatFullDate(message.date, i18n.language)}
             </time>
@@ -259,7 +278,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
 }
 
 /** Less common actions for one message. */
-function MessageMenu({ message, accounts }: { message: Message; accounts: Account[] }) {
+function MessageMenu({ message, accounts, onPrint }: { message: Message; accounts: Account[]; onPrint: () => void }) {
   const { t } = useT();
   const client = useQueryClient();
   const email = message.from.email;
@@ -270,20 +289,31 @@ function MessageMenu({ message, accounts }: { message: Message; accounts: Accoun
     useUi.getState().selectThread(null);
     void blockSender(entry, [message.id], refresh);
   };
-  const items = own
-    ? []
-    : [
-        { label: <MenuLabel icon={Ban} text={t("reader.blockSender", { email })} />, onSelect: () => block(email) },
-        ...(domain
-          ? [
-              {
-                label: <MenuLabel icon={Ban} text={t("reader.blockDomain", { domain })} />,
-                onSelect: () => block(`@${domain}`),
-              },
-            ]
-          : []),
-      ];
-  if (items.length === 0) return null;
+  const items = [
+    // Android's web view can't print; the system share sheet will do that later.
+    ...(nativeAndroid ? [] : [{ label: <MenuLabel icon={Printer} text={t("reader.print")} />, onSelect: onPrint }]),
+    {
+      label: <MenuLabel icon={Download} text={t("reader.saveMessage")} />,
+      onSelect: () =>
+        void backend()
+          .saveMessage(message.id)
+          .then((saved) => saved && toast(t("toast.messageSaved"), "success"))
+          .catch((error: unknown) => toast(error instanceof Error ? error.message : String(error), "error")),
+    },
+    ...(own
+      ? []
+      : [
+          { label: <MenuLabel icon={Ban} text={t("reader.blockSender", { email })} />, onSelect: () => block(email) },
+          ...(domain
+            ? [
+                {
+                  label: <MenuLabel icon={Ban} text={t("reader.blockDomain", { domain })} />,
+                  onSelect: () => block(`@${domain}`),
+                },
+              ]
+            : []),
+        ]),
+  ];
   return (
     <Menu
       align="end"
@@ -310,4 +340,35 @@ function MenuLabel({ icon: Icon, text }: { icon: typeof Ban; text: string }) {
       {text}
     </span>
   );
+}
+
+/** Prints one mail from a hidden frame that can't run scripts. */
+function printMessage(message: Message, allowRemote: boolean, inlineImages: ReadonlyMap<string, string>) {
+  const labels = {
+    from: translate("compose.from"),
+    to: translate("compose.to"),
+    cc: translate("compose.cc"),
+    date: translate("reader.date"),
+  };
+  const frame = document.createElement("iframe");
+  // allow-modals lets the print dialog open; without allow-scripts nothing in the mail runs.
+  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none";
+  frame.srcdoc = buildPrintDocument(
+    message,
+    allowRemote,
+    inlineImages,
+    labels,
+    formatFullDate(message.date, document.documentElement.lang || "de"),
+  );
+  frame.onload = () => {
+    const view = frame.contentWindow;
+    if (!view) return;
+    view.addEventListener("afterprint", () => frame.remove());
+    // Give pictures a moment; then print.
+    setTimeout(() => view.print(), 250);
+    setTimeout(() => frame.remove(), 10 * 60 * 1000);
+  };
+  document.body.append(frame);
 }

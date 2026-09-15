@@ -585,6 +585,25 @@ export class DemoBackend implements Backend {
     return true;
   }
 
+  async saveMessage(messageId: string) {
+    const message = this.messages.find((m) => m.id === messageId);
+    if (!message) throw new BackendError("not_found", "This message no longer exists.");
+    const eml = [
+      `From: ${message.from.name ?? ""} <${message.from.email}>`,
+      `To: ${message.to.map((a) => a.email).join(", ")}`,
+      `Subject: ${message.subject}`,
+      `Date: ${new Date(message.date).toUTCString()}`,
+      "Content-Type: text/html; charset=utf-8",
+      "",
+      message.bodyHtml ?? message.bodyText ?? "",
+    ].join("\r\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([eml], { type: "message/rfc822" }));
+    link.download = `${message.subject || "Mail"}.eml`;
+    link.click();
+    return true;
+  }
+
   async saveAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
     const link = document.createElement("a");

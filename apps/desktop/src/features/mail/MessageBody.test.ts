@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/backend/types";
-import { buildDocument, fixViewportHeightUnits, isRunaway, resolveAppearance, ROOT_ID } from "./MessageBody";
+import {
+  buildDocument,
+  buildPrintDocument,
+  fixViewportHeightUnits,
+  isRunaway,
+  resolveAppearance,
+  ROOT_ID,
+} from "./MessageBody";
 
 function message(patch: Partial<Message>): Message {
   return {
@@ -129,5 +136,40 @@ describe("resolveAppearance", () => {
   it("measures simple HTML mail before deciding", () => {
     expect(resolveAppearance(html, true, "auto")).toEqual({ kind: "auto" });
     expect(resolveAppearance(html, true, "dark")).toEqual({ kind: "darken", why: "choice" });
+  });
+});
+
+describe("embedded images", () => {
+  it("show in the reader as the blob URLs of their files", () => {
+    const doc = buildDocument(
+      message({ bodyHtml: '<img src="cid:logo@shop" alt="Logo">' }),
+      false,
+      "light",
+      new Map([["logo@shop", "blob:logo"]]),
+    );
+    expect(doc).toContain('src="blob:logo"');
+  });
+});
+
+describe("buildPrintDocument", () => {
+  const labels = { from: "Von", to: "An", cc: "Cc", date: "Datum" };
+
+  it("prints the header and a sanitized body without remote content", () => {
+    const doc = buildPrintDocument(
+      message({
+        subject: "Rechnung <2026>",
+        to: [{ name: "Mini", email: "mini@uwumail.dev" }],
+        bodyHtml: '<p>Hallo</p><script>alert(1)</script><img src="cid:logo@shop">',
+      }),
+      false,
+      new Map([["logo@shop", "blob:logo"]]),
+      labels,
+      "14. September 2026",
+    );
+    expect(doc).toContain("<title>Rechnung &#60;2026&#62;</title>");
+    expect(doc).toContain("Mini &#60;mini@uwumail.dev&#62;");
+    expect(doc).toContain('src="blob:logo"');
+    expect(doc).not.toContain("<script>");
+    expect(doc).toContain("img-src data: blob:;");
   });
 });

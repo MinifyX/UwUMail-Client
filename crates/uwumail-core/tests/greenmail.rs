@@ -750,6 +750,11 @@ async fn unsubscribes_from_a_newsletter_by_mail() {
     assert!(options.mailto.is_some());
     assert_eq!(engine.inbox_messages_from(&list.to_uppercase()).unwrap(), std::slice::from_ref(&message.id));
 
+    // The whole mail can be saved as a file.
+    let file = engine.message_file(&message.id).await.unwrap();
+    assert!(file.filename.ends_with(".eml"));
+    assert!(String::from_utf8_lossy(&std::fs::read(&file.path).unwrap()).contains("List-Unsubscribe"));
+
     // UwUMail writes to the list address itself.
     assert!(matches!(engine.unsubscribe(&message.id).await.unwrap(), UnsubscribeOutcome::Done));
     let list_imap = ServerSettings { host, port: 3143, security: Security::None };

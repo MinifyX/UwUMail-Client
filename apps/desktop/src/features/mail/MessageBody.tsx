@@ -71,7 +71,8 @@ export function buildDocument(
   const dark = variant === "dark";
   const body = isHtml
     ? fixViewportHeightUnits(
-        forceColorSchemeQueries(sanitize(replaceContentIds(message.bodyHtml!, inlineImages)), dark),
+        // cid: links survive the sanitizer, our own blob URLs wouldn't: swap them afterwards.
+        forceColorSchemeQueries(replaceContentIds(sanitize(message.bodyHtml!), inlineImages), dark),
       )
     : linkify(textToHtml(message.bodyText ?? ""));
   const imageSources = allowRemote ? "data: cid: blob: https: http:" : "data: cid: blob:";
@@ -97,6 +98,50 @@ blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${dark ? "#4d233
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>${frame}
 ${isHtml ? html : text}</style></head><body><div id="${ROOT_ID}">${body}</div></body></html>`;
+}
+
+export interface PrintLabels {
+  from: string;
+  to: string;
+  cc: string;
+  date: string;
+}
+
+/**
+ * A page for printing one mail: its header and the body, sanitized like in the reader, light,
+ * without remote content unless it's allowed for this mail.
+ */
+export function buildPrintDocument(
+  message: Message,
+  allowRemote: boolean,
+  inlineImages: ReadonlyMap<string, string>,
+  labels: PrintLabels,
+  date: string,
+) {
+  const escape = (text: string) => text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  const people = (list: Message["to"]) =>
+    escape(list.map((a) => (a.name ? `${a.name} <${a.email}>` : a.email)).join(", "));
+  const body =
+    message.bodyHtml !== null
+      ? replaceContentIds(sanitize(message.bodyHtml), inlineImages)
+      : `<div style="white-space:pre-wrap">${textToHtml(message.bodyText ?? "")}</div>`;
+  const imageSources = allowRemote ? "data: blob: https: http:" : "data: blob:";
+  const rows = [
+    [labels.from, people([message.from])],
+    [labels.to, people(message.to)],
+    ...(message.cc.length > 0 ? [[labels.cc, people(message.cc)]] : []),
+    [labels.date, escape(date)],
+  ]
+    .map(([label, value]) => `<tr><th>${escape(label!)}</th><td>${value}</td></tr>`)
+    .join("");
+  return `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:">
+<title>${escape(message.subject)}</title>
+<style>@page{margin:16mm}body{margin:0;color:#1c1420;background:#fff;font:14px/1.5 system-ui,sans-serif}
+h1{font-size:20px;margin:0 0 8px}table.head{border-collapse:collapse;margin:0 0 12px;font-size:12.5px}
+table.head th{text-align:left;color:#716672;font-weight:600;padding:1px 12px 1px 0;vertical-align:top}
+hr{border:0;border-top:1px solid #e6dde3;margin:0 0 16px}img{max-width:100%}</style></head>
+<body><h1>${escape(message.subject)}</h1><table class="head">${rows}</table><hr>${body}</body></html>`;
 }
 
 /**

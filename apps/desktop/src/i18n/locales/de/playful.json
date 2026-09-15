@@ -64,7 +64,8 @@
     "markedSpam": "Ab in die Spam-Ecke (｀へ´)",
     "moveUndone": "Zack, alles wie vorher (・ω・)",
     "blocked": "{{entry}} kommt nicht mehr rein (｀・ω・´) Neue Mails landen im Papierkorb.",
-    "unsubscribed": "Abgemeldet (≧▽≦) Keine Post mehr von {{name}}"
+    "unsubscribed": "Abgemeldet (≧▽≦) Keine Post mehr von {{name}}",
+    "messageSaved": "Mail sicher abgelegt (˘ω˘)"
   },
   "status": {
     "syncing": "Hole frische Mails…",

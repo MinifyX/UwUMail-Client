@@ -20,7 +20,7 @@
 - [x] Embedded images (cid:) in received mail; pictures in sent mail travel as inline parts
 - [x] Move to folder (menu with search, v, drag and drop), multi-select (Ctrl/Shift+click, x), spam and not spam, blocked senders, undo for moves (toast and z), shortcuts g i / g s / g d / g f, ! and Ctrl+Shift+D
 - [x] Unsubscribe button for newsletters: one click (RFC 8058) or by mail, otherwise the sender's page; archive earlier issues with undo
-- [ ] Print and save as file
+- [x] Print a mail (desktop) and save it as an .eml file
 - [x] Unified inbox across all mailboxes
 - [x] Conversation view (can be turned off)
 - [x] Offline reading and local full-text search

@@ -265,7 +265,15 @@ async fn open_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_i
 #[tauri::command]
 async fn save_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_id: String) -> CommandResult<bool> {
     let file = engine.attachment(&attachment_id).await?;
-    platform::save_file(&app, &engine, &attachment_id, &file).await
+    platform::save_file(&app, &file).await
+}
+
+/// Saves a whole mail as an .eml file where the user picks (Downloads on Android).
+/// Returns false when the user cancelled.
+#[tauri::command]
+async fn save_message(app: AppHandle, engine: State<'_, Engine>, message_id: String) -> CommandResult<bool> {
+    let file = engine.message_file(&message_id).await?;
+    platform::save_file(&app, &file).await
 }
 
 #[tauri::command]
@@ -411,6 +419,7 @@ pub fn run() {
             get_attachment,
             open_attachment,
             save_attachment,
+            save_message,
             get_sender_picture,
             clear_sender_pictures,
             get_company_domain,

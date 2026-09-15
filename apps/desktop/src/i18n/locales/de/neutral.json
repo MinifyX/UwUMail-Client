@@ -111,7 +111,10 @@
     "more": "Mehr",
     "blockSender": "{{email}} blockieren",
     "blockDomain": "Alles von @{{domain}} blockieren",
-    "unsubscribe": "Abmelden"
+    "unsubscribe": "Abmelden",
+    "print": "Drucken",
+    "saveMessage": "Als Datei speichern (.eml)",
+    "date": "Datum"
   },
   "compose": {
     "new": "Neue Mail",
@@ -176,7 +179,8 @@
     "unsubscribePage": "Die Abmeldeseite von {{name}} ist im Browser geöffnet",
     "unsubscribeArchived_one": "{{count}} Mail archiviert",
     "unsubscribeArchived_other": "{{count}} Mails archiviert",
-    "unsubscribeFailed": "Das Abmelden hat nicht geklappt. {{reason}}"
+    "unsubscribeFailed": "Das Abmelden hat nicht geklappt. {{reason}}",
+    "messageSaved": "Mail gespeichert"
   },
   "status": {
     "syncing": "Suche nach neuen Mails",

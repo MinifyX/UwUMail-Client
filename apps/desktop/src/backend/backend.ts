@@ -98,6 +98,8 @@ export interface Backend {
   openAttachment(attachmentId: string): Promise<boolean>;
   /** Asks where to save it in a native dialog. Resolves to false when the user cancels. */
   saveAttachment(attachmentId: string): Promise<boolean>;
+  /** The whole mail as an .eml file, where the user picks. False when cancelled. */
+  saveMessage(messageId: string): Promise<boolean>;
 
   /** Brand logo or website icon for a company address; null for people and mail providers. */
   getSenderPicture(email: string): Promise<SenderPicture | null>;

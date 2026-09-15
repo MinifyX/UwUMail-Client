@@ -108,12 +108,7 @@ pub async fn confirm(_app: &AppHandle, title: &str, text: String, ok: &str, canc
 }
 
 /// Saves into Downloads/UwUMail; there is no save dialog on Android.
-pub async fn save_file(
-    _app: &AppHandle,
-    _engine: &Engine,
-    _attachment_id: &str,
-    file: &AttachmentFile,
-) -> Result<bool, Error> {
+pub async fn save_file(_app: &AppHandle, file: &AttachmentFile) -> Result<bool, Error> {
     call("saveToDownloads", json!({ "path": file.path, "filename": file.filename, "mimeType": file.mime_type }))?;
     Ok(true)
 }

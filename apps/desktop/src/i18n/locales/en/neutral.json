@@ -111,7 +111,10 @@
     "more": "More",
     "blockSender": "Block {{email}}",
     "blockDomain": "Block everything from @{{domain}}",
-    "unsubscribe": "Unsubscribe"
+    "unsubscribe": "Unsubscribe",
+    "print": "Print",
+    "saveMessage": "Save as file (.eml)",
+    "date": "Date"
   },
   "compose": {
     "new": "New message",
@@ -176,7 +179,8 @@
     "unsubscribePage": "{{name}}'s unsubscribe page is open in your browser",
     "unsubscribeArchived_one": "{{count}} mail archived",
     "unsubscribeArchived_other": "{{count}} mails archived",
-    "unsubscribeFailed": "Unsubscribing didn't work. {{reason}}"
+    "unsubscribeFailed": "Unsubscribing didn't work. {{reason}}",
+    "messageSaved": "Mail saved"
   },
   "status": {
     "syncing": "Checking for mail",

@@ -64,7 +64,8 @@
     "markedSpam": "Off to the spam corner (｀へ´)",
     "moveUndone": "Poof, back as it was (・ω・)",
     "blocked": "{{entry}} can't get in anymore (｀・ω・´) New mail goes to the trash.",
-    "unsubscribed": "Unsubscribed (≧▽≦) No more mail from {{name}}"
+    "unsubscribed": "Unsubscribed (≧▽≦) No more mail from {{name}}",
+    "messageSaved": "Mail tucked away safely (˘ω˘)"
   },
   "status": {
     "syncing": "Fetching fresh mail…",

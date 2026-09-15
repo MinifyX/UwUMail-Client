@@ -227,6 +227,17 @@ impl AttachmentCache {
         })
     }
 
+    /// Writes a whole message as a file next to its attachments, e.g. to save it somewhere else.
+    pub fn store_message(&self, message_id: &str, filename: &str, raw: &[u8]) -> Result<PathBuf> {
+        let folder = self.folder(message_id);
+        std::fs::create_dir_all(&folder).map_err(|e| Error::internal(format!("Couldn't create the cache: {e}")))?;
+        // Attachment files start with their index; this can't be mistaken for one.
+        let path = folder.join(format!("message-{}", safe_filename(filename)));
+        std::fs::write(&path, raw).map_err(|e| Error::internal(format!("Couldn't write the message: {e}")))?;
+        self.trim();
+        Ok(path)
+    }
+
     pub fn remove_message(&self, message_id: &str) {
         let _ = std::fs::remove_dir_all(self.folder(message_id));
     }
