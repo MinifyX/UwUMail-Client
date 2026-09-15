@@ -17,6 +17,15 @@ fail() {
   failed=1
 }
 
+# adb sometimes loses the emulator for a moment and dumps nothing: wait for it and try again.
+dump_log() {
+  for _ in 1 2 3; do
+    adb wait-for-device
+    adb logcat -d > "$out/logcat.txt" && grep -q "UwUMail :" "$out/logcat.txt" && return
+    sleep 3
+  done
+}
+
 adb logcat -c
 adb install -r "$apk" || { fail "Install failed"; exit 1; }
 adb shell pm grant "$package" android.permission.POST_NOTIFICATIONS || true
@@ -53,7 +62,7 @@ sleep 4
 # waiting for it here, so the engine must ignore it (and never log the link itself).
 adb shell "am start -W -a android.intent.action.VIEW -d 'app.uwumail://oauth?code=smoke&state=smoke'"
 sleep 4
-adb logcat -d > "$out/logcat.txt"
+dump_log
 grep -q "UwUMail : sign-in link ignored" "$out/logcat.txt" || fail "The sign-in link didn't reach the engine"
 if grep -q "code=smoke" "$out/logcat.txt"; then fail "The sign-in link ended up in the log"; fi
 
@@ -81,14 +90,14 @@ after=$(adb shell pidof "$package" | tr -d '\r')
 
 # An update check (20 s after each start, again 30 s after a failure) proves HTTPS certificate checks
 # work. The emulator's network sometimes comes up late, so one success is enough.
-adb logcat -d > "$out/logcat.txt"
+dump_log
 grep -q "UwUMail : update check" "$out/logcat.txt" || fail "The update check didn't run"
 if ! grep -Eq "UwUMail : update check: (nothing new|.* is ready)" "$out/logcat.txt"; then
   grep "UwUMail : update check failed" "$out/logcat.txt"
   fail "HTTPS failed on Android"
 fi
 
-adb logcat -d > "$out/logcat.txt"
+dump_log
 grep -q "UwUMail : engine running" "$out/logcat.txt" || fail "The mail engine didn't start (see uwumail-log.txt)"
 if grep -q "UwUMail : start failed" "$out/logcat.txt"; then fail "The native start reported an error"; fi
 relauncher=$(grep -m1 -o "Start proc [0-9]*:$package:relaunch" "$out/logcat.txt" | sed 's/Start proc \([0-9]*\):.*/\1/')
