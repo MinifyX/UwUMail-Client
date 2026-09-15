@@ -88,9 +88,7 @@ jobs:
 
   installers:
     name: Installers (${{ matrix.name }})
-    # By hand only: installer builds (Windows most of all) use up the private repo's free
-    # Actions minutes. Releases are built locally with `pnpm release`.
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request'
     needs: [ui, engine]
     strategy:
       fail-fast: false
@@ -103,33 +101,52 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 2
+      - name: Skip for documentation-only changes
+        id: changes
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && git diff --name-only HEAD^ HEAD | grep -qvE '^(docs/|brand/|README|CONTRIBUTING|\.github/ISSUE)'; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Linux build dependencies
-        if: runner.os == 'Linux'
+        if: steps.changes.outputs.build == 'true' && runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        if: steps.changes.outputs.build == 'true'
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        if: steps.changes.outputs.build == 'true'
         with:
           node-version: 24
           cache: pnpm
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        if: steps.changes.outputs.build == 'true'
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: steps.changes.outputs.build == 'true'
       - run: pnpm install --frozen-lockfile
+        if: steps.changes.outputs.build == 'true'
       # Windows gets UwUMail's own installer; Linux the usual packages.
       - run: pnpm build:setup
-        if: runner.os == 'Windows'
+        if: steps.changes.outputs.build == 'true' && runner.os == 'Windows'
         env:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
       - run: pnpm tauri build
-        if: runner.os == 'Linux'
+        if: steps.changes.outputs.build == 'true' && runner.os == 'Linux'
         env:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.changes.outputs.build == 'true'
         with:
           name: UwUMail-${{ matrix.name }}-${{ github.sha }}
           retention-days: 14

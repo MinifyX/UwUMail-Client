@@ -1,4 +1,5 @@
-// Publishes the UwUMail version in tauri.conf.json for Windows, from this PC:
+// Publishes the UwUMail version in tauri.conf.json for Windows, from this PC. Normally
+// the release workflow does this for a pushed tag; this is the way when GitHub can't.
 //
 //   pnpm release              build and sign the setup, check it, publish it
 //   pnpm release --no-build   publish the setup already in target/release

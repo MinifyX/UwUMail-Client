@@ -293,13 +293,13 @@ different site than the target.
 
 - Every push: typecheck, lint, unit tests, `cargo clippy`, `cargo test`
   (including integration tests against GreenMail and Stalwart), `cargo audit`
-  and `pnpm audit --prod`, all on Linux runners. All actions are pinned to
-  commit SHAs.
-- By hand only, to stay within the private repo's free Actions minutes: the
-  installers (`UwUMail-Setup-<version>.exe` and the Linux packages, in CI), the
-  Android APK with its emulator test, and the release workflow.
-- Releases: tag `vX.Y.Z` (or `vX.Y.Z-beta.N`), push the tag, then run
-  `pnpm release` on a Windows PC. It builds and signs the setup, checks the
-  signature against the updater key and hands it to `MinifyX/UwUMail-Releases`,
-  whose free public workflow publishes it and updates the feeds (see
-  `release-notes/README.md`). macOS and Linux releases are paused for now.
+  and `pnpm audit --prod`. All actions are pinned to commit SHAs.
+- Every push to `main`: `UwUMail-Setup-<version>.exe` for Windows and the Linux
+  packages as workflow artifacts, and the signed Android APK with its emulator
+  test.
+- Tags `vX.Y.Z` (or `vX.Y.Z-beta.N`): the signed setup goes to
+  `MinifyX/UwUMail-Releases` as a release and into the update feeds (see
+  `release-notes/README.md`); macOS and Linux get a draft release here. When
+  GitHub can't run the workflow, `pnpm release` on a Windows PC does the
+  Windows part: it builds and signs the setup, checks the signature against the
+  updater key and hands it over the same way.
