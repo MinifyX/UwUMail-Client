@@ -135,6 +135,50 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
     }
 }
 
+/// Plain text as simple HTML paragraphs, for editing a text-only draft.
+pub fn text_to_html(text: &str) -> String {
+    let escaped = text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+    escaped
+        .lines()
+        .map(|line| if line.is_empty() { "<p><br></p>".to_string() } else { format!("<p>{line}</p>") })
+        .collect()
+}
+
+/// What a saved draft needs beyond the stored message: Bcc (only drafts keep it in the
+/// headers) and the attachment files themselves, to put back into the composer.
+pub struct DraftParts {
+    pub bcc: Vec<Address>,
+    pub attachments: Vec<crate::model::OutgoingAttachment>,
+}
+
+pub fn draft_parts(raw: &[u8]) -> DraftParts {
+    use base64::Engine as _;
+    let Some(message) = MessageParser::default().parse(raw) else {
+        return DraftParts { bcc: Vec::new(), attachments: Vec::new() };
+    };
+    let attachments = message
+        .attachments()
+        .map(|part| {
+            let mime_type = part
+                .content_type()
+                .map(|ct| match ct.subtype() {
+                    Some(sub) => format!("{}/{}", ct.ctype(), sub),
+                    None => ct.ctype().to_string(),
+                })
+                .unwrap_or_else(|| "application/octet-stream".into());
+            crate::model::OutgoingAttachment {
+                filename: crate::attachments::clean_display_name(part.attachment_name().unwrap_or("attachment")),
+                mime_type,
+                size: part.contents().len() as u64,
+                source: crate::model::AttachmentSource::Base64 {
+                    data: base64::engine::general_purpose::STANDARD.encode(part.contents()),
+                },
+            }
+        })
+        .collect();
+    DraftParts { bcc: addresses(message.bcc()), attachments }
+}
+
 const REMOTE_MARKERS: [&str; 6] =
     ["src=\"http", "src='http", "url(http", "url(\"http", "url('http", "background=\"http"];
 

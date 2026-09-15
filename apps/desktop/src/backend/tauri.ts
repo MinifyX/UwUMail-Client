@@ -7,6 +7,8 @@ import type {
   BackendEvent,
   Contact,
   DiscoveredSettings,
+  DraftContent,
+  DraftSaveResult,
   FlagChange,
   Folder,
   MailtoDraft,
@@ -93,6 +95,18 @@ export class TauriBackend implements Backend {
 
   send(message: OutgoingMessage) {
     return call<void>("send_message", { message });
+  }
+
+  saveDraft(draft: OutgoingMessage) {
+    return call<DraftSaveResult>("save_draft", { draft });
+  }
+
+  deleteDraft(accountId: string, draftKey: string) {
+    return call<void>("delete_draft", { accountId, draftKey });
+  }
+
+  openDraft(messageId: string) {
+    return call<DraftContent>("open_draft", { messageId });
   }
 
   async getAttachment(attachmentId: string): Promise<AttachmentContent> {

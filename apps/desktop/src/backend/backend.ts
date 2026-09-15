@@ -4,6 +4,8 @@ import type {
   BackendEvent,
   Contact,
   DiscoveredSettings,
+  DraftContent,
+  DraftSaveResult,
   FlagChange,
   Folder,
   MailtoDraft,
@@ -50,6 +52,10 @@ export interface Backend {
   archive(messageIds: string[]): Promise<void>;
   trash(messageIds: string[]): Promise<void>;
   send(message: OutgoingMessage): Promise<void>;
+  /** Saves into the account's Drafts folder, replacing the draft's earlier version. */
+  saveDraft(draft: OutgoingMessage): Promise<DraftSaveResult>;
+  deleteDraft(accountId: string, draftKey: string): Promise<void>;
+  openDraft(messageId: string): Promise<DraftContent>;
 
   searchContacts(query: string): Promise<Contact[]>;
 

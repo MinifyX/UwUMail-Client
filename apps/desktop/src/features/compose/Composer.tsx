@@ -2,6 +2,7 @@ import clsx from "clsx";
 import {
   ArrowLeft,
   Bold,
+  Check,
   ChevronDown,
   Italic,
   Link,
@@ -14,12 +15,12 @@ import {
   Trash,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { OutgoingAttachment } from "@/backend/types";
 import { useBackLayer } from "@/lib/backStack";
 import { useIsPhone } from "@/lib/device";
-import { clearPhoneDraft, savePhoneDraft } from "./phoneDraft";
+import { clearLocalDraft, markLocalDraftSaved, saveLocalDraft } from "./localDraft";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
 import { useT } from "@/i18n";
@@ -31,6 +32,13 @@ import { toast } from "@/state/toasts";
 import { useUi, type ComposeRequest } from "@/state/ui";
 import { initialDraft, type DraftState } from "./draft";
 import { RecipientInput } from "./RecipientInput";
+
+/** Quiet for this long after the last change, then the draft goes to the server. */
+const DRAFT_SAVE_DELAY = 2500;
+/** While someone keeps typing, it still goes at least this often. */
+const DRAFT_SAVE_MAX_WAIT = 15_000;
+
+type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; at: string } | { kind: "local" };
 
 function readAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -73,27 +81,147 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   // On the phone the back gesture shrinks the draft to a bar instead of losing it.
   useBackLayer(phone && !minimized, () => setMinimized(true));
 
-  const discard = () => {
-    clearPhoneDraft();
-    closeCompose();
+  const inReplyTo = request.mode === "forward" ? undefined : (request.restore?.inReplyTo ?? request.source?.id);
+  // Drafts: changed since the last save, the key of the server copy and where it lives.
+  const dirty = useRef(request.restore?.savedToServer === false);
+  const draftKey = useRef(request.restore?.draftKey);
+  const savedAccount = useRef(request.restore?.draftKey ? request.restore.accountId : undefined);
+  const lastSave = useRef(0);
+  const saving = useRef<Promise<void>>(Promise.resolve());
+  /** Sent or thrown away: nothing may save the draft again. */
+  const finished = useRef(false);
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+  const latest = useRef({ draft, accountId, attachments });
+  useEffect(() => {
+    latest.current = { draft, accountId, attachments };
+  });
+
+  const localCopy = useCallback(
+    (savedToServer: boolean) => {
+      const { draft: current } = latest.current;
+      saveLocalDraft({
+        mode: request.mode,
+        accountId: latest.current.accountId,
+        to: current.to,
+        cc: current.cc,
+        bcc: current.bcc,
+        subject: current.subject,
+        html: body.current,
+        inReplyTo,
+        draftKey: draftKey.current,
+        savedToServer,
+      });
+    },
+    [request.mode, inReplyTo],
+  );
+
+  /** Saves the draft into the Drafts folder, one save after the other. */
+  const saveDraft = useCallback(() => {
+    const run = async () => {
+      if (!dirty.current || finished.current) return;
+      dirty.current = false;
+      lastSave.current = Date.now();
+      const { draft: current, accountId: account, attachments: files } = latest.current;
+      const html = quotableHtml(editor.current?.innerHTML ?? body.current);
+      setSaveState({ kind: "saving" });
+      try {
+        const saved = await backend().saveDraft({
+          accountId: account,
+          to: current.to,
+          cc: current.cc,
+          bcc: current.bcc,
+          subject: current.subject,
+          html,
+          text: htmlToPlainText(html),
+          inReplyTo,
+          attachments: files,
+          draftKey: draftKey.current,
+        });
+        // Written from another mailbox now: the old copy goes.
+        const previous = savedAccount.current;
+        if (previous && previous !== account)
+          void backend()
+            .deleteDraft(previous, saved.draftKey)
+            .catch(() => {});
+        draftKey.current = saved.draftKey;
+        savedAccount.current = account;
+        if (!dirty.current) markLocalDraftSaved(saved.draftKey);
+        setSaveState({ kind: "saved", at: saved.savedAt });
+      } catch {
+        // Kept on this device; the next change or closing tries again.
+        dirty.current = true;
+        setSaveState({ kind: "local" });
+      }
+    };
+    saving.current = saving.current.then(run);
+    return saving.current;
+  }, [inReplyTo]);
+
+  const changed = () => {
+    dirty.current = true;
   };
 
   useEffect(() => {
-    if (!phone) return;
-    const timer = window.setTimeout(() => {
-      savePhoneDraft({
-        mode: request.mode,
-        accountId: draft.accountId,
-        to: draft.to,
-        cc: draft.cc,
-        bcc: draft.bcc,
-        subject: draft.subject,
-        html: body.current,
-        inReplyTo: request.restore?.inReplyTo ?? request.source?.id,
-      });
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [phone, draft, edits, request]);
+    if (!dirty.current || finished.current) return;
+    const local = window.setTimeout(() => localCopy(false), 500);
+    const sinceSave = Date.now() - lastSave.current;
+    const server = window.setTimeout(
+      () => void saveDraft(),
+      Math.max(0, Math.min(DRAFT_SAVE_DELAY, DRAFT_SAVE_MAX_WAIT - sinceSave)),
+    );
+    return () => {
+      window.clearTimeout(local);
+      window.clearTimeout(server);
+    };
+  }, [draft, edits, attachments, localCopy, saveDraft]);
+
+  // Replaced by another compose window or closed from elsewhere: nothing typed gets lost.
+  useEffect(
+    () => () => {
+      if (dirty.current && !finished.current) {
+        localCopy(false);
+        void saveDraft();
+      }
+    },
+    [localCopy, saveDraft],
+  );
+
+  /** Closes the window; the draft stays in the Drafts folder. */
+  const close = () => {
+    const worthKeeping = dirty.current || draftKey.current !== undefined;
+    closeCompose();
+    if (!worthKeeping) {
+      clearLocalDraft();
+      return;
+    }
+    if (dirty.current) localCopy(false);
+    void saveDraft().then(() => {
+      if (dirty.current) {
+        toast(t("toast.draftLocal"), "error");
+      } else {
+        clearLocalDraft();
+        toast(t("toast.draftSaved"), "success");
+      }
+    });
+  };
+
+  /** Throws the draft away, also from the Drafts folder. */
+  const discard = () => {
+    const hadDraft = draftKey.current !== undefined || dirty.current;
+    finished.current = true;
+    clearLocalDraft();
+    closeCompose();
+    // After a save that may still be on its way, so it can't bring the draft back.
+    void saving.current.then(async () => {
+      const key = draftKey.current;
+      const account = savedAccount.current;
+      if (key && account)
+        await backend()
+          .deleteDraft(account, key)
+          .catch(() => {});
+    });
+    if (hadDraft) toast(t("toast.draftDiscarded"));
+  };
 
   useEffect(() => {
     if (request.mode !== "new") {
@@ -108,6 +236,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
 
   const update = (patch: Partial<DraftState>) => {
     setError(null);
+    changed();
     setDraft((current) => ({ ...current, ...patch }));
   };
 
@@ -129,7 +258,9 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
     // What people paste can carry forms or remote content; send only the safe part.
     const html = quotableHtml(editor.current?.innerHTML ?? body.current);
     setSending(true);
+    finished.current = true;
     try {
+      await saving.current;
       await backend().send({
         accountId,
         to: draft.to,
@@ -138,14 +269,22 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         subject: draft.subject,
         html,
         text: htmlToPlainText(html),
-        inReplyTo: request.mode === "forward" ? undefined : (request.restore?.inReplyTo ?? request.source?.id),
+        inReplyTo,
         attachments,
+        draftKey: savedAccount.current === accountId ? draftKey.current : undefined,
       });
+      // Written in another mailbox before: sending there doesn't remove that copy.
+      if (draftKey.current && savedAccount.current && savedAccount.current !== accountId) {
+        void backend()
+          .deleteDraft(savedAccount.current, draftKey.current)
+          .catch(() => {});
+      }
       toast(t("toast.sent"), "success", "sent");
-      clearPhoneDraft();
+      clearLocalDraft();
       closeCompose();
       void refresh();
     } catch (reason) {
+      finished.current = false;
       setError(t("toast.sendFailed", { reason: reason instanceof Error ? reason.message : String(reason) }));
     } finally {
       setSending(false);
@@ -258,7 +397,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         )}
         <button
           type="button"
-          onClick={discard}
+          onClick={close}
           aria-label={t("compose.close")}
           title={t("compose.close")}
           className="grid size-8 place-items-center rounded-full hover:bg-white/10"
@@ -336,6 +475,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           data-placeholder={t("compose.placeholder")}
           onInput={(event) => {
             setError(null);
+            changed();
             body.current = event.currentTarget.innerHTML;
             setEdits((count) => count + 1);
           }}
@@ -356,7 +496,10 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
               <button
                 type="button"
                 aria-label={t("compose.removeAttachment", { name: attachment.filename })}
-                onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
+                onClick={() => {
+                  changed();
+                  setAttachments(attachments.filter((_, i) => i !== index));
+                }}
                 className="grid size-6 place-items-center rounded-full hover:bg-pink-tint"
               >
                 <X className="size-3" aria-hidden />
@@ -428,12 +571,39 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
                 source: { kind: "base64" as const, data: await readAsBase64(file) },
               })),
             );
+            changed();
             setAttachments((current) => [...current, ...added]);
           }}
         />
         <span className="flex-1" />
+        <DraftStatus state={saveState} />
         <IconButton icon={Trash} size="sm" label={t("compose.discard")} onClick={discard} />
       </footer>
     </section>
+  );
+}
+
+function DraftStatus({ state }: { state: SaveState }) {
+  const { t, i18n } = useT();
+  if (state.kind === "idle") return null;
+  const text =
+    state.kind === "saving"
+      ? t("compose.draftSaving")
+      : state.kind === "local"
+        ? t("compose.draftLocal")
+        : t("compose.draftSaved", {
+            time: new Date(state.at).toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" }),
+          });
+  return (
+    <span
+      role="status"
+      className={clsx(
+        "mr-1 flex min-w-0 items-center gap-1 text-[12px]",
+        state.kind === "local" ? "font-semibold text-danger" : "text-muted",
+      )}
+    >
+      {state.kind === "saved" && <Check className="size-3.5 shrink-0" aria-hidden />}
+      <span className="truncate">{text}</span>
+    </span>
   );
 }

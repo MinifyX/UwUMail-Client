@@ -13,7 +13,9 @@
 - [x] JMAP next to IMAP/SMTP: discovery, sync, push, sending, switchable per account (tested against Stalwart)
 - [ ] JMAP: verify against Fastmail and Cyrus with real accounts
 - [x] Writing: compose, reply, reply all, forward, attachments
-- [ ] Drafts saved to the server, multiple identities per mailbox
+- [x] Drafts saved automatically to the server's Drafts folder, continued on any device, removed when sent
+- [ ] Undo send, signatures, multiple identities per mailbox
+- [ ] Unsubscribe button, spam and blocked senders, move to folder, print and save as file, multi-select, more shortcuts
 - [x] Unified inbox across all mailboxes
 - [x] Conversation view (can be turned off)
 - [x] Offline reading and local full-text search

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n";
 import { useBackLayer } from "@/lib/backStack";
 import { useUi } from "@/state/ui";
-import { loadPhoneDraft } from "../compose/phoneDraft";
+import { loadLocalDraft } from "../compose/localDraft";
 import { MailboxNav } from "../mail/MailboxNav";
 import { MobileList } from "./MobileList";
 import { MobileReader } from "./MobileReader";
@@ -83,7 +83,7 @@ export function MobileShell() {
 
   // A draft Android didn't let us finish comes back as the bar above the write button.
   useEffect(() => {
-    const saved = loadPhoneDraft();
+    const saved = loadLocalDraft();
     const ui = useUi.getState();
     if (!saved || ui.compose) return;
     ui.openCompose({ mode: saved.mode, restore: saved });

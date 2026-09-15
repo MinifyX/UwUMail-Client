@@ -44,7 +44,8 @@
   },
   "compose": {
     "placeholder": "Schreib was Liebes ✿",
-    "noRecipients": "An wen soll's gehen? Füg erst einen Empfänger hinzu (・・ )?"
+    "noRecipients": "An wen soll's gehen? Füg erst einen Empfänger hinzu (・・ )?",
+    "draftLocal": "Erst mal nur hier gespeichert (・_・;)"
   },
   "toast": {
     "sent": "Und ab die Post ✉︎ ~",
@@ -53,7 +54,9 @@
     "trashed": "Tschüssi (｡•́︿•̀｡)",
     "newMail_one": "Du hast Post! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
     "newMail_other": "{{count}} neue Mails! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
-    "accountAdded": "{{email}} ist eingezogen! ٩(◕‿◕)۶"
+    "accountAdded": "{{email}} ist eingezogen! ٩(◕‿◕)۶",
+    "draftSaved": "Entwurf ist sicher verstaut (˘ω˘)",
+    "draftDiscarded": "Weg damit, als wär nie was gewesen (・ω・)"
   },
   "status": {
     "syncing": "Hole frische Mails…",

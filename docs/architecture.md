@@ -146,6 +146,21 @@ load" remembers the address or the company domain (the registrable domain from
 the public suffix list, never a mail provider), kept in the settings and listed
 under Settings → Reading.
 
+### Drafts
+
+The composer saves 2.5 seconds after the last change (at least every 15
+seconds while typing) and when it closes. `Engine::save_draft` builds the
+message like for sending, but keeps Bcc and a stable Message-ID, the draft
+key: over IMAP it appends to the Drafts folder with `\Draft \Seen`, finds all
+versions with `UID SEARCH HEADER Message-ID` and deletes all but the newest;
+over JMAP it imports into the Drafts mailbox and destroys older emails with
+the same `messageId` (compared on the client, because servers don't reliably
+filter by that header). Sending with the key removes every version.
+`open_draft` reads the saved message back, including Bcc and attachments.
+Next to the server copy the composer keeps one local copy (local storage):
+drafts that never reached the server come back on the next start, and on the
+phone the open draft always comes back as its bar.
+
 ### Addons
 
 See [addons.md](addons.md). In short: each addon runs in its own sandboxed

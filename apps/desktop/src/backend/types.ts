@@ -77,6 +77,8 @@ export interface ThreadSummary {
   unreadCount: number;
   flagged: boolean;
   hasAttachments: boolean;
+  /** Somewhere in the conversation is an unsent draft. */
+  hasDraft: boolean;
 }
 
 export interface ThreadPage {
@@ -143,6 +145,27 @@ export interface OutgoingMessage {
   html: string;
   text: string;
   inReplyTo?: string;
+  attachments: OutgoingAttachment[];
+  /** The draft this was written in: saving replaces it, sending removes it. */
+  draftKey?: string;
+}
+
+export interface DraftSaveResult {
+  draftKey: string;
+  savedAt: string;
+}
+
+/** A draft from the Drafts folder, ready to continue writing. */
+export interface DraftContent {
+  accountId: string;
+  draftKey: string | null;
+  to: Address[];
+  cc: Address[];
+  bcc: Address[];
+  subject: string;
+  html: string;
+  /** The local id of the message it answers, if that is still around. */
+  inReplyTo: string | null;
   attachments: OutgoingAttachment[];
 }
 

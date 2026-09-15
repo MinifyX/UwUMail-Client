@@ -548,31 +548,167 @@ impl Engine {
         Ok(())
     }
 
-    pub async fn send(&self, outgoing: OutgoingMessage) -> Result<()> {
-        let account = self.inner.store.account(&outgoing.account_id)?;
-        let threading = match &outgoing.in_reply_to {
+    fn threading_for(&self, in_reply_to: Option<&str>) -> Result<Option<Threading>> {
+        Ok(match in_reply_to {
             Some(id) => self
                 .inner
                 .store
                 .threading_headers(id)?
                 .map(|(parent_message_id, references)| Threading { parent_message_id, references }),
             None => None,
+        })
+    }
+
+    /// Saves what the composer has into the account's Drafts folder and removes the draft's
+    /// earlier version. The returned key identifies the draft for the next save.
+    pub async fn save_draft(&self, draft: OutgoingMessage) -> Result<SavedDraft> {
+        let account = self.inner.store.account(&draft.account_id)?;
+        let key = match draft.draft_key.as_deref() {
+            Some(key) if smtp::is_draft_key(key) => key.to_string(),
+            Some(_) => return Err(Error::invalid("This draft can't be saved.")),
+            None => smtp::new_message_id(&account.email),
         };
-        let from = Address {
-            name: Some(account.display_name.clone()).filter(|n| !n.is_empty()),
-            email: account.email.clone(),
+        let threading = self.threading_for(draft.in_reply_to.as_deref())?;
+        let from = sender(&account);
+        let message = smtp::build(&smtp::Mail {
+            from: &from,
+            to: &draft.to,
+            cc: &draft.cc,
+            bcc: &draft.bcc,
+            subject: &draft.subject,
+            text: &draft.text,
+            html: &draft.html,
+            threading: threading.as_ref(),
+            attachments: &draft.attachments,
+            message_id: Some(&key),
+            draft: true,
+        })?;
+        let raw = message.formatted();
+
+        if account.protocol == Protocol::Jmap {
+            let client = self.inner.jmap_client(&account.id).await?;
+            jmap_sync::save_draft(&client, &self.inner.store, &account.id, raw, &key).await?;
+            self.inner.wake(&account.id);
+        } else {
+            let folder = self.inner.ensure_folder(&account.id, FolderRole::Drafts).await?;
+            with_session!(self.inner, &account.id, |session| imap::append(
+                session,
+                &folder.path,
+                &raw,
+                Some("(\\Seen \\Draft)")
+            ))?;
+            let uids = with_session!(self.inner, &account.id, |session| imap::uids_with_message_id(
+                session,
+                &folder.path,
+                &key
+            ))?;
+            if let Some((&newest, older)) = uids.split_last() {
+                with_session!(self.inner, &account.id, |session| imap::delete_permanently(
+                    session,
+                    &folder.path,
+                    older
+                ))?;
+                self.inner.store.delete_uids(&folder.id, older)?;
+                let flags = MessageFlags { seen: true, draft: true, ..MessageFlags::default() };
+                let size = raw.len() as u64;
+                self.inner.store.insert_message(
+                    &account.id,
+                    &folder.id,
+                    newest,
+                    flags,
+                    size,
+                    Some(mime::now()),
+                    &mime::parse(&raw),
+                )?;
+            }
+            self.inner.emit(EngineEvent::MailChanged { account_id: account.id.clone() });
+        }
+        Ok(SavedDraft { draft_key: key, saved_at: mime::iso8601(mime::now()) })
+    }
+
+    /// Removes every saved version of a draft.
+    pub async fn delete_draft(&self, account_id: &str, draft_key: &str) -> Result<()> {
+        if !smtp::is_draft_key(draft_key) {
+            return Err(Error::invalid("This draft can't be deleted."));
+        }
+        let account = self.inner.store.account(account_id)?;
+        let Some(folder) = self.inner.store.folder_by_role(account_id, FolderRole::Drafts)? else { return Ok(()) };
+        if account.protocol == Protocol::Jmap {
+            let client = self.inner.jmap_client(account_id).await?;
+            jmap_sync::delete_draft(&client, &self.inner.store, account_id, draft_key).await?;
+            self.inner.wake(account_id);
+        } else {
+            let uids = with_session!(self.inner, account_id, |session| imap::uids_with_message_id(
+                session,
+                &folder.path,
+                draft_key
+            ))?;
+            with_session!(self.inner, account_id, |session| imap::delete_permanently(session, &folder.path, &uids))?;
+        }
+        // Also what the last sync brought in, so the draft disappears right away.
+        let local = self.inner.store.ids_by_header_id(&folder.id, draft_key)?;
+        self.inner.store.delete_messages(&local)?;
+        self.inner.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
+        Ok(())
+    }
+
+    /// A draft from the Drafts folder with everything needed to keep writing it.
+    pub async fn open_draft(&self, message_id: &str) -> Result<DraftContent> {
+        let message = self
+            .inner
+            .store
+            .messages_by_ids(&[message_id.to_string()])?
+            .pop()
+            .ok_or_else(|| Error::not_found("This draft no longer exists."))?;
+        let location = self
+            .inner
+            .store
+            .locations(&[message_id.to_string()])?
+            .pop()
+            .ok_or_else(|| Error::not_found("This draft no longer exists."))?;
+        let folder = self.inner.store.folder(&location.folder_id)?;
+        if !message.flags.draft && folder.role != Some(FolderRole::Drafts) {
+            return Err(Error::invalid("This message isn't a draft."));
+        }
+        let raw = self.inner.raw_message(&location).await?;
+        let parsed = mime::parse(&raw);
+        let parts = mime::draft_parts(&raw);
+        let in_reply_to = match &parsed.in_reply_to {
+            Some(parent) => self.inner.store.message_by_header_id(&location.account_id, parent)?,
+            None => None,
         };
-        let message = smtp::build(
-            &from,
-            &outgoing.to,
-            &outgoing.cc,
-            &outgoing.bcc,
-            &outgoing.subject,
-            &outgoing.text,
-            &outgoing.html,
-            threading.as_ref(),
-            &outgoing.attachments,
-        )?;
+        let html =
+            parsed.html.clone().unwrap_or_else(|| mime::text_to_html(parsed.text.as_deref().unwrap_or_default()));
+        Ok(DraftContent {
+            account_id: location.account_id,
+            draft_key: parsed.message_id.filter(|id| smtp::is_draft_key(id)),
+            to: parsed.to,
+            cc: parsed.cc,
+            bcc: parts.bcc,
+            subject: parsed.subject,
+            html,
+            in_reply_to,
+            attachments: parts.attachments,
+        })
+    }
+
+    pub async fn send(&self, outgoing: OutgoingMessage) -> Result<()> {
+        let account = self.inner.store.account(&outgoing.account_id)?;
+        let threading = self.threading_for(outgoing.in_reply_to.as_deref())?;
+        let from = sender(&account);
+        let message = smtp::build(&smtp::Mail {
+            from: &from,
+            to: &outgoing.to,
+            cc: &outgoing.cc,
+            bcc: &outgoing.bcc,
+            subject: &outgoing.subject,
+            text: &outgoing.text,
+            html: &outgoing.html,
+            threading: threading.as_ref(),
+            attachments: &outgoing.attachments,
+            message_id: None,
+            draft: false,
+        })?;
 
         let recipients: Vec<Address> = outgoing.to.iter().chain(&outgoing.cc).chain(&outgoing.bcc).cloned().collect();
         if account.protocol == Protocol::Jmap {
@@ -598,12 +734,21 @@ impl Engine {
                 && let Some(sent) = self.inner.store.folder_by_role(&account.id, FolderRole::Sent)?
             {
                 let raw = message.formatted();
-                if let Err(error) =
-                    with_session!(self.inner, &account.id, |session| imap::append(session, &sent.path, &raw, true))
-                {
+                if let Err(error) = with_session!(self.inner, &account.id, |session| imap::append(
+                    session,
+                    &sent.path,
+                    &raw,
+                    Some("(\\Seen)")
+                )) {
                     tracing::warn!("Couldn't store the sent message: {error}");
                 }
             }
+        }
+
+        if let Some(key) = &outgoing.draft_key
+            && let Err(error) = self.delete_draft(&account.id, key).await
+        {
+            tracing::warn!("Couldn't remove the draft of a sent message: {error}");
         }
 
         if let Some(original) = &outgoing.in_reply_to {
@@ -654,20 +799,7 @@ impl Engine {
             .locations(std::slice::from_ref(&message_id))?
             .pop()
             .ok_or_else(|| Error::not_found("This message no longer exists."))?;
-        let raw = if let Some(blob) = &location.blob_id {
-            let client = self.inner.jmap_client(&location.account_id).await?;
-            client.download(blob, "message.eml", "message/rfc822").await?
-        } else {
-            let uid = u32::try_from(location.uid)
-                .ok()
-                .filter(|uid| *uid > 0)
-                .ok_or_else(|| Error::connection("The message is still being moved. Try again in a moment."))?;
-            with_session!(self.inner, &location.account_id, |session| imap::fetch_body(
-                session,
-                &location.folder_path,
-                uid
-            ))?
-        };
+        let raw = self.inner.raw_message(&location).await?;
         self.inner.attachments.store_from_raw(&message_id, index, &raw)
     }
 
@@ -709,6 +841,10 @@ impl Engine {
     }
 }
 
+fn sender(account: &AccountRecord) -> Address {
+    Address { name: Some(account.display_name.clone()).filter(|n| !n.is_empty()), email: account.email.clone() }
+}
+
 /// JMAP email ids by account.
 fn group_remote(locations: &[MessageLocation]) -> HashMap<String, Vec<String>> {
     let mut groups: HashMap<String, Vec<String>> = HashMap::new();
@@ -734,6 +870,19 @@ fn group_by_folder(locations: &[MessageLocation]) -> HashMap<(String, String), V
 }
 
 impl Inner {
+    /// The complete message from the server.
+    async fn raw_message(&self, location: &MessageLocation) -> Result<Vec<u8>> {
+        if let Some(blob) = &location.blob_id {
+            let client = self.jmap_client(&location.account_id).await?;
+            return client.download(blob, "message.eml", "message/rfc822").await;
+        }
+        let uid = u32::try_from(location.uid)
+            .ok()
+            .filter(|uid| *uid > 0)
+            .ok_or_else(|| Error::connection("The message is still being moved. Try again in a moment."))?;
+        with_session!(self, &location.account_id, |session| imap::fetch_body(session, &location.folder_path, uid))
+    }
+
     /// Mail received before this (Unix seconds) is kept as a preview.
     fn full_after(&self) -> Option<i64> {
         let days = self.offline_days.load(Ordering::Relaxed);

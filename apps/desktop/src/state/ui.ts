@@ -15,11 +15,11 @@ export interface ComposeRequest {
   body?: string;
   /** Files shared from another app. */
   attachments?: OutgoingAttachment[];
-  /** A draft saved on the phone, brought back after Android closed UwUMail. */
+  /** A draft to keep writing: from the Drafts folder, or kept on this device. */
   restore?: SavedDraft;
 }
 
-/** What the phone keeps of an unsent draft. */
+/** A draft to continue: kept on this device, or opened from the Drafts folder. */
 export interface SavedDraft {
   mode: ComposeMode;
   accountId: string;
@@ -29,6 +29,10 @@ export interface SavedDraft {
   subject: string;
   html: string;
   inReplyTo?: string;
+  /** Its Message-ID in the Drafts folder, once saved there. */
+  draftKey?: string;
+  /** False while the newest text only exists on this device. */
+  savedToServer?: boolean;
 }
 
 export type SettingsSection = "appearance" | "mail" | "security" | "accounts" | "addons" | "about";

@@ -10,6 +10,8 @@ import type {
   BackendEvent,
   Contact,
   DiscoveredSettings,
+  DraftContent,
+  DraftSaveResult,
   FlagChange,
   Folder,
   MailtoDraft,
@@ -66,6 +68,8 @@ export class DemoBackend implements Backend {
   private nextId = 1000;
   private attachmentUrls = new Map<string, string>();
   private mailtoTaken = false;
+  /** Draft key → the demo message that holds the draft, and what the composer sent. */
+  private drafts = new Map<string, { messageId: string; draft: OutgoingMessage }>();
 
   constructor() {
     setTimeout(() => {
@@ -240,6 +244,75 @@ export class DemoBackend implements Backend {
     this.moveToRole(messageIds, "trash");
   }
 
+  async saveDraft(draft: OutgoingMessage): Promise<DraftSaveResult> {
+    await wait(350);
+    const account = this.accounts.find((a) => a.id === draft.accountId);
+    if (!account) throw new BackendError("not_found", "Account not found");
+    const draftKey = draft.draftKey ?? `demo-${this.nextId++}@${account.email.split("@")[1] ?? "uwumail.dev"}`;
+    this.removeDraftMessage(draftKey);
+    const original = draft.inReplyTo ? this.messages.find((m) => m.id === draft.inReplyTo) : undefined;
+    const id = `msg-${this.nextId++}`;
+    this.messages.push({
+      id,
+      threadId: original?.threadId ?? `thr-${id}`,
+      accountId: account.id,
+      folderId: `${account.id}:drafts`,
+      from: { name: account.displayName, email: account.email },
+      to: draft.to,
+      cc: draft.cc,
+      replyTo: [],
+      subject: draft.subject,
+      date: new Date().toISOString(),
+      flags: { seen: true, flagged: false, answered: false, draft: true },
+      snippet: draft.text.slice(0, 140),
+      bodyHtml: draft.html,
+      bodyText: draft.text,
+      hasRemoteContent: false,
+      attachments: draft.attachments.map((a, i) => ({
+        id: `att-${id}-${i}`,
+        filename: a.filename,
+        mimeType: a.mimeType,
+        size: a.size,
+        inline: false,
+      })),
+    });
+    this.drafts.set(draftKey, { messageId: id, draft: { ...draft, draftKey } });
+    this.emit({ type: "mail:changed", accountId: account.id });
+    return { draftKey, savedAt: new Date().toISOString() };
+  }
+
+  async deleteDraft(accountId: string, draftKey: string) {
+    await wait(150);
+    this.removeDraftMessage(draftKey);
+    this.emit({ type: "mail:changed", accountId });
+  }
+
+  async openDraft(messageId: string): Promise<DraftContent> {
+    await wait(200);
+    const entry = [...this.drafts.values()].find((d) => d.messageId === messageId);
+    const message = this.messages.find((m) => m.id === messageId);
+    if (!message) throw new BackendError("not_found", "This draft no longer exists.");
+    const draft = entry?.draft;
+    return {
+      accountId: message.accountId,
+      draftKey: draft?.draftKey ?? null,
+      to: message.to,
+      cc: message.cc,
+      bcc: draft?.bcc ?? [],
+      subject: message.subject,
+      html: message.bodyHtml ?? message.bodyText ?? "",
+      inReplyTo: draft?.inReplyTo ?? null,
+      attachments: draft?.attachments ?? [],
+    };
+  }
+
+  private removeDraftMessage(draftKey: string) {
+    const entry = this.drafts.get(draftKey);
+    if (!entry) return;
+    this.messages = this.messages.filter((m) => m.id !== entry.messageId);
+    this.drafts.delete(draftKey);
+  }
+
   async send(outgoing: OutgoingMessage) {
     await wait(900);
     if (outgoing.to.length + outgoing.cc.length + outgoing.bcc.length === 0) {
@@ -247,6 +320,7 @@ export class DemoBackend implements Backend {
     }
     const account = this.accounts.find((a) => a.id === outgoing.accountId);
     if (!account) throw new BackendError("not_found", "Account not found");
+    if (outgoing.draftKey) this.removeDraftMessage(outgoing.draftKey);
     const original = outgoing.inReplyTo ? this.messages.find((m) => m.id === outgoing.inReplyTo) : undefined;
     const id = `msg-${this.nextId++}`;
     if (original) original.flags.answered = true;
@@ -472,6 +546,7 @@ export class DemoBackend implements Backend {
       unreadCount: sorted.filter((m) => !m.flags.seen).length,
       flagged: sorted.some((m) => m.flags.flagged),
       hasAttachments: sorted.some((m) => m.attachments.length > 0),
+      hasDraft: sorted.some((m) => m.flags.draft),
     };
   }
 }

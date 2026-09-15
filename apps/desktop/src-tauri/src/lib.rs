@@ -103,6 +103,21 @@ async fn send_message(engine: State<'_, Engine>, message: OutgoingMessage) -> Co
 }
 
 #[tauri::command]
+async fn save_draft(engine: State<'_, Engine>, draft: OutgoingMessage) -> CommandResult<SavedDraft> {
+    engine.save_draft(draft).await
+}
+
+#[tauri::command]
+async fn delete_draft(engine: State<'_, Engine>, account_id: String, draft_key: String) -> CommandResult<()> {
+    engine.delete_draft(&account_id, &draft_key).await
+}
+
+#[tauri::command]
+async fn open_draft(engine: State<'_, Engine>, message_id: String) -> CommandResult<DraftContent> {
+    engine.open_draft(&message_id).await
+}
+
+#[tauri::command]
 fn search_contacts(engine: State<'_, Engine>, query: String) -> CommandResult<Vec<Contact>> {
     engine.search_contacts(&query)
 }
@@ -285,6 +300,9 @@ pub fn run() {
             archive_messages,
             trash_messages,
             send_message,
+            save_draft,
+            delete_draft,
+            open_draft,
             search_contacts,
             get_attachment,
             open_attachment,

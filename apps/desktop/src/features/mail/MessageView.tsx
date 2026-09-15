@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ChevronDown, ImageIcon, ImageOff, Moon, Sun } from "lucide-react";
+import { ChevronDown, ImageIcon, ImageOff, Moon, PenLine, Sun } from "lucide-react";
 import { useState } from "react";
 import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
@@ -13,6 +13,7 @@ import { domainEntry, isDomainEntry, matchingEntries } from "@/lib/trustedSender
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
+import { openDraftMessage } from "../compose/openDraft";
 import { MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
 
 interface AppearanceToggleProps {
@@ -172,16 +173,18 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
     return (
       <button
         type="button"
-        onClick={onExpand}
+        // A draft is continued in the composer rather than read.
+        onClick={message.flags.draft ? () => void openDraftMessage(message.id) : onExpand}
         className="flex w-full items-center gap-3 rounded-2xl border border-hairline bg-surface px-4 py-3 text-left hover:bg-elevated"
       >
         <Avatar address={message.from} size="sm" />
         <span
           className={clsx("w-36 shrink-0 truncate text-[13.5px]", message.flags.seen ? "font-semibold" : "font-bold")}
         >
-          {displayName(message.from)}
+          {message.flags.draft ? <span className="text-danger">{t("reader.draft")}</span> : displayName(message.from)}
         </span>
         <span className="min-w-0 flex-1 truncate text-[13px] text-muted">{message.snippet}</span>
+        {message.flags.draft && <PenLine className="size-4 shrink-0 text-muted" aria-hidden />}
         <span className="shrink-0 text-[12px] text-muted">
           {formatListDate(message.date, i18n.language, t("common.yesterday"))}
         </span>
@@ -202,6 +205,16 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
             <p className="truncate text-[12.5px] text-muted">{t("reader.to", { names: recipientNames })}</p>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-3">
+            {message.flags.draft && (
+              <>
+                <span className="rounded-full bg-danger-tint px-2 py-0.5 text-[12px] font-bold text-danger">
+                  {t("reader.draft")}
+                </span>
+                <Button size="sm" icon={PenLine} onClick={() => void openDraftMessage(message.id)}>
+                  {t("reader.continueDraft")}
+                </Button>
+              </>
+            )}
             {theme === "dark" && <AppearanceToggle message={message} appearance={appearance} autoDark={autoDark} />}
             <time dateTime={message.date} className="text-[12.5px] text-muted">
               {formatFullDate(message.date, i18n.language)}

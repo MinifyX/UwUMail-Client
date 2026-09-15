@@ -47,6 +47,8 @@ export interface ViewInfo {
   subtitle?: string;
   account?: Account;
   isInbox: boolean;
+  /** Opening a conversation here continues the draft instead of reading it. */
+  isDrafts: boolean;
 }
 
 export function useViewInfo(view: MailboxView): ViewInfo {
@@ -56,9 +58,20 @@ export function useViewInfo(view: MailboxView): ViewInfo {
 
   if (view.kind === "unified") {
     const title = view.role === "inbox" ? t("nav.inbox") : t(`nav.${view.role}`);
-    return { title, subtitle: accounts.length > 1 ? t("nav.unified") : undefined, isInbox: view.role === "inbox" };
+    return {
+      title,
+      subtitle: accounts.length > 1 ? t("nav.unified") : undefined,
+      isInbox: view.role === "inbox",
+      isDrafts: view.role === "drafts",
+    };
   }
   const folder = folders.find((f) => f.id === view.folderId);
   const account = accounts.find((a) => a.id === view.accountId);
-  return { title: folder?.name ?? "", subtitle: account?.email, account, isInbox: folder?.role === "inbox" };
+  return {
+    title: folder?.name ?? "",
+    subtitle: account?.email,
+    account,
+    isInbox: folder?.role === "inbox",
+    isDrafts: folder?.role === "drafts",
+  };
 }

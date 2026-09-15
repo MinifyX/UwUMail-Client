@@ -541,6 +541,107 @@ pub async fn ensure_mailbox(
     store.folder(&folder_id)
 }
 
+/// Emails in the Drafts mailbox with this Message-ID (without angle brackets). The mailbox is
+/// read page by page and compared here, because servers don't reliably support a header filter.
+async fn drafts_with_message_id(client: &Client, mailbox_id: &str, message_id: &str) -> Result<Vec<String>> {
+    const PAGE: usize = 200;
+    const MAX_DRAFTS: usize = 2000;
+    let account = client.account_id();
+    let page = PAGE.min(client.session.max_objects_in_get);
+    let mut found = Vec::new();
+    let mut position = 0;
+    while position < MAX_DRAFTS {
+        let responses = client
+            .call(vec![
+                (
+                    "Email/query",
+                    json!({
+                        "accountId": account,
+                        "filter": { "inMailbox": mailbox_id },
+                        "sort": [{ "property": "receivedAt", "isAscending": false }],
+                        "position": position,
+                        "limit": page,
+                    }),
+                ),
+                (
+                    "Email/get",
+                    json!({
+                        "accountId": account,
+                        "#ids": { "resultOf": "0", "name": "Email/query", "path": "/ids" },
+                        "properties": ["id", "messageId"],
+                    }),
+                ),
+            ])
+            .await?;
+        let emails = list(responses.get(1, "Email/get")?);
+        found.extend(
+            emails
+                .iter()
+                .filter(|email| {
+                    email
+                        .get("messageId")
+                        .and_then(Value::as_array)
+                        .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(message_id)))
+                })
+                .filter_map(|email| text(email, "id").map(String::from)),
+        );
+        if emails.len() < page {
+            break;
+        }
+        position += page;
+    }
+    Ok(found)
+}
+
+/// Stores a draft in the Drafts mailbox and removes its older versions (same Message-ID).
+pub async fn save_draft(
+    client: &Client,
+    store: &Store,
+    account_id: &str,
+    raw: Vec<u8>,
+    message_id: &str,
+) -> Result<()> {
+    let blob = client.upload(raw, "message/rfc822").await?;
+    let drafts = ensure_mailbox(client, store, account_id, FolderRole::Drafts).await?;
+    let responses = client
+        .call(vec![(
+            "Email/import",
+            json!({
+                "accountId": client.account_id(),
+                "emails": { "draft": {
+                    "blobId": blob,
+                    "mailboxIds": { drafts.path.clone(): true },
+                    "keywords": { "$draft": true, "$seen": true },
+                } },
+            }),
+        )])
+        .await?;
+    let imported = responses.get(0, "Email/import")?;
+    if let Some(error) = jmap::set_errors(imported) {
+        return Err(error.into());
+    }
+    let created = imported.pointer("/created/draft/id").and_then(Value::as_str).unwrap_or_default();
+    let older: Vec<String> = drafts_with_message_id(client, &drafts.path, message_id)
+        .await?
+        .into_iter()
+        .filter(|id| id != created)
+        .collect();
+    if !older.is_empty() {
+        destroy_emails(client, &older).await?;
+    }
+    Ok(())
+}
+
+/// Removes every version of a draft, e.g. after it was sent or thrown away.
+pub async fn delete_draft(client: &Client, store: &Store, account_id: &str, message_id: &str) -> Result<()> {
+    let Some(drafts) = store.folder_by_role(account_id, FolderRole::Drafts)? else { return Ok(()) };
+    let ids = drafts_with_message_id(client, &drafts.path, message_id).await?;
+    if !ids.is_empty() {
+        destroy_emails(client, &ids).await?;
+    }
+    Ok(())
+}
+
 /// Sends a message: stores it in Sent, then submits it for delivery. If the
 /// submission fails, the stored copy is removed again.
 pub async fn send(

@@ -99,7 +99,9 @@
       "title": "Couldn't load this message",
       "body": "Check your connection and try again.",
       "retry": "Try again"
-    }
+    },
+    "draft": "Draft",
+    "continueDraft": "Continue writing"
   },
   "compose": {
     "new": "New message",
@@ -128,7 +130,10 @@
     "quoteHeader": "On {{date}}, {{name}} wrote:",
     "forwardHeader": "Forwarded message",
     "removeRecipient": "Remove {{email}}",
-    "removeAttachment": "Remove {{name}}"
+    "removeAttachment": "Remove {{name}}",
+    "draftSaving": "Saving …",
+    "draftSaved": "Draft saved · {{time}}",
+    "draftLocal": "Only saved on this device"
   },
   "toast": {
     "sent": "Message sent",
@@ -137,7 +142,11 @@
     "trashed": "Moved to trash",
     "newMail_one": "{{count}} new message",
     "newMail_other": "{{count}} new messages",
-    "accountAdded": "{{email}} is ready"
+    "accountAdded": "{{email}} is ready",
+    "draftSaved": "Draft saved",
+    "draftLocal": "The draft is only saved on this device. UwUMail will try again later.",
+    "draftDiscarded": "Draft discarded",
+    "draftOpenFailed": "The draft couldn't be opened. {{reason}}"
   },
   "status": {
     "syncing": "Checking for mail",

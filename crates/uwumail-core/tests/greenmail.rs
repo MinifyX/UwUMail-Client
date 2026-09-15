@@ -123,6 +123,7 @@ async fn sync_send_reply_flag_and_trash() {
                 size: 5,
                 source: AttachmentSource::Base64 { data: "SGFsbG8=".into() },
             }],
+            draft_key: None,
         })
         .await
         .expect("message can be sent");
@@ -180,6 +181,7 @@ async fn sync_send_reply_flag_and_trash() {
             text: "Ja!".into(),
             in_reply_to: Some(message.id.clone()),
             attachments: vec![],
+            draft_key: None,
         })
         .await
         .unwrap();
@@ -316,6 +318,116 @@ async fn old_mail_becomes_previews_and_server_search_finds_the_rest() {
     let thread = found.threads.iter().find(|t| t.subject == "Ganz alt").expect("server search finds the old mail");
     let detail = engine.get_thread(&thread.id, false).await.unwrap();
     assert!(detail.messages[0].body_text.as_deref().unwrap_or_default().contains("Zimtschnecke"));
+
+    engine.remove_account(&account.id).await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn drafts_are_saved_replaced_continued_and_removed_on_send() {
+    let Some(host) = server() else {
+        eprintln!("UWUMAIL_TEST_MAILSERVER not set, skipping");
+        return;
+    };
+    let data = tempfile::tempdir().unwrap();
+    let engine = Engine::new(EngineOptions {
+        data_dir: data.path().to_path_buf(),
+        secrets: Arc::new(MemorySecrets::default()),
+        open_url: Arc::new(|_| {}),
+    })
+    .unwrap();
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("draft-{}@uwumail.test", &unique[..8]);
+    let imap = ServerSettings { host: host.clone(), port: 3143, security: Security::None };
+    let smtp = ServerSettings { host, port: 3025, security: Security::None };
+    let account = engine
+        .add_account(NewAccount {
+            display_name: "Mini".into(),
+            email: email.clone(),
+            auth: AuthKind::Password,
+            password: Some("uwu".into()),
+            imap: imap.clone(),
+            smtp,
+            username: email.clone(),
+            color: AccountColor::Pink,
+            protocol: Protocol::Imap,
+            jmap_url: None,
+        })
+        .await
+        .unwrap();
+    wait_for("the inbox folder", async || {
+        engine.list_folders(Some(&account.id)).unwrap().into_iter().find(|f| f.role == Some(FolderRole::Inbox))
+    })
+    .await;
+
+    let subject = format!("Entwurf {unique}");
+    let draft = |to: Vec<Address>, html: &str, draft_key: Option<String>| OutgoingMessage {
+        account_id: account.id.clone(),
+        to,
+        cc: vec![],
+        bcc: vec![Address { name: None, email: "heimlich@uwumail.test".into() }],
+        subject: subject.clone(),
+        html: html.into(),
+        text: html.replace("<p>", "").replace("</p>", ""),
+        in_reply_to: None,
+        attachments: vec![OutgoingAttachment {
+            filename: "notiz.txt".into(),
+            mime_type: "text/plain".into(),
+            size: 5,
+            source: AttachmentSource::Base64 { data: "SGFsbG8=".into() },
+        }],
+        draft_key,
+    };
+
+    // A draft without recipients can be saved; saving again replaces it instead of adding one.
+    let first = engine.save_draft(draft(vec![], "<p>Hi</p>", None)).await.expect("a draft can be saved");
+    let me = Address { name: None, email: email.clone() };
+    let second = engine
+        .save_draft(draft(vec![me.clone()], "<p>Hi Leni, hast du Zeit?</p>", Some(first.draft_key.clone())))
+        .await
+        .unwrap();
+    assert_eq!(first.draft_key, second.draft_key);
+
+    let drafts_query = ThreadQuery { view: MailboxView::Unified { role: UnifiedRole::Drafts }, ..inbox_query(None) };
+    let drafts = engine.list_threads(&drafts_query).unwrap().threads;
+    let mine: Vec<_> = drafts.iter().filter(|t| t.subject == subject).collect();
+    assert_eq!(mine.len(), 1, "the draft shows up once right away");
+
+    let folder = engine
+        .list_folders(Some(&account.id))
+        .unwrap()
+        .into_iter()
+        .find(|f| f.role == Some(FolderRole::Drafts))
+        .unwrap();
+    let mut other_client =
+        imap::login(&imap, imap::Login::Password { username: &email, password: "uwu" }).await.unwrap();
+    let on_server = imap::uids_with_message_id(&mut other_client, &folder.path, &first.draft_key).await.unwrap();
+    assert_eq!(on_server.len(), 1, "only the newest version stays on the server");
+
+    // Opening it brings back everything, including Bcc and the attachment.
+    let detail = engine.get_thread(&mine[0].id, true).await.unwrap();
+    let opened = engine.open_draft(&detail.messages[0].id).await.unwrap();
+    assert_eq!(opened.draft_key.as_deref(), Some(first.draft_key.as_str()));
+    assert_eq!(opened.to, std::slice::from_ref(&me));
+    assert_eq!(opened.bcc[0].email, "heimlich@uwumail.test");
+    assert!(opened.html.contains("hast du Zeit"));
+    assert_eq!(opened.attachments[0].filename, "notiz.txt");
+
+    // Sending it removes the draft, here and on the server.
+    engine
+        .send(OutgoingMessage {
+            bcc: vec![],
+            ..draft(vec![me], "<p>Hi Leni, hast du Zeit?</p>", Some(first.draft_key.clone()))
+        })
+        .await
+        .unwrap();
+    assert!(engine.list_threads(&drafts_query).unwrap().threads.iter().all(|t| t.subject != subject));
+    assert!(imap::uids_with_message_id(&mut other_client, &folder.path, &first.draft_key).await.unwrap().is_empty());
+    let _ = other_client.logout().await;
+
+    // Throwing a draft away works the same way.
+    let thrown = engine.save_draft(draft(vec![], "<p>Doch nicht</p>", None)).await.unwrap();
+    engine.delete_draft(&account.id, &thrown.draft_key).await.unwrap();
+    assert!(engine.list_threads(&drafts_query).unwrap().threads.iter().all(|t| t.subject != subject));
 
     engine.remove_account(&account.id).await.unwrap();
 }

@@ -44,7 +44,8 @@
   },
   "compose": {
     "placeholder": "Write something nice ✿",
-    "noRecipients": "Who's it for? Add a recipient first (・・ )?"
+    "noRecipients": "Who's it for? Add a recipient first (・・ )?",
+    "draftLocal": "Only saved here for now (・_・;)"
   },
   "toast": {
     "sent": "Off it goes ✉︎ ~",
@@ -53,7 +54,9 @@
     "trashed": "Bye bye (｡•́︿•̀｡)",
     "newMail_one": "You've got mail! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
     "newMail_other": "{{count}} new mails! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
-    "accountAdded": "{{email}} moved in! ٩(◕‿◕)۶"
+    "accountAdded": "{{email}} moved in! ٩(◕‿◕)۶",
+    "draftSaved": "Draft tucked away safely (˘ω˘)",
+    "draftDiscarded": "Poof, as if it never happened (・ω・)"
   },
   "status": {
     "syncing": "Fetching fresh mail…",

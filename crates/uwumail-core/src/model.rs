@@ -226,6 +226,8 @@ pub struct ThreadSummary {
     pub unread_count: u32,
     pub flagged: bool,
     pub has_attachments: bool,
+    /// Somewhere in the conversation is an unsent draft.
+    pub has_draft: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -322,6 +324,32 @@ pub struct OutgoingMessage {
     #[serde(default)]
     pub in_reply_to: Option<String>,
     #[serde(default)]
+    pub attachments: Vec<OutgoingAttachment>,
+    /// The Message-ID of the draft this was written in. Saving replaces that draft; sending removes it.
+    #[serde(default)]
+    pub draft_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedDraft {
+    pub draft_key: String,
+    pub saved_at: String,
+}
+
+/// A draft from the Drafts folder, ready to continue writing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftContent {
+    pub account_id: String,
+    pub draft_key: Option<String>,
+    pub to: Vec<Address>,
+    pub cc: Vec<Address>,
+    pub bcc: Vec<Address>,
+    pub subject: String,
+    pub html: String,
+    /// The local id of the message this draft answers, if it is still around.
+    pub in_reply_to: Option<String>,
     pub attachments: Vec<OutgoingAttachment>,
 }
 

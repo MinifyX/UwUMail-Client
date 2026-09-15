@@ -67,8 +67,9 @@ export function ThreadRow({
   // Show the other people in the conversation; fall back to everyone when it's only me.
   const mine = new Set(accounts.map((a) => a.email.toLowerCase()));
   const others = thread.participants.filter((p) => !mine.has(p.email.toLowerCase()));
-  const people = others.length > 0 ? others : thread.participants;
-  const lead = people[people.length - 1] ?? { email: "?" };
+  // A draft on its own has only me in it; the red label says enough then.
+  const people = others.length > 0 ? others : thread.hasDraft ? [] : thread.participants;
+  const lead = people[people.length - 1] ?? thread.participants[0] ?? { email: "?" };
   const names = people.map(displayName).join(", ");
   const date = formatListDate(thread.lastDate, i18n.language, t("common.yesterday"));
   const account = showAccount ? accounts.find((a) => a.id === thread.accountIds[0]) : undefined;
@@ -88,7 +89,9 @@ export function ThreadRow({
         type="button"
         onClick={onSelect}
         aria-current={selected ? "true" : undefined}
-        aria-label={[unread && t("list.unread"), names, subject, date].filter(Boolean).join(", ")}
+        aria-label={[unread && t("list.unread"), thread.hasDraft && t("reader.draft"), names, subject, date]
+          .filter(Boolean)
+          .join(", ")}
         className="absolute inset-0 rounded-[inherit] focus-visible:shadow-focus focus-visible:outline-none"
       />
 
@@ -121,6 +124,12 @@ export function ThreadRow({
               unread ? "font-bold text-ink" : "font-semibold text-ink/85",
             )}
           >
+            {thread.hasDraft && (
+              <span className="mr-1.5 font-bold text-danger">
+                {t("reader.draft")}
+                {names && ","}
+              </span>
+            )}
             {names}
             {thread.messageCount > 1 && (
               <span className="ml-1.5 text-[12px] font-semibold text-muted">{thread.messageCount}</span>

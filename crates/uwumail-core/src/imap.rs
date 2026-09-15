@@ -591,9 +591,19 @@ pub async fn delete_permanently(session: &mut ImapSession, folder_path: &str, ui
     Ok(())
 }
 
-pub async fn append(session: &mut ImapSession, folder_path: &str, raw: &[u8], seen: bool) -> Result<()> {
-    session.append(folder_path, seen.then_some("(\\Seen)"), None, raw).await?;
+/// Stores a message in a folder; `flags` like `(\Seen)`.
+pub async fn append(session: &mut ImapSession, folder_path: &str, raw: &[u8], flags: Option<&str>) -> Result<()> {
+    session.append(folder_path, flags, None, raw).await?;
     Ok(())
+}
+
+/// Uids in a folder whose Message-ID is `message_id` (given without angle brackets), oldest first.
+pub async fn uids_with_message_id(session: &mut ImapSession, folder_path: &str, message_id: &str) -> Result<Vec<u32>> {
+    session.select(folder_path).await?;
+    let found = session.uid_search(format!("HEADER Message-ID {}", quoted(&format!("<{message_id}>")))).await?;
+    let mut uids: Vec<u32> = found.into_iter().collect();
+    uids.sort_unstable();
+    Ok(uids)
 }
 
 #[cfg(test)]

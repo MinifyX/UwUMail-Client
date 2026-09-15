@@ -10,6 +10,7 @@ import { useT } from "@/i18n";
 import { flattenThreads, useAccounts, useMessageActions, useThreadActions, useThreads } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
+import { openDraftThread } from "../compose/openDraft";
 import { ThreadRow } from "./ThreadRow";
 import { useViewInfo } from "./view";
 
@@ -177,7 +178,7 @@ export function ThreadList({ variant, className }: ThreadListProps) {
                 accounts={accounts}
                 showAccount={showAccount}
                 actions={threadActions}
-                onSelect={() => selectThread(thread.id)}
+                onSelect={() => (info.isDrafts ? void openDraftThread(thread.id) : selectThread(thread.id))}
               />
             ))}
             {query.hasNextPage && (

@@ -35,6 +35,7 @@ import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { ThreadRow } from "../mail/ThreadRow";
 import { useViewInfo } from "../mail/view";
+import { openDraftThread } from "../compose/openDraft";
 import { PullToRefresh } from "./PullToRefresh";
 import { SwipeRow } from "./SwipeRow";
 import { useThreadActions } from "./threadActions";
@@ -282,7 +283,13 @@ export function MobileList() {
                           accounts={accounts}
                           showAccount={showAccount}
                           actions={cardActions}
-                          onSelect={() => (selecting ? toggle(thread.id) : selectThread(thread.id))}
+                          onSelect={() =>
+                            selecting
+                              ? toggle(thread.id)
+                              : info.isDrafts
+                                ? void openDraftThread(thread.id)
+                                : selectThread(thread.id)
+                          }
                         />
                         {isSelected && (
                           // Covers the sender picture, wherever the card's density puts it.

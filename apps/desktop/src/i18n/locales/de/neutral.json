@@ -99,7 +99,9 @@
       "title": "Die Mail konnte nicht geladen werden",
       "body": "Prüf deine Verbindung und versuch es noch einmal.",
       "retry": "Nochmal versuchen"
-    }
+    },
+    "draft": "Entwurf",
+    "continueDraft": "Weiterschreiben"
   },
   "compose": {
     "new": "Neue Mail",
@@ -128,7 +130,10 @@
     "quoteHeader": "Am {{date}} schrieb {{name}}:",
     "forwardHeader": "Weitergeleitete Nachricht",
     "removeRecipient": "{{email}} entfernen",
-    "removeAttachment": "{{name}} entfernen"
+    "removeAttachment": "{{name}} entfernen",
+    "draftSaving": "Speichert …",
+    "draftSaved": "Entwurf gespeichert · {{time}}",
+    "draftLocal": "Nur auf diesem Gerät gespeichert"
   },
   "toast": {
     "sent": "Mail gesendet",
@@ -137,7 +142,11 @@
     "trashed": "In den Papierkorb verschoben",
     "newMail_one": "{{count}} neue Mail",
     "newMail_other": "{{count}} neue Mails",
-    "accountAdded": "{{email}} ist bereit"
+    "accountAdded": "{{email}} ist bereit",
+    "draftSaved": "Entwurf gespeichert",
+    "draftLocal": "Der Entwurf ist nur auf diesem Gerät gespeichert. UwUMail versucht es später erneut.",
+    "draftDiscarded": "Entwurf verworfen",
+    "draftOpenFailed": "Der Entwurf konnte nicht geöffnet werden. {{reason}}"
   },
   "status": {
     "syncing": "Suche nach neuen Mails",

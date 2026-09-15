@@ -203,6 +203,8 @@ export function useBackendEvents() {
           break;
         case "mail:changed":
           void client.invalidateQueries({ queryKey: queryKeys.threads });
+          // The open conversation too: a reply or a draft may have joined it. Unchanged data keeps its objects.
+          void client.invalidateQueries({ queryKey: queryKeys.thread });
           void client.invalidateQueries({ queryKey: queryKeys.folders });
           break;
         case "mail:received":

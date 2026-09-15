@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { backend } from "@/backend/backend";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
@@ -12,6 +12,7 @@ import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { AccountSetup } from "../accounts/AccountSetup";
 import { Composer } from "../compose/Composer";
+import { loadLocalDraft } from "../compose/localDraft";
 import { MailboxNav } from "../mail/MailboxNav";
 import { MobileShell } from "../mobile/MobileShell";
 import { ThreadList } from "../mail/ThreadList";
@@ -54,6 +55,17 @@ export function MailShell() {
   const pro = layout === "pro" && (roomForPro || !isAndroid);
   useAccounts();
   useBackendEvents();
+
+  // A draft that never reached the Drafts folder (offline, or UwUMail was closed) comes back.
+  // The phone brings back every kept draft as its bar (MobileShell).
+  useEffect(() => {
+    if (phone) return;
+    const saved = loadLocalDraft();
+    const ui = useUi.getState();
+    if (!saved || saved.savedToServer !== false || ui.compose) return;
+    ui.openCompose({ mode: saved.mode, restore: saved });
+    ui.setComposeMinimized(true);
+  }, [phone]);
 
   // Titles depend on tone, theme and layout, so rebuild when they change.
   // eslint-disable-next-line react-hooks/exhaustive-deps

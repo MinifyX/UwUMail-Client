@@ -910,6 +910,28 @@ impl Store {
         Ok(deleted)
     }
 
+    /// The local id of a message by its Message-ID header, preferring anything but drafts.
+    pub fn message_by_header_id(&self, account_id: &str, header_id: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT m.id FROM messages m JOIN folders f ON f.id = m.folder_id
+                 WHERE m.account_id = ?1 AND m.message_id = ?2
+                 ORDER BY COALESCE(f.role, '') = 'drafts' LIMIT 1",
+                params![account_id, header_id],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Local ids of the messages in a folder with this Message-ID header.
+    pub fn ids_by_header_id(&self, folder_id: &str, header_id: &str) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT id FROM messages WHERE folder_id = ?1 AND message_id = ?2")?;
+        let ids = stmt.query_map(params![folder_id, header_id], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        Ok(ids)
+    }
+
     pub fn locations(&self, ids: &[String]) -> Result<Vec<MessageLocation>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
@@ -1289,6 +1311,7 @@ fn summarize(id: &str, messages: &[Message]) -> Option<ThreadSummary> {
         unread_count: messages.iter().filter(|m| !m.flags.seen).count() as u32,
         flagged: messages.iter().any(|m| m.flags.flagged),
         has_attachments: messages.iter().any(|m| !m.attachments.is_empty()),
+        has_draft: messages.iter().any(|m| m.flags.draft),
     })
 }
 
