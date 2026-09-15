@@ -151,8 +151,28 @@ pub async fn connect(settings: &ServerSettings) -> Result<Client<MailStream>> {
     }
 }
 
+/// Turns a rejected login into something a person can act on.
+///
+/// Microsoft 365 is the reason this exists: an administrator can switch IMAP
+/// off per mailbox or for a whole tenant, and the sign-in then fails in a way
+/// that looks exactly like a wrong password, which sends people hunting for a
+/// problem that is not theirs to fix.
+pub(crate) fn explain_rejection(message: &str, oauth: bool) -> Error {
+    let text = message.to_ascii_lowercase();
+    if text.contains("disabled") && (text.contains("imap") || text.contains("protocol")) {
+        return Error::imap_disabled("IMAP is switched off for this mailbox.");
+    }
+    if oauth {
+        // The sign-in itself succeeded, so a rejection here is about the mailbox,
+        // never about a password the person could correct.
+        return Error::auth("The mail server refused the sign-in for this mailbox.");
+    }
+    Error::auth("The server rejected the username or password.")
+}
+
 pub async fn login(settings: &ServerSettings, credentials: Login<'_>) -> Result<ImapSession> {
     let client = connect(settings).await?;
+    let oauth = matches!(credentials, Login::OAuth { .. });
     let result = match credentials {
         Login::Password { username, password } => client.login(username, password).await,
         Login::OAuth { username, access_token } => {
@@ -160,8 +180,8 @@ pub async fn login(settings: &ServerSettings, credentials: Login<'_>) -> Result<
         }
     };
     result.map_err(|(error, _)| match error {
-        async_imap::error::Error::No(_) | async_imap::error::Error::Bad(_) => {
-            Error::auth("The server rejected the username or password.")
+        async_imap::error::Error::No(message) | async_imap::error::Error::Bad(message) => {
+            explain_rejection(&message, oauth)
         }
         other => other.into(),
     })
@@ -608,6 +628,24 @@ pub async fn uids_with_message_id(session: &mut ImapSession, folder_path: &str, 
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn tells_a_switched_off_mailbox_from_a_wrong_password() {
+        // What Exchange Online answers when an admin disabled IMAP for the mailbox.
+        assert_eq!(
+            explain_rejection("IMAP4 protocol is disabled for this mailbox.", true).code,
+            crate::error::ErrorCode::ImapDisabled
+        );
+        assert_eq!(
+            explain_rejection("Your account has been disabled for the IMAP protocol", false).code,
+            crate::error::ErrorCode::ImapDisabled
+        );
+        // A plain rejection stays an auth failure, but the wording follows the login kind.
+        let oauth = explain_rejection("AUTHENTICATE failed.", true);
+        assert_eq!(oauth.code, crate::error::ErrorCode::AuthFailed);
+        assert!(!oauth.message.contains("password"), "an OAuth sign-in has no password to blame");
+        assert!(explain_rejection("LOGIN failed.", false).message.contains("password"));
+    }
     use super::*;
 
     #[test]

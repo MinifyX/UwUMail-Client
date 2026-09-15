@@ -9,6 +9,11 @@ pub enum ErrorCode {
     InvalidInput,
     NotSupported,
     Internal,
+    /// The server is fine and the sign-in worked, but an administrator has
+    /// switched IMAP off for this mailbox. Common in Microsoft 365.
+    ImapDisabled,
+    /// Same for sending: the tenant or the mailbox may not submit over SMTP.
+    SmtpDisabled,
 }
 
 /// Error type crossing the boundary to the UI. The message is shown to users,
@@ -45,6 +50,14 @@ impl Error {
 
     pub fn not_supported(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::NotSupported, message)
+    }
+
+    pub fn imap_disabled(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::ImapDisabled, message)
+    }
+
+    pub fn smtp_disabled(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::SmtpDisabled, message)
     }
 
     pub fn internal(message: impl Into<String>) -> Self {

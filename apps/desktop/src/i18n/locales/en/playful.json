@@ -97,7 +97,9 @@
     "connecting": "Knocking on the server's door…",
     "errorAuth": "The server said no to that password (｡•́︿•̀｡) Double-check it?",
     "errorConnection": "I couldn't reach the server (・_・;) Check the address and your internet.",
-    "protocolJmapHint": "Your server speaks JMAP: faster, lighter, and new mail flies in instantly ✧"
+    "protocolJmapHint": "Your server speaks JMAP: faster, lighter, and new mail flies in instantly ✧",
+    "errorImapDisabled": "Microsoft won’t let me in (´･_･`) IMAP is switched off for this mailbox — only an administrator can flip it: Set-CASMailbox -Identity ADDRESS -ImapEnabled $true",
+    "errorSmtpDisabled": "I’m not allowed to send from here (｡•́︿•̀｡) An administrator can turn it on with: Set-CASMailbox -Identity ADDRESS -SmtpClientAuthenticationDisabled $false"
   },
   "settings": {
     "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)",

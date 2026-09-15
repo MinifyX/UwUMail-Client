@@ -101,6 +101,8 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
       if (reason.code === "auth_failed") return t("account.errorAuth");
       if (reason.code === "connection_failed") return t("account.errorConnection");
       if (reason.code === "invalid_input") return t("account.errorInvalid");
+      if (reason.code === "imap_disabled") return t("account.errorImapDisabled");
+      if (reason.code === "smtp_disabled") return t("account.errorSmtpDisabled");
       return reason.message;
     }
     return String(reason);

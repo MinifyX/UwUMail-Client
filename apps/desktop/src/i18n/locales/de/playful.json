@@ -97,7 +97,9 @@
     "connecting": "Ich klopf beim Server an…",
     "errorAuth": "Der Server mag das Passwort nicht (｡•́︿•̀｡) Schau nochmal drüber?",
     "errorConnection": "Ich komm nicht an den Server ran (・_・;) Prüf die Adresse und dein Internet.",
-    "protocolJmapHint": "Dein Server kann JMAP: schneller, sparsamer und neue Mails fliegen sofort rein ✧"
+    "protocolJmapHint": "Dein Server kann JMAP: schneller, sparsamer und neue Mails fliegen sofort rein ✧",
+    "errorImapDisabled": "Microsoft lässt mich nicht rein (´･_･`) Für dieses Postfach ist IMAP abgeschaltet — das kann nur eure Administration umlegen: Set-CASMailbox -Identity ADRESSE -ImapEnabled $true",
+    "errorSmtpDisabled": "Ich darf von hier aus nichts verschicken (｡•́︿•̀｡) Eure Administration schaltet das Senden frei mit: Set-CASMailbox -Identity ADRESSE -SmtpClientAuthenticationDisabled $false"
   },
   "settings": {
     "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)",

@@ -221,7 +221,9 @@ pub async fn send(settings: &ServerSettings, username: &str, auth: SmtpAuth, mes
 
     transport.send(message.clone()).await.map(|_| ()).map_err(|error| {
         let text = error.to_string();
-        if text.contains("535") || text.to_lowercase().contains("authentication") {
+        if let Some(refused) = explain_refusal(&text) {
+            refused
+        } else if text.contains("535") || text.to_lowercase().contains("authentication") {
             Error::auth("The mail server rejected the login for sending.")
         } else if error.is_permanent() {
             Error::invalid(format!("The server refused the message: {text}"))
@@ -231,8 +233,42 @@ pub async fn send(settings: &ServerSettings, username: &str, auth: SmtpAuth, mes
     })
 }
 
+/// Recognises a server that refuses to let this mailbox submit mail at all.
+///
+/// Microsoft 365 turns SMTP submission off for new tenants by default, and
+/// Basic authentication for it is being retired, so the refusal is a permanent
+/// setting an administrator has to change — not something retrying will fix.
+pub(crate) fn explain_refusal(text: &str) -> Option<Error> {
+    let text = text.to_ascii_lowercase();
+    let disabled = text.contains("smtpclientauthentication is disabled")
+        || text.contains("smtp_auth_disabled")
+        || text.contains("5.7.139")
+        // "550 5.7.30 Basic authentication is not supported for Client Submission"
+        || text.contains("5.7.30")
+        || (text.contains("client submission") && text.contains("not supported"))
+        || (text.contains("submission") && text.contains("disabled"));
+    disabled.then(|| Error::smtp_disabled("This mailbox may not send over SMTP."))
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn recognizes_a_tenant_that_forbids_smtp_submission() {
+        for refusal in [
+            "535 5.7.139 Authentication unsuccessful, SmtpClientAuthentication is disabled for the Tenant. Visit https://aka.ms/smtp_auth_disabled for more information.",
+            "550 5.7.30 Basic authentication is not supported for Client Submission",
+        ] {
+            assert_eq!(
+                explain_refusal(refusal).map(|e| e.code),
+                Some(crate::error::ErrorCode::SmtpDisabled),
+                "should recognize: {refusal}"
+            );
+        }
+        // An ordinary bad password is not a policy problem and must stay retryable advice.
+        assert!(explain_refusal("535 5.7.3 Authentication unsuccessful").is_none());
+        assert!(explain_refusal("451 4.7.0 Temporary server error").is_none());
+    }
     use super::*;
 
     fn mail<'a>(from: &'a Address, to: &'a [Address], subject: &'a str) -> Mail<'a> {

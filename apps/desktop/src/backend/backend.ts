@@ -25,7 +25,16 @@ import type {
 } from "./types";
 
 export type BackendErrorCode =
-  "auth_failed" | "connection_failed" | "not_found" | "invalid_input" | "not_supported" | "internal";
+  | "auth_failed"
+  | "connection_failed"
+  | "not_found"
+  | "invalid_input"
+  | "not_supported"
+  | "internal"
+  /** An administrator switched IMAP off for this mailbox. */
+  | "imap_disabled"
+  /** This mailbox may not submit mail over SMTP. */
+  | "smtp_disabled";
 
 export class BackendError extends Error {
   readonly code: BackendErrorCode;
