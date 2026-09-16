@@ -138,6 +138,10 @@ export class TauriBackend implements Backend {
     return call<MovedMessage[]>("trash_messages", { messageIds });
   }
 
+  deleteForever(messageIds: string[]) {
+    return call<number>("delete_messages_forever", { messageIds });
+  }
+
   moveMessages(messageIds: string[], folderId: string) {
     return call<MovedMessage[]>("move_messages", { messageIds, folderId });
   }

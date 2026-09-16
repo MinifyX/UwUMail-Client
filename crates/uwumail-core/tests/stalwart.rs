@@ -277,7 +277,11 @@ async fn jmap_sync_send_push_flags_and_trash() {
     let answered = server_keywords(&leni_server, &subject).await;
     assert!(answered.iter().any(|email| email["keywords"]["$answered"] == true), "the original is marked answered");
 
-    // Trash moves the message on the server; trashing it again deletes it.
+    // Deleting for good leaves mail outside the trash alone.
+    assert_eq!(engine.delete_forever(std::slice::from_ref(&message.id)).await.unwrap(), 0);
+    assert_eq!(server_keywords(&leni_server, &subject).await.len(), 1);
+
+    // Trash moves the message on the server, and the trash shows it.
     engine.trash(std::slice::from_ref(&message.id)).await.unwrap();
     let trash = role_folder(&engine, &leni.id, FolderRole::Trash).unwrap();
     assert!(
@@ -288,9 +292,17 @@ async fn jmap_sync_send_push_flags_and_trash() {
             .iter()
             .all(|t| t.subject != subject)
     );
+    assert!(
+        engine.list_threads(&folder_query(&leni.id, &trash.id)).unwrap().threads.iter().any(|t| t.subject == subject),
+        "the trash shows the message"
+    );
     let on_server = server_keywords(&leni_server, &subject).await;
     assert_eq!(on_server[0]["mailboxIds"], json!({ trash.path.clone(): true }));
-    engine.trash(std::slice::from_ref(&message.id)).await.unwrap();
+
+    // Trashing it again changes nothing; deleting it for good removes it from the server.
+    assert!(engine.trash(std::slice::from_ref(&message.id)).await.unwrap().is_empty());
+    assert_eq!(server_keywords(&leni_server, &subject).await.len(), 1);
+    assert_eq!(engine.delete_forever(std::slice::from_ref(&message.id)).await.unwrap(), 1);
     let left = server_keywords(&leni_server, &subject).await;
     assert!(left.is_empty(), "still on the server: {left:?}");
     assert!(

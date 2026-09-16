@@ -215,7 +215,7 @@ async fn sync_send_reply_flag_and_trash() {
         gone.then_some(())
     })
     .await;
-    wait_for("both messages in the trash folder", async || {
+    let trash = wait_for("both messages in the trash folder", async || {
         engine.sync_now(Some(&account.id));
         engine
             .list_folders(Some(&account.id))
@@ -224,6 +224,21 @@ async fn sync_send_reply_flag_and_trash() {
             .find(|f| f.role == Some(FolderRole::Trash) && f.total >= 2)
     })
     .await;
+
+    // The trash shows the conversation. Trashing it again changes nothing; deleting it for
+    // good empties the trash on the server too.
+    let trash_query = ThreadQuery {
+        view: MailboxView::Folder { account_id: account.id.clone(), folder_id: trash.id.clone() },
+        ..inbox_query(None)
+    };
+    let trashed = engine.list_threads(&trash_query).unwrap().threads.into_iter().find(|t| t.subject == subject);
+    assert_eq!(trashed.expect("the trash shows the conversation").message_count, 2);
+    assert!(engine.trash(&ids).await.unwrap().is_empty());
+    assert_eq!(engine.delete_forever(&ids).await.unwrap(), 2);
+    assert!(engine.list_threads(&trash_query).unwrap().threads.iter().all(|t| t.subject != subject));
+    let mut other = imap::login(&imap, imap::Login::Password { username: &email, password: "uwu" }).await.unwrap();
+    assert_eq!(other.select(&trash.path).await.unwrap().exists, 0, "the trash is empty on the server");
+    let _ = other.logout().await;
 
     // The engine told the UI about all of it.
     let mut saw_change = false;

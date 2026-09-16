@@ -190,6 +190,12 @@ itself: there a conversation (id `trash:<thread>`) holds only what was trashed,
 so a trashed reply shows up in the trash while the rest of its conversation
 stays where it was.
 
+Mail already in the target folder stays where it is, so trashing mail twice
+never deletes it. Deleting for good is its own call, `Engine::delete_forever`,
+which only touches mail lying in its account's trash; the UI asks first. An
+IMAP message moved there moments ago still has a placeholder uid and is found
+on the server by its Message-ID.
+
 ### Unsubscribing
 
 The engine keeps a mail's `List-Unsubscribe` options. `Engine::unsubscribe`

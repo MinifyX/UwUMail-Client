@@ -712,9 +712,15 @@ impl Engine {
         self.inner.move_to(message_ids, MoveTarget::Role(FolderRole::Archive)).await
     }
 
-    /// Moves mail into the trash; what's already there is deleted for good and isn't returned.
+    /// Moves mail into the trash. What's already there stays and isn't returned.
     pub async fn trash(&self, message_ids: &[String]) -> Result<Vec<MovedMessage>> {
         self.inner.move_to(message_ids, MoveTarget::Role(FolderRole::Trash)).await
+    }
+
+    /// Deletes mail in the trash for good, on the server too. Mail that isn't in
+    /// the trash (anymore) is left alone. Returns how many messages were deleted.
+    pub async fn delete_forever(&self, message_ids: &[String]) -> Result<usize> {
+        self.inner.delete_forever(message_ids).await
     }
 
     /// Moves mail into another folder of the same mailbox.
@@ -1271,7 +1277,7 @@ fn sender(account: &AccountRecord) -> Address {
 }
 
 enum MoveTarget {
-    /// The account's folder for a role, created when missing. Trashing what's already in the trash deletes it.
+    /// The account's folder for a role, created when missing.
     Role(FolderRole),
     /// A folder by its local id.
     Folder(String),
@@ -1285,6 +1291,23 @@ pub fn is_blocked(entries: &[String], email: &str) -> bool {
         Some(blocked) => domain == blocked || domain.ends_with(&format!(".{blocked}")),
         None => *entry == email,
     })
+}
+
+/// Messages by account.
+fn by_account(locations: &[MessageLocation]) -> HashMap<String, Vec<MessageLocation>> {
+    let mut groups: HashMap<String, Vec<MessageLocation>> = HashMap::new();
+    for location in locations {
+        groups.entry(location.account_id.clone()).or_default().push(location.clone());
+    }
+    groups
+}
+
+fn local_ids(locations: &[MessageLocation]) -> Vec<String> {
+    locations.iter().map(|location| location.id.clone()).collect()
+}
+
+fn remote_ids(locations: &[MessageLocation]) -> Vec<String> {
+    locations.iter().filter_map(|location| location.remote_id.clone()).collect()
 }
 
 /// JMAP email ids by account.
@@ -1422,17 +1445,13 @@ impl Inner {
         Ok(client)
     }
 
-    /// Archive or trash over JMAP. Trashing what's already in the trash deletes it.
+    /// Moves mail over IMAP or JMAP. Mail already in the target folder stays where it is.
     async fn move_to(&self, message_ids: &[String], target: MoveTarget) -> Result<Vec<MovedMessage>> {
         let locations = self.store.locations(message_ids)?;
         let mut moved = Vec::new();
-        let mut by_account: HashMap<String, Vec<MessageLocation>> = HashMap::new();
-        for location in &locations {
-            by_account.entry(location.account_id.clone()).or_default().push(location.clone());
-        }
-        for (account_id, messages) in by_account {
+        for (account_id, messages) in by_account(&locations) {
             let jmap = self.store.account(&account_id)?.protocol == Protocol::Jmap;
-            let (folder, deleting) = match &target {
+            let folder = match &target {
                 MoveTarget::Role(role) if jmap => {
                     let client = self.jmap_client(&account_id).await?;
                     let folder = jmap_sync::ensure_mailbox(&client, &self.store, &account_id, *role).await?;
@@ -1440,9 +1459,9 @@ impl Inner {
                         .lock()
                         .unwrap()
                         .insert((account_id.clone(), folder.path.clone()), Instant::now());
-                    (folder, *role == FolderRole::Trash)
+                    folder
                 }
-                MoveTarget::Role(role) => (self.ensure_folder(&account_id, *role).await?, *role == FolderRole::Trash),
+                MoveTarget::Role(role) => self.ensure_folder(&account_id, *role).await?,
                 MoveTarget::Folder(id) => {
                     let folder = self.store.folder(id)?;
                     if folder.account_id != account_id {
@@ -1451,33 +1470,18 @@ impl Inner {
                     if !folder.selectable {
                         return Err(Error::invalid("This folder can't hold mail."));
                     }
-                    (folder, false)
+                    folder
                 }
             };
-            moved.extend(
-                messages
-                    .iter()
-                    .filter(|m| m.folder_id != folder.id)
-                    .map(|m| MovedMessage { id: m.id.clone(), from_folder_id: m.folder_id.clone() }),
-            );
+            let to_move: Vec<MessageLocation> = messages.into_iter().filter(|m| m.folder_id != folder.id).collect();
+            moved
+                .extend(to_move.iter().map(|m| MovedMessage { id: m.id.clone(), from_folder_id: m.folder_id.clone() }));
             if jmap {
-                self.move_jmap(&account_id, messages, &folder, deleting).await?;
+                self.move_jmap(&account_id, &to_move, &folder).await?;
                 continue;
             }
-            let (already_there, to_move): (Vec<_>, Vec<_>) =
-                messages.into_iter().partition(|m| m.folder_id == folder.id);
 
-            if deleting && !already_there.is_empty() {
-                // Deleting from the trash deletes for real.
-                let ids: Vec<String> = already_there.iter().map(|m| m.id.clone()).collect();
-                self.store.delete_messages(&ids)?;
-                for ((account, path), uids) in group_by_folder(&already_there) {
-                    with_session!(self, &account, |session| imap::delete_permanently(session, &path, &uids))?;
-                }
-            }
-
-            let ids: Vec<String> = to_move.iter().map(|m| m.id.clone()).collect();
-            self.store.move_local(&ids, &folder.id)?;
+            self.store.move_local(&local_ids(&to_move), &folder.id)?;
             for ((account, path), uids) in group_by_folder(&to_move) {
                 with_session!(self, &account, |session| imap::move_messages(session, &path, &uids, &folder.path))?;
             }
@@ -1504,28 +1508,56 @@ impl Inner {
         kept
     }
 
-    async fn move_jmap(
-        &self,
-        account_id: &str,
-        messages: Vec<MessageLocation>,
-        target: &FolderRecord,
-        deleting: bool,
-    ) -> Result<()> {
-        let client = self.jmap_client(account_id).await?;
-        let (already_there, to_move): (Vec<_>, Vec<_>) = messages.into_iter().partition(|m| m.folder_id == target.id);
-        let remote = |list: &[MessageLocation]| list.iter().filter_map(|m| m.remote_id.clone()).collect::<Vec<_>>();
-        let ids = |list: &[MessageLocation]| list.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
-
-        if deleting && !already_there.is_empty() {
-            jmap_sync::destroy_emails(&client, &remote(&already_there)).await?;
-            self.store.delete_messages(&ids(&already_there))?;
-        }
+    async fn move_jmap(&self, account_id: &str, to_move: &[MessageLocation], target: &FolderRecord) -> Result<()> {
         if !to_move.is_empty() {
-            jmap_sync::move_emails(&client, &remote(&to_move), &target.path).await?;
-            self.store.set_folder(&ids(&to_move), &target.id)?;
+            let client = self.jmap_client(account_id).await?;
+            jmap_sync::move_emails(&client, &remote_ids(to_move), &target.path).await?;
+            self.store.set_folder(&local_ids(to_move), &target.id)?;
         }
         self.wake(account_id);
         Ok(())
+    }
+
+    /// Deletes mail in the trash for good, first on the server, then here. Mail
+    /// elsewhere stays, so an outdated view can never delete it by accident.
+    async fn delete_forever(&self, message_ids: &[String]) -> Result<usize> {
+        let locations = self.store.locations(message_ids)?;
+        let mut deleted = 0;
+        for (account_id, messages) in by_account(&locations) {
+            let Some(trash) = self.store.folder_by_role(&account_id, FolderRole::Trash)? else { continue };
+            let doomed: Vec<MessageLocation> = messages.into_iter().filter(|m| m.folder_id == trash.id).collect();
+            if doomed.is_empty() {
+                continue;
+            }
+            if self.store.account(&account_id)?.protocol == Protocol::Jmap {
+                let client = self.jmap_client(&account_id).await?;
+                jmap_sync::destroy_emails(&client, &remote_ids(&doomed)).await?;
+            } else {
+                let mut uids: Vec<u32> = Vec::new();
+                for message in &doomed {
+                    match u32::try_from(message.uid).ok().filter(|uid| *uid > 0) {
+                        Some(uid) => uids.push(uid),
+                        // Just moved here: the trash hasn't synced yet, so the server's uid is unknown.
+                        None => {
+                            let message_id = message.message_id.as_deref().ok_or_else(|| {
+                                Error::connection("The message is still being moved. Try again in a moment.")
+                            })?;
+                            uids.extend(with_session!(self, &account_id, |session| imap::uids_with_message_id(
+                                session,
+                                &trash.path,
+                                message_id
+                            ))?);
+                        }
+                    }
+                }
+                with_session!(self, &account_id, |session| imap::delete_permanently(session, &trash.path, &uids))?;
+            }
+            self.store.delete_messages(&local_ids(&doomed))?;
+            deleted += doomed.len();
+            self.wake(&account_id);
+        }
+        self.emit_changed(&locations);
+        Ok(deleted)
     }
 
     async fn command_session(&self, account_id: &str) -> Result<OwnedMutexGuard<Option<ImapSession>>> {

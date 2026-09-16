@@ -77,9 +77,11 @@ export interface Backend {
   getThread(threadId: string, conversations: boolean): Promise<ThreadDetail>;
 
   setFlags(messageIds: string[], change: FlagChange): Promise<void>;
-  /** These return what moved and from where, for undoing. Deleting from the trash returns nothing. */
+  /** These return what moved and from where, for undoing. Mail already in that folder stays and isn't returned. */
   archive(messageIds: string[]): Promise<MovedMessage[]>;
   trash(messageIds: string[]): Promise<MovedMessage[]>;
+  /** Deletes mail in the trash for good, on the server too; mail elsewhere stays. Returns how many went. */
+  deleteForever(messageIds: string[]): Promise<number>;
   /** Into another folder of the same mailbox. */
   moveMessages(messageIds: string[], folderId: string): Promise<MovedMessage[]>;
   /** Spam goes into the junk folder; not spam back to the inbox. */

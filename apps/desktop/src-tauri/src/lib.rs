@@ -138,6 +138,11 @@ async fn trash_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> 
 }
 
 #[tauri::command]
+async fn delete_messages_forever(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<usize> {
+    engine.delete_forever(&message_ids).await
+}
+
+#[tauri::command]
 async fn move_messages(
     engine: State<'_, Engine>,
     message_ids: Vec<String>,
@@ -408,6 +413,7 @@ pub fn run() {
             set_flags,
             archive_messages,
             trash_messages,
+            delete_messages_forever,
             move_messages,
             mark_spam,
             blocked_senders,

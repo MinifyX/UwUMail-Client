@@ -373,6 +373,16 @@ export class DemoBackend implements Backend {
     return this.moveToRole(messageIds, "trash");
   }
 
+  async deleteForever(messageIds: string[]) {
+    await wait(120);
+    const doomed = new Set(
+      this.messages.filter((m) => messageIds.includes(m.id) && this.roleOf(m) === "trash").map((m) => m.id),
+    );
+    this.emitChanged([...doomed]);
+    this.messages = this.messages.filter((m) => !doomed.has(m.id));
+    return doomed.size;
+  }
+
   async moveMessages(messageIds: string[], folderId: string) {
     await wait(120);
     const folder = this.folders.find((f) => f.id === folderId);
