@@ -48,6 +48,9 @@ const DEMO_FREEMAIL = new Set(["gmail.com", "gmx.de", "web.de", "outlook.com", "
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Like the engine: conversations the trash lists hold only their trashed messages. */
+const TRASHED_THREAD = "trash:";
+
 function lang(): "de" | "en" {
   return navigator.language.toLowerCase().startsWith("de") ? "de" : "en";
 }
@@ -321,15 +324,19 @@ export class DemoBackend implements Backend {
   async listThreads(query: ThreadQuery): Promise<ThreadPage> {
     await wait(120);
     const matching = this.messages.filter((m) => this.inView(m, query) && this.matchesFilter(m, query));
+    const { view } = query;
+    const trash = view.kind === "folder" && this.folders.find((f) => f.id === view.folderId)?.role === "trash";
     const groups = new Map<string, Message[]>();
     for (const message of matching) {
-      const key = query.conversations ? message.threadId : `m:${message.id}`;
+      const key = query.conversations ? `${trash ? TRASHED_THREAD : ""}${message.threadId}` : `m:${message.id}`;
       const list = groups.get(key) ?? [];
       list.push(message);
       groups.set(key, list);
     }
     const threads = [...groups.entries()]
-      .map(([id, list]) => this.summarize(id, query.conversations ? this.threadMessages(list[0]!.threadId) : list))
+      .map(([id, list]) =>
+        this.summarize(id, query.conversations ? this.threadMessages(list[0]!.threadId, trash) : list),
+      )
       .sort((a, b) => b.lastDate.localeCompare(a.lastDate));
     const offset = query.cursor ? Number(query.cursor) : 0;
     const page = threads.slice(offset, offset + query.limit);
@@ -341,7 +348,9 @@ export class DemoBackend implements Backend {
     await wait(90);
     const list = threadId.startsWith("m:")
       ? this.messages.filter((m) => m.id === threadId.slice(2))
-      : this.threadMessages(threadId);
+      : threadId.startsWith(TRASHED_THREAD)
+        ? this.threadMessages(threadId.slice(TRASHED_THREAD.length), true)
+        : this.threadMessages(threadId, false);
     if (list.length === 0) throw new BackendError("not_found", "Thread not found");
     const messages = conversations || threadId.startsWith("m:") ? list : list.slice(-1);
     return { thread: this.summarize(threadId, list), messages: structuredClone(messages) };
@@ -769,9 +778,9 @@ export class DemoBackend implements Backend {
       .includes(search);
   }
 
-  private threadMessages(threadId: string) {
+  private threadMessages(threadId: string, trashed: boolean) {
     return this.messages
-      .filter((m) => m.threadId === threadId && this.roleOf(m) !== "trash")
+      .filter((m) => m.threadId === threadId && (this.roleOf(m) === "trash") === trashed)
       .sort((a, b) => a.date.localeCompare(b.date));
   }
 

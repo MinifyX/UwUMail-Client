@@ -160,6 +160,10 @@ ALTER TABLE messages ADD COLUMN unsubscribe_json TEXT;
 "#,
 ];
 
+/// Prefix of the conversation ids the trash lists: those conversations hold only
+/// their trashed messages, while everywhere else they leave them out.
+const TRASHED_THREAD: &str = "trash:";
+
 /// A stable positive stand-in for IMAP's uid, so JMAP emails fit the same table.
 fn remote_uid(remote_id: &str) -> i64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
@@ -1128,6 +1132,16 @@ impl Store {
         }
     }
 
+    /// Whether a view is an account's trash folder.
+    fn shows_trash(&self, view: &MailboxView) -> Result<bool> {
+        let MailboxView::Folder { folder_id, .. } = view else { return Ok(false) };
+        let role: Option<Option<String>> = self
+            .conn()
+            .query_row("SELECT role FROM folders WHERE id = ?1", [folder_id], |row| row.get(0))
+            .optional()?;
+        Ok(role.flatten().as_deref() == Some(FolderRole::Trash.as_str()))
+    }
+
     pub fn list_threads(&self, query: &ThreadQuery) -> Result<ThreadPage> {
         self.threads(query, None)
     }
@@ -1179,6 +1193,7 @@ impl Store {
         let limit = query.limit.clamp(1, 500);
         let offset: u32 = query.cursor.as_deref().and_then(|c| c.parse().ok()).unwrap_or(0);
         let group = if query.conversations { "m.thread_id" } else { "m.id" };
+        let trash = self.shows_trash(&query.view)?;
 
         let sql = format!(
             "SELECT {group}, MAX(m.date) AS last FROM messages m JOIN folders f ON f.id = m.folder_id
@@ -1196,8 +1211,8 @@ impl Store {
         let mut threads = Vec::with_capacity(keys.len().min(limit as usize));
         for key in keys.into_iter().take(limit as usize) {
             let (id, messages) = if query.conversations {
-                let messages = self.thread_messages(&key)?;
-                (key, messages)
+                let messages = self.thread_messages(&key, trash)?;
+                (if trash { format!("{TRASHED_THREAD}{key}") } else { key }, messages)
             } else {
                 let messages = self.messages_by_ids(std::slice::from_ref(&key))?;
                 (format!("m:{key}"), messages)
@@ -1210,9 +1225,12 @@ impl Store {
     }
 
     pub fn get_thread(&self, thread_id: &str, conversations: bool) -> Result<ThreadDetail> {
-        let messages = match thread_id.strip_prefix("m:") {
-            Some(message_id) => self.messages_by_ids(&[message_id.to_string()])?,
-            None => self.thread_messages(thread_id)?,
+        let messages = if let Some(message_id) = thread_id.strip_prefix("m:") {
+            self.messages_by_ids(&[message_id.to_string()])?
+        } else if let Some(trashed) = thread_id.strip_prefix(TRASHED_THREAD) {
+            self.thread_messages(trashed, true)?
+        } else {
+            self.thread_messages(thread_id, false)?
         };
         let thread = summarize(thread_id, &messages).ok_or_else(|| Error::not_found("Conversation not found"))?;
         let messages = if conversations || thread_id.starts_with("m:") {
@@ -1256,18 +1274,18 @@ impl Store {
         })
     }
 
-    /// All messages of a conversation, oldest first, without trash and duplicates
-    /// of the same message in several folders.
-    pub fn thread_messages(&self, thread_id: &str) -> Result<Vec<Message>> {
+    /// The messages of a conversation, oldest first, without duplicates of the same message
+    /// in several folders: only those in the trash, or all but those.
+    pub fn thread_messages(&self, thread_id: &str, trashed: bool) -> Result<Vec<Message>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(&format!(
             "SELECT {} FROM messages m JOIN folders f ON f.id = m.folder_id
-             WHERE m.thread_id = ?1 AND COALESCE(f.role, '') != 'trash' ORDER BY m.date",
+             WHERE m.thread_id = ?1 AND (COALESCE(f.role, '') = 'trash') = ?2 ORDER BY m.date",
             Self::MESSAGE_COLUMNS
         ))?;
         let mut seen_ids = HashSet::new();
         let mut out = Vec::new();
-        let mut rows = stmt.query([thread_id])?;
+        let mut rows = stmt.query(params![thread_id, trashed])?;
         while let Some(row) = rows.next()? {
             let message_id: Option<String> = row.get(19)?;
             if let Some(mid) = message_id
@@ -1733,6 +1751,62 @@ mod tests {
 
         let detail = store.get_thread(&thread.id, true).unwrap();
         assert_eq!(detail.messages[0].body_text.as_deref().map(str::trim), Some("Hast du den Clip gesehen?"));
+    }
+
+    #[test]
+    fn the_trash_shows_the_trashed_part_of_a_conversation() {
+        let (store, _, inbox, sent) = store_with_account();
+        let trash = folder(&store, "Trash", Some(FolderRole::Trash), ".");
+        insert(
+            &store,
+            &sent,
+            1,
+            &raw(
+                "a@x",
+                "Clip",
+                "Mini <mini@uwumail.dev>",
+                None,
+                "Hast du ihn gesehen?",
+                "Mon, 14 Sep 2026 09:00:00 +0000",
+            ),
+        );
+        let reply = insert(
+            &store,
+            &inbox,
+            2,
+            &raw("b@x", "Re: Clip", "Leni <leni@x.example>", Some("a@x"), "Genau!", "Mon, 14 Sep 2026 10:00:00 +0000"),
+        )
+        .unwrap();
+        store.move_local(std::slice::from_ref(&reply), &trash).unwrap();
+
+        let list = |folder_id: &str| {
+            store
+                .list_threads(&ThreadQuery {
+                    view: MailboxView::Folder { account_id: "acc".into(), folder_id: folder_id.into() },
+                    filter: ListFilter::All,
+                    search: None,
+                    conversations: true,
+                    account_ids: None,
+                    cursor: None,
+                    limit: 50,
+                })
+                .unwrap()
+                .threads
+        };
+        // What's left of the conversation doesn't show the trashed reply.
+        let kept = list(&sent);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].message_count, 1);
+        assert_eq!(store.get_thread(&kept[0].id, true).unwrap().messages.len(), 1);
+
+        // The trash shows just the reply, and opens just the reply.
+        let trashed = list(&trash);
+        assert_eq!(trashed.len(), 1);
+        assert_eq!(trashed[0].message_count, 1);
+        assert_ne!(trashed[0].id, kept[0].id);
+        let detail = store.get_thread(&trashed[0].id, true).unwrap();
+        assert_eq!(detail.thread.subject, "Re: Clip");
+        assert_eq!(detail.messages.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), [reply.as_str()]);
     }
 
     #[test]

@@ -185,6 +185,11 @@ folder or the inbox. Blocked addresses and `@domains` live in
 `blocked_senders`; new inbox mail from them is moved to the trash during sync,
 before any notification.
 
+Conversations leave out their messages in the trash, except in the trash
+itself: there a conversation (id `trash:<thread>`) holds only what was trashed,
+so a trashed reply shows up in the trash while the rest of its conversation
+stays where it was.
+
 ### Unsubscribing
 
 The engine keeps a mail's `List-Unsubscribe` options. `Engine::unsubscribe`
