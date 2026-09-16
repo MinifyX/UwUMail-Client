@@ -1,7 +1,6 @@
 import DOMPurify from "dompurify";
 
 const REMOTE = /^\s*(https?:)?\/\//i;
-const CSS_URL = /url\s*\(/i;
 
 /**
  * Mail HTML for places inside the app's own page, such as a quoted reply in
@@ -17,8 +16,9 @@ export function quotableHtml(html: string): string {
         const value = node.getAttribute(name);
         if (value !== null && (REMOTE.test(value) || name === "srcset")) node.removeAttribute(name);
       }
-      const style = node.getAttribute("style");
-      if (style !== null && CSS_URL.test(style)) node.removeAttribute("style");
+      // Quoted mail renders in the app page, not the sandboxed reader frame, so inline styles could
+      // leak into or overlay the composer. Drop them entirely; the quote keeps its text and structure.
+      if (node.hasAttribute("style")) node.removeAttribute("style");
       if (node.tagName === "IMG" && !node.hasAttribute("src")) node.remove();
       if (node.tagName === "A") {
         const href = node.getAttribute("href") ?? "";
