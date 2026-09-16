@@ -1,9 +1,9 @@
 {
-  "version": "0.2.0-beta.2",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.2.0-beta.2/UwUMail-0.2.0-beta.2-20000026.apk",
-  "sha256": "1e0ba6c2f9f8aaed8bd0d1f82a5a5eed2030d996791444b6edda4896566b91f9",
+  "version": "0.2.0-beta.3",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.2.0-beta.3/UwUMail-0.2.0-beta.3-20000039.apk",
+  "sha256": "8b967e041562061a9066c0c4d7fa24ee64b08ba258c4e5cacbd4f783f1df9af0",
   "notes": {
-    "de": "- Entwürfe werden automatisch am Server gespeichert, weiterschreiben auf PC und Handy\n- „Senden rückgängig“: 10 Sekunden Zeit (einstellbar)\n- Signaturen pro Absender, auch mit Bildern\n- Mehrere Absenderadressen pro Postfach, Antworten gehen von der richtigen raus\n- Newsletter mit einem Klick abbestellen\n- Spam-Knopf und Absender blockieren\n- Mails verschieben (auch per Ziehen) und mehrere auf einmal auswählen\n- Drucken und als Datei speichern\n- Eingebettete Bilder in Mails werden angezeigt\n- Neue Tastenkürzel (? zeigt alle)",
-    "en": "- Drafts are saved to the server automatically, keep writing on your PC or phone\n- “Undo send”: 10 seconds to change your mind (adjustable)\n- Signatures per sender address, with pictures too\n- Several sender addresses per mailbox, replies go out from the right one\n- Unsubscribe from newsletters with one click\n- Spam button and blocking senders\n- Move mail (also by dragging) and select several at once\n- Print mail and save it as a file\n- Embedded pictures in mail show up\n- New keyboard shortcuts (? shows them all)"
+    "de": "- Der Papierkorb zeigt gelöschte Mails jetzt auch, wenn „Mails als Unterhaltungen gruppieren“ an ist (vorher sah er leer aus)\n- Endgültig löschen geht nur noch im Papierkorb, und Nyu fragt vorher nach\n- Entf gedrückt halten löscht nicht mehr eine Mail nach der anderen\n- Privat und Business: Postfächer auf Wunsch in zwei Bereiche trennen (Einstellungen → Postfächer)\n- Neue Mails starten im geöffneten Bereich, Benachrichtigungen auf dem Handy öffnen den passenden\n- Sicherheit: Windows lädt Systembibliotheken nur noch aus System32, zitierte Mails bringen keine fremden Formatierungen mehr mit",
+    "en": "- The trash now shows deleted mail even with “Group messages into conversations” on (it looked empty before)\n- Deleting for good only happens in the trash, and Nyu asks first\n- Holding Delete no longer deletes one mail after the other\n- Private and business: keep your mailboxes in two workspaces if you like (Settings → Mailboxes)\n- New mail starts in the open workspace, notifications on the phone open the right one\n- Security: Windows loads system libraries from System32 only, and quoted mail no longer brings along foreign formatting"
   }
 }
