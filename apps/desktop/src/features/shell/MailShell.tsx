@@ -101,7 +101,7 @@ export function MailShell() {
     }
     return map;
   }, [commands, layout]);
-  useHotkeys(hotkeys);
+  useHotkeys(hotkeys, { repeat: ["j", "k"] });
 
   return (
     <div className="flex h-full flex-col">

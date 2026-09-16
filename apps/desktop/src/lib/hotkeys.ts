@@ -2,6 +2,12 @@ import { useEffect, useRef } from "react";
 
 export type HotkeyMap = Record<string, (event: KeyboardEvent) => void>;
 
+interface HotkeyOptions {
+  enabled?: boolean;
+  /** Combos that run again while their key is held down, like moving through a list. */
+  repeat?: string[];
+}
+
 function isTyping(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
@@ -10,7 +16,8 @@ function isTyping(target: EventTarget | null) {
 /**
  * Keys use the format "mod+k", "shift+3" or plain "j". "mod" is Cmd on macOS
  * and Ctrl elsewhere. Single keys are ignored while the user types. "g i" is
- * a sequence: g, then i within a second.
+ * a sequence: g, then i within a second. A key held down runs its handler once,
+ * so holding Delete can't delete one conversation after the other.
  */
 function comboOf(event: KeyboardEvent) {
   const parts: string[] = [];
@@ -22,10 +29,12 @@ function comboOf(event: KeyboardEvent) {
 
 const SEQUENCE_WAIT = 1000;
 
-export function useHotkeys(map: HotkeyMap, enabled = true) {
+export function useHotkeys(map: HotkeyMap, { enabled = true, repeat = [] }: HotkeyOptions = {}) {
   const latest = useRef(map);
+  const repeating = useRef(repeat);
   useEffect(() => {
     latest.current = map;
+    repeating.current = repeat;
   });
 
   useEffect(() => {
@@ -48,6 +57,7 @@ export function useHotkeys(map: HotkeyMap, enabled = true) {
         return;
       }
       event.preventDefault();
+      if (event.repeat && !repeating.current.includes(combo)) return;
       handler(event);
     };
     window.addEventListener("keydown", onKeyDown);
