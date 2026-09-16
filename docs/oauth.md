@@ -73,6 +73,34 @@ A shared mailbox has no sign-in of its own. Add it under its own address and
 give "Sign in as" the address that has access to it: the sign-in page then asks
 for that person, and their token opens the shared address over XOAUTH2.
 
+### Who can sign in, and who needs their IT first
+
+Personal Microsoft accounts work the moment a client id exists. Company
+mailboxes are a different story, and it is worth being plain about why.
+
+Since November 2020, Entra hands the decision to an administrator whenever a
+multi-tenant app asks for more than signing in and reading a profile, and its
+publisher is not verified. Mailbox access is squarely in that category. The
+step-up is on by default in every tenant, so the person signing in sees
+"AADSTS90094: needs permission ... that only an admin can grant" rather than a
+consent screen.
+
+Publisher verification would lift that, but it needs a verified Microsoft AI
+Cloud Partner Program account as a partner global account, an app registered in
+a work or school tenant (one registered with a personal Microsoft account can
+never be verified), and a DNS-verified publisher domain. UwUMail has none of
+these, and is not going to: it is a hobby project, not a company.
+
+So UwUMail does the next best thing. After a refused Microsoft sign-in it offers
+the page where an administrator allows the app for their whole company,
+`login.microsoftonline.com/<domain>/adminconsent?client_id=<id>`, ready to send to
+whoever runs the tenant. One click there and everyone in that company can sign
+in. Thunderbird asks its users to do the same thing, by hand, through a support
+article.
+
+Tenants that switch user consent off entirely always need that admin step, no
+matter how verified an app is. That one is not ours to solve.
+
 On Android the engine is told `Engine::use_oauth_app_link("app.uwumail://oauth")`;
 the activity that receives the link passes the URL to `Engine::finish_sign_in`,
 which only accepts that link and hands it to the sign-in that is waiting. The
