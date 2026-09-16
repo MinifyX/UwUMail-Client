@@ -70,6 +70,7 @@
     "forward": "Forward",
     "archive": "Archive",
     "trash": "Delete",
+    "deleteForever": "Delete forever",
     "flag": "Flag",
     "unflag": "Remove flag",
     "markUnread": "Mark as unread",
@@ -184,7 +185,9 @@
     "unsubscribeArchived_one": "{{count}} mail archived",
     "unsubscribeArchived_other": "{{count}} mails archived",
     "unsubscribeFailed": "Unsubscribing didn't work. {{reason}}",
-    "messageSaved": "Mail saved"
+    "messageSaved": "Mail saved",
+    "deletedForever_one": "{{count}} message deleted forever",
+    "deletedForever_other": "{{count}} messages deleted forever"
   },
   "status": {
     "syncing": "Checking for mail",
@@ -576,6 +579,13 @@
     "body": "UwUMail unsubscribes you with the sender directly. After that, no more mail should come from there.",
     "bodyPage": "The sender has its own page for this. UwUMail opens it for you, and you confirm there.",
     "archive": "Archive earlier mail from there"
+  },
+  "deleteForever": {
+    "title_one": "Delete this message forever?",
+    "title_other": "Delete {{count}} messages forever?",
+    "body_one": "It's removed from the server too and can't be brought back.",
+    "body_other": "They're removed from the server too and can't be brought back.",
+    "confirm": "Delete forever"
   },
   "workspace": {
     "label": "Workspace",

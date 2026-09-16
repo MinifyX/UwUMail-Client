@@ -203,7 +203,7 @@ export function ThreadList({ variant, className }: ThreadListProps) {
             <IconButton
               icon={Trash}
               size="sm"
-              label={t("reader.trash")}
+              label={info.isTrash ? t("reader.deleteForever") : t("reader.trash")}
               onClick={() => runOnChecked(selection.trash)}
             />
             <IconButton
@@ -287,6 +287,7 @@ export function ThreadList({ variant, className }: ThreadListProps) {
                 actions={threadActions}
                 checked={checked.includes(thread.id)}
                 dragIds={checked.includes(thread.id) ? checked : [thread.id]}
+                inTrash={info.isTrash}
                 onSelect={(event) => {
                   if (event.ctrlKey || event.metaKey) {
                     anchor.current = thread.id;

@@ -1,9 +1,18 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { backend } from "@/backend/backend";
-import type { FlagChange, ListFilter, MailboxView, Message, MovedMessage, ThreadSummary } from "@/backend/types";
-import { useT } from "@/i18n";
+import type {
+  FlagChange,
+  Folder,
+  ListFilter,
+  MailboxView,
+  Message,
+  MovedMessage,
+  ThreadSummary,
+} from "@/backend/types";
+import { translate, useT } from "@/i18n";
 import { inWorkspace } from "@/lib/workspaces";
+import { confirmDeleteForever } from "@/state/deleteForever";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { announceMove } from "@/state/undo";
@@ -123,20 +132,73 @@ export function useThread(threadId: string | null) {
   });
 }
 
-function useInvalidateMail() {
-  const client = useQueryClient();
-  return () =>
-    Promise.all([
-      client.invalidateQueries({ queryKey: queryKeys.threads }),
-      client.invalidateQueries({ queryKey: queryKeys.thread }),
-      client.invalidateQueries({ queryKey: queryKeys.folders }),
-    ]);
+/** Lists, conversations and folder counts load again after mail changed. */
+function invalidateMail(client: QueryClient) {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: queryKeys.threads }),
+    client.invalidateQueries({ queryKey: queryKeys.thread }),
+    client.invalidateQueries({ queryKey: queryKeys.folders }),
+  ]);
+}
+
+/** Whether all these messages lie in their mailbox's trash, where deleting means for good. */
+export function inTrash(messages: Pick<Message, "folderId">[], folders: Folder[]) {
+  return (
+    messages.length > 0 &&
+    messages.every((message) => folders.find((folder) => folder.id === message.folderId)?.role === "trash")
+  );
+}
+
+/** A conversation that goes away hands the selection to the next one, or closes if it was the last. */
+export function leaveThread(threadId: string) {
+  const ui = useUi.getState();
+  if (ui.selectedThreadId === threadId) ui.selectRelative(1);
+  if (useUi.getState().selectedThreadId === threadId) ui.selectThread(null);
+}
+
+/**
+ * Moves mail into the trash, with undo. Mail that already lies there goes for good, but only
+ * after Nyu asked. `leave` runs right before either happens. Resolves whether the mail went.
+ */
+export async function trashMail(client: QueryClient, messages: Message[], leave?: () => void) {
+  const ids = messages.map((message) => message.id);
+  const refresh = () => invalidateMail(client);
+  const fail = (error: unknown) => {
+    toast(error instanceof Error ? error.message : String(error), "error");
+    return false;
+  };
+  let forever: boolean;
+  try {
+    const folders = await client.ensureQueryData({
+      queryKey: queryKeys.folders,
+      queryFn: () => backend().listFolders(),
+    });
+    forever = inTrash(messages, folders);
+  } catch (error) {
+    return fail(error);
+  }
+  if (forever && !(await confirmDeleteForever(ids.length))) return false;
+  leave?.();
+  try {
+    if (forever) {
+      const count = await backend().deleteForever(ids);
+      toast(translate("toast.deletedForever", { count }), "success");
+    } else {
+      announceMove(await backend().trash(ids), translate("toast.trashed"), refresh);
+    }
+    return true;
+  } catch (error) {
+    return fail(error);
+  } finally {
+    await refresh();
+  }
 }
 
 /** Actions on messages with cache invalidation and friendly feedback. */
 export function useMessageActions() {
   const { t } = useT();
-  const invalidate = useInvalidateMail();
+  const client = useQueryClient();
+  const invalidate = () => invalidateMail(client);
 
   const run = async (action: () => Promise<void>, success?: string) => {
     try {
@@ -163,7 +225,8 @@ export function useMessageActions() {
   return {
     setFlags: (ids: string[], change: FlagChange) => run(() => backend().setFlags(ids, change)),
     archive: (ids: string[]) => moveWithUndo(() => backend().archive(ids), t("toast.archived")),
-    trash: (ids: string[]) => moveWithUndo(() => backend().trash(ids), t("toast.trashed")),
+    /** Into the trash, or out of it for good after asking; see `trashMail`. */
+    trash: (messages: Message[], leave?: () => void) => trashMail(client, messages, leave),
     move: (ids: string[], folder: { id: string; name: string }) =>
       moveWithUndo(() => backend().moveMessages(ids, folder.id), t("toast.moved", { folder: folder.name })),
     spam: (ids: string[], spam: boolean) =>
@@ -177,7 +240,7 @@ export function useThreadActions() {
   const client = useQueryClient();
   const actions = useMessageActions();
 
-  const withMessages = async (thread: ThreadSummary, act: (messages: Message[]) => Promise<void>) => {
+  const withMessages = async (thread: ThreadSummary, act: (messages: Message[]) => Promise<unknown>) => {
     const { conversations } = useSettings.getState();
     try {
       const detail = await client.fetchQuery({
@@ -189,25 +252,16 @@ export function useThreadActions() {
       toast(error instanceof Error ? error.message : String(error), "error");
     }
   };
-  // Like the shortcuts: a thread that goes away hands the selection to the next one.
-  const moveOnIfOpen = (thread: ThreadSummary) => {
-    const ui = useUi.getState();
-    if (ui.selectedThreadId === thread.id) ui.selectRelative(1);
-    if (useUi.getState().selectedThreadId === thread.id) ui.selectThread(null);
-  };
   const ids = (messages: Message[]) => messages.map((message) => message.id);
 
   return {
     archive: (thread: ThreadSummary) =>
       withMessages(thread, (messages) => {
-        moveOnIfOpen(thread);
+        leaveThread(thread.id);
         return actions.archive(ids(messages));
       }),
     trash: (thread: ThreadSummary) =>
-      withMessages(thread, (messages) => {
-        moveOnIfOpen(thread);
-        return actions.trash(ids(messages));
-      }),
+      withMessages(thread, (messages) => actions.trash(messages, () => leaveThread(thread.id))),
     toggleRead: (thread: ThreadSummary) =>
       withMessages(thread, (messages) => {
         if (thread.unreadCount > 0) return actions.setFlags(ids(messages), { seen: true });

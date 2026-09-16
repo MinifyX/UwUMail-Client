@@ -70,6 +70,7 @@
     "forward": "Weiterleiten",
     "archive": "Archivieren",
     "trash": "Löschen",
+    "deleteForever": "Endgültig löschen",
     "flag": "Markieren",
     "unflag": "Markierung entfernen",
     "markUnread": "Als ungelesen markieren",
@@ -184,7 +185,9 @@
     "unsubscribeArchived_one": "{{count}} Mail archiviert",
     "unsubscribeArchived_other": "{{count}} Mails archiviert",
     "unsubscribeFailed": "Das Abmelden hat nicht geklappt. {{reason}}",
-    "messageSaved": "Mail gespeichert"
+    "messageSaved": "Mail gespeichert",
+    "deletedForever_one": "{{count}} Mail endgültig gelöscht",
+    "deletedForever_other": "{{count}} Mails endgültig gelöscht"
   },
   "status": {
     "syncing": "Suche nach neuen Mails",
@@ -576,6 +579,13 @@
     "body": "UwUMail meldet dich direkt beim Absender ab. Danach sollten keine Mails mehr von dort kommen.",
     "bodyPage": "Der Absender hat dafür eine eigene Seite. UwUMail öffnet sie für dich, dort bestätigst du die Abmeldung.",
     "archive": "Bisherige Mails von dort archivieren"
+  },
+  "deleteForever": {
+    "title_one": "Diese Mail endgültig löschen?",
+    "title_other": "{{count}} Mails endgültig löschen?",
+    "body_one": "Sie verschwindet auch vom Server und lässt sich nicht zurückholen.",
+    "body_other": "Sie verschwinden auch vom Server und lassen sich nicht zurückholen.",
+    "confirm": "Endgültig löschen"
   },
   "workspace": {
     "label": "Bereich",

@@ -70,7 +70,7 @@ export function useSelectionActions() {
   return {
     messagesOf,
     archive: async (threadIds: string[]) => actions.archive(ids(await messagesOf(threadIds))),
-    trash: async (threadIds: string[]) => actions.trash(ids(await messagesOf(threadIds))),
+    trash: async (threadIds: string[]) => actions.trash(await messagesOf(threadIds)),
     spam: async (threadIds: string[], spam: boolean) => actions.spam(ids(await messagesOf(threadIds)), spam),
     read: async (threadIds: string[], seen: boolean) => actions.setFlags(ids(await messagesOf(threadIds)), { seen }),
     flag: async (threadIds: string[], flagged: boolean) =>

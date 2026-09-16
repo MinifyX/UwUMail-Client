@@ -51,6 +51,8 @@ export interface ViewInfo {
   isInbox: boolean;
   /** Opening a conversation here continues the draft instead of reading it. */
   isDrafts: boolean;
+  /** Deleting here means for good. */
+  isTrash: boolean;
 }
 
 export function useViewInfo(view: MailboxView): ViewInfo {
@@ -68,6 +70,7 @@ export function useViewInfo(view: MailboxView): ViewInfo {
       subtitle: workspaces ? workspaceName(activeWorkspace) : accounts.length > 1 ? t("nav.unified") : undefined,
       isInbox: view.role === "inbox",
       isDrafts: view.role === "drafts",
+      isTrash: false,
     };
   }
   const folder = folders.find((f) => f.id === view.folderId);
@@ -78,5 +81,6 @@ export function useViewInfo(view: MailboxView): ViewInfo {
     account,
     isInbox: folder?.role === "inbox",
     isDrafts: folder?.role === "drafts",
+    isTrash: folder?.role === "trash",
   };
 }

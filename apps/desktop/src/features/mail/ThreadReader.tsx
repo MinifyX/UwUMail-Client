@@ -18,7 +18,7 @@ import type { Message } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
-import { useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
+import { inTrash, useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
 import { useUi } from "@/state/ui";
 import { MessageView } from "./MessageView";
 import { requestMove } from "./selection";
@@ -113,6 +113,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const flagged = data.thread.flagged;
   const hiddenCount = all.filter((m) => !expanded.has(m.id)).length;
   const inJunk = all.every((m) => folders.find((f) => f.id === m.folderId)?.role === "junk");
+  const trashed = inTrash(all, folders);
 
   return (
     <section className={clsx("flex h-full min-w-0 flex-col bg-canvas", className)} aria-label={data.thread.subject}>
@@ -143,8 +144,8 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
         />
         <IconButton
           icon={Trash}
-          label={t("reader.trash")}
-          onClick={() => void actions.trash(ids).then(() => selectThread(null))}
+          label={trashed ? t("reader.deleteForever") : t("reader.trash")}
+          onClick={() => void actions.trash(all).then((gone) => gone && selectThread(null))}
         />
         <IconButton
           icon={FolderInput}

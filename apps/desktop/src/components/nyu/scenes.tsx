@@ -328,6 +328,26 @@ function NoAccount() {
   );
 }
 
+/** Deleting for good: Nyu sadly watches a letter drop into the bin. */
+function Goodbye() {
+  return (
+    <>
+      <Shadow cx={172} />
+      <Nyu mood="sad" x={102} y={128} scale={0.4} tilt={-6} />
+      <Sticker edge={EDGE}>
+        <path d="M204 106 H284 L274 200 H214Z" fill={NYU.lilac} {...S} />
+        <rect x="194" y="90" width="100" height="18" rx="7" fill={NYU.violet} {...S} />
+        <path d="M232 90 V80 Q232 74 238 74 H250 Q256 74 256 80 V90" fill="none" {...S} />
+      </Sticker>
+      <path d="M232 126 L235 182 M244 126 V182 M256 126 L253 182" stroke={NYU.ink} strokeWidth={5} opacity="0.3" />
+      <Sticker edge={EDGE}>
+        <Letter x={244} y={44} rotate={14} seal />
+      </Sticker>
+      <path d="M232 8 v10 M252 4 v10" fill="none" stroke={NYU.ink} strokeWidth={4} opacity="0.35" />
+    </>
+  );
+}
+
 const SCENES = {
   inbox: Inbox,
   search: Search,
@@ -340,6 +360,7 @@ const SCENES = {
   loadError: LoadError,
   offline: Offline,
   noAccount: NoAccount,
+  goodbye: Goodbye,
 } satisfies Record<string, () => ReactNode>;
 
 export type SceneName = keyof typeof SCENES;

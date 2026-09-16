@@ -69,7 +69,9 @@
     "moveUndone": "Zack, alles wie vorher (・ω・)",
     "blocked": "{{entry}} kommt nicht mehr rein (｀・ω・´) Neue Mails landen im Papierkorb.",
     "unsubscribed": "Abgemeldet (≧▽≦) Keine Post mehr von {{name}}",
-    "messageSaved": "Mail sicher abgelegt (˘ω˘)"
+    "messageSaved": "Mail sicher abgelegt (˘ω˘)",
+    "deletedForever_one": "Für immer weg (｡•́︿•̀｡)",
+    "deletedForever_other": "{{count}} Mails für immer weg (｡•́︿•̀｡)"
   },
   "status": {
     "syncing": "Hole frische Mails…",
@@ -144,6 +146,12 @@
   },
   "unsubscribe": {
     "title": "Tschüss {{name}}?"
+  },
+  "deleteForever": {
+    "title_one": "Diese Mail für immer löschen? (｡•́︿•̀｡)",
+    "title_other": "{{count}} Mails für immer löschen? (｡•́︿•̀｡)",
+    "body_one": "Dann ist sie auch auf dem Server weg, und ich kann sie nicht mehr zurückholen.",
+    "body_other": "Dann sind sie auch auf dem Server weg, und ich kann sie nicht mehr zurückholen."
   },
   "workspace": {
     "setupTitle": "Welche Postfächer ziehen zu {{name}}? (｀・ω・´)ゞ",

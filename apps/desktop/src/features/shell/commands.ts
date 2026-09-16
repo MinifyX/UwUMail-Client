@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { backend } from "@/backend/backend";
 import { i18n } from "@/i18n";
-import { queryKeys } from "@/lib/queries";
+import { leaveThread, queryKeys, trashMail } from "@/lib/queries";
 import { WORKSPACES } from "@/lib/workspaces";
 import { useSettings } from "@/state/settings";
 import { announceMove, runLastUndo } from "@/state/undo";
@@ -119,7 +119,7 @@ export function buildCommands(
       keys: ["e"],
       needsThread: true,
       run: withThread(async (thread) => {
-        ui.selectRelative(1);
+        leaveThread(thread.thread.id);
         announceMove(await backend().archive(ids(thread)), t("toast.archived"), () => afterChange(client));
         await afterChange(client);
       }),
@@ -130,10 +130,9 @@ export function buildCommands(
       icon: Trash,
       keys: ["#", "Delete"],
       needsThread: true,
+      // In the trash this deletes for good, after Nyu asked.
       run: withThread(async (thread) => {
-        ui.selectRelative(1);
-        announceMove(await backend().trash(ids(thread)), t("toast.trashed"), () => afterChange(client));
-        await afterChange(client);
+        await trashMail(client, thread.messages, () => leaveThread(thread.thread.id));
       }),
     },
     {
@@ -151,7 +150,7 @@ export function buildCommands(
       keys: ["!"],
       needsThread: true,
       run: withThread(async (thread) => {
-        ui.selectRelative(1);
+        leaveThread(thread.thread.id);
         announceMove(await backend().markSpam(ids(thread), true), t("toast.markedSpam"), () => afterChange(client));
         await afterChange(client);
       }),

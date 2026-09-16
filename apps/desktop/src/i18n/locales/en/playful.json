@@ -69,7 +69,9 @@
     "moveUndone": "Poof, back as it was (・ω・)",
     "blocked": "{{entry}} can't get in anymore (｀・ω・´) New mail goes to the trash.",
     "unsubscribed": "Unsubscribed (≧▽≦) No more mail from {{name}}",
-    "messageSaved": "Mail tucked away safely (˘ω˘)"
+    "messageSaved": "Mail tucked away safely (˘ω˘)",
+    "deletedForever_one": "Gone forever (｡•́︿•̀｡)",
+    "deletedForever_other": "{{count}} messages gone forever (｡•́︿•̀｡)"
   },
   "status": {
     "syncing": "Fetching fresh mail…",
@@ -144,6 +146,12 @@
   },
   "unsubscribe": {
     "title": "Bye bye {{name}}?"
+  },
+  "deleteForever": {
+    "title_one": "Say goodbye to this one forever? (｡•́︿•̀｡)",
+    "title_other": "Say goodbye to {{count}} messages forever? (｡•́︿•̀｡)",
+    "body_one": "It'll be gone from the server too, and I can't fetch it back.",
+    "body_other": "They'll be gone from the server too, and I can't fetch them back."
   },
   "workspace": {
     "setupTitle": "Which mailboxes move to {{name}}? (｀・ω・´)ゞ",

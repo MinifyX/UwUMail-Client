@@ -45,7 +45,7 @@ export function useThreadActions() {
       case "archive":
         return actions.archive(ids);
       case "trash":
-        return actions.trash(ids);
+        return actions.trash(messages);
     }
   };
 

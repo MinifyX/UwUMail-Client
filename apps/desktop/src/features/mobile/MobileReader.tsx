@@ -243,7 +243,11 @@ export function MobileReader({ threadId }: { threadId: string }) {
           onClick={() => openCompose({ mode: "forward", source: latest })}
         />
         <BarButton icon={Archive} label={t("mobile.swipe.archive")} onClick={() => leaveAfter(actions.archive(ids))} />
-        <BarButton icon={Trash} label={t("reader.trash")} onClick={() => leaveAfter(actions.trash(ids))} />
+        <BarButton
+          icon={Trash}
+          label={t("reader.trash")}
+          onClick={() => void actions.trash(all).then((gone) => gone && back())}
+        />
       </nav>
     </section>
   );

@@ -199,7 +199,11 @@ export function MobileList() {
             <IconButton icon={MailCheck} label={t("mobile.swipe.read")} onClick={() => runOnSelection("read")} />
             <IconButton icon={Star} label={t("reader.flag")} onClick={() => runOnSelection("flag")} />
             <IconButton icon={Archive} label={t("reader.archive")} onClick={() => runOnSelection("archive")} />
-            <IconButton icon={Trash} label={t("reader.trash")} onClick={() => runOnSelection("trash")} />
+            <IconButton
+              icon={Trash}
+              label={info.isTrash ? t("reader.deleteForever") : t("reader.trash")}
+              onClick={() => runOnSelection("trash")}
+            />
             <IconButton icon={FolderInput} label={t("reader.move")} onClick={moveSelection} />
           </div>
         ) : (
@@ -315,6 +319,7 @@ export function MobileList() {
                           accounts={accounts}
                           showAccount={showAccount}
                           actions={cardActions}
+                          inTrash={info.isTrash}
                           onSelect={() =>
                             selecting
                               ? toggle(thread.id)

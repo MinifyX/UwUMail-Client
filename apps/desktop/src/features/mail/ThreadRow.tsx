@@ -22,6 +22,8 @@ interface ThreadRowProps {
   checked?: boolean;
   /** Thread ids a drag from this row carries (desktop), or none to not drag. */
   dragIds?: string[];
+  /** The row sits in the trash, where deleting means for good. */
+  inTrash?: boolean;
 }
 
 function QuickAction({
@@ -67,6 +69,7 @@ export function ThreadRow({
   onSelect,
   checked = false,
   dragIds,
+  inTrash = false,
 }: ThreadRowProps) {
   const { t, i18n } = useT();
   const compact = density === "compact";
@@ -206,7 +209,7 @@ export function ThreadRow({
         />
         <QuickAction
           icon={Trash}
-          label={t("reader.trash")}
+          label={inTrash ? t("reader.deleteForever") : t("reader.trash")}
           compact={compact}
           onClick={() => void actions.trash(thread)}
         />
