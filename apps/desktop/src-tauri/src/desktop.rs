@@ -17,7 +17,25 @@ use crate::{background, updates};
 
 pub use updates::{Channel, ReadyUpdate};
 
-pub fn before_start() {}
+pub fn before_start() {
+    #[cfg(windows)]
+    restrict_dll_search();
+}
+
+/// On Windows, DLLs loaded by name at runtime resolve from System32 only, never the install folder
+/// or PATH. This is the runtime counterpart to `/DEPENDENTLOADFLAG` (build.rs), which only covers
+/// statically imported DLLs, and mirrors the setup (M7). Called before anything else loads a DLL.
+#[cfg(windows)]
+fn restrict_dll_search() {
+    // SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32) from kernel32.
+    unsafe extern "system" {
+        fn SetDefaultDllDirectories(directory_flags: u32) -> i32;
+    }
+    const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 0x0000_0800;
+    unsafe {
+        SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+}
 
 pub fn plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
     builder
