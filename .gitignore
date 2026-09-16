@@ -39,3 +39,6 @@ pnpm-debug.log*
 
 # Packaged addons built locally
 *.uwuaddon
+
+# Private security-test notes (repro steps, PoCs) — never commit
+security-test-notes.local.md
