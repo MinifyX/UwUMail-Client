@@ -33,7 +33,7 @@ struct ProviderConfig {
 
 fn config(provider: OAuthProvider) -> Result<ProviderConfig> {
     let missing = || {
-        Error::not_supported(
+        Error::oauth_not_configured(
             "This build of UwUMail has no OAuth client id for this provider. See docs/oauth.md to set one up.",
         )
     };
@@ -135,18 +135,47 @@ pub(crate) fn redirect_parameters(url: &url::Url) -> Result<(String, String)> {
     let mut code = None;
     let mut state = None;
     let mut error = None;
+    let mut description = String::new();
     for (key, value) in url.query_pairs() {
         match key.as_ref() {
             "code" => code = Some(value.into_owned()),
             "state" => state = Some(value.into_owned()),
             "error" => error = Some(value.into_owned()),
+            "error_description" => description = value.into_owned(),
             _ => {}
         }
     }
     if let Some(error) = error {
-        return Err(Error::auth(format!("Sign-in was cancelled ({error}).")));
+        return Err(explain_sign_in_error(&error, &description));
     }
     Ok((code.ok_or_else(|| Error::auth("No authorization code received."))?, state.unwrap_or_default()))
+}
+
+/// Turns a refused sign-in into something the person can act on.
+///
+/// Microsoft states the real reason as an AADSTS code inside
+/// `error_description`. The one that matters here is a company tenant that
+/// only lets an administrator allow an app: UwUMail asks for mailbox access,
+/// which counts as more than signing in, so tenants hand that decision to an
+/// admin by default. Nobody signing in can do anything about it themselves,
+/// and saying "cancelled" would send them looking in the wrong place.
+pub(crate) fn explain_sign_in_error(error: &str, description: &str) -> Error {
+    // AADSTS65001: nobody has consented yet. AADSTS90094: the grant needs an admin.
+    if description.contains("AADSTS65001") || description.contains("AADSTS90094") {
+        return Error::admin_consent_required("This company allows apps only after an administrator agrees.");
+    }
+    Error::auth(format!("Sign-in was cancelled ({error})."))
+}
+
+/// The page where an administrator allows UwUMail for their whole company.
+///
+/// Naming the domain instead of `common` lands the admin in their own tenant.
+/// The page lists exactly the permissions the app registration asks for.
+pub fn admin_consent_url(domain: &str) -> Result<String> {
+    let config = config(OAuthProvider::Microsoft)?;
+    let tenant: String = url::form_urlencoded::byte_serialize(domain.as_bytes()).collect();
+    let client_id: String = url::form_urlencoded::byte_serialize(config.client_id.as_bytes()).collect();
+    Ok(format!("https://login.microsoftonline.com/{tenant}/adminconsent?client_id={client_id}"))
 }
 
 const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8><title>UwUMail</title>\
@@ -347,6 +376,27 @@ mod tests {
         assert!(wait_for_app_link(&mut incoming, "ours").await.is_err(), "a cancel with our state counts");
         drop(sender);
         assert!(wait_for_app_link(&mut incoming, "ours").await.is_err(), "a replaced sign-in ends");
+    }
+
+    #[test]
+    fn tells_an_admin_approval_from_a_cancelled_sign_in() {
+        // What a company tenant answers when only admins may allow apps.
+        let needs_admin = url::Url::parse(
+            "http://localhost/?error=access_denied&error_description=AADSTS65001%3A+The+user+or+administrator+has+not+consented&state=s",
+        )
+        .unwrap();
+        assert_eq!(redirect_parameters(&needs_admin).unwrap_err().code, crate::error::ErrorCode::AdminConsentRequired);
+        let grant_needs_admin = url::Url::parse(
+            "http://localhost/?error=access_denied&error_description=AADSTS90094%3A+needs+permission+to+access+resources&state=s",
+        )
+        .unwrap();
+        assert_eq!(
+            redirect_parameters(&grant_needs_admin).unwrap_err().code,
+            crate::error::ErrorCode::AdminConsentRequired
+        );
+        // Someone who simply closed the page is not an admin problem.
+        let cancelled = url::Url::parse("http://localhost/?error=access_denied&state=s").unwrap();
+        assert_eq!(redirect_parameters(&cancelled).unwrap_err().code, crate::error::ErrorCode::AuthFailed);
     }
 
     #[test]

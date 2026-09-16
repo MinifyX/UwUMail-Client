@@ -7,10 +7,11 @@ import { AccountSetup } from "./AccountSetup";
 
 const discoverSettings = vi.fn<(email: string) => Promise<DiscoveredSettings>>();
 const addAccount = vi.fn<(account: NewAccount) => Promise<Account>>();
+const microsoftAdminConsentUrl = vi.fn<(email: string) => Promise<string>>();
 
 vi.mock("@/backend/backend", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/backend/backend")>()),
-  backend: () => ({ discoverSettings, addAccount }),
+  backend: () => ({ discoverSettings, addAccount, microsoftAdminConsentUrl }),
 }));
 
 /** What discovery returns for a company domain it could not place. */
@@ -61,6 +62,9 @@ describe("AccountSetup with Microsoft 365", () => {
   beforeEach(() => {
     discoverSettings.mockReset().mockResolvedValue(guessed);
     addAccount.mockReset().mockResolvedValue(added);
+    microsoftAdminConsentUrl
+      .mockReset()
+      .mockResolvedValue("https://login.microsoftonline.com/example-company.de/adminconsent?client_id=abc");
   });
 
   // Vitest runs without globals here, so the automatic cleanup is not registered.
@@ -125,5 +129,41 @@ describe("AccountSetup with Microsoft 365", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("IMAP abgeschaltet");
     expect(alert.textContent).toContain("Set-CASMailbox");
+  });
+
+  it("hands a refused company sign-in the link for its administrators", async () => {
+    const { BackendError } = await import("@/backend/backend");
+    addAccount.mockRejectedValue(new BackendError("admin_consent_required", "Needs an administrator."));
+    setup();
+    await discover();
+    click("Dieses Postfach liegt bei Microsoft 365");
+    click("Weiter mit Microsoft");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Administration zugestimmt");
+    expect(await screen.findByText(/adminconsent/)).toBeTruthy();
+  });
+
+  it("offers the link after any refused Microsoft sign-in, not only the named one", async () => {
+    // Microsoft often shows its approval page instead of naming a reason.
+    const { BackendError } = await import("@/backend/backend");
+    addAccount.mockRejectedValue(new BackendError("auth_failed", "Sign-in was cancelled (access_denied)."));
+    setup();
+    await discover();
+    click("Dieses Postfach liegt bei Microsoft 365");
+    click("Weiter mit Microsoft");
+
+    expect(await screen.findByText(/adminconsent/)).toBeTruthy();
+  });
+
+  it("keeps the link away from refusals an administrator cannot help with", async () => {
+    const { BackendError } = await import("@/backend/backend");
+    addAccount.mockRejectedValue(new BackendError("oauth_not_configured", "No client id in this build."));
+    setup();
+    await discover();
+    click("Dieses Postfach liegt bei Microsoft 365");
+    click("Weiter mit Microsoft");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Zugangsdaten");
+    expect(screen.queryByText(/adminconsent/)).toBeNull();
   });
 });

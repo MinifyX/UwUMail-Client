@@ -29,6 +29,9 @@ interface AccountSetupProps {
 
 const PROVIDER_NAMES = { microsoft: "Microsoft", google: "Google" } as const;
 
+/** Refusals that an administrator's approval would not change. */
+const BEYOND_CONSENT = new Set(["oauth_not_configured", "not_supported", "invalid_input", "connection_failed"]);
+
 /**
  * Exchange Online's fixed hosts, for switching a mailbox to Microsoft by hand
  * when discovery got it wrong. Keep in step with `microsoft_settings` in
@@ -102,6 +105,9 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
   const [showServers, setShowServers] = useState(false);
   // A shared mailbox is opened with someone else's sign-in.
   const [signInAs, setSignInAs] = useState("");
+  // Offered after a refused Microsoft sign-in, for the company's administrators.
+  const [consentUrl, setConsentUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [showSharedMailbox, setShowSharedMailbox] = useState(false);
   const [busy, setBusy] = useState<"discover" | "connect" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +122,12 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
       if (reason.code === "invalid_input") return t("account.errorInvalid");
       if (reason.code === "imap_disabled") return t("account.errorImapDisabled");
       if (reason.code === "smtp_disabled") return t("account.errorSmtpDisabled");
+      if (reason.code === "admin_consent_required") return t("account.errorAdminConsent");
+      if (reason.code === "oauth_not_configured" && settings?.oauth)
+        return t("account.errorOauthMissing", { provider: PROVIDER_NAMES[settings.oauth] });
+      // The browser demo is the only place that calls a provider sign-in unsupported.
+      if (reason.code === "not_supported" && settings?.oauth)
+        return t("account.errorOauthDemo", { provider: PROVIDER_NAMES[settings.oauth] });
       return reason.message;
     }
     return String(reason);
@@ -175,8 +187,31 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
       onDone(account);
     } catch (reason) {
       setError(describeError(reason));
+      // Microsoft often shows its "needs admin approval" page instead of coming
+      // back with a reason, so the link is worth offering after any refused
+      // Microsoft sign-in, not only after the error code that names it. It is
+      // not worth offering where approval is beside the point.
+      const pointless = reason instanceof BackendError && BEYOND_CONSENT.has(reason.code);
+      if (settings.oauth === "microsoft" && !pointless) {
+        try {
+          setConsentUrl(await backend().microsoftAdminConsentUrl(email.trim()));
+        } catch {
+          // A build without a client id has no link to offer either.
+        }
+      }
     } finally {
       setBusy(null);
+    }
+  };
+
+  const copyConsentUrl = async () => {
+    if (!consentUrl) return;
+    try {
+      await navigator.clipboard.writeText(consentUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard denied: the link is on screen to copy by hand.
     }
   };
 
@@ -198,6 +233,7 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
     setPassword("");
     setProtocol("imap");
     setError(null);
+    setConsentUrl(null);
   };
 
   const switchToPassword = () => {
@@ -205,6 +241,7 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
     setSettings({ ...settings, oauth: undefined });
     setSignInAs("");
     setShowSharedMailbox(false);
+    setConsentUrl(null);
     // The Microsoft hosts are almost certainly wrong now, so show them.
     setShowServers(true);
     setError(null);
@@ -473,6 +510,22 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
         <p role="alert" className="text-[13px] text-danger">
           {error}
         </p>
+      )}
+
+      {consentUrl && (
+        <div className="flex flex-col gap-2 rounded-2xl bg-pink-tint/60 px-4 py-3 text-[13px] text-pink-ink">
+          <p className="flex gap-2">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>
+              <strong className="block">{t("account.adminConsentTitle")}</strong>
+              {t("account.adminConsentBody")}
+            </span>
+          </p>
+          <code className="rounded-xl bg-surface px-3 py-2 text-[12px] break-all select-all">{consentUrl}</code>
+          <Button size="sm" variant="ghost" className="self-start" onClick={() => void copyConsentUrl()}>
+            {copied ? t("account.consentLinkCopied") : t("account.consentLinkCopy")}
+          </Button>
+        </div>
       )}
 
       {cleartext && (

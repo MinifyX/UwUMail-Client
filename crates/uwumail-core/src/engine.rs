@@ -355,6 +355,15 @@ impl Engine {
         autoconfig::discover(&self.inner.http, email).await
     }
 
+    /// The page an administrator opens to allow UwUMail for a whole company,
+    /// for a mailbox whose sign-in ended in [`ErrorCode::AdminConsentRequired`].
+    ///
+    /// [`ErrorCode::AdminConsentRequired`]: crate::error::ErrorCode::AdminConsentRequired
+    pub fn microsoft_admin_consent_url(&self, email: &str) -> Result<String> {
+        let (_, domain) = autoconfig::split_email(email)?;
+        oauth::admin_consent_url(&domain)
+    }
+
     pub async fn add_account(&self, new: NewAccount) -> Result<Account> {
         let (_, domain) = autoconfig::split_email(&new.email)?;
         let jmap_url = new.jmap_url.as_deref().map(str::trim).filter(|url| !url.is_empty()).map(String::from);

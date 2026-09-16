@@ -94,6 +94,10 @@ export class TauriBackend implements Backend {
     return call<DiscoveredSettings>("discover_settings", { email });
   }
 
+  microsoftAdminConsentUrl(email: string) {
+    return call<string>("microsoft_admin_consent_url", { email });
+  }
+
   addAccount(account: NewAccount) {
     return call<Account>("add_account", { account });
   }

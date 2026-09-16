@@ -14,6 +14,12 @@ pub enum ErrorCode {
     ImapDisabled,
     /// Same for sending: the tenant or the mailbox may not submit over SMTP.
     SmtpDisabled,
+    /// The sign-in needs an administrator of the company to allow UwUMail in
+    /// their tenant first. Nothing the person signing in can do themselves.
+    AdminConsentRequired,
+    /// This build carries no client id for the provider, so signing in with it
+    /// cannot start. A packaging matter, not something a user can fix.
+    OauthNotConfigured,
 }
 
 /// Error type crossing the boundary to the UI. The message is shown to users,
@@ -58,6 +64,14 @@ impl Error {
 
     pub fn smtp_disabled(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::SmtpDisabled, message)
+    }
+
+    pub fn admin_consent_required(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::AdminConsentRequired, message)
+    }
+
+    pub fn oauth_not_configured(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::OauthNotConfigured, message)
     }
 
     pub fn internal(message: impl Into<String>) -> Self {

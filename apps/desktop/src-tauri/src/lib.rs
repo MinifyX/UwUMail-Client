@@ -65,6 +65,11 @@ async fn discover_settings(engine: State<'_, Engine>, email: String) -> CommandR
 }
 
 #[tauri::command]
+fn microsoft_admin_consent_url(engine: State<'_, Engine>, email: String) -> CommandResult<String> {
+    engine.microsoft_admin_consent_url(&email)
+}
+
+#[tauri::command]
 async fn add_account(engine: State<'_, Engine>, account: NewAccount) -> CommandResult<Account> {
     engine.add_account(account).await
 }
@@ -390,6 +395,7 @@ pub fn run() {
             rename_identity,
             remove_identity,
             discover_settings,
+            microsoft_admin_consent_url,
             add_account,
             remove_account,
             set_account_protocol,

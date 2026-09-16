@@ -34,7 +34,11 @@ export type BackendErrorCode =
   /** An administrator switched IMAP off for this mailbox. */
   | "imap_disabled"
   /** This mailbox may not submit mail over SMTP. */
-  | "smtp_disabled";
+  | "smtp_disabled"
+  /** A company tenant lets only an administrator allow UwUMail. */
+  | "admin_consent_required"
+  /** This build carries no client id for the provider. */
+  | "oauth_not_configured";
 
 export class BackendError extends Error {
   readonly code: BackendErrorCode;
@@ -60,6 +64,8 @@ export interface Backend {
   saveSignature(signature: Signature): Promise<Signature>;
   deleteSignature(signatureId: string): Promise<void>;
   discoverSettings(email: string): Promise<DiscoveredSettings>;
+  /** The page an administrator opens to allow UwUMail for a whole company. */
+  microsoftAdminConsentUrl(email: string): Promise<string>;
   addAccount(account: NewAccount): Promise<Account>;
   removeAccount(accountId: string): Promise<void>;
   /** Switches between IMAP/SMTP and JMAP; the mailbox syncs again from scratch. */

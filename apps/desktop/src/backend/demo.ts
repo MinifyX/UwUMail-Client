@@ -194,6 +194,11 @@ export class DemoBackend implements Backend {
     this.signatures = this.signatures.filter((s) => s.id !== signatureId);
   }
 
+  async microsoftAdminConsentUrl(email: string): Promise<string> {
+    const domain = email.split("@")[1]?.toLowerCase() ?? "common";
+    return `https://login.microsoftonline.com/${domain}/adminconsent?client_id=demo`;
+  }
+
   async discoverSettings(email: string): Promise<DiscoveredSettings> {
     await wait(700);
     const domain = email.split("@")[1]?.toLowerCase();
@@ -245,7 +250,13 @@ export class DemoBackend implements Backend {
 
   async addAccount(input: NewAccount) {
     await wait(1200);
-    if (input.auth === "password" && input.password === "wrong") {
+    // The browser demo has no OAuth round trip: the desktop app opens the
+    // provider's page and listens on loopback for the answer. Pretending it
+    // worked would show a mailbox that no sign-in stands behind.
+    if (input.auth !== "password") {
+      throw new BackendError("not_supported", "Signing in with a provider needs the desktop app.");
+    }
+    if (input.password === "wrong") {
       throw new BackendError("auth_failed", "The server rejected the password.");
     }
     const account: Account = {
