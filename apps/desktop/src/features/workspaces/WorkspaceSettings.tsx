@@ -182,7 +182,7 @@ export function WorkspaceSettings() {
           ))}
         </div>
       )}
-      <Dialog open={settingUp} onClose={requestClose} dismissable={!dirty} width="sm">
+      <Dialog open={settingUp} onClose={requestClose} closeOnOutsideClick={!dirty} width="sm">
         {settingUp && (
           <WorkspaceSetup
             accounts={accounts}

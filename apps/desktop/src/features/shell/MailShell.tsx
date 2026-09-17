@@ -39,7 +39,7 @@ function AddAccountDialog() {
 
   return (
     <>
-      <Dialog open={open} onClose={requestClose} dismissable={!dirty} title={t("nav.addAccount")}>
+      <Dialog open={open} onClose={requestClose} closeOnOutsideClick={!dirty} title={t("nav.addAccount")}>
         <div className="px-6 pt-2 pb-6">
           <AccountSetup
             onDirtyChange={setDirty}

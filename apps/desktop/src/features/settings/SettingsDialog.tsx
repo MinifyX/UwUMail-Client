@@ -580,7 +580,7 @@ export function SettingsDialog() {
       <Dialog
         open={section !== null}
         onClose={requestClose}
-        dismissable={!formDirty}
+        closeOnOutsideClick={!formDirty}
         title={t("settings.title")}
         width="lg"
       >
