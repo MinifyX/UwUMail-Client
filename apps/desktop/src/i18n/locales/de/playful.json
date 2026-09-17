@@ -154,6 +154,10 @@
     "body_one": "Dann ist sie auch auf dem Server weg, und ich kann sie nicht mehr zurückholen.",
     "body_other": "Dann sind sie auch auf dem Server weg, und ich kann sie nicht mehr zurückholen."
   },
+  "discardChanges": {
+    "title": "Alles wegwerfen? (・_・;)",
+    "body": "Ich vergesse dann alles, was du hier eingetippt hast."
+  },
   "workspace": {
     "setupTitle": "Welche Postfächer ziehen zu {{name}}? (｀・ω・´)ゞ",
     "enabled": "{{private}} und {{business}} haben jetzt eigene Zimmer ✧"

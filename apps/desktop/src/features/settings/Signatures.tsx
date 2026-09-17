@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Bold, ImagePlus, Italic, Link, Pencil, Plus, Trash } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { Signature } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -10,6 +10,7 @@ import { pictureAsDataUrl } from "@/lib/images";
 import { queryKeys, useIdentities, useSignatures } from "@/lib/queries";
 import { isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { toast } from "@/state/toasts";
+import { useUi } from "@/state/ui";
 import { Row } from "./Row";
 
 export function Signatures() {
@@ -21,6 +22,12 @@ export function Signatures() {
   const email = chosen ?? identities[0]?.email ?? "";
   const [editing, setEditing] = useState<Signature | null>(null);
   const own = signatures.filter((s) => s.email.toLowerCase() === email.toLowerCase());
+  const setSettingsFormDirty = useUi((s) => s.setSettingsFormDirty);
+  // The settings window shouldn't vanish (backdrop click, Escape) while a signature is mid-edit.
+  useEffect(() => {
+    setSettingsFormDirty(editing !== null);
+    return () => setSettingsFormDirty(false);
+  }, [editing, setSettingsFormDirty]);
 
   const refresh = () => client.invalidateQueries({ queryKey: queryKeys.signatures });
   const failed = (reason: unknown) => toast(reason instanceof Error ? reason.message : String(reason), "error");

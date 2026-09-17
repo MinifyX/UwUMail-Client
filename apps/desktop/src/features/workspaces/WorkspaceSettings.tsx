@@ -1,10 +1,11 @@
 import clsx from "clsx";
 import { Check } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Account } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Segmented, TextInput, Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
@@ -47,11 +48,28 @@ export function WorkspacePicker({
 }
 
 /** Nyu asks which mailboxes are business before the workspaces turn on. */
-function WorkspaceSetup({ accounts, onClose }: { accounts: Account[]; onClose: () => void }) {
+function WorkspaceSetup({
+  accounts,
+  onCancel,
+  onDone,
+  onDirtyChange,
+}: {
+  accounts: Account[];
+  onCancel: () => void;
+  onDone: () => void;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
   const { t } = useT();
   const nameOf = useWorkspaceName();
   // Turned on again, the earlier choice is still ticked.
-  const [business, setBusiness] = useState(() => new Set(useSettings.getState().businessAccounts));
+  const [initial] = useState(() => new Set(useSettings.getState().businessAccounts));
+  const [business, setBusiness] = useState(() => new Set(initial));
+  const dirty = business.size !== initial.size || [...business].some((id) => !initial.has(id));
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+    return () => onDirtyChange(false);
+  }, [dirty, onDirtyChange]);
 
   const toggle = (accountId: string) => {
     const next = new Set(business);
@@ -63,7 +81,7 @@ function WorkspaceSetup({ accounts, onClose }: { accounts: Account[]; onClose: (
     const businessAccounts = accounts.filter((account) => business.has(account.id)).map((account) => account.id);
     useSettings.getState().update({ workspaces: true, businessAccounts });
     toast(t("workspace.enabled", { private: nameOf("private"), business: nameOf("business") }), "success");
-    onClose();
+    onDone();
   };
 
   return (
@@ -111,7 +129,7 @@ function WorkspaceSetup({ accounts, onClose }: { accounts: Account[]; onClose: (
         <Button variant="primary" autoFocus onClick={finish}>
           {t("workspace.setupDone")}
         </Button>
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="ghost" onClick={onCancel}>
           {t("common.cancel")}
         </Button>
       </div>
@@ -127,6 +145,13 @@ export function WorkspaceSettings() {
   const update = useSettings((s) => s.update);
   const { data: accounts = [] } = useAccounts();
   const [settingUp, setSettingUp] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
+  const requestClose = () => {
+    if (dirty) setConfirmingDiscard(true);
+    else setSettingUp(false);
+  };
 
   return (
     <div className="flex flex-col gap-3 border-b border-hairline pb-4">
@@ -157,9 +182,24 @@ export function WorkspaceSettings() {
           ))}
         </div>
       )}
-      <Dialog open={settingUp} onClose={() => setSettingUp(false)} width="sm">
-        {settingUp && <WorkspaceSetup accounts={accounts} onClose={() => setSettingUp(false)} />}
+      <Dialog open={settingUp} onClose={requestClose} dismissable={!dirty} width="sm">
+        {settingUp && (
+          <WorkspaceSetup
+            accounts={accounts}
+            onCancel={requestClose}
+            onDone={() => setSettingUp(false)}
+            onDirtyChange={setDirty}
+          />
+        )}
       </Dialog>
+      <ConfirmDiscardDialog
+        open={confirmingDiscard}
+        onKeepEditing={() => setConfirmingDiscard(false)}
+        onDiscard={() => {
+          setConfirmingDiscard(false);
+          setSettingUp(false);
+        }}
+      />
     </div>
   );
 }

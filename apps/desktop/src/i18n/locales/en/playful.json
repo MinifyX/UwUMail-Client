@@ -154,6 +154,10 @@
     "body_one": "It'll be gone from the server too, and I can't fetch it back.",
     "body_other": "They'll be gone from the server too, and I can't fetch them back."
   },
+  "discardChanges": {
+    "title": "Throw it all away? (・_・;)",
+    "body": "I'll forget everything you just typed here."
+  },
   "workspace": {
     "setupTitle": "Which mailboxes move to {{name}}? (｀・ω・´)ゞ",
     "enabled": "{{private}} and {{business}} have their own rooms now ✧"

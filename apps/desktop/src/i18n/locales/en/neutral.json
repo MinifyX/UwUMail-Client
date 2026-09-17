@@ -590,6 +590,12 @@
     "body_other": "They're removed from the server too and can't be brought back.",
     "confirm": "Delete forever"
   },
+  "discardChanges": {
+    "title": "Discard your changes?",
+    "body": "What you've entered here would be lost.",
+    "discard": "Discard changes",
+    "keepEditing": "Keep editing"
+  },
   "workspace": {
     "label": "Workspace",
     "private": "Private",

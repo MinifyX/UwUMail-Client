@@ -24,6 +24,7 @@ import { mobile, nativeAndroid } from "@/backend/mobile";
 import type { Account, Protocol } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
+import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Segmented, Select, Toggle } from "@/components/ui/Field";
@@ -566,37 +567,60 @@ export function SettingsDialog() {
   const section = useUi((s) => s.settingsOpen);
   const openSettings = useUi((s) => s.openSettings);
   const closeSettings = useUi((s) => s.closeSettings);
+  const formDirty = useUi((s) => s.settingsFormDirty);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
+  const requestClose = () => {
+    if (formDirty) setConfirmingDiscard(true);
+    else closeSettings();
+  };
 
   return (
-    <Dialog open={section !== null} onClose={closeSettings} title={t("settings.title")} width="lg">
-      <div className="flex min-h-[460px] flex-col gap-2 px-4 pb-5 sm:flex-row sm:gap-6 sm:px-6">
-        <nav className="flex shrink-0 gap-1 overflow-x-auto sm:w-48 sm:flex-col" aria-label={t("settings.title")}>
-          {SECTIONS.filter((item) => !item.androidOnly || nativeAndroid).map(({ id, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => openSettings(id)}
-              aria-current={section === id ? "page" : undefined}
-              className={clsx(
-                "flex h-10 shrink-0 items-center gap-3 rounded-xl px-3 text-left text-[13.5px] font-semibold transition-colors",
-                section === id ? "bg-pink-tint text-pink-ink" : "text-muted hover:bg-pink-tint/50 hover:text-ink",
-              )}
-            >
-              <Icon className="size-[17px]" aria-hidden />
-              {t(`settings.${id}`)}
-            </button>
-          ))}
-        </nav>
-        <div className="min-w-0 flex-1">
-          {section === "appearance" && <Appearance />}
-          {section === "mail" && <Reading />}
-          {section === "compose" && <Writing />}
-          {section === "security" && <Security />}
-          {section === "accounts" && <Accounts />}
-          {section === "addons" && <Addons />}
-          {section === "about" && <About />}
+    <>
+      <Dialog
+        open={section !== null}
+        onClose={requestClose}
+        dismissable={!formDirty}
+        title={t("settings.title")}
+        width="lg"
+      >
+        <div className="flex min-h-[460px] flex-col gap-2 px-4 pb-5 sm:flex-row sm:gap-6 sm:px-6">
+          <nav className="flex shrink-0 gap-1 overflow-x-auto sm:w-48 sm:flex-col" aria-label={t("settings.title")}>
+            {SECTIONS.filter((item) => !item.androidOnly || nativeAndroid).map(({ id, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => openSettings(id)}
+                aria-current={section === id ? "page" : undefined}
+                className={clsx(
+                  "flex h-10 shrink-0 items-center gap-3 rounded-xl px-3 text-left text-[13.5px] font-semibold transition-colors",
+                  section === id ? "bg-pink-tint text-pink-ink" : "text-muted hover:bg-pink-tint/50 hover:text-ink",
+                )}
+              >
+                <Icon className="size-[17px]" aria-hidden />
+                {t(`settings.${id}`)}
+              </button>
+            ))}
+          </nav>
+          <div className="min-w-0 flex-1">
+            {section === "appearance" && <Appearance />}
+            {section === "mail" && <Reading />}
+            {section === "compose" && <Writing />}
+            {section === "security" && <Security />}
+            {section === "accounts" && <Accounts />}
+            {section === "addons" && <Addons />}
+            {section === "about" && <About />}
+          </div>
         </div>
-      </div>
-    </Dialog>
+      </Dialog>
+      <ConfirmDiscardDialog
+        open={confirmingDiscard}
+        onKeepEditing={() => setConfirmingDiscard(false)}
+        onDiscard={() => {
+          setConfirmingDiscard(false);
+          closeSettings();
+        }}
+      />
+    </>
   );
 }

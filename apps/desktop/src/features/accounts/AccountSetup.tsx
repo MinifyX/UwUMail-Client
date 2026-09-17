@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { ChevronDown, CircleCheck, Info, KeyRound, ShieldAlert, Zap } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { backend, BackendError } from "@/backend/backend";
 import {
@@ -25,6 +25,8 @@ import { switchWorkspace } from "../workspaces/workspaces";
 interface AccountSetupProps {
   onDone: (account: Account) => void;
   footer?: ReactNode;
+  /** Tells a dialog around this form whether closing would throw entries away. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const PROVIDER_NAMES = { microsoft: "Microsoft", google: "Google" } as const;
@@ -93,7 +95,7 @@ function ServerFields({
   );
 }
 
-export function AccountSetup({ onDone, footer }: AccountSetupProps) {
+export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProps) {
   const { t } = useT();
   const client = useQueryClient();
   const [displayName, setDisplayName] = useState("");
@@ -114,6 +116,13 @@ export function AccountSetup({ onDone, footer }: AccountSetupProps) {
   const workspaces = useSettings((s) => s.workspaces);
   // A new mailbox joins the workspace that's open, unless picked otherwise.
   const [workspace, setWorkspace] = useState<Workspace>(() => useSettings.getState().activeWorkspace);
+
+  const dirty =
+    displayName.trim() !== "" || email.trim() !== "" || password !== "" || signInAs.trim() !== "" || settings !== null;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
 
   const describeError = (reason: unknown) => {
     if (reason instanceof BackendError) {

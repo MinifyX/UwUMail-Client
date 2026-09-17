@@ -590,6 +590,12 @@
     "body_other": "Sie verschwinden auch vom Server und lassen sich nicht zurückholen.",
     "confirm": "Endgültig löschen"
   },
+  "discardChanges": {
+    "title": "Änderungen verwerfen?",
+    "body": "Was du hier eingegeben hast, geht sonst verloren.",
+    "discard": "Verwerfen",
+    "keepEditing": "Weiter bearbeiten"
+  },
   "workspace": {
     "label": "Bereich",
     "private": "Privat",

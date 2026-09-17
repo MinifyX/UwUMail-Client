@@ -1,7 +1,8 @@
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { backend } from "@/backend/backend";
+import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { isAndroid, PRO_QUERY, useIsPhone, useMediaQuery } from "@/lib/device";
@@ -28,17 +29,36 @@ function AddAccountDialog() {
   const { t } = useT();
   const open = useUi((s) => s.addAccountOpen);
   const setOpen = useUi((s) => s.setAddAccountOpen);
+  const [dirty, setDirty] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
+  const requestClose = () => {
+    if (dirty) setConfirmingDiscard(true);
+    else setOpen(false);
+  };
+
   return (
-    <Dialog open={open} onClose={() => setOpen(false)} title={t("nav.addAccount")}>
-      <div className="px-6 pt-2 pb-6">
-        <AccountSetup
-          onDone={(account) => {
-            toast(t("toast.accountAdded", { email: account.email }), "success");
-            setOpen(false);
-          }}
-        />
-      </div>
-    </Dialog>
+    <>
+      <Dialog open={open} onClose={requestClose} dismissable={!dirty} title={t("nav.addAccount")}>
+        <div className="px-6 pt-2 pb-6">
+          <AccountSetup
+            onDirtyChange={setDirty}
+            onDone={(account) => {
+              toast(t("toast.accountAdded", { email: account.email }), "success");
+              setOpen(false);
+            }}
+          />
+        </div>
+      </Dialog>
+      <ConfirmDiscardDialog
+        open={confirmingDiscard}
+        onKeepEditing={() => setConfirmingDiscard(false)}
+        onDiscard={() => {
+          setConfirmingDiscard(false);
+          setOpen(false);
+        }}
+      />
+    </>
   );
 }
 

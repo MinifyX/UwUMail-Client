@@ -58,6 +58,8 @@ interface UiState {
   compose: ComposeRequest | null;
   composeMinimized: boolean;
   settingsOpen: SettingsSection | null;
+  /** A form inside the settings dialog (e.g. a signature being edited) has unsaved input. */
+  settingsFormDirty: boolean;
   addAccountOpen: boolean;
   paletteOpen: boolean;
   shortcutsOpen: boolean;
@@ -77,6 +79,7 @@ interface UiState {
   setComposeMinimized: (minimized: boolean) => void;
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
+  setSettingsFormDirty: (dirty: boolean) => void;
   setAddAccountOpen: (open: boolean) => void;
   setPaletteOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
@@ -95,6 +98,7 @@ export const useUi = create<UiState>()((set, get) => ({
   compose: null,
   composeMinimized: false,
   settingsOpen: null,
+  settingsFormDirty: false,
   addAccountOpen: false,
   paletteOpen: false,
   shortcutsOpen: false,
@@ -118,7 +122,8 @@ export const useUi = create<UiState>()((set, get) => ({
   closeCompose: () => set({ compose: null, composeMinimized: false }),
   setComposeMinimized: (minimized) => set({ composeMinimized: minimized }),
   openSettings: (section = "appearance") => set({ settingsOpen: section, paletteOpen: false }),
-  closeSettings: () => set({ settingsOpen: null }),
+  closeSettings: () => set({ settingsOpen: null, settingsFormDirty: false }),
+  setSettingsFormDirty: (dirty) => set({ settingsFormDirty: dirty }),
   setAddAccountOpen: (open) => set({ addAccountOpen: open }),
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
