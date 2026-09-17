@@ -568,11 +568,23 @@ export function SettingsDialog() {
   const openSettings = useUi((s) => s.openSettings);
   const closeSettings = useUi((s) => s.closeSettings);
   const formDirty = useUi((s) => s.settingsFormDirty);
-  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  // What the question is standing in front of: closing the window, or the section to switch to.
+  const [pending, setPending] = useState<"close" | SettingsSection | null>(null);
 
   const requestClose = () => {
-    if (formDirty) setConfirmingDiscard(true);
+    if (formDirty) setPending("close");
     else closeSettings();
+  };
+  // Switching section unmounts whatever is being edited, so it asks like closing does.
+  const requestSection = (id: SettingsSection) => {
+    if (formDirty && id !== section) setPending(id);
+    else openSettings(id);
+  };
+  const discard = () => {
+    const target = pending;
+    setPending(null);
+    if (target === "close") closeSettings();
+    else if (target) openSettings(target);
   };
 
   return (
@@ -590,7 +602,7 @@ export function SettingsDialog() {
               <button
                 key={id}
                 type="button"
-                onClick={() => openSettings(id)}
+                onClick={() => requestSection(id)}
                 aria-current={section === id ? "page" : undefined}
                 className={clsx(
                   "flex h-10 shrink-0 items-center gap-3 rounded-xl px-3 text-left text-[13.5px] font-semibold transition-colors",
@@ -613,14 +625,7 @@ export function SettingsDialog() {
           </div>
         </div>
       </Dialog>
-      <ConfirmDiscardDialog
-        open={confirmingDiscard}
-        onKeepEditing={() => setConfirmingDiscard(false)}
-        onDiscard={() => {
-          setConfirmingDiscard(false);
-          closeSettings();
-        }}
-      />
+      <ConfirmDiscardDialog open={pending !== null} onKeepEditing={() => setPending(null)} onDiscard={discard} />
     </>
   );
 }
