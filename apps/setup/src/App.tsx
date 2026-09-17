@@ -118,7 +118,7 @@ function Window({
     <div className="setup-sparkles flex h-full flex-col">
       <header data-tauri-drag-region className="flex h-11 shrink-0 items-center gap-1 px-2">
         <span data-tauri-drag-region className="mr-auto pl-3 text-[14px] font-extrabold tracking-tight">
-          UwU<span className="text-pink">Mail</span>
+          <span className="text-pink">UwU</span>Mail
         </span>
         <button type="button" className={control} onClick={onToggleSound} aria-label={muted ? t.soundOn : t.soundOff}>
           <Icon path={muted ? ICONS.soundOff : ICONS.soundOn} />

@@ -538,7 +538,7 @@ function About() {
       <LogoSymbol className="h-20 w-auto" title="UwUMail" />
       <div>
         <p className="text-[20px] font-extrabold">
-          UwU<span className="text-pink">Mail</span>
+          <span className="text-pink">UwU</span>Mail
         </p>
         <p className="text-[13px] text-muted">{t("settings.version", { version: pkg.version })}</p>
       </div>
