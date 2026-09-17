@@ -2,6 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { BackendError, type Backend, type BackendErrorCode } from "./backend";
 import type {
+  BlockedSender,
   Account,
   AttachmentContent,
   BackendEvent,
@@ -159,15 +160,15 @@ export class TauriBackend implements Backend {
   }
 
   blockedSenders() {
-    return call<string[]>("blocked_senders");
+    return call<BlockedSender[]>("blocked_senders");
   }
 
-  blockSender(entry: string) {
-    return call<string>("block_sender", { entry });
+  blockSender(entry: string, accountId?: string) {
+    return call<BlockedSender>("block_sender", { entry, accountId: accountId ?? null });
   }
 
-  unblockSender(entry: string) {
-    return call<void>("unblock_sender", { entry });
+  unblockSender(sender: BlockedSender) {
+    return call<void>("unblock_sender", { sender });
   }
 
   send(message: OutgoingMessage) {

@@ -4,6 +4,7 @@ import { demoAttachmentBlob } from "./demo-attachments";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, welcomeMessage } from "./demo-data";
 import { demoSenderPicture } from "./demo-pictures";
 import type {
+  BlockedSender,
   Account,
   AttachmentContent,
   Address,
@@ -83,7 +84,7 @@ export class DemoBackend implements Backend {
   private mailtoTaken = false;
   /** Draft key → the demo message that holds the draft, and what the composer sent. */
   private drafts = new Map<string, { messageId: string; draft: OutgoingMessage }>();
-  private blocked = new Set<string>();
+  private blocked: BlockedSender[] = [];
   private signatures: Signature[] = [
     {
       id: "sig-demo",
@@ -426,19 +427,32 @@ export class DemoBackend implements Backend {
     return [...this.blocked];
   }
 
-  async blockSender(entry: string) {
+  async blockSender(entry: string, accountId?: string) {
     await wait(80);
     const normalized = entry.trim().toLowerCase();
     if (!/^(@[^@\s]+\.[^@\s]+|[^@\s]+@[^@\s]+\.[^@\s]+)$/.test(normalized)) {
       throw new BackendError("invalid_input", `"${entry}" isn't an address or @domain.`);
     }
-    this.blocked.add(normalized);
-    return normalized;
+    // The demo's JMAP mailbox plays a UwUMail server that keeps the list itself.
+    const onServer = this.accounts.find((account) => account.id === accountId)?.protocol === "jmap";
+    const existing = this.blocked.find(
+      (sender) => sender.entry === normalized && sender.accountId === (onServer ? accountId : null),
+    );
+    if (existing) return existing;
+    const sender: BlockedSender = {
+      entry: normalized,
+      accountId: onServer ? accountId! : null,
+      serverId: onServer ? `l${this.nextId++}` : null,
+    };
+    this.blocked.push(sender);
+    return sender;
   }
 
-  async unblockSender(entry: string) {
+  async unblockSender(sender: BlockedSender) {
     await wait(60);
-    this.blocked.delete(entry);
+    this.blocked = this.blocked.filter(
+      (other) => !(other.entry === sender.entry && other.accountId === sender.accountId),
+    );
   }
 
   async queueSend(message: OutgoingMessage, delaySeconds: number): Promise<QueuedSend> {

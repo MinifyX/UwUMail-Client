@@ -400,3 +400,69 @@ async fn jmap_drafts_are_saved_replaced_and_removed_on_send() {
 
     engine.remove_account(&mini.id).await.unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn jmap_blocks_senders_on_a_uwumail_server() {
+    let Some(base) = std::env::var("UWUMAIL_TEST_JMAP").ok().filter(|s| !s.is_empty()) else {
+        eprintln!("UWUMAIL_TEST_JMAP not set, skipping");
+        return;
+    };
+    let session_url = format!("{}/.well-known/jmap", base.trim_end_matches('/'));
+    let data = tempfile::tempdir().unwrap();
+    let engine = Engine::new(EngineOptions {
+        data_dir: data.path().to_path_buf(),
+        secrets: Arc::new(MemorySecrets::default()),
+        open_url: Arc::new(|_| {}),
+    })
+    .unwrap();
+    let no_server = ServerSettings { host: String::new(), port: 0, security: Security::Tls };
+    let (email, password) = MINI;
+    let mini = engine
+        .add_account(NewAccount {
+            display_name: "Mini".into(),
+            email: email.into(),
+            auth: AuthKind::Password,
+            password: Some(password.into()),
+            imap: no_server.clone(),
+            smtp: no_server,
+            username: email.into(),
+            color: AccountColor::Pink,
+            protocol: Protocol::Jmap,
+            jmap_url: Some(session_url.clone()),
+            sign_in_as: None,
+        })
+        .await
+        .unwrap();
+
+    let other = Client::connect(&reqwest::Client::new(), &session_url, email, password).await.unwrap();
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let spammer = format!("Werbung-{}@Shop.example", &unique[..8]);
+    let address = engine.block_sender(&spammer, Some(&mini.id)).await.unwrap();
+    if !other.session.sender_lists {
+        eprintln!("this JMAP server keeps no sender lists (not a UwUMail server), the app blocks on its own");
+        assert_eq!(address.server_id, None);
+        engine.unblock_sender(&address).await.unwrap();
+        return;
+    }
+    assert!(address.server_id.is_some(), "a UwUMail server keeps the entry: {address:?}");
+    assert_eq!(address.entry, spammer.to_lowercase());
+    assert_eq!(address.account_id.as_deref(), Some(mini.id.as_str()));
+    let domain = engine.block_sender(&format!("@news-{}.example", &unique[..8]), Some(&mini.id)).await.unwrap();
+    assert!(domain.entry.starts_with("@news-"), "{domain:?}");
+
+    // Blocking again, e.g. from another device, is fine and finds the same entry.
+    assert_eq!(engine.block_sender(&spammer, Some(&mini.id)).await.unwrap(), address);
+    // Another app on the same login sees it, because the server keeps it.
+    let on_server = uwumail_core::jmap_sync::server_blocked_senders(&other).await.unwrap();
+    assert!(on_server.iter().any(|(_, entry)| *entry == address.entry));
+
+    let listed = engine.blocked_senders().await.unwrap();
+    assert!(listed.contains(&address) && listed.contains(&domain), "{listed:?}");
+    engine.unblock_sender(&address).await.unwrap();
+    engine.unblock_sender(&domain).await.unwrap();
+    engine.unblock_sender(&domain).await.unwrap();
+    let left = engine.blocked_senders().await.unwrap();
+    assert!(!left.contains(&address) && !left.contains(&domain));
+
+    engine.remove_account(&mini.id).await.unwrap();
+}

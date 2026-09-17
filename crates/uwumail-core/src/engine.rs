@@ -834,12 +834,43 @@ impl Engine {
         self.inner.store.inbox_messages_from(email)
     }
 
-    /// Addresses and `@domains` whose new mail goes straight to the trash.
-    pub fn blocked_senders(&self) -> Result<Vec<String>> {
-        self.inner.store.blocked_senders()
+    /// Blocked senders: the app's own list, whose new mail it moves into junk, and what each account keeps on
+    /// its UwUMail server. A server that can't be reached leaves out its entries.
+    pub async fn blocked_senders(&self) -> Result<Vec<BlockedSender>> {
+        let mut blocked: Vec<BlockedSender> = self
+            .inner
+            .store
+            .blocked_senders()?
+            .into_iter()
+            .map(|entry| BlockedSender { entry, account_id: None, server_id: None })
+            .collect();
+        for account in self.inner.store.accounts()? {
+            if account.protocol != Protocol::Jmap {
+                continue;
+            }
+            let listed = async {
+                let client = self.inner.jmap_client(&account.id).await?;
+                if !client.session.sender_lists {
+                    return Ok(Vec::new());
+                }
+                jmap_sync::server_blocked_senders(&client).await
+            }
+            .await;
+            match listed {
+                Ok(listed) => blocked.extend(listed.into_iter().map(|(id, entry)| BlockedSender {
+                    entry,
+                    account_id: Some(account.id.clone()),
+                    server_id: Some(id),
+                })),
+                Err(error) => tracing::warn!("Couldn't read the blocked senders on the server: {error}"),
+            }
+        }
+        Ok(blocked)
     }
 
-    pub fn block_sender(&self, entry: &str) -> Result<String> {
+    /// Blocks an address or `@domain`. For an account on a UwUMail server the server keeps the entry, so it
+    /// holds while the app is closed and on every device; otherwise this app does.
+    pub async fn block_sender(&self, entry: &str, account_id: Option<&str>) -> Result<BlockedSender> {
         let entry = entry.trim().to_lowercase();
         let valid = match entry.strip_prefix('@') {
             Some(domain) => domain.contains('.') && matches!(url::Host::parse(domain), Ok(url::Host::Domain(_))),
@@ -848,12 +879,27 @@ impl Engine {
         if !valid {
             return Err(Error::invalid(format!("\"{entry}\" isn't an address or @domain.")));
         }
+        if let Some(account_id) = account_id
+            && self.inner.store.account(account_id)?.protocol == Protocol::Jmap
+        {
+            let client = self.inner.jmap_client(account_id).await?;
+            if client.session.sender_lists {
+                let (id, entry) = jmap_sync::block_on_server(&client, &entry).await?;
+                return Ok(BlockedSender { entry, account_id: Some(account_id.to_string()), server_id: Some(id) });
+            }
+        }
         self.inner.store.block_sender(&entry)?;
-        Ok(entry)
+        Ok(BlockedSender { entry, account_id: None, server_id: None })
     }
 
-    pub fn unblock_sender(&self, entry: &str) -> Result<()> {
-        self.inner.store.unblock_sender(entry)
+    pub async fn unblock_sender(&self, sender: &BlockedSender) -> Result<()> {
+        match (&sender.account_id, &sender.server_id) {
+            (Some(account_id), Some(id)) => {
+                let client = self.inner.jmap_client(account_id).await?;
+                jmap_sync::unblock_on_server(&client, id).await
+            }
+            _ => self.inner.store.unblock_sender(&sender.entry),
+        }
     }
 
     fn threading_for(&self, in_reply_to: Option<&str>) -> Result<Option<Threading>> {
@@ -1491,7 +1537,7 @@ impl Inner {
         Ok(moved)
     }
 
-    /// New inbox mail from blocked senders goes straight to the trash; returns the rest.
+    /// New inbox mail from senders the app blocks goes straight into junk; returns the rest.
     async fn drop_blocked(&self, messages: Vec<Message>) -> Vec<Message> {
         let blocked = match self.store.blocked_senders() {
             Ok(blocked) if !blocked.is_empty() => blocked,
@@ -1501,8 +1547,8 @@ impl Inner {
             messages.into_iter().partition(|message| is_blocked(&blocked, &message.from.email));
         if !dropped.is_empty() {
             let ids: Vec<String> = dropped.into_iter().map(|message| message.id).collect();
-            if let Err(error) = Box::pin(self.move_to(&ids, MoveTarget::Role(FolderRole::Trash))).await {
-                tracing::warn!("Couldn't move mail from blocked senders to the trash: {error}");
+            if let Err(error) = Box::pin(self.move_to(&ids, MoveTarget::Role(FolderRole::Junk))).await {
+                tracing::warn!("Couldn't move mail from blocked senders into junk: {error}");
             }
         }
         kept

@@ -14,6 +14,8 @@ use crate::error::{Error, ErrorCode, Result};
 pub const CORE: &str = "urn:ietf:params:jmap:core";
 pub const MAIL: &str = "urn:ietf:params:jmap:mail";
 pub const SUBMISSION: &str = "urn:ietf:params:jmap:submission";
+/// A UwUMail server's allowed and blocked senders (UwUMail-Server docs/jmap-senders.md).
+pub const SENDERS: &str = "urn:uwumail:jmap:senders";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -67,6 +69,8 @@ pub struct Session {
     pub max_objects_in_get: usize,
     pub max_calls_in_request: usize,
     pub username: String,
+    /// The server keeps a list of blocked senders for this login (a UwUMail server).
+    pub sender_lists: bool,
 }
 
 impl Session {
@@ -100,6 +104,7 @@ impl Session {
             max_objects_in_get: limit("maxObjectsInGet", 500),
             max_calls_in_request: limit("maxCallsInRequest", 16),
             username: text("username").unwrap_or_default().to_string(),
+            sender_lists: capabilities.contains_key(SENDERS),
         })
     }
 
@@ -279,7 +284,12 @@ impl Client {
             .enumerate()
             .map(|(index, (name, arguments))| json!([name, arguments, index.to_string()]))
             .collect();
-        let body = json!({ "using": [CORE, MAIL, SUBMISSION], "methodCalls": method_calls });
+        let mut using = vec![CORE, MAIL, SUBMISSION];
+        // Servers refuse capabilities they don't know, so ours only goes to servers that offer it.
+        if self.session.sender_lists {
+            using.push(SENDERS);
+        }
+        let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self
             .http
             .post(&self.session.api_url)

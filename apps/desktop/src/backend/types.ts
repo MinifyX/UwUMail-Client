@@ -191,6 +191,15 @@ export interface OutgoingMessage {
   fromEmail?: string;
 }
 
+/** A blocked sender: in this app, or on the UwUMail server of one account. */
+export interface BlockedSender {
+  /** An address or `@domain`; on a server also an IP address, network or host name. */
+  entry: string;
+  /** The account whose server keeps the entry; null for the app's own list. */
+  accountId: string | null;
+  serverId: string | null;
+}
+
 /** A moved message and the folder it came from, for undoing. */
 export interface MovedMessage {
   id: string;

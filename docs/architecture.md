@@ -181,9 +181,13 @@ Archive, trash, move and spam share one engine path (`Inner::move_to`) and
 return every moved message with the folder it came from; the UI's "Undo"
 (toast or `z`) moves them back. Spam and not spam set the `$Junk` /
 `$NotJunk` keywords first where the server takes them, then move to the junk
-folder or the inbox. Blocked addresses and `@domains` live in
-`blocked_senders`; new inbox mail from them is moved to the trash during sync,
-before any notification.
+folder or the inbox. Blocking a sender of an account on a UwUMail server puts
+the address or `@domain` on that server's list over JMAP (`SenderList/get` and
+`/set`, capability `urn:uwumail:jmap:senders`), so the server sorts new mail
+into junk even while the app is closed. For every other account the entry
+lives in `blocked_senders` on this device, and new inbox mail from it is moved
+into junk during sync, before any notification. Blocking also marks the open
+mail as spam.
 
 Conversations leave out their messages in the trash, except in the trash
 itself: there a conversation (id `trash:<thread>`) holds only what was trashed,

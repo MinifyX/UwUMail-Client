@@ -287,7 +287,7 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
   const refresh = () => client.invalidateQueries();
   const block = (entry: string) => {
     useUi.getState().selectThread(null);
-    void blockSender(entry, [message.id], refresh);
+    void blockSender(entry, message.accountId, [message.id], refresh);
   };
   const items = [
     // Android's web view can't print; the system share sheet will do that later.

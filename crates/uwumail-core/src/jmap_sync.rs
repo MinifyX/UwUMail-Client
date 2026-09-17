@@ -470,6 +470,76 @@ pub async fn set_keywords(client: &Client, remote_ids: &[String], keywords: &[(&
 }
 
 /// Moves emails into exactly one mailbox.
+/// A blocked entry as the app writes it: an address, or `@domain` for a whole domain.
+pub fn entry_from_server(kind: &str, value: &str) -> String {
+    if kind == "domain" { format!("@{value}") } else { value.to_string() }
+}
+
+/// The blocked senders a login keeps on its UwUMail server, as `(id, entry)`.
+pub async fn server_blocked_senders(client: &Client) -> Result<Vec<(String, String)>> {
+    let responses = client.call(vec![("SenderList/get", json!({ "accountId": client.account_id() }))]).await?;
+    let list = responses.get(0, "SenderList/get")?.get("list").and_then(Value::as_array).cloned().unwrap_or_default();
+    Ok(list
+        .iter()
+        .filter(|item| item.get("list").and_then(Value::as_str) == Some("block"))
+        .filter_map(|item| {
+            let text = |key: &str| item.get(key).and_then(Value::as_str);
+            Some((text("id")?.to_string(), entry_from_server(text("kind")?, text("value")?)))
+        })
+        .collect())
+}
+
+/// Blocks an address or `@domain` on the UwUMail server and returns `(id, entry)` as stored there.
+pub async fn block_on_server(client: &Client, entry: &str) -> Result<(String, String)> {
+    let (kind, value) = match entry.strip_prefix('@') {
+        Some(domain) => ("domain", domain),
+        None => ("address", entry),
+    };
+    let create = json!({ "b": { "list": "block", "kind": kind, "value": value } });
+    let responses =
+        client.call(vec![("SenderList/set", json!({ "accountId": client.account_id(), "create": create }))]).await?;
+    let arguments = responses.get(0, "SenderList/set")?;
+    let created = arguments.get("created").and_then(|created| created.get("b"));
+    if let Some(created) = created {
+        let text = |key: &str| created.get(key).and_then(Value::as_str);
+        if let (Some(id), Some(kind), Some(value)) = (text("id"), text("kind"), text("value")) {
+            return Ok((id.to_string(), entry_from_server(kind, value)));
+        }
+    }
+    let failure = arguments.get("notCreated").and_then(|failed| failed.get("b"));
+    match failure.and_then(|failure| failure.get("type")).and_then(Value::as_str) {
+        // Blocked before, maybe from another device: that's what was asked for.
+        Some("senderListed") => {
+            let blocked = server_blocked_senders(client).await?;
+            match blocked.into_iter().find(|(_, listed)| listed == entry) {
+                Some(found) => Ok(found),
+                None => Err(Error::invalid(format!(
+                    "{entry} is allowed on your UwUMail server. Remove it from that list first."
+                ))),
+            }
+        }
+        Some("senderListFull") => Err(Error::invalid("The list of blocked senders on your UwUMail server is full.")),
+        Some("senderInvalid") => Err(Error::invalid(format!("\"{entry}\" isn't an address or @domain."))),
+        _ => Err(jmap::set_errors(arguments)
+            .map(Error::from)
+            .unwrap_or_else(|| Error::internal("The server didn't block the sender."))),
+    }
+}
+
+/// Takes an entry off the UwUMail server's list. One that is gone already counts as done.
+pub async fn unblock_on_server(client: &Client, id: &str) -> Result<()> {
+    let responses =
+        client.call(vec![("SenderList/set", json!({ "accountId": client.account_id(), "destroy": [id] }))]).await?;
+    let arguments = responses.get(0, "SenderList/set")?;
+    let failure = arguments.get("notDestroyed").and_then(|failed| failed.get(id));
+    match failure.and_then(|failure| failure.get("type")).and_then(Value::as_str) {
+        None | Some("notFound") => Ok(()),
+        Some(_) => Err(jmap::set_errors(arguments)
+            .map(Error::from)
+            .unwrap_or_else(|| Error::internal("The server didn't unblock the sender."))),
+    }
+}
+
 pub async fn move_emails(client: &Client, remote_ids: &[String], mailbox_id: &str) -> Result<()> {
     update_emails(client, remote_ids, json!({ "mailboxIds": { mailbox_id: true } })).await
 }

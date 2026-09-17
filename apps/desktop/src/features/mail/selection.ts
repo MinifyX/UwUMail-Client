@@ -23,21 +23,22 @@ export function requestMove(messages: Message[], onMoved?: () => void) {
   });
 }
 
-/** Blocks an address or @domain and puts these messages into the trash, with undo. */
-export async function blockSender(entry: string, messageIds: string[], refresh: () => unknown) {
+/** Blocks an address or @domain, on the account's UwUMail server where there is one, and puts these messages into junk, with undo. */
+export async function blockSender(entry: string, accountId: string, messageIds: string[], refresh: () => unknown) {
   try {
-    const blocked = await backend().blockSender(entry);
-    const moved = await backend().trash(messageIds);
+    const blocked = await backend().blockSender(entry, accountId);
+    const moved = await backend().markSpam(messageIds, true);
     const undo = () => {
       void backend()
         .unblockSender(blocked)
         .then(() => moveBack(moved))
-        .then(() => toast(translate("toast.unblocked", { entry: blocked })))
+        .then(() => toast(translate("toast.unblocked", { entry: blocked.entry })))
         .catch((error: unknown) => toast(error instanceof Error ? error.message : String(error), "error"))
         .finally(() => void refresh());
     };
     rememberUndo(undo);
-    toast(translate("toast.blocked", { entry: blocked }), "success", undefined, {
+    const text = blocked.serverId ? "toast.blockedOnServer" : "toast.blocked";
+    toast(translate(text, { entry: blocked.entry }), "success", undefined, {
       duration: 8000,
       action: { label: translate("toast.undo"), run: undo },
     });

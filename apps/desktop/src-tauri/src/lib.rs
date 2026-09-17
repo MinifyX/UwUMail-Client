@@ -171,18 +171,22 @@ fn inbox_messages_from(engine: State<'_, Engine>, email: String) -> CommandResul
 }
 
 #[tauri::command]
-fn blocked_senders(engine: State<'_, Engine>) -> CommandResult<Vec<String>> {
-    engine.blocked_senders()
+async fn blocked_senders(engine: State<'_, Engine>) -> CommandResult<Vec<BlockedSender>> {
+    engine.blocked_senders().await
 }
 
 #[tauri::command]
-fn block_sender(engine: State<'_, Engine>, entry: String) -> CommandResult<String> {
-    engine.block_sender(&entry)
+async fn block_sender(
+    engine: State<'_, Engine>,
+    entry: String,
+    account_id: Option<String>,
+) -> CommandResult<BlockedSender> {
+    engine.block_sender(&entry, account_id.as_deref()).await
 }
 
 #[tauri::command]
-fn unblock_sender(engine: State<'_, Engine>, entry: String) -> CommandResult<()> {
-    engine.unblock_sender(&entry)
+async fn unblock_sender(engine: State<'_, Engine>, sender: BlockedSender) -> CommandResult<()> {
+    engine.unblock_sender(&sender).await
 }
 
 #[tauri::command]

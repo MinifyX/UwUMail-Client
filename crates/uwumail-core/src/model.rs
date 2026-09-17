@@ -395,6 +395,18 @@ pub struct Signature {
     pub for_replies: bool,
 }
 
+/// A blocked sender: on this device, or on the UwUMail server of one account.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockedSender {
+    /// An address or `@domain`; on a server also an IP address, network or host name.
+    pub entry: String,
+    /// The account whose server keeps the entry; none for the app's own list.
+    pub account_id: Option<String>,
+    /// The entry's id on that server.
+    pub server_id: Option<String>,
+}
+
 /// A message that was moved, with the folder it came from, so the move can be undone.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

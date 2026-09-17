@@ -1,4 +1,5 @@
 import type {
+  BlockedSender,
   Account,
   AttachmentContent,
   BackendEvent,
@@ -86,14 +87,15 @@ export interface Backend {
   moveMessages(messageIds: string[], folderId: string): Promise<MovedMessage[]>;
   /** Spam goes into the junk folder; not spam back to the inbox. */
   markSpam(messageIds: string[], spam: boolean): Promise<MovedMessage[]>;
-  /** Addresses and `@domains` whose new mail goes straight to the trash. */
-  blockedSenders(): Promise<string[]>;
+  /** The app's own blocked senders, then what each account keeps on its UwUMail server. New mail from them goes to junk. */
+  blockedSenders(): Promise<BlockedSender[]>;
   /** One click or a mail where possible; otherwise the page to open. */
   unsubscribe(messageId: string): Promise<UnsubscribeOutcome>;
   /** Inbox mail from an address, e.g. a newsletter's earlier issues. */
   inboxMessagesFrom(email: string): Promise<string[]>;
-  blockSender(entry: string): Promise<string>;
-  unblockSender(entry: string): Promise<void>;
+  /** Blocks on the account's UwUMail server where there is one, otherwise in this app. */
+  blockSender(entry: string, accountId?: string): Promise<BlockedSender>;
+  unblockSender(sender: BlockedSender): Promise<void>;
   send(message: OutgoingMessage): Promise<void>;
   /** Sends after `delaySeconds` unless `cancelSend` comes first; the result arrives as send:done or send:failed. */
   queueSend(message: OutgoingMessage, delaySeconds: number): Promise<QueuedSend>;

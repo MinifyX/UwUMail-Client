@@ -690,29 +690,24 @@ async fn move_spam_and_blocked_senders() {
     engine.mark_spam(std::slice::from_ref(&message.id), false).await.unwrap();
     find(&offer).await;
 
-    // Mail from a blocked address never stays in the inbox.
+    // Mail from a blocked address never stays in the inbox. An IMAP server keeps no list, so the app does.
     let spammer = format!("werbung-{}@uwumail.test", &unique[..8]);
     engine.add_identity(&account.id, &spammer, "Werbung").unwrap();
-    assert!(engine.block_sender("kein @ding").is_err());
-    engine.block_sender(&spammer.to_uppercase()).unwrap();
-    assert_eq!(engine.blocked_senders().unwrap(), std::slice::from_ref(&spammer));
+    assert!(engine.block_sender("kein @ding", Some(&account.id)).await.is_err());
+    let entry = engine.block_sender(&spammer.to_uppercase(), Some(&account.id)).await.unwrap();
+    assert_eq!(entry, BlockedSender { entry: spammer.clone(), account_id: None, server_id: None });
+    assert_eq!(engine.blocked_senders().await.unwrap(), std::slice::from_ref(&entry));
     let blocked = format!("Kauf jetzt {unique}");
     send(&blocked, Some(spammer.clone())).await;
-    let trash_query = |trash: &Folder| ThreadQuery {
-        view: MailboxView::Folder { account_id: account.id.clone(), folder_id: trash.id.clone() },
-        conversations: false,
-        ..inbox_query(None)
-    };
-    wait_for("the blocked mail in the trash", async || {
+    wait_for("the blocked mail in junk", async || {
         engine.sync_now(Some(&account.id));
-        let trash = folder(FolderRole::Trash)?;
-        engine.list_threads(&trash_query(&trash)).unwrap().threads.into_iter().find(|t| t.subject == blocked)
+        engine.list_threads(&in_junk).unwrap().threads.into_iter().find(|t| t.subject == blocked)
     })
     .await;
     let inbox_now = engine.list_threads(&ThreadQuery { conversations: false, ..inbox_query(None) }).unwrap();
     assert!(inbox_now.threads.iter().all(|t| t.subject != blocked));
-    engine.unblock_sender(&spammer).unwrap();
-    assert!(engine.blocked_senders().unwrap().is_empty());
+    engine.unblock_sender(&entry).await.unwrap();
+    assert!(engine.blocked_senders().await.unwrap().is_empty());
 
     engine.remove_account(&account.id).await.unwrap();
 }
