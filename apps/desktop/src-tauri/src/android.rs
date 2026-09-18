@@ -142,7 +142,7 @@ pub fn set_system_bars(dark: bool, background: String) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn mobile_action(_app: &AppHandle, action: &str) -> Result<(), Error> {
+pub fn mobile_action(action: &str) -> Result<(), Error> {
     if !["requestNotifications", "uiReady", "watchSettings"].contains(&action) {
         return Err(Error::invalid("Unknown action"));
     }

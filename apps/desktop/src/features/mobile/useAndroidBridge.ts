@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { mobile, nativeMobile } from "@/backend/mobile";
+import { mobile, nativeAndroid } from "@/backend/mobile";
 import { resolveLanguage, useT } from "@/i18n";
 import { useResolvedTheme } from "@/lib/theme";
 import { useAccounts } from "@/lib/queries";
@@ -11,8 +11,8 @@ import { revealWorkspaceOf } from "../workspaces/workspaces";
 
 const ASKED_FOR_NOTIFICATIONS = "uwumail.askedNotifications";
 
-/** Keeps the phone side in step with the UI. Mount once, inside the app. Does nothing elsewhere. */
-export function useMobileBridge() {
+/** Keeps the Android side in step with the UI. Mount once, inside the app. Does nothing elsewhere. */
+export function useAndroidBridge() {
   const { t } = useT();
   const theme = useResolvedTheme();
   const tone = useSettings((s) => s.tone);
@@ -26,7 +26,7 @@ export function useMobileBridge() {
 
   // Status and navigation bars take the color of the screen behind them.
   useEffect(() => {
-    if (!nativeMobile) return;
+    if (!nativeAndroid) return;
     const frame = requestAnimationFrame(() => {
       const styles = getComputedStyle(document.documentElement);
       const background = (
@@ -52,9 +52,9 @@ export function useMobileBridge() {
     requestAnimationFrame(() => void mobile.uiReady());
   }, []);
 
-  // Once there's a mailbox, ask for permission to show new mail (both phones ask once).
+  // Once there's a mailbox, ask for permission to show new mail (Android 13+ asks once).
   useEffect(() => {
-    if (!nativeMobile || accounts.length === 0) return;
+    if (!nativeAndroid || accounts.length === 0) return;
     try {
       if (localStorage.getItem(ASKED_FOR_NOTIFICATIONS)) return;
       localStorage.setItem(ASKED_FOR_NOTIFICATIONS, "1");
@@ -66,7 +66,7 @@ export function useMobileBridge() {
 
   // Shares, mailto: links and tapped notifications.
   useEffect(() => {
-    if (!nativeMobile) return;
+    if (!nativeAndroid) return;
     const take = async () => {
       const action = await mobile.takeLaunchAction();
       if (!action) return;

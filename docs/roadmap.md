@@ -60,16 +60,6 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [ ] Home screen widget
 - [ ] Sign in with Microsoft and Google on Android
 
-## iOS
-
-- [x] Same app and engine on the iPhone, unsigned IPA from CI, simulator smoke test ([how it works](ios.md))
-- [x] Phone layout, swipe actions, app lock with Face ID, haptics, passwords in the iOS keychain
-- [x] Notifications for mail that arrives while UwUMail runs
-- [x] Attachments saved into UwUMail's folder in the Files app; profiles and apps from mail refused
-- [ ] Share sheet: hand attachments to other apps, print, share a mail
-- [ ] Background refresh: answer iOS' wake-up and look for mail
-- [ ] `mailto:` links and the redirect back from Microsoft and Google sign-in
-
 ## After v0.1 — official addons
 
 - [ ] Send later + Snooze

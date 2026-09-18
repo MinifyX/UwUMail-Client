@@ -6,7 +6,6 @@ dist/
 target/
 *.tsbuildinfo
 apps/desktop/src-tauri/gen/schemas/
-apps/desktop/src-tauri/gen/apple/
 apps/setup/src-tauri/gen/schemas/
 
 # Local environment

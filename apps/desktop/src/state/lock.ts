@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { mobile, nativeMobile } from "@/backend/mobile";
+import { mobile, nativeAndroid } from "@/backend/mobile";
 import { useSettings } from "./settings";
 
 interface LockState {
@@ -12,7 +12,7 @@ interface LockState {
 
 export const useAppLock = create<LockState>((set) => ({
   // Settings load synchronously from storage, so a locked app starts covered.
-  locked: nativeMobile && useSettings.getState().appLock,
+  locked: nativeAndroid && useSettings.getState().appLock,
   prompting: false,
   setLocked: (locked) => set({ locked }),
 }));

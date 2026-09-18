@@ -153,7 +153,7 @@ pub fn set_system_bars(_dark: bool, _background: String) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn mobile_action(_app: &AppHandle, _action: &str) -> Result<(), Error> {
+pub fn mobile_action(_action: &str) -> Result<(), Error> {
     Ok(())
 }
 

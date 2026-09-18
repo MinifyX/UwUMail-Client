@@ -20,7 +20,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import pkg from "../../../package.json";
 import { backend } from "@/backend/backend";
-import { mobile, nativeAndroid, nativeIos, nativeMobile } from "@/backend/mobile";
+import { mobile, nativeAndroid } from "@/backend/mobile";
 import type { Account, Protocol } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -52,11 +52,11 @@ import { WorkspacePicker, WorkspaceSettings } from "../workspaces/WorkspaceSetti
 
 const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
 
-const SECTIONS: { id: SettingsSection; icon: LucideIcon; phoneOnly?: boolean }[] = [
+const SECTIONS: { id: SettingsSection; icon: LucideIcon; androidOnly?: boolean }[] = [
   { id: "appearance", icon: Palette },
   { id: "mail", icon: Mail },
   { id: "compose", icon: PenLine },
-  { id: "security", icon: Lock, phoneOnly: true },
+  { id: "security", icon: Lock, androidOnly: true },
   { id: "accounts", icon: Users },
   { id: "addons", icon: Puzzle },
   { id: "about", icon: Info },
@@ -339,7 +339,7 @@ function Reading() {
           <SwipeSelect value={settings.swipeLeft} onChange={(swipeLeft) => settings.update({ swipeLeft })} />
         </Row>
       )}
-      {nativeMobile && (
+      {nativeAndroid && (
         <Row label={t("settings.offlineDays")} description={t("settings.offlineDaysDesc")}>
           <Segmented
             label={t("settings.offlineDays")}
@@ -354,28 +354,25 @@ function Reading() {
           />
         </Row>
       )}
-      {/* iOS has nothing to switch here: it decides by itself when a resting app may look for mail. */}
-      {!nativeIos && (
-        <div className="flex flex-col gap-2 border-b border-hairline py-4">
-          <Toggle
-            checked={settings.runInBackground}
-            onChange={(runInBackground) => settings.update({ runInBackground })}
-            label={t(nativeAndroid ? "settings.backgroundPush" : "settings.runInBackground")}
-            description={t(nativeAndroid ? "settings.backgroundPushDesc" : "settings.runInBackgroundDesc")}
-          />
-          {nativeAndroid && settings.runInBackground && (
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={BellOff}
-              className="self-start"
-              onClick={() => void mobile.openWatchSettings()}
-            >
-              {t("settings.hideWatchNotification")}
-            </Button>
-          )}
-        </div>
-      )}
+      <div className="flex flex-col gap-2 border-b border-hairline py-4">
+        <Toggle
+          checked={settings.runInBackground}
+          onChange={(runInBackground) => settings.update({ runInBackground })}
+          label={t(nativeAndroid ? "settings.backgroundPush" : "settings.runInBackground")}
+          description={t(nativeAndroid ? "settings.backgroundPushDesc" : "settings.runInBackgroundDesc")}
+        />
+        {nativeAndroid && settings.runInBackground && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={BellOff}
+            className="self-start"
+            onClick={() => void mobile.openWatchSettings()}
+          >
+            {t("settings.hideWatchNotification")}
+          </Button>
+        )}
+      </div>
     </>
   );
 }
@@ -601,7 +598,7 @@ export function SettingsDialog() {
       >
         <div className="flex min-h-[460px] flex-col gap-2 px-4 pb-5 sm:flex-row sm:gap-6 sm:px-6">
           <nav className="flex shrink-0 gap-1 overflow-x-auto sm:w-48 sm:flex-col" aria-label={t("settings.title")}>
-            {SECTIONS.filter((item) => !item.phoneOnly || nativeMobile).map(({ id, icon: Icon }) => (
+            {SECTIONS.filter((item) => !item.androidOnly || nativeAndroid).map(({ id, icon: Icon }) => (
               <button
                 key={id}
                 type="button"

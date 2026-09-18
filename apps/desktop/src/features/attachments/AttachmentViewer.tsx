@@ -1,13 +1,13 @@
 import { ChevronLeft, ChevronRight, Download, ExternalLink, ShieldAlert, X } from "lucide-react";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
-import { nativeAndroid, nativeIos } from "@/backend/mobile";
+import { nativeAndroid } from "@/backend/mobile";
 import type { Address, Attachment } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
-import { attachmentKind, isAppPackage, isDangerous, isIosInstallable } from "@/lib/attachments";
+import { attachmentKind, isAppPackage, isDangerous } from "@/lib/attachments";
 import { displayName, formatSize } from "@/lib/format";
 import { useAttachment } from "@/lib/queries";
 import { toast } from "@/state/toasts";
@@ -42,9 +42,8 @@ function ViewerBody({ attachments, index, sender, onIndexChange }: AttachmentVie
   const attachment = attachments[index]!;
   const kind = attachmentKind(attachment.filename, attachment.mimeType);
   const dangerous = isDangerous(attachment.filename);
-  // On the phone apps and profiles from mail are only saved; the engine refuses to open them too.
-  const blocked =
-    (nativeAndroid && isAppPackage(attachment.filename)) || (nativeIos && isIosInstallable(attachment.filename));
+  // On the phone app packages from mail are only saved; the engine refuses to open them too.
+  const blocked = nativeAndroid && isAppPackage(attachment.filename);
   const needsFile = kind !== "other";
   const { data: file, error, isPending } = useAttachment(needsFile ? attachment.id : null);
   const [busy, setBusy] = useState<"open" | "save" | null>(null);

@@ -1,4 +1,4 @@
-import { isAndroid, isIos } from "@/lib/device";
+import { isAndroid } from "@/lib/device";
 import { isTauri } from "./backend";
 import type { Address, OutgoingAttachment, ThreadPage, ThreadQuery } from "./types";
 
@@ -13,15 +13,11 @@ export type LaunchAction =
     }
   | { kind: "open"; threadId: string; messageId: string };
 
-/** True inside the Android app. */
+/** True inside the Android app; everything below does nothing elsewhere. */
 export const nativeAndroid = isTauri() && isAndroid;
-/** True inside the iOS app. */
-export const nativeIos = isTauri() && isIos;
-/** True inside either phone app; everything below does nothing elsewhere. */
-export const nativeMobile = nativeAndroid || nativeIos;
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
-  if (!nativeMobile) return null;
+  if (!nativeAndroid) return null;
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(command, args);
 }
@@ -33,12 +29,11 @@ export async function searchServer(query: ThreadQuery): Promise<ThreadPage | nul
   return invoke<ThreadPage>("search_server", { query });
 }
 
-/** Phone-only pieces of the app shell. Safe to call anywhere. */
+/** Android-only pieces of the app shell. Safe to call anywhere. */
 export const mobile = {
   /**
    * Language and tone for notifications shown while no window is open. With the app lock on,
-   * notifications leave out what the mail says and Recents shows no preview. Android only:
-   * on iOS nothing of UwUMail runs without the app.
+   * notifications leave out what the mail says and Recents shows no preview.
    */
   setPrefs: (language: string, tone: string, appLock: boolean) =>
     call<void>("set_mobile_prefs", { language, tone, appLock }),
@@ -55,14 +50,14 @@ export const mobile = {
 
   takeLaunchAction: () => call<LaunchAction>("take_launch_action"),
   onLaunchAction(listener: () => void) {
-    if (!nativeMobile) return () => {};
+    if (!nativeAndroid) return () => {};
     const pending = import("@tauri-apps/api/event").then(({ listen }) => listen("launch:action", listener));
     return () => void pending.then((unlisten) => unlisten());
   },
 
   /** A short tick, e.g. when a swipe crosses its threshold. */
   async haptic(style: "light" | "medium" = "light") {
-    if (nativeMobile) {
+    if (nativeAndroid) {
       const { impactFeedback } = await import("@tauri-apps/plugin-haptics");
       await impactFeedback(style).catch(() => undefined);
     } else if (typeof navigator !== "undefined" && "vibrate" in navigator) {
@@ -72,7 +67,7 @@ export const mobile = {
 
   /** Whether the phone can check a fingerprint, face or screen lock. */
   async canLock() {
-    if (!nativeMobile) return false;
+    if (!nativeAndroid) return false;
     const { checkStatus } = await import("@tauri-apps/plugin-biometric");
     const status = await checkStatus().catch(() => null);
     // A PIN or pattern works too, even without enrolled biometrics.
@@ -81,7 +76,7 @@ export const mobile = {
 
   /** Asks for fingerprint, face or the phone's PIN. Resolves to false when cancelled. */
   async unlock(reason: string, title: string) {
-    if (!nativeMobile) return true;
+    if (!nativeAndroid) return true;
     const { authenticate } = await import("@tauri-apps/plugin-biometric");
     try {
       await authenticate(reason, { allowDeviceCredential: true, title });

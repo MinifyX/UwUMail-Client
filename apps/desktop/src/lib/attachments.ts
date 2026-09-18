@@ -65,7 +65,6 @@ const DANGEROUS = new Set(
     "ins isp hta chm hlp msc scf settingcontent-ms library-ms diagcab gadget js jse vbs vbe wsf wsh wsc sct ps1",
     "ps1xml ps2 psc1 psd1 psm1 jar jnlp app dmg pkg command sh run appimage deb rpm docm dotm xlsm xltm xlam xll",
     "pptm potm ppam sldm one iqy slk iso img vhd vhdx html htm xhtml shtml mht mhtml apk apks apkm xapk aab",
-    "mobileconfig ipa shortcut wf webloc",
   ]
     .join(" ")
     .split(" "),
@@ -73,9 +72,6 @@ const DANGEROUS = new Set(
 
 /** Android app packages: on the phone they can only be saved, never opened from a mail. */
 const APP_PACKAGES = new Set(["apk", "apks", "apkm", "xapk", "aab"]);
-
-/** What an iPhone installs: apps, Shortcuts, and profiles that can add certificates or device management. */
-const IOS_INSTALLABLE = new Set(["mobileconfig", "ipa", "shortcut", "wf"]);
 
 /** Characters that flip how text is displayed, used to disguise file names. */
 const BIDI_CONTROLS = /[‎‏‪-‮⁦-⁩]/g;
@@ -112,10 +108,6 @@ export function isDangerous(filename: string): boolean {
 
 export function isAppPackage(filename: string): boolean {
   return APP_PACKAGES.has(effectiveExtension(filename));
-}
-
-export function isIosInstallable(filename: string): boolean {
-  return IOS_INSTALLABLE.has(effectiveExtension(filename));
 }
 
 /** RFC 4180-ish CSV parsing: quoted fields, escaped quotes, commas/semicolons/tabs. */

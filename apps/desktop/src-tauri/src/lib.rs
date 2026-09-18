@@ -3,10 +3,9 @@ mod background;
 #[cfg(desktop)]
 mod updates;
 
-/// What differs between desktop, Android and iOS, behind the same functions.
+/// What differs between desktop and Android, behind the same functions.
 #[cfg_attr(desktop, path = "desktop.rs")]
 #[cfg_attr(target_os = "android", path = "android.rs")]
-#[cfg_attr(target_os = "ios", path = "ios.rs")]
 mod platform;
 
 use platform::{Channel, ReadyUpdate};
@@ -339,10 +338,10 @@ fn set_system_bars(dark: bool, background: String) -> CommandResult<()> {
     platform::set_system_bars(dark, background)
 }
 
-/// Phones: `requestNotifications`, `uiReady` or `watchSettings`.
+/// Android: `requestNotifications`, `uiReady` or `watchSettings`.
 #[tauri::command]
-fn mobile_action(app: AppHandle, action: String) -> CommandResult<()> {
-    platform::mobile_action(&app, &action)
+fn mobile_action(action: String) -> CommandResult<()> {
+    platform::mobile_action(&action)
 }
 
 #[tauri::command]
