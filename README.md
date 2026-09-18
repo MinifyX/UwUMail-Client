@@ -6,7 +6,7 @@
 
 <p align="center">
   The mail client I build for myself, because every other one annoyed me. (◕‿◕✿)<br/>
-  IMAP · SMTP · JMAP · Windows · macOS · Linux · Android
+  IMAP · SMTP · JMAP · Windows · macOS · Linux · Android · iOS
 </p>
 
 ---
@@ -53,12 +53,14 @@ Server). It's what I wanted from a mail client:
 > Windows and Android builds are on the
 > [releases page](https://github.com/MinifyX/UwUMail-Client/releases); the
 > [roadmap](docs/roadmap.md) shows what's done and what I'd like to do next.
+> The iPhone build comes out of CI unsigned and is sideloaded — how that works,
+> and what iOS doesn't allow, is in [docs/ios.md](docs/ios.md).
 
 ## Project layout
 
 | Path | What lives there |
 | --- | --- |
-| `apps/desktop` | The Tauri 2 app for desktop and Android (React UI + Rust shell) |
+| `apps/desktop` | The Tauri 2 app for desktop, Android and iOS (React UI + Rust shell) |
 | `apps/setup` | UwUMail's own installer, updater and uninstaller for Windows |
 | `crates/uwumail-core` | Mail engine: accounts, IMAP and JMAP sync, sending, local store, search |
 | `crates/uwumail-android` | Android side of the engine: background service, keystore, notifications |
