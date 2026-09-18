@@ -44,14 +44,15 @@ echo "Simulator app: $sim"
 # we — a plain -project build leaves FRAMEWORK_SEARCH_PATHS empty, which the
 # "Build Rust Code" phase refuses to run without.
 project=$(find "$gen" -maxdepth 1 -name '*.xcodeproj' | head -n 1)
-workspace=$(find "$gen" -maxdepth 1 -name '*.xcworkspace' | head -n 1)
+# The workspace sits inside the project folder; that is the one Tauri builds.
+workspace="$project/project.xcworkspace"
 list=$(xcodebuild -list -json -project "$project")
 scheme=$(node -e 'const l=JSON.parse(process.argv[1]).project;
   const s=l.schemes.find(n=>/_iOS$/.test(n))??l.schemes[0];
   if(!s){console.error("no scheme");process.exit(1)}console.log(s)' "$list")
 configuration=$(node -e 'const l=JSON.parse(process.argv[1]).project;
   console.log(l.configurations.find(n=>/^release$/i.test(n))??l.configurations[0])' "$list")
-if [ -n "$workspace" ]; then
+if [ -d "$workspace" ]; then
   container=(-workspace "$workspace")
 else
   container=(-project "$project")
@@ -64,7 +65,6 @@ xcodebuild build \
   -scheme "$scheme" \
   -configuration "$configuration" \
   -sdk iphoneos \
-  -destination 'generic/platform=iOS' \
   -derivedDataPath "$derived" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
