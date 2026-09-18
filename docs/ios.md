@@ -83,9 +83,16 @@ pnpm tauri ios init --ci
 pnpm tauri ios dev          # runs it in the simulator
 ```
 
-`pnpm tauri ios build` wants an Apple development team. Without one, build the
-same way CI does:
+`pnpm tauri ios build` wants an Apple development team for the export step at
+the end; the app is finished before that. That is what CI takes:
 
 ```bash
 bash scripts/ios-build.sh 0.2.0-dev out
 ```
+
+One thing to know when a dependency is added: on iOS, Cargo builds a static
+library and Xcode does the linking, so `cargo:rustc-link-lib=framework=…` from a
+crate's build script never reaches the linker. The frameworks have to be listed
+in `tauri.ios.conf.json` under `bundle > iOS > frameworks` instead — that's why
+`SystemConfiguration` is in there, for the DNS resolver's system settings. A
+missing one shows up as "Undefined symbols for architecture arm64".

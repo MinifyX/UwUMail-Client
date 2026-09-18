@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Builds UwUMail for the iPhone and for the simulator, and packs the iPhone app
+# Builds UwUMail for the simulator and for the iPhone, and packs the iPhone app
 # into an .ipa.
 #
-# Nothing here is signed: UwUMail has no Apple developer account. Tauri hands
-# the finished app to Xcode's exporter, which wants a certificate and stops —
-# by then the app itself is built, and that unsigned app is what goes into the
-# .ipa. A sideloading tool signs it with your own Apple ID on the way to the
+# Nothing here is signed: UwUMail has no Apple developer account. Tauri's own
+# build refuses to start for a real iPhone without one ("requires a development
+# team"), so that half goes straight to xcodebuild with signing switched off.
+# A sideloading tool signs the .ipa with your own Apple ID on the way to the
 # phone, see docs/ios.md.
 #
 # Usage: scripts/ios-build.sh <version> [output folder]
@@ -28,27 +28,59 @@ if [ -f "$extra" ] && [ -n "$generated" ]; then
   echo "Merged $extra into $generated"
 fi
 
-# Where Xcode leaves the app, wherever Tauri told it to build.
-find_app() {
-  find "$HOME/Library/Developer/Xcode/DerivedData" "$gen/build" -type d -name '*.app' -path "*$1*" 2>/dev/null |
-    head -n 1
-}
-
 mkdir -p "$out"
 
-# The simulator build the smoke test starts afterwards.
+# The simulator build, which the smoke test starts afterwards. Tauri does this
+# one itself: the simulator needs no certificate.
 pnpm tauri ios build --ci --target aarch64-sim
-sim=$(find_app release-iphonesimulator)
+sim=$(find "$gen/build" "$HOME/Library/Developer/Xcode/DerivedData" -type d -name '*.app' -path '*sim*' 2>/dev/null | head -n 1)
 test -n "$sim" || { echo "::error::The simulator build produced no app"; exit 1; }
 rm -rf "$out/simulator"
 mkdir -p "$out/simulator"
 cp -R "$sim" "$out/simulator/"
+echo "Simulator app: $sim"
 
-# The iPhone itself. Exporting needs a certificate, so this is expected to stop
-# short of an .ipa — the app it built on the way is the one we want.
-pnpm tauri ios build --ci --target aarch64 ||
-  echo "::notice::Tauri couldn't export a signed app, as expected; packing the unsigned one"
-app=$(find_app release-iphoneos)
+# The iPhone itself. Tauri builds through the workspace it generated, and so do
+# we — a plain -project build leaves FRAMEWORK_SEARCH_PATHS empty, which the
+# "Build Rust Code" phase refuses to run without.
+project=$(find "$gen" -maxdepth 1 -name '*.xcodeproj' | head -n 1)
+workspace=$(find "$gen" -maxdepth 1 -name '*.xcworkspace' | head -n 1)
+list=$(xcodebuild -list -json -project "$project")
+scheme=$(node -e 'const l=JSON.parse(process.argv[1]).project;
+  const s=l.schemes.find(n=>/_iOS$/.test(n))??l.schemes[0];
+  if(!s){console.error("no scheme");process.exit(1)}console.log(s)' "$list")
+configuration=$(node -e 'const l=JSON.parse(process.argv[1]).project;
+  console.log(l.configurations.find(n=>/^release$/i.test(n))??l.configurations[0])' "$list")
+if [ -n "$workspace" ]; then
+  container=(-workspace "$workspace")
+else
+  container=(-project "$project")
+fi
+echo "Building $scheme ($configuration) from ${container[*]}"
+
+derived="$RUNNER_TEMP/ios-device"
+xcodebuild build \
+  "${container[@]}" \
+  -scheme "$scheme" \
+  -configuration "$configuration" \
+  -sdk iphoneos \
+  -destination 'generic/platform=iOS' \
+  -derivedDataPath "$derived" \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGN_IDENTITY="" \
+  CODE_SIGN_ENTITLEMENTS="" \
+  FRAMEWORK_SEARCH_PATHS='$(inherited)' \
+  HEADER_SEARCH_PATHS='$(inherited)' \
+  ENABLE_USER_SCRIPT_SANDBOXING=NO ||
+  {
+    # Xcode keeps what a script build phase printed in its own compressed log.
+    log=$(ls -t "$derived"/Logs/Build/*.xcactivitylog 2>/dev/null | head -n 1)
+    [ -n "$log" ] && { echo "--- what the build phases printed ---"; gunzip -c "$log" | tr '\r' '\n' | strings | grep -v "^	export " | tail -n 120; }
+    exit 1
+  }
+
+app=$(find "$derived/Build/Products" -maxdepth 2 -type d -name '*.app' | head -n 1)
 test -n "$app" || { echo "::error::The iPhone build produced no app"; exit 1; }
 rm -rf "$RUNNER_TEMP/Payload"
 mkdir -p "$RUNNER_TEMP/Payload"
