@@ -21,12 +21,15 @@ rustup target list --installed | grep apple-ios || true
 
 # `tauri ios build` folds Info.ios.plist in on its own, but only into the app it
 # exports; the generated project keeps its own copy, so the keys go in here too.
-extra="apps/desktop/src-tauri/Info.ios.plist"
-generated=$(find "$gen" -maxdepth 2 -name Info.plist | head -n 1)
-if [ -f "$extra" ] && [ -n "$generated" ]; then
-  /usr/libexec/PlistBuddy -c "Merge $extra" "$generated"
-  echo "Merged $extra into $generated"
-fi
+merge_info_plist() {
+  local extra="apps/desktop/src-tauri/Info.ios.plist" generated
+  generated=$(find "$gen" -maxdepth 2 -name Info.plist | head -n 1)
+  if [ -f "$extra" ] && [ -n "$generated" ]; then
+    /usr/libexec/PlistBuddy -c "Merge $extra" "$generated"
+    echo "Merged $extra into $generated"
+  fi
+}
+merge_info_plist
 
 mkdir -p "$out"
 
@@ -40,9 +43,25 @@ mkdir -p "$out/simulator"
 cp -R "$sim" "$out/simulator/"
 echo "Simulator app: $sim"
 
-# The iPhone itself. Tauri builds through the workspace it generated, and so do
-# we — a plain -project build leaves FRAMEWORK_SEARCH_PATHS empty, which the
-# "Build Rust Code" phase refuses to run without.
+# Xcode throws away everything the "Build Rust Code" phase prints, which for the
+# iPhone build is exactly where it dies. Keep a copy and show it.
+node -e '
+  const fs = require("fs");
+  const file = process.argv[1];
+  const text = fs.readFileSync(file, "utf8");
+  const patched = text.replace(
+    /(- script: )(pnpm tauri ios xcode-script[^\n]*)/,
+    (_, head, command) =>
+      `${head}${command} > "$SRCROOT/rust-build.log" 2>&1; status=$?; cat "$SRCROOT/rust-build.log"; exit $status`,
+  );
+  if (patched === text) { console.error("::warning::Could not find the Rust build phase in project.yml"); }
+  fs.writeFileSync(file, patched);
+' "$gen/project.yml"
+(cd "$gen" && xcodegen generate)
+merge_info_plist
+
+# The iPhone itself, through the same workspace Tauri builds from, with signing
+# switched off — Tauri's own build stops before it starts without a certificate.
 project=$(find "$gen" -maxdepth 1 -name '*.xcodeproj' | head -n 1)
 # The workspace sits inside the project folder; that is the one Tauri builds.
 workspace="$project/project.xcworkspace"
@@ -74,9 +93,8 @@ xcodebuild build \
   HEADER_SEARCH_PATHS='$(inherited)' \
   ENABLE_USER_SCRIPT_SANDBOXING=NO ||
   {
-    # Xcode keeps what a script build phase printed in its own compressed log.
-    log=$(ls -t "$derived"/Logs/Build/*.xcactivitylog 2>/dev/null | head -n 1)
-    [ -n "$log" ] && { echo "--- what the build phases printed ---"; gunzip -c "$log" | tr '\r' '\n' | strings | grep -v "^	export " | tail -n 120; }
+    echo "--- what the Rust build phase printed ---"
+    cat "$gen/rust-build.log" 2>/dev/null || echo "(no log written)"
     exit 1
   }
 
