@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Builds UwUMail for the iPhone and for the simulator from the Xcode project
-# `tauri ios init` generated, and packs the app into an .ipa.
+# Builds UwUMail for the iPhone and for the simulator, and packs the iPhone app
+# into an .ipa.
 #
-# Nothing here is signed: UwUMail has no Apple developer account, so the IPA
-# carries no certificate and iOS won't install it as it is. A sideloading tool
-# (Sideloadly, AltStore) signs it with your own Apple ID on the way to the
-# phone — see docs/ios-sideload.md.
+# Nothing here is signed: UwUMail has no Apple developer account. Tauri hands
+# the finished app to Xcode's exporter, which wants a certificate and stops —
+# by then the app itself is built, and that unsigned app is what goes into the
+# .ipa. A sideloading tool signs it with your own Apple ID on the way to the
+# phone, see docs/ios.md.
 #
 # Usage: scripts/ios-build.sh <version> [output folder]
 set -euo pipefail
@@ -14,56 +15,40 @@ version="$1"
 out="${2:-out}"
 gen="apps/desktop/src-tauri/gen/apple"
 
-project=$(find "$gen" -maxdepth 1 -name '*.xcodeproj' | head -n 1)
-test -n "$project" || { echo "::error::No Xcode project in $gen — did 'tauri ios init' run?"; exit 1; }
+echo "--- tools ---"
+command -v pnpm node cargo rustup
+rustup target list --installed | grep apple-ios || true
 
-list=$(xcodebuild -list -json -project "$project")
-echo "$list"
-# cargo-mobile2 names the schemes "<app>_iOS" and lowercases the configurations.
-scheme=$(node -e 'const l=JSON.parse(process.argv[1]).project;
-  const s=l.schemes.find(n=>/_iOS$/.test(n))??l.schemes[0];
-  if(!s){console.error("no scheme");process.exit(1)}console.log(s)' "$list")
-configuration=$(node -e 'const l=JSON.parse(process.argv[1]).project;
-  const c=l.configurations.find(n=>/^release$/i.test(n))??l.configurations[0];
-  console.log(c)' "$list")
-echo "Building scheme $scheme ($configuration)"
+# `tauri ios build` folds Info.ios.plist in on its own, but only into the app it
+# exports; the generated project keeps its own copy, so the keys go in here too.
+extra="apps/desktop/src-tauri/Info.ios.plist"
+generated=$(find "$gen" -maxdepth 2 -name Info.plist | head -n 1)
+if [ -f "$extra" ] && [ -n "$generated" ]; then
+  /usr/libexec/PlistBuddy -c "Merge $extra" "$generated"
+  echo "Merged $extra into $generated"
+fi
+
+# Where Xcode leaves the app, wherever Tauri told it to build.
+find_app() {
+  find "$HOME/Library/Developer/Xcode/DerivedData" "$gen/build" -type d -name '*.app' -path "*$1*" 2>/dev/null |
+    head -n 1
+}
 
 mkdir -p "$out"
 
-# Xcode keeps what a script build phase printed in its own compressed log, not
-# in the output above; without this a failing Rust build says nothing at all.
-dump_script_log() {
-  local derived="$1" log
-  log=$(ls -t "$derived"/Logs/Build/*.xcactivitylog 2>/dev/null | head -n 1)
-  [ -n "$log" ] || return 0
-  echo "--- what the build phases printed ---"
-  gunzip -c "$log" | tr '\r' '\n' | strings | tail -n 200
-}
+# The simulator build the smoke test starts afterwards.
+pnpm tauri ios build --ci --target aarch64-sim
+sim=$(find_app release-iphonesimulator)
+test -n "$sim" || { echo "::error::The simulator build produced no app"; exit 1; }
+rm -rf "$out/simulator"
+mkdir -p "$out/simulator"
+cp -R "$sim" "$out/simulator/"
 
-build() {
-  local sdk="$1" destination="$2" derived="$3"
-  xcodebuild build \
-    -project "$project" \
-    -scheme "$scheme" \
-    -configuration "$configuration" \
-    -sdk "$sdk" \
-    -destination "$destination" \
-    -derivedDataPath "$derived" \
-    CODE_SIGNING_ALLOWED=NO \
-    CODE_SIGNING_REQUIRED=NO \
-    CODE_SIGN_IDENTITY="" \
-    CODE_SIGN_ENTITLEMENTS="" \
-    ENABLE_USER_SCRIPT_SANDBOXING=NO ||
-    { dump_script_log "$derived"; return 1; }
-}
-
-echo "--- tools ---"
-command -v pnpm node cargo rustup
-rustup target list --installed
-
-# The iPhone itself: arm64, packed as an .ipa the way iOS expects it.
-build iphoneos 'generic/platform=iOS' "$RUNNER_TEMP/ios-device"
-app=$(find "$RUNNER_TEMP/ios-device/Build/Products" -maxdepth 2 -name '*.app' | head -n 1)
+# The iPhone itself. Exporting needs a certificate, so this is expected to stop
+# short of an .ipa — the app it built on the way is the one we want.
+pnpm tauri ios build --ci --target aarch64 ||
+  echo "::notice::Tauri couldn't export a signed app, as expected; packing the unsigned one"
+app=$(find_app release-iphoneos)
 test -n "$app" || { echo "::error::The iPhone build produced no app"; exit 1; }
 rm -rf "$RUNNER_TEMP/Payload"
 mkdir -p "$RUNNER_TEMP/Payload"
@@ -72,16 +57,8 @@ cp -R "$app" "$RUNNER_TEMP/Payload/"
 mv "$RUNNER_TEMP/unsigned.ipa" "$out/UwUMail-$version-unsigned.ipa"
 rm -rf "$RUNNER_TEMP/Payload"
 
-# The simulator build the smoke test starts afterwards.
-build iphonesimulator 'generic/platform=iOS Simulator' "$RUNNER_TEMP/ios-sim"
-sim=$(find "$RUNNER_TEMP/ios-sim/Build/Products" -maxdepth 2 -name '*.app' | head -n 1)
-test -n "$sim" || { echo "::error::The simulator build produced no app"; exit 1; }
-rm -rf "$out/simulator"
-mkdir -p "$out/simulator"
-cp -R "$sim" "$out/simulator/"
-
 # What ended up inside, so a missing Info.plist key shows in the log.
-plist="$app/Info.plist"
-echo "--- Info.plist ---"
-plutil -p "$plist" | grep -E "CFBundleIdentifier|CFBundleShortVersionString|CFBundleVersion|MinimumOSVersion|NSFaceIDUsageDescription|UIFileSharingEnabled|UIBackgroundModes" || true
+echo "--- Info.plist of $app ---"
+plutil -p "$app/Info.plist" |
+  grep -E "CFBundleIdentifier|CFBundleShortVersionString|CFBundleVersion|MinimumOSVersion|NSFaceIDUsageDescription|UIFileSharingEnabled|UIBackgroundModes" || true
 ls -la "$out"

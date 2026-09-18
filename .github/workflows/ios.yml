@@ -69,16 +69,6 @@ jobs:
             --config "{\"version\":\"${{ steps.version.outputs.short }}\",\"bundle\":{\"iOS\":{\"bundleVersion\":\"${{ steps.version.outputs.build }}\"}}}"
           find apps/desktop/src-tauri/gen/apple -maxdepth 2 -not -path '*/build/*' | sort
 
-      # Tauri's own build wants a signing team for the iPhone, but the simulator
-      # may not need one. Kept alongside until the plain xcodebuild path is proven.
-      - name: Build (Tauri, simulator)
-        continue-on-error: true
-        env:
-          UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
-          UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
-          UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
-        run: pnpm tauri ios build --ci --target aarch64-sim
-
       - name: Build
         env:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}

@@ -11,7 +11,8 @@
   "bundle": {
     "iOS": {
       "minimumSystemVersion": "17.0",
-      "infoPlist": "Info.ios.plist"
+      "infoPlist": "Info.ios.plist",
+      "frameworks": ["SystemConfiguration"]
     }
   }
 }
