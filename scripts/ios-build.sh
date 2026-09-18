@@ -30,6 +30,16 @@ echo "Building scheme $scheme ($configuration)"
 
 mkdir -p "$out"
 
+# Xcode keeps what a script build phase printed in its own compressed log, not
+# in the output above; without this a failing Rust build says nothing at all.
+dump_script_log() {
+  local derived="$1" log
+  log=$(ls -t "$derived"/Logs/Build/*.xcactivitylog 2>/dev/null | head -n 1)
+  [ -n "$log" ] || return 0
+  echo "--- what the build phases printed ---"
+  gunzip -c "$log" | tr '\r' '\n' | strings | tail -n 200
+}
+
 build() {
   local sdk="$1" destination="$2" derived="$3"
   xcodebuild build \
@@ -43,8 +53,13 @@ build() {
     CODE_SIGNING_REQUIRED=NO \
     CODE_SIGN_IDENTITY="" \
     CODE_SIGN_ENTITLEMENTS="" \
-    ENABLE_USER_SCRIPT_SANDBOXING=NO
+    ENABLE_USER_SCRIPT_SANDBOXING=NO ||
+    { dump_script_log "$derived"; return 1; }
 }
+
+echo "--- tools ---"
+command -v pnpm node cargo rustup
+rustup target list --installed
 
 # The iPhone itself: arm64, packed as an .ipa the way iOS expects it.
 build iphoneos 'generic/platform=iOS' "$RUNNER_TEMP/ios-device"
