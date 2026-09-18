@@ -4,14 +4,14 @@ name: iOS
 #
 # The IPA is unsigned: UwUMail has no Apple developer account, so nothing here
 # carries a certificate. A sideloading tool signs it with your own Apple ID on
-# the way to the phone — see docs/ios-sideload.md.
+# the way to the phone — see docs/ios.md.
 #
 # The Xcode project isn't in the repository; `tauri ios init` writes a fresh one
 # on the runner every time, so nothing generated has to be kept in sync by hand.
 
 on:
   push:
-    branches: [main, feat/ios]
+    branches: [main]
     paths-ignore: ["docs/**", "brand/**", "README.md", "CONTRIBUTING.md", "release-notes/**"]
   workflow_dispatch:
 
@@ -101,7 +101,7 @@ jobs:
 
       # What `tauri ios init` generated, to look at when a build goes sideways.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: failure()
         with:
           name: UwUMail-iOS-project-${{ github.sha }}
           retention-days: 7
