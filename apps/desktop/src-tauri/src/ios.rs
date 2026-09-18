@@ -55,7 +55,7 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
         Engine::new(EngineOptions { data_dir, secrets: Arc::new(KeyringSecrets), open_url })
     })?;
     engine.start()?;
-    // Shows up in Xcode's console and in the simulator log the CI watches.
+    // Shows up in Xcode's console when the app is run from there.
     println!("UwUMail: engine running");
     Ok(engine)
 }
