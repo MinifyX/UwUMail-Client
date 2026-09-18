@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { attachmentKind, isAppPackage, isDangerous, parseCsv, parseIcalDate, parseIcs, parseVcf } from "./attachments";
+import {
+  attachmentKind,
+  isAppPackage,
+  isDangerous,
+  isIosInstallable,
+  parseCsv,
+  parseIcalDate,
+  parseIcs,
+  parseVcf,
+} from "./attachments";
 
 describe("attachmentKind", () => {
   it("uses the MIME type first and the extension as fallback", () => {
@@ -21,6 +30,12 @@ describe("attachmentKind", () => {
     expect(isDangerous("Update.APK")).toBe(true);
     expect(isAppPackage("spiel.xapk. ")).toBe(true);
     expect(isAppPackage("apk.pdf")).toBe(false);
+  });
+
+  it("knows what an iPhone would install", () => {
+    expect(isDangerous("wlan.mobileconfig")).toBe(true);
+    expect(isIosInstallable("wlan.MOBILECONFIG")).toBe(true);
+    expect(isIosInstallable("urlaub.jpg")).toBe(false);
   });
 });
 

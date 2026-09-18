@@ -99,10 +99,19 @@ const DANGEROUS: &[&str] = &[
     "apkm",
     "xapk",
     "aab",
+    "mobileconfig",
+    "ipa",
+    "shortcut",
+    "wf",
+    "webloc",
 ];
 
 /// Android app packages. On Android UwUMail never hands these to the installer.
 const APP_PACKAGES: &[&str] = &["apk", "apks", "apkm", "xapk", "aab"];
+
+/// What iOS installs instead: apps, Shortcuts, and configuration profiles, which can add
+/// certificates, VPNs or device management. UwUMail never hands these to the system.
+const IOS_INSTALLABLE: &[&str] = &["mobileconfig", "ipa", "shortcut", "wf"];
 
 /// Characters that reverse how text is displayed, e.g. to show `rechnung\u{202E}fdp.exe` as "rechnungexe.pdf".
 fn is_bidi_control(c: char) -> bool {
@@ -123,6 +132,10 @@ fn extension(filename: &str) -> Option<String> {
 
 pub fn is_app_package(filename: &str) -> bool {
     extension(filename).is_some_and(|ext| APP_PACKAGES.contains(&ext.as_str()))
+}
+
+pub fn is_ios_installable(filename: &str) -> bool {
+    extension(filename).is_some_and(|ext| IOS_INSTALLABLE.contains(&ext.as_str()))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -297,6 +310,9 @@ mod tests {
         assert_eq!(clean_display_name("bild.png\n\nGeprüft ✓"), "bild.png  Geprüft ✓");
         assert!(is_dangerous("Update.APK") && is_app_package("Update.APK"));
         assert!(is_app_package("game.xapk. ") && !is_app_package("apk.pdf"));
+        // A profile can add certificates, a VPN or device management to an iPhone.
+        assert!(is_dangerous("wlan.mobileconfig") && is_ios_installable("wlan.mobileconfig"));
+        assert!(is_ios_installable("UwUMail.ipa") && !is_ios_installable("urlaub.jpg"));
     }
 
     #[test]
