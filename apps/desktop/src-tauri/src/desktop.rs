@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use tauri::{App, AppHandle, Manager, RunEvent, Runtime, Wry};
+use tauri::{App, AppHandle, Manager, RunEvent, Wry};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
@@ -88,7 +88,22 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
     }
 }
 
-pub fn on_run_event<R: Runtime>(_app: &AppHandle<R>, _event: RunEvent) {}
+/// macOS hands `mailto:` links over as an "open URL" event instead of on the
+/// command line, and clicking the Dock icon brings a hidden window back.
+pub fn on_run_event(app: &AppHandle, event: RunEvent) {
+    #[cfg(target_os = "macos")]
+    {
+        match event {
+            RunEvent::Opened { urls } => background::on_opened(app, urls.iter().map(|url| url.as_str())),
+            RunEvent::Reopen { has_visible_windows: false, .. } => background::show_main_window(app),
+            _ => {}
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, event);
+    }
+}
 
 /// Every attachment may be opened on desktop; dangerous ones are confirmed first.
 pub fn check_openable(_file: &AttachmentFile) -> Result<(), Error> {

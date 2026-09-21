@@ -44,6 +44,21 @@ fn deliver_mailto(app: &AppHandle, draft: MailtoDraft) {
     let _ = app.emit("compose:mailto", ());
 }
 
+/// A link macOS handed over before the window was set up, e.g. the one UwUMail was started for.
+#[cfg(target_os = "macos")]
+static EARLY_MAILTO: Mutex<Option<MailtoDraft>> = Mutex::new(None);
+
+/// macOS: links opened with UwUMail, such as a clicked `mailto:` link.
+#[cfg(target_os = "macos")]
+pub fn on_opened<'a>(app: &AppHandle, urls: impl IntoIterator<Item = &'a str>) {
+    let Some(draft) = mailto::from_args(urls) else { return };
+    if app.try_state::<PendingMailto>().is_some() {
+        deliver_mailto(app, draft);
+    } else {
+        *EARLY_MAILTO.lock().unwrap() = Some(draft);
+    }
+}
+
 /// Called in the first instance when UwUMail is started again, e.g. from a
 /// shortcut or by clicking a `mailto:` link.
 pub fn on_second_instance(app: &AppHandle, args: Vec<String>) {
@@ -74,6 +89,12 @@ pub fn setup(app: &mut tauri::App) -> tauri::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if let Some(draft) = mailto::from_args(&args) {
         *app.state::<PendingMailto>().0.lock().unwrap() = Some(draft);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(draft) = EARLY_MAILTO.lock().unwrap().take() {
+            *app.state::<PendingMailto>().0.lock().unwrap() = Some(draft);
+        }
     }
 
     let labels = labels();
