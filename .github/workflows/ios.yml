@@ -11,7 +11,7 @@ name: iOS
 
 on:
   push:
-    branches: [main, feat/platforms]
+    branches: [main]
     paths-ignore: ["docs/**", "brand/**", "README.md", "CONTRIBUTING.md", "release-notes/**"]
   workflow_dispatch:
 
