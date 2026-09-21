@@ -19,7 +19,7 @@ import { Menu } from "@/components/ui/Menu";
 import { translate, useT } from "@/i18n";
 import { displayName, formatFullDate, formatListDate } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCompanyDomain } from "@/lib/queries";
+import { useCompanyDomain, useFolders } from "@/lib/queries";
 import { useUi } from "@/state/ui";
 import { useResolvedTheme } from "@/lib/theme";
 import { domainEntry, isDomainEntry, matchingEntries } from "@/lib/trustedSenders";
@@ -179,8 +179,13 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const recipientNames = message.to
     .map((address) => (myAddresses.has(address.email.toLowerCase()) ? t("reader.me") : displayName(address)))
     .join(", ");
+  const { data: folders = [] } = useFolders();
+  // Mail the server filed in Junk was found suspicious; do not auto-load its remote content on the
+  // strength of the From address alone, which an attacker controls (webmail security audit W-4). An explicit
+  // "load images" click still works.
+  const inJunk = folders.find((folder) => folder.id === message.folderId)?.role === "junk";
   const trustedBy = matchingEntries(message.from.email, trustedSenders);
-  const allowRemote = loadRemote || remoteSetting === "always" || trustedBy.length > 0;
+  const allowRemote = loadRemote || (!inJunk && (remoteSetting === "always" || trustedBy.length > 0));
 
   // A remembered choice for this sender wins; plain text otherwise follows the app.
   const preference = senderChoice ?? (message.bodyHtml !== null ? mailAppearance : "auto");
@@ -255,7 +260,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
       {message.hasRemoteContent && !allowRemote && (
         <RemoteImagesBanner email={message.from.email} onLoad={() => setLoadRemote(true)} />
       )}
-      {message.hasRemoteContent && remoteSetting !== "always" && trustedBy.length > 0 && (
+      {message.hasRemoteContent && remoteSetting !== "always" && trustedBy.length > 0 && !inJunk && (
         <TrustedImagesNote entries={trustedBy} onUntrust={() => setLoadRemote(false)} />
       )}
 
