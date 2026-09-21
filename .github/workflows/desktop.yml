@@ -10,7 +10,7 @@ name: Desktop setups
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/platforms]
     paths-ignore: ["docs/**", "brand/**", "README.md", "CONTRIBUTING.md", "release-notes/**"]
   workflow_dispatch:
   workflow_call:
