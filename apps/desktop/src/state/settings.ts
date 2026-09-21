@@ -45,6 +45,11 @@ export interface Settings {
   linkDomains: string[];
   /** The message header shows every address in full. Kept on this device only. */
   showAddressDetails: boolean;
+  /**
+   * Which UwUMail account's server keeps the settings that follow the account (see
+   * state/accountSync): an account id, "" for the first one that can, or "off".
+   */
+  settingsSyncAccount: string;
   mailAppearance: MailAppearance;
   /** Light/dark choices remembered per sender address (lowercase). */
   senderAppearance: Record<string, "light" | "dark">;
@@ -99,6 +104,7 @@ export const DEFAULT_SETTINGS: Settings = {
   linkConfirm: true,
   linkDomains: [],
   showAddressDetails: false,
+  settingsSyncAccount: "",
   mailAppearance: "auto",
   senderAppearance: {},
   collapsedFolders: [],
