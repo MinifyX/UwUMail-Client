@@ -69,6 +69,8 @@ const DANGEROUS = new Set(
     // svg renders script and foreignObject when opened from disk; rdp/wsb/pub/desktop start a
     // connection, run a command or launch a program (webmail security audit W-7).
     "svg svgz rdp wsb pub desktop",
+    // Installer, theme and search-connector files, add-ins and Access databases with macros.
+    "appinstaller theme themepack deskthemepack searchconnector-ms website ws xbap vsto vsix cab accde mdb mde adp ade",
   ]
     .join(" ")
     .split(" "),
@@ -107,8 +109,9 @@ export function attachmentKind(filename: string, mimeType: string): AttachmentKi
 
 /** The extension that decides what a file does, ignoring direction tricks and trailing dots and spaces. */
 function effectiveExtension(filename: string): string {
-  // Windows ignores trailing dots and spaces, so "tool.exe. " still runs as tool.exe.
-  return extensionOf(filename.replace(BIDI_CONTROLS, "").replace(/[. ]+$/, ""));
+  // Windows ignores trailing dots and spaces, so "tool.exe. " still runs as tool.exe. The engine
+  // trims every kind of space before writing the file, so a no-break space counts as well.
+  return extensionOf(filename.replace(BIDI_CONTROLS, "").replace(/[.\s]+$/u, ""));
 }
 
 export function isDangerous(filename: string): boolean {

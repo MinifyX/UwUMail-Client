@@ -112,6 +112,24 @@ const DANGEROUS: &[&str] = &[
     "wsb",
     "pub",
     "desktop",
+    // Installer, theme and search-connector files that fetch or run something, add-ins and
+    // Access databases that carry macros.
+    "appinstaller",
+    "theme",
+    "themepack",
+    "deskthemepack",
+    "searchconnector-ms",
+    "website",
+    "ws",
+    "xbap",
+    "vsto",
+    "vsix",
+    "cab",
+    "accde",
+    "mdb",
+    "mde",
+    "adp",
+    "ade",
 ];
 
 /// Android app packages. On Android UwUMail never hands these to the installer.
@@ -134,7 +152,9 @@ pub fn clean_display_name(name: &str) -> String {
 
 fn extension(filename: &str) -> Option<String> {
     let name = clean_display_name(filename);
-    let name = name.trim_end_matches(['.', ' ']);
+    // Every kind of space, not just ASCII: `safe_filename` trims them all before the file is
+    // written, so "tool.exe" + a no-break space lands on disk as tool.exe.
+    let name = name.trim_end_matches(|c: char| c == '.' || c.is_whitespace());
     name.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase())
 }
 
@@ -157,8 +177,10 @@ pub struct AttachmentFile {
 }
 
 pub fn is_dangerous(filename: &str) -> bool {
-    // Windows ignores trailing dots and spaces, so "tool.exe. " still runs as tool.exe.
-    extension(filename).is_some_and(|ext| DANGEROUS.contains(&ext.as_str()))
+    // Windows ignores trailing dots and spaces, so "tool.exe. " still runs as tool.exe. What
+    // decides in the end is the name the file gets on disk, so that one is checked too.
+    let dangerous = |name: &str| extension(name).is_some_and(|ext| DANGEROUS.contains(&ext.as_str()));
+    dangerous(filename) || dangerous(&safe_filename(&clean_display_name(filename)))
 }
 
 /// A file name that is safe on every OS: no paths, no reserved names, not too long.
@@ -332,6 +354,21 @@ mod tests {
         for name in ["login.svg", "logo.SVGZ", "remote.rdp", "sandbox.wsb", "flyer.pub", "start.desktop"] {
             assert!(is_dangerous(name), "{name}");
         }
+        for name in ["setup.appinstaller", "dark.themepack", "shared.searchconnector-ms", "addin.vsto", "db.accde"] {
+            assert!(is_dangerous(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn sees_through_unicode_spaces_at_the_end_of_a_name() {
+        // These spaces are trimmed before the file is written, so the file on disk is an .exe.
+        for name in ["invoice.exe\u{a0}", "invoice.exe.\u{3000}", "invoice.exe\u{2002}\u{202f}", "invoice.exe\u{2028}"]
+        {
+            assert!(is_dangerous(name), "{name:?}");
+            assert!(safe_filename(&clean_display_name(name)).ends_with(".exe"), "{name:?}");
+        }
+        assert!(is_app_package("game.apk\u{a0}"));
+        assert!(!is_dangerous("invoice.exe\u{a0}.pdf"));
     }
 
     #[test]

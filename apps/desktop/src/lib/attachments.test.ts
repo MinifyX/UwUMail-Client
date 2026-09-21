@@ -109,3 +109,18 @@ describe("vCard", () => {
     });
   });
 });
+
+describe("dangerous names with Unicode spaces", () => {
+  it("counts a no-break or ideographic space at the end like the engine does", () => {
+    expect(isDangerous("invoice.exe ")).toBe(true);
+    expect(isDangerous("invoice.exe.　")).toBe(true);
+    expect(isAppPackage("game.apk ")).toBe(true);
+    expect(isDangerous("invoice.exe .pdf")).toBe(false);
+  });
+
+  it("knows the installer, theme and add-in lures", () => {
+    for (const name of ["a.appinstaller", "b.themepack", "c.searchconnector-ms", "d.vsto", "e.accde"]) {
+      expect(isDangerous(name), name).toBe(true);
+    }
+  });
+});

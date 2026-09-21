@@ -1272,12 +1272,14 @@ impl Engine {
         let known =
             message.attachments.get(index).ok_or_else(|| Error::not_found("This attachment no longer exists."))?;
         if let Some(path) = self.inner.attachments.cached(&message_id, index) {
+            // The name on disk is what the system goes by when the file is opened.
+            let on_disk = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
             return Ok(AttachmentFile {
+                dangerous: attachments::is_dangerous(&known.filename) || attachments::is_dangerous(&on_disk),
                 path,
                 filename: known.filename.clone(),
                 mime_type: known.mime_type.clone(),
                 size: known.size,
-                dangerous: attachments::is_dangerous(&known.filename),
             });
         }
         let location = self
