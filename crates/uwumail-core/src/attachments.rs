@@ -207,6 +207,23 @@ pub fn safe_filename(name: &str) -> String {
     format!("{}{ext}", stem.chars().take(150 - ext.chars().count()).collect::<String>())
 }
 
+/// Marks a file as downloaded from the internet (Windows' "Mark of the Web"), like a browser or
+/// Outlook does: SmartScreen then warns before a program from it runs, and Office opens documents
+/// in Protected View with their macros blocked. Best effort: file systems without alternate data
+/// streams (FAT, some network drives) don't keep the mark. Does nothing on other systems.
+pub fn mark_from_internet(path: &Path) {
+    #[cfg(windows)]
+    {
+        let mut stream = path.as_os_str().to_os_string();
+        stream.push(":Zone.Identifier");
+        if let Err(error) = std::fs::write(&stream, "[ZoneTransfer]\r\nZoneId=3\r\n") {
+            tracing::debug!("Couldn't mark a file as downloaded: {error}");
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = path;
+}
+
 /// Splits `"<message id>:<index>"`.
 pub fn parse_id(id: &str) -> Result<(String, usize)> {
     let (message, index) = id.rsplit_once(':').ok_or_else(|| Error::invalid("Invalid attachment id."))?;
@@ -260,6 +277,7 @@ impl AttachmentCache {
         let path = folder.join(format!("{index}-{}", safe_filename(&filename)));
         let contents = part.contents();
         std::fs::write(&path, contents).map_err(|e| Error::internal(format!("Couldn't save the attachment: {e}")))?;
+        mark_from_internet(&path);
         self.trim();
         Ok(AttachmentFile {
             dangerous: is_dangerous(&filename),
@@ -277,6 +295,7 @@ impl AttachmentCache {
         // Attachment files start with their index; this can't be mistaken for one.
         let path = folder.join(format!("message-{}", safe_filename(filename)));
         std::fs::write(&path, raw).map_err(|e| Error::internal(format!("Couldn't write the message: {e}")))?;
+        mark_from_internet(&path);
         self.trim();
         Ok(path)
     }
@@ -402,6 +421,13 @@ Content-Transfer-Encoding: base64\r\n\r\nSGFsbG8gZGEh\r\n--x--\r\n";
         assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "Hallo da!");
         assert_eq!(cache.cached("m1", 0), Some(file.path.clone()));
         assert!(cache.store_from_raw("m1", 5, raw.as_bytes()).is_err());
+        #[cfg(windows)]
+        {
+            let mut stream = file.path.as_os_str().to_os_string();
+            stream.push(":Zone.Identifier");
+            let mark = std::fs::read_to_string(stream).expect("the attachment carries the mark of the web");
+            assert!(mark.contains("ZoneId=3"), "{mark}");
+        }
     }
 
     #[test]

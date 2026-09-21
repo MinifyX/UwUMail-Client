@@ -139,6 +139,8 @@ pub async fn save_file(app: &AppHandle, file: &AttachmentFile) -> Result<bool, E
     // The file is already in the cache; the page never decides which file gets copied.
     std::fs::copy(&file.path, &destination)
         .map_err(|e| Error::invalid(format!("Couldn't save to {}: {e}", destination.display())))?;
+    // A saved attachment stays marked as downloaded, whatever the copy took along.
+    uwumail_core::attachments::mark_from_internet(&destination);
     Ok(true)
 }
 
