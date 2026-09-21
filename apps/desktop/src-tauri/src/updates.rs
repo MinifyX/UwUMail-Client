@@ -1,11 +1,16 @@
-//! Automatic updates on Windows.
+//! Automatic updates on Windows, macOS and Linux.
 //!
 //! UwUMail looks for a new version shortly after starting and every six
-//! hours, downloads the signed `UwUMail-Setup.exe` quietly and tells the UI.
+//! hours, downloads the signed setup for this system quietly and tells the UI.
 //! "Restart now" hands over to that setup in `--update` mode; otherwise the
 //! update is applied the next time UwUMail starts.
+//!
+//! The setup is `UwUMail-Setup-<version>.exe` on Windows, the setup program
+//! itself on macOS and the setup AppImage on Linux. On macOS and Linux only a
+//! UwUMail the setup installed updates itself, so a copy started from
+//! somewhere else never installs a second one.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -67,8 +72,71 @@ fn is_newer(app: &AppHandle, version: &str) -> bool {
     semver::Version::parse(version).is_ok_and(|v| v > current_version(app))
 }
 
-fn setup_file(dir: &std::path::Path, version: &str) -> PathBuf {
-    dir.join(format!("UwUMail-Setup-{version}.exe"))
+fn setup_file(dir: &Path, version: &str) -> PathBuf {
+    if cfg!(windows) {
+        dir.join(format!("UwUMail-Setup-{version}.exe"))
+    } else if cfg!(target_os = "linux") {
+        dir.join(format!("UwUMail-Setup-{version}.AppImage"))
+    } else {
+        dir.join(format!("UwUMail-Setup-{version}"))
+    }
+}
+
+/// A path with its links resolved.
+fn real(path: &Path) -> Option<PathBuf> {
+    std::fs::canonicalize(path).ok()
+}
+
+/// Whether this UwUMail is the one the setup installed and may replace.
+fn updates_itself() -> bool {
+    if cfg!(debug_assertions) {
+        return false;
+    }
+    if cfg!(windows) {
+        return true;
+    }
+    let (Some(exe), Some(home)) = (
+        std::env::current_exe().ok().and_then(|exe| real(&exe)),
+        std::env::var_os("HOME").map(PathBuf::from).filter(|home| home.is_absolute()),
+    ) else {
+        return false;
+    };
+    let installed = if cfg!(target_os = "macos") {
+        home.join("Applications/UwUMail.app")
+    } else {
+        let data = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .filter(|dir| dir.is_absolute())
+            .unwrap_or_else(|| home.join(".local/share"));
+        data.join("uwumail/app")
+    };
+    real(&installed).is_some_and(|installed| exe.starts_with(installed))
+}
+
+/// Creates the updates folder for this user alone.
+fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+/// Writes the downloaded setup, runnable only by this user where that matters.
+fn write_setup(file: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let _ = std::fs::remove_file(file);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o700);
+    }
+    let mut out = options.open(file)?;
+    std::io::Write::write_all(&mut out, bytes)?;
+    out.sync_all()
 }
 
 /// A waiting update, if it is where UwUMail put it and still carries a valid
@@ -125,17 +193,52 @@ fn hand_over(update: &ReadyUpdate, relaunch: bool) -> Result<(), Error> {
     if relaunch {
         args.push("--relaunch");
     }
-    std::process::Command::new(&update.file)
-        .args(&args)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| Error::internal(format!("Couldn't start the update: {e}")))
+    let mut command = std::process::Command::new(&update.file);
+    command.args(&args);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Its own process group, so the setup outlives this UwUMail.
+        command.process_group(0).stdin(std::process::Stdio::null());
+        if let Some(dir) = update.file.parent() {
+            command.current_dir(dir);
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // UwUMail runs from its unpacked AppImage; the setup must not inherit where that one keeps
+        // its libraries. It unpacks itself into the private updates folder instead of mounting,
+        // so FUSE isn't needed and nothing lands in the shared /tmp.
+        for name in [
+            "APPDIR",
+            "APPIMAGE",
+            "ARGV0",
+            "OWD",
+            "LD_LIBRARY_PATH",
+            "GDK_PIXBUF_MODULEDIR",
+            "GDK_PIXBUF_MODULE_FILE",
+            "GIO_EXTRA_MODULES",
+            "GIO_MODULE_DIR",
+            "GSETTINGS_SCHEMA_DIR",
+            "GTK_DATA_PREFIX",
+            "GTK_EXE_PREFIX",
+            "GTK_IM_MODULE_FILE",
+            "GTK_PATH",
+        ] {
+            command.env_remove(name);
+        }
+        command.env("APPIMAGE_EXTRACT_AND_RUN", "1");
+        if let Some(dir) = update.file.parent() {
+            command.env("TMPDIR", dir);
+        }
+    }
+    command.spawn().map(|_| ()).map_err(|e| Error::internal(format!("Couldn't start the update: {e}")))
 }
 
 /// Called first thing on start: installs a waiting update, or cleans up after one.
 /// Returns true when UwUMail must quit right away because the setup takes over.
 pub fn apply_pending_on_start(app: &AppHandle) -> bool {
-    if !cfg!(windows) || cfg!(debug_assertions) {
+    if !updates_itself() {
         return false;
     }
     match read_pending(app) {
@@ -164,7 +267,7 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
     if let Some(update) = ready(app) {
         return Ok(Some(update));
     }
-    if !cfg!(windows) {
+    if !updates_itself() {
         return Ok(None);
     }
     let channel = *state.channel.lock().unwrap();
@@ -185,9 +288,9 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
     // The plugin checks the signature against the public key before handing out the bytes.
     let bytes = found.download(|_, _| {}, || {}).await.map_err(fail)?;
     let dir = updates_dir(app).ok_or_else(|| Error::internal("No folder for updates"))?;
-    std::fs::create_dir_all(&dir).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
+    create_private_dir(&dir).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
     let file = setup_file(&dir, &found.version);
-    std::fs::write(&file, &bytes).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
+    write_setup(&file, &bytes).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
     let update = ReadyUpdate {
         version: found.version.clone(),
         notes: found.body.clone(),
