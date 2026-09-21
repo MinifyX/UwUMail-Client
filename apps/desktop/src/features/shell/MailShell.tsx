@@ -105,6 +105,9 @@ export function MailShell() {
   const hotkeys = useMemo(() => {
     const map: HotkeyMap = {
       "mod+k": () => useUi.getState().setPaletteOpen(true),
+      // The simple layout only hides the list while a mail is open, so j/k step through it there too.
+      j: () => useUi.getState().selectRelative(1),
+      k: () => useUi.getState().selectRelative(-1),
       Escape: () => {
         const ui = useUi.getState();
         if (ui.folderDrawerOpen) ui.setFolderDrawerOpen(false);
@@ -112,15 +115,11 @@ export function MailShell() {
         else if (ui.selectedThreadId) ui.selectThread(null);
       },
     };
-    if (layout === "pro") {
-      map.j = () => useUi.getState().selectRelative(1);
-      map.k = () => useUi.getState().selectRelative(-1);
-    }
     for (const command of commands) {
       for (const key of command.keys ?? []) map[key] = () => void command.run();
     }
     return map;
-  }, [commands, layout]);
+  }, [commands]);
   useHotkeys(hotkeys, { repeat: ["j", "k"] });
 
   return (
