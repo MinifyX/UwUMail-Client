@@ -30,4 +30,29 @@ describe("links", () => {
       actual: "phish.example",
     });
   });
+
+  it("sees through invisible characters in the link text (W-8)", () => {
+    expect(misleadingLink("https://evil.example/", "paypal​.com")).toEqual({
+      shown: "paypal.com",
+      actual: "evil.example",
+    });
+    expect(misleadingLink("https://evil.example/", "pay­pal.com")).toEqual({
+      shown: "paypal.com",
+      actual: "evil.example",
+    });
+    expect(claimedHost("paypal⁠.com")).toBe("paypal.com");
+  });
+
+  it("checks every mailto recipient, not only the first (W-9)", () => {
+    expect(misleadingLink("mailto:service@bank.example?bcc=x@phish.example", "service@bank.example")).toEqual({
+      shown: "bank.example",
+      actual: "phish.example",
+    });
+    expect(misleadingLink("mailto:service@bank.example,x@phish.example", "service@bank.example")).toEqual({
+      shown: "bank.example",
+      actual: "phish.example",
+    });
+    // Every recipient is the claimed site: nothing to warn about.
+    expect(misleadingLink("mailto:sales@bank.example?cc=help@bank.example", "bank.example")).toBeNull();
+  });
 });
