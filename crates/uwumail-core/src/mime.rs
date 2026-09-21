@@ -25,6 +25,8 @@ pub struct ParsedMessage {
     pub from: Option<Address>,
     pub to: Vec<Address>,
     pub cc: Vec<Address>,
+    /// Only present in mail this account sent itself (the copy in Sent keeps it).
+    pub bcc: Vec<Address>,
     pub reply_to: Vec<Address>,
     /// Unix seconds.
     pub date: Option<i64>,
@@ -130,6 +132,7 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
         from: addresses(message.from()).into_iter().next(),
         to: addresses(message.to()),
         cc: addresses(message.cc()),
+        bcc: addresses(message.bcc()),
         reply_to: addresses(message.reply_to()),
         date: message.date().map(|d| d.to_timestamp()),
         has_body: text.is_some() || html.is_some(),

@@ -147,6 +147,8 @@ export interface Message {
   from: Address;
   to: Address[];
   cc: Address[];
+  /** Blind copies; only known for mail sent from this account (and missing in older caches). */
+  bcc?: Address[];
   replyTo: Address[];
   subject: string;
   date: string;

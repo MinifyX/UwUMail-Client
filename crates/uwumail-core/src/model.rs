@@ -294,6 +294,9 @@ pub struct Message {
     pub from: Address,
     pub to: Vec<Address>,
     pub cc: Vec<Address>,
+    /// Blind copies, only known for mail sent from this account.
+    #[serde(default)]
+    pub bcc: Vec<Address>,
     pub reply_to: Vec<Address>,
     pub subject: String,
     pub date: String,
