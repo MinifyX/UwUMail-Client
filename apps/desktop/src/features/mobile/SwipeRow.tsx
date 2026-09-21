@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Archive, MailCheck, MailOpen, Star, Trash } from "lucide-react";
+import { Archive, MailCheck, MailOpen, ShieldAlert, ShieldCheck, Star, Trash } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { mobile } from "@/backend/mobile";
@@ -16,9 +16,12 @@ const LONG_PRESS_MS = 450;
 const LOOKS: Record<Exclude<SwipeAction, "none">, { icon: LucideIcon; className: string }> = {
   read: { icon: MailCheck, className: "bg-[var(--uwu-account-violet)]" },
   archive: { icon: Archive, className: "bg-pink-solid" },
+  spam: { icon: ShieldAlert, className: "bg-[var(--uwu-account-coral)]" },
   trash: { icon: Trash, className: "bg-danger" },
   flag: { icon: Star, className: "bg-[var(--uwu-account-amber)]" },
 };
+/** "Spam" in junk takes the mail back out. */
+const NOT_SPAM_LOOK = { icon: ShieldCheck, className: "bg-[var(--uwu-account-mint)]" };
 
 interface SwipeRowProps {
   children: ReactNode;
@@ -28,6 +31,8 @@ interface SwipeRowProps {
   left: SwipeAction;
   /** The thread is unread, so "read" marks it read instead of unread. */
   unread: boolean;
+  /** The thread lies in junk, so "spam" moves it back out. */
+  inJunk?: boolean;
   onSwipe: (action: Exclude<SwipeAction, "none">) => void;
   onLongPress: () => void;
   /** In selection mode taps select and nothing swipes. */
@@ -43,7 +48,16 @@ type Gesture = {
   armed: boolean;
 };
 
-export function SwipeRow({ children, right, left, unread, onSwipe, onLongPress, selecting }: SwipeRowProps) {
+export function SwipeRow({
+  children,
+  right,
+  left,
+  unread,
+  inJunk = false,
+  onSwipe,
+  onLongPress,
+  selecting,
+}: SwipeRowProps) {
   const { t } = useT();
   const [offset, setOffset] = useState(0);
   const [leaving, setLeaving] = useState<"left" | "right" | null>(null);
@@ -67,13 +81,16 @@ export function SwipeRow({ children, right, left, unread, onSwipe, onLongPress, 
   };
 
   const side = offset > 0 ? right : left;
-  const look = side !== "none" ? LOOKS[side] : null;
+  const notSpam = side === "spam" && inJunk;
+  const look = notSpam ? NOT_SPAM_LOOK : side !== "none" ? LOOKS[side] : null;
   const label =
     side === "read"
       ? t(unread ? "mobile.swipe.read" : "mobile.swipe.unread")
-      : side !== "none"
-        ? t(`mobile.swipe.${side}`)
-        : "";
+      : notSpam
+        ? t("mobile.swipe.notSpam")
+        : side !== "none"
+          ? t(`mobile.swipe.${side}`)
+          : "";
   const Icon = side === "read" && !unread ? MailOpen : look?.icon;
 
   return (
@@ -170,13 +187,13 @@ export function SwipeRow({ children, right, left, unread, onSwipe, onLongPress, 
             if (current.armed && action !== "none") {
               const direction = offset > 0 ? "right" : "left";
               // "Read" and "flag" keep the row in place; the others slide it away.
-              if (action === "archive" || action === "trash") setLeaving(direction);
+              if (action === "archive" || action === "spam" || action === "trash") setLeaving(direction);
               window.setTimeout(
                 () => {
                   onSwipe(action);
                   setLeaving(null);
                 },
-                action === "archive" || action === "trash" ? 180 : 0,
+                action === "archive" || action === "spam" || action === "trash" ? 180 : 0,
               );
             }
           }

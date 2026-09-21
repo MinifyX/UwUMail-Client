@@ -144,6 +144,10 @@
     "serverSearch": {
       "searching": "Nyu fragt beim Server nach (｡･ω･｡)",
       "nothingMore": "Der Server hat auch nichts Neues für dich (・・ )"
+    },
+    "swipe": {
+      "spam": "Spam!",
+      "notSpam": "Doch kein Spam"
     }
   },
   "unsubscribe": {

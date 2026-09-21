@@ -544,7 +544,9 @@
       "archive": "Archiv",
       "trash": "Löschen",
       "flag": "Markieren",
-      "none": "Nichts"
+      "none": "Nichts",
+      "spam": "Spam",
+      "notSpam": "Kein Spam"
     },
     "pull": {
       "pull": "Zum Aktualisieren ziehen",

@@ -544,7 +544,9 @@
       "archive": "Archive",
       "trash": "Delete",
       "flag": "Flag",
-      "none": "Nothing"
+      "none": "Nothing",
+      "spam": "Spam",
+      "notSpam": "Not spam"
     },
     "pull": {
       "pull": "Pull to refresh",
