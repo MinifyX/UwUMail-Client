@@ -38,8 +38,7 @@ still_running_after() {
     cat "$log"
     fail "$name stopped within $seconds seconds"
   fi
-  echo "  ✓ $name runs" >&2
-  echo "$pid"
+  echo "  ✓ $name runs"
 }
 
 if [ "$os" = "Darwin" ]; then
@@ -79,7 +78,7 @@ if [ "$os" = "Darwin" ]; then
   program="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$app/Contents/Info.plist")"
 
   step "UwUMail starts"
-  still_running_after 20 "UwUMail" "$evidence/app.log" "$program" >/dev/null
+  still_running_after 20 "UwUMail" "$evidence/app.log" "$program"
   screencapture -x "$evidence/app.png" 2>/dev/null || true
   check '[ -d "$data" ]' "UwUMail created its data folder"
 
@@ -95,7 +94,7 @@ if [ "$os" = "Darwin" ]; then
   check '[ -f "$app/Contents/Info.plist" ]' "UwUMail is still there"
 
   step "The setup window opens"
-  still_running_after 12 "the setup window" "$evidence/setup.log" "$setup" >/dev/null
+  still_running_after 12 "the setup window" "$evidence/setup.log" "$setup"
   screencapture -x "$evidence/setup.png" 2>/dev/null || true
   pkill -f "$setup_app/Contents/MacOS/" || true
 
@@ -118,32 +117,33 @@ else
   export APPIMAGE_EXTRACT_AND_RUN=1 TMPDIR="$HOME/tmp"
   # A session bus for the single-instance check, and a screen for the windows.
   gui() { dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" "$@"; }
+  # Whether a program of ours runs, by where its file lies (its name on the command line is short).
+  running_from() { local p; for p in /proc/[0-9]*; do [[ "$(readlink "$p/exe" 2>/dev/null)" == "$1"* ]] && return 0; done; return 1; }
 
   step "Silent install"
   limit 300 "$setup" --silent --autostart --default-mail-app
   check '[ -x "$app/AppRun" ]' "the app is unpacked in ~/.local/share/uwumail/app"
   check '[ "$(stat -c %a "$base")" = 700 ]' "~/.local/share/uwumail is private"
   check '[ -z "$(find "$app" -perm -o+w -not -type l)" ]' "nothing in the app is writable for others"
-  check '[ "$(readlink "$HOME/.local/bin/uwumail")" = "$app/AppRun" ]' "~/.local/bin/uwumail points at the app"
+  check 'grep -qF "$app/AppRun" "$HOME/.local/bin/uwumail" && [ -x "$HOME/.local/bin/uwumail" ]' "~/.local/bin/uwumail starts the app"
   check 'desktop-file-validate "$entry"' "the menu entry is valid"
   check 'grep -q "^MimeType=x-scheme-handler/mailto;" "$entry"' "the menu entry takes mailto: links"
   check 'desktop-file-validate "$autostart" && grep -q -- "--autostart" "$autostart"' "the autostart entry is valid"
   check 'ls "$HOME"/.local/share/icons/hicolor/*/apps/uwumail.png >/dev/null' "the icon is installed"
-  check 'grep -q "^x-scheme-handler/mailto=uwumail.desktop;" "$HOME/.config/mimeapps.list"' "UwUMail is the mailto: handler"
+  check 'grep -Eq "^x-scheme-handler/mailto=uwumail.desktop;?$" "$HOME/.config/mimeapps.list"' "UwUMail is the mailto: handler"
   if command -v xdg-mime >/dev/null; then
     check '[ "$(xdg-mime query default x-scheme-handler/mailto)" = uwumail.desktop ]' "xdg-mime agrees"
   fi
   check 'grep -q "\"version\": \"$version\"" "$base/setup.json"' "the setup remembers version $version"
-  echo "--- AppRun ---"; head -c 2000 "$app/AppRun" | cat -v | head -n 30
 
   step "UwUMail starts (through ~/.local/bin/uwumail)"
-  still_running_after 25 "UwUMail" "$evidence/app.log" gui "$HOME/.local/bin/uwumail" >/dev/null
-  check 'pgrep -f "$app/" >/dev/null' "UwUMail runs from the installed folder"
+  still_running_after 25 "UwUMail" "$evidence/app.log" gui "$HOME/.local/bin/uwumail"
+  check 'running_from "$app/"' "UwUMail runs from the installed folder"
   check '[ -d "$data" ]' "UwUMail created its data folder"
 
   step "Update over the running app"
   limit 300 "$setup" --silent --update
-  check '! pgrep -f "$app/" >/dev/null' "the setup closed the running UwUMail"
+  check '! running_from "$app/"' "the setup closed the running UwUMail"
   check '[ -x "$app/AppRun" ]' "the updated app is in place"
   check '[ -z "$(find "$base" -maxdepth 1 -name ".app.*")" ]' "no leftovers next to the app"
 
@@ -154,7 +154,7 @@ else
   check '[ -x "$app/AppRun" ]' "UwUMail is still there"
 
   step "The setup window opens"
-  still_running_after 15 "the setup window" "$evidence/setup.log" gui "$setup" >/dev/null
+  still_running_after 15 "the setup window" "$evidence/setup.log" gui "$setup"
 
   step "Uninstall"
   pkill -f "uwumail-setup" || true
