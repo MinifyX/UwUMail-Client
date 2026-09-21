@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "mobile",
-  "description": "Android-only permissions of the main window: app lock and haptic feedback.",
+  "description": "Phone-only permissions of the main window: app lock and haptic feedback.",
   "windows": ["main"],
-  "platforms": ["android"],
+  "platforms": ["android", "iOS"],
   "permissions": ["biometric:default", "haptics:default"]
 }

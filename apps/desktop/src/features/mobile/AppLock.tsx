@@ -1,6 +1,6 @@
 import { Fingerprint } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { nativeAndroid } from "@/backend/mobile";
+import { nativeMobile } from "@/backend/mobile";
 import { NyuScene } from "@/components/nyu/scenes";
 import { Button } from "@/components/ui/Button";
 import { useT } from "@/i18n";
@@ -13,7 +13,7 @@ import { useSettings } from "@/state/settings";
  */
 export function AppLock() {
   const { t } = useT();
-  const enabled = useSettings((s) => s.appLock && nativeAndroid);
+  const enabled = useSettings((s) => s.appLock && nativeMobile);
   const after = useSettings((s) => s.appLockAfter);
   const locked = useAppLock((s) => s.locked) && enabled;
   const [asking, setAsking] = useState(false);

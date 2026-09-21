@@ -28,7 +28,7 @@ import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
 import { openDraftMessage } from "../compose/openDraft";
 import { useInlineImages } from "./useInlineImages";
-import { nativeAndroid } from "@/backend/mobile";
+import { nativeMobile } from "@/backend/mobile";
 import { backend } from "@/backend/backend";
 import { blockSender } from "./selection";
 import { UnsubscribeButton } from "./Unsubscribe";
@@ -290,8 +290,8 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
     void blockSender(entry, message.accountId, [message.id], refresh);
   };
   const items = [
-    // Android's web view can't print; the system share sheet will do that later.
-    ...(nativeAndroid ? [] : [{ label: <MenuLabel icon={Printer} text={t("reader.print")} />, onSelect: onPrint }]),
+    // No phone web view prints; the system share sheet will do that later.
+    ...(nativeMobile ? [] : [{ label: <MenuLabel icon={Printer} text={t("reader.print")} />, onSelect: onPrint }]),
     {
       label: <MenuLabel icon={Download} text={t("reader.saveMessage")} />,
       onSelect: () =>

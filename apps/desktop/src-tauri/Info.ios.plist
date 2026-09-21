@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the Info.plist that `tauri ios init` generates. -->
+<plist version="1.0">
+<dict>
+	<!-- Shown by iOS when UwUMail asks for Face ID, with the app lock switched on. -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>UwUMail checks it is you before it shows your mail.</string>
+
+	<!-- Saved attachments land in UwUMail's own folder in the Files app. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+
+	<!-- Lets iOS wake UwUMail up now and then to look for mail. iOS decides when,
+	     and never while the phone is busy; there is no service that keeps running. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+
+	<!-- UwUMail only uses TLS the way every mail app does. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>
