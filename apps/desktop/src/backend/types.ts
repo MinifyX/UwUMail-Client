@@ -147,6 +147,8 @@ export interface Message {
   from: Address;
   to: Address[];
   cc: Address[];
+  /** Blind copies; only known for mail sent from this account (and missing in older caches). */
+  bcc?: Address[];
   replyTo: Address[];
   subject: string;
   date: string;
@@ -316,4 +318,6 @@ export type BackendEvent =
   | { type: "send:done"; sendId: string; accountId: string }
   | { type: "send:failed"; sendId: string; accountId: string; reason: string; message: OutgoingMessage }
   | { type: "compose:mailto" }
+  /** The shared settings of a UwUMail account may have changed; `state` when the server said which. */
+  | { type: "settings:changed"; accountId: string; state?: string }
   | ({ type: "update:ready" } & UpdateInfo);

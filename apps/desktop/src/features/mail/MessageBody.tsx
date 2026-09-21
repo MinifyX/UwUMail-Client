@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "@/backend/types";
 import { textToHtml } from "@/lib/format";
 import { replaceContentIds } from "@/lib/inlineImages";
-import { requestOpenLink } from "@/state/links";
 import type { MailAppearance } from "@/state/settings";
+import { hideLinkStatus, watchLinks } from "./linkEvents";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
 import { forwardFrameKeys } from "./readerKeys";
 
@@ -217,6 +217,8 @@ export function MessageBody({ message, allowRemote, appearance, onAutoDecision, 
   useEffect(() => {
     onAutoDecisionRef.current = onAutoDecision;
   });
+  // A mail that goes away under the pointer never reports the pointer leaving its link.
+  useEffect(() => hideLinkStatus, [signature]);
 
   const handleLoad = (frame: HTMLIFrameElement) => {
     const doc = frame.contentDocument;
@@ -261,15 +263,7 @@ export function MessageBody({ message, allowRemote, appearance, onAutoDecision, 
     doc.addEventListener("load", updateHeight, true);
     // ↑/↓ and the other shortcuts keep working while the focus is inside the mail.
     forwardFrameKeys(frame, doc);
-    doc.addEventListener("click", (event) => {
-      // `area` as well as `a`: an image map is a link with no text, and today it only ever gets
-      // here without its href because a table of attributes in the sanitizer happens to drop it.
-      // Catching it here does not depend on that staying true.
-      const anchor = (event.target as Element | null)?.closest?.("a[href], area[href]");
-      if (!anchor) return;
-      event.preventDefault();
-      requestOpenLink(anchor.getAttribute("href") ?? "", anchor.textContent ?? "");
-    });
+    watchLinks(frame, doc);
   };
 
   const scheme = variant === "dark" || done?.dark ? "dark" : "light";

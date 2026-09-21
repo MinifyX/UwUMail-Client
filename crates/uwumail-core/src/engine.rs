@@ -14,16 +14,19 @@ use crate::attachments::{self, AttachmentCache, AttachmentFile};
 use crate::error::{Error, ErrorCode, Result};
 use crate::imap::{self, ImapSession, Login};
 use crate::jmap::Client as JmapClient;
-use crate::jmap_sync;
+use crate::jmap::StateChange;
 use crate::model::*;
 use crate::pictures::{SenderPicture, SenderPictures};
 use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
 use crate::{autoconfig, mime, oauth};
+use crate::{jmap_settings, jmap_sync};
 
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(5 * 60);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+/// The JMAP type of the shared settings.
+const USER_SETTINGS: &str = "UserSettings";
 /// JMAP servers without push are asked for changes this often.
 const JMAP_POLL_EVERY: Duration = Duration::from_secs(60);
 /// Server search over IMAP asks at most this many folders per mailbox.
@@ -324,6 +327,24 @@ impl Engine {
         if signature.id.is_empty() {
             signature.id = uuid::Uuid::new_v4().to_string();
         }
+        self.inner.store.save_signature(&signature)?;
+        Ok(signature)
+    }
+
+    /// Stores a signature that came from the settings sync, as it came: its address may not be
+    /// set up on this device (yet). The page has cleaned its HTML already.
+    pub fn put_synced_signature(&self, mut signature: Signature) -> Result<Signature> {
+        const MAX_SIGNATURE: usize = 1024 * 1024;
+        let valid_id = (1..=64).contains(&signature.id.len())
+            && signature.id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        if !valid_id {
+            return Err(Error::invalid("This signature id makes no sense."));
+        }
+        if signature.html.len() > MAX_SIGNATURE {
+            return Err(Error::invalid("This signature is too big. Try a smaller picture."));
+        }
+        signature.email = signature.email.trim().to_string();
+        signature.name = signature.name.trim().chars().take(100).collect();
         self.inner.store.save_signature(&signature)?;
         Ok(signature)
     }
@@ -886,6 +907,41 @@ impl Engine {
         }
         self.inner.store.block_sender(&entry)?;
         Ok(BlockedSender { entry, account_id: None, server_id: None })
+    }
+
+    /// The accounts whose UwUMail server keeps settings for its apps, for the settings sync.
+    /// Accounts that can't be reached right now are left out.
+    pub async fn settings_sync_accounts(&self) -> Result<Vec<String>> {
+        let mut found = Vec::new();
+        for account in self.inner.store.accounts()? {
+            if account.protocol != Protocol::Jmap {
+                continue;
+            }
+            match self.inner.jmap_client(&account.id).await {
+                Ok(client) if client.session.user_settings => found.push(account.id),
+                Ok(_) => {}
+                Err(error) => tracing::debug!("Couldn't ask {} about its settings: {error}", account.id),
+            }
+        }
+        Ok(found)
+    }
+
+    /// The settings an account's UwUMail server keeps for all devices of the login.
+    pub async fn user_settings(&self, account_id: &str) -> Result<UserSettings> {
+        let client = self.inner.jmap_client(account_id).await?;
+        jmap_settings::load(&client).await
+    }
+
+    /// Sets keys of the shared settings (`null` removes one); with `if_in_state` only if nothing
+    /// else was written since.
+    pub async fn save_user_settings(
+        &self,
+        account_id: &str,
+        changes: &serde_json::Map<String, serde_json::Value>,
+        if_in_state: Option<&str>,
+    ) -> Result<UserSettingsSaved> {
+        let client = self.inner.jmap_client(account_id).await?;
+        jmap_settings::save(&client, changes, if_in_state).await
     }
 
     pub async fn unblock_sender(&self, sender: &BlockedSender) -> Result<()> {
@@ -1808,6 +1864,10 @@ async fn run_jmap_account(inner: &Inner, account_id: &str, wake: &Notify) -> Res
             // Catch what changed while the push connection was being opened.
             if push.is_some() {
                 inner.sync_jmap(&client, account_id).await?;
+                // The page reads the shared settings again too: it may have changes waiting.
+                if client.session.user_settings {
+                    inner.emit(EngineEvent::SettingsChanged { account_id: account_id.to_string(), state: None });
+                }
             }
         }
         let outcome = tokio::select! {
@@ -1816,19 +1876,31 @@ async fn run_jmap_account(inner: &Inner, account_id: &str, wake: &Notify) -> Res
                     Some(stream) => stream.changed().await,
                     None => {
                         tokio::time::sleep(JMAP_POLL_EVERY).await;
-                        Ok(())
+                        Ok(StateChange::default())
                     }
                 }
             } => changed,
-            _ = wake.notified() => Ok(()),
-            _ = tokio::time::sleep(FULL_SYNC_EVERY) => Ok(()),
+            _ = wake.notified() => Ok(StateChange::default()),
+            _ = tokio::time::sleep(FULL_SYNC_EVERY) => Ok(StateChange::default()),
         };
-        if let Err(error) = outcome {
-            tracing::debug!("Push for {account_id} ended: {error}");
-            push = None;
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(5)) => {}
-                _ = wake.notified() => {}
+        match outcome {
+            Ok(change) => {
+                if client.session.user_settings && change.may_have_changed(USER_SETTINGS) {
+                    let state = change.state_of(USER_SETTINGS).map(String::from);
+                    inner.emit(EngineEvent::SettingsChanged { account_id: account_id.to_string(), state });
+                }
+                // A settings change alone is nothing for the mail.
+                if change.only(&[USER_SETTINGS]) {
+                    continue;
+                }
+            }
+            Err(error) => {
+                tracing::debug!("Push for {account_id} ended: {error}");
+                push = None;
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(5)) => {}
+                    _ = wake.notified() => {}
+                }
             }
         }
         inner.sync_jmap(&client, account_id).await?;

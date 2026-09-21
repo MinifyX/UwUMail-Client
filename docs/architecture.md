@@ -74,6 +74,39 @@ IMAP (and forth), which rebuilds the local cache.
   `tests/stalwart.rs` covers setup, nested mailboxes, sending with attachments,
   push, flags in both directions, reply threading and trash.
 
+### Settings sync
+
+A UwUMail server keeps one settings document per login
+(`urn:uwumail:jmap:settings`, UwUMail-Server `docs/jmap-settings.md`) that the
+webmail and the apps share. The engine only carries it (`jmap_settings.rs`,
+commands `settings_sync_accounts`, `load_user_settings`, `save_user_settings`)
+and reports `settings:changed` when a push names `UserSettings`, and once push
+is up. Everything else happens in the page, in two files that are identical in
+UwUMail-Webmail:
+
+- `lib/settingsSync.ts` maps settings onto keys (choices one key each, lists one
+  key per entry, signatures `signature:<id>`), checks values the way the server
+  does, and merges: the first time lists become the union of both sides and the
+  server's choices win; after that the server wins unless a change made here is
+  still waiting.
+- `lib/settingsSyncQueue.ts` sends changes batched after a short pause, with
+  `ifInState`; on `stateMismatch` it reads, merges and sends again. Changes made
+  offline wait in `localStorage` and go out on the next push, reconnect or retry.
+  Keys the server refuses stay on the device.
+
+`state/accountSync.ts` picks the account (Settings → Accounts, "Sync settings";
+first account that can by default, or off), keeps signatures in the local
+database and cleans the ones that come in. Device-only settings (layout,
+density, swipes, motion, app lock, background, updates, workspaces) never
+travel. `tests/uwumail_server.rs` runs against a local server:
+
+```bash
+# in UwUMail-Server: create a.test and mini@a.test, then serve with plain HTTP
+UWUMAIL_LISTEN__PROXY=127.0.0.1:18080 … cargo run -p uwumail-server -- serve
+UWUMAIL_TEST_SERVER=http://127.0.0.1:18080 UWUMAIL_TEST_LOGIN=mini@a.test \
+UWUMAIL_TEST_PASSWORD=… cargo test -p uwumail-core --test uwumail_server -- --test-threads=1
+```
+
 ### `apps/desktop/src-tauri` — the shell
 
 Thin layer that owns the app lifecycle: windows, tray, notifications, updater,

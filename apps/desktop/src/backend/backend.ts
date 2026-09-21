@@ -24,6 +24,7 @@ import type {
   UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
+import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 
 export type BackendErrorCode =
   | "auth_failed"
@@ -64,6 +65,14 @@ export interface Backend {
   listSignatures(): Promise<Signature[]>;
   saveSignature(signature: Signature): Promise<Signature>;
   deleteSignature(signatureId: string): Promise<void>;
+  /** Stores a signature from the settings sync as it came, whether or not its address is set up here. */
+  putSyncedSignature(signature: Signature): Promise<Signature>;
+  /** Accounts whose UwUMail server keeps settings for its apps; unreachable ones are left out. */
+  settingsSyncAccounts(): Promise<string[]>;
+  /** The settings an account's server keeps for all devices, see lib/settingsSync. */
+  loadUserSettings(accountId: string): Promise<{ state: string; values: Record<string, unknown> }>;
+  /** Sets keys (`null` removes); with `ifInState` only if nothing was written since. */
+  saveUserSettings(accountId: string, patch: Record<string, unknown>, ifInState?: string): Promise<SaveOutcome>;
   discoverSettings(email: string): Promise<DiscoveredSettings>;
   /** The page an administrator opens to allow UwUMail for a whole company. */
   microsoftAdminConsentUrl(email: string): Promise<string>;

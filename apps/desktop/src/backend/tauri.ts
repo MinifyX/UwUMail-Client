@@ -27,6 +27,7 @@ import type {
   UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
+import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 
 interface EngineError {
   code: BackendErrorCode;
@@ -53,6 +54,7 @@ const EVENT_NAMES = [
   "send:done",
   "send:failed",
   "compose:mailto",
+  "settings:changed",
   "update:ready",
 ] as const;
 
@@ -89,6 +91,29 @@ export class TauriBackend implements Backend {
 
   deleteSignature(signatureId: string) {
     return call<void>("delete_signature", { signatureId });
+  }
+
+  putSyncedSignature(signature: Signature) {
+    return call<Signature>("put_synced_signature", { signature });
+  }
+
+  settingsSyncAccounts() {
+    return call<string[]>("settings_sync_accounts");
+  }
+
+  loadUserSettings(accountId: string) {
+    return call<{ state: string; values: Record<string, unknown> }>("load_user_settings", { accountId });
+  }
+
+  async saveUserSettings(accountId: string, patch: Record<string, unknown>, ifInState?: string) {
+    const saved = await call<{ ok: boolean; state?: string; type?: string; properties?: string[] }>(
+      "save_user_settings",
+      { accountId, changes: patch, ifInState: ifInState ?? null },
+    );
+    const outcome: SaveOutcome = saved.ok
+      ? { ok: true, ...(saved.state ? { state: saved.state } : {}) }
+      : { ok: false, type: saved.type ?? "serverFail", ...(saved.properties ? { properties: saved.properties } : {}) };
+    return outcome;
   }
 
   discoverSettings(email: string) {

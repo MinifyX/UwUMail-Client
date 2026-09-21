@@ -10,6 +10,7 @@ import { pictureAsDataUrl } from "@/lib/images";
 import { queryKeys, useIdentities, useSignatures } from "@/lib/queries";
 import { isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { toast } from "@/state/toasts";
+import { signaturesChangedHere, useAccountSync } from "@/state/accountSync";
 import { useUi } from "@/state/ui";
 import { Row } from "./Row";
 
@@ -29,7 +30,11 @@ export function Signatures() {
     return () => setSettingsFormDirty(false);
   }, [editing, setSettingsFormDirty]);
 
-  const refresh = () => client.invalidateQueries({ queryKey: queryKeys.signatures });
+  const unsynced = useAccountSync((s) => (s.accountId ? s.unsynced : []));
+  const refresh = () => {
+    signaturesChangedHere();
+    return client.invalidateQueries({ queryKey: queryKeys.signatures });
+  };
   const failed = (reason: unknown) => toast(reason instanceof Error ? reason.message : String(reason), "error");
 
   return (
@@ -79,6 +84,7 @@ export function Signatures() {
                     <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{signature.name}</span>
                     {signature.forNew && <Badge>{t("settings.signatureDefaultNew")}</Badge>}
                     {signature.forReplies && <Badge>{t("settings.signatureDefaultReplies")}</Badge>}
+                    {unsynced.includes(signature.id) && <Badge>{t("settings.signatureLocalOnly")}</Badge>}
                     <IconButton
                       icon={Pencil}
                       size="sm"
@@ -97,6 +103,9 @@ export function Signatures() {
                     // Saved through the same sanitizer as the composer; pictures are data URLs only.
                     dangerouslySetInnerHTML={{ __html: quotableHtml(signature.html) }}
                   />
+                  {unsynced.includes(signature.id) && (
+                    <p className="mt-2 text-[12.5px] text-muted">{t("settings.signatureLocalOnlyDesc")}</p>
+                  )}
                 </li>
               ))}
             </ul>

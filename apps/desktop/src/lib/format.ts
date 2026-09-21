@@ -23,6 +23,11 @@ export function formatFullDate(iso: string, locale: string): string {
   return new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 }
 
+/** Weekday, full date and time, for the full header of a message. */
+export function formatLongDate(iso: string, locale: string): string {
+  return new Date(iso).toLocaleString(locale, { dateStyle: "full", timeStyle: "short" });
+}
+
 export function formatSize(bytes: number, locale: string): string {
   const units = ["B", "KB", "MB", "GB"];
   let value = bytes;

@@ -44,7 +44,12 @@
     "error": {
       "title": "Ich hab mich im Kabel verheddert (╥﹏╥)",
       "body": "Die Mail kam nicht durch. Versuch es gleich nochmal."
-    }
+    },
+    "showAddresses": "Alle Adressen anzeigen",
+    "hideAddresses": "Adressen einklappen",
+    "replyTo": "Antwort an",
+    "copyAddress": "{{email}} kopieren",
+    "addressCopied": "Adresse eingesteckt ✧"
   },
   "compose": {
     "placeholder": "Schreib was Liebes ✿",
@@ -116,7 +121,26 @@
     "backgroundPushDesc": "Nyu bleibt wach und passt auf dein Postfach auf. Android zeigt dafür eine stille Mitteilung, die du ausblenden kannst ♡",
     "senderAdded": "{{email}} ist startklar (｀・ω・´)ゞ",
     "signatureSaved": "Signatur sitzt ✧",
-    "signaturePlaceholder": "Liebe Grüße ✿"
+    "signaturePlaceholder": "Liebe Grüße ✿",
+    "linkConfirm": "Vor dem Öffnen von Links fragen",
+    "linkConfirmDesc": "Ich zeig dir vorher, wohin ein Link aus einer Mail führt. Getarnte Links frag ich immer.",
+    "linkDomains": "Ohne Nachfrage öffnen",
+    "linkDomainsDesc": "Links zu diesen Seiten lass ich direkt durch, außer sie sind verkleidet.",
+    "linkDomainsEmpty": "Noch keine. Du fügst Seiten direkt beim Öffnen eines Links hinzu ✧",
+    "linkDomainsInactive": "Gerade lass ich alle Links ohne Nachfrage durch.",
+    "forgetLinkDomain": "{{domain}} entfernen",
+    "syncAccount": "Einstellungen synchronisieren",
+    "syncAccountDesc": "Aussehen, Sprache, Bilder, Links und Signaturen reisen mit deinem UwUMail-Konto mit, in die App auf jedem Gerät und ins Webmail ✧ Layout, Dichte, Wischgesten, App-Sperre und Updates bleiben hier bei mir.",
+    "syncAuto": "Automatisch",
+    "syncOff": "Aus",
+    "syncNone": "Hmm, keins deiner Konten wohnt auf einem UwUMail-Server, der sich Einstellungen merkt (・・ )? Dann bleibt alles hier.",
+    "syncSyncing": "Synchronisiere mit {{email}} …",
+    "syncDone": "Alles gleich mit {{email}} ✧ {{when}}",
+    "syncOffline": "{{email}} antwortet gerade nicht. Ich halte deine Änderungen fest und schicke sie, sobald es wieder geht (｡•̀ᴗ-)✧",
+    "syncFailed": "Mit {{email}} hat das Synchronisieren nicht geklappt (╥﹏╥) {{detail}}",
+    "syncRefused": "{{count}} Einstellungen nimmt der Server nicht an. Sie bleiben auf diesem Gerät.",
+    "signatureLocalOnly": "Nur hier",
+    "signatureLocalOnlyDesc": "Die hier bleibt bei mir auf diesem Gerät: zu groß zum Mitreisen (höchstens 256 KB) oder mit Bildern, die nur hier gehen."
   },
   "attachment": {
     "loading": "Ich pack den Anhang aus…",
@@ -127,7 +151,30 @@
     "readyTitle": "Nyu hat was Neues mitgebracht ✧"
   },
   "link": {
-    "warningTitle": "Hm, dieser Link schummelt vielleicht (・_・;)"
+    "warningTitle": "Hm, dieser Link schummelt vielleicht (・_・;)",
+    "confirmTitle": "Magst du diesen Link öffnen? (・ω・)",
+    "confirmBody": "Lass uns kurz zusammen schauen, wo er hinführt ✧",
+    "mailTitle": "Eine Mail schreiben? ✉",
+    "mailBody": "Der Link macht eine neue Mail an diese Leute auf.",
+    "open": "Öffnen",
+    "compose": "Mail schreiben",
+    "copy": "Adresse kopieren",
+    "copyShort": "Kopieren",
+    "copied": "Link eingesteckt ✧",
+    "remember": "Bei {{domain}} nicht mehr fragen",
+    "remembered": "Links zu {{domain}} lass ich ab jetzt direkt durch ✧ Umstellen kannst du das in den Einstellungen unter Lesen.",
+    "insecure": "Unverschlüsselt (http): Was du dort eintippst, könnten andere mitlesen (・_・;)",
+    "unicodeHost": "Sieht so aus",
+    "lookalike": "Hier mischen sich Buchstaben, die nur so tun wie andere. So verkleiden sich falsche Seiten (・_・;)",
+    "userinfo": "Vor der Adresse steht ein Benutzername, der sich als andere Seite verkleiden kann. Wirklich geht's zu {{domain}}.",
+    "redirectsTo": "Hüpft weiter zu",
+    "tracking": "Klick-Tracking über {{host}}",
+    "service": "Weiterleitungsdienst {{host}}",
+    "hiddenTarget": "Wohin's danach geht, verrät der Link nicht.",
+    "otherTarget": "Anderes Ziel als angezeigt",
+    "statusRedirect": "hüpft weiter zu {{target}}",
+    "unsupported": "Solche Links mach ich lieber nicht auf (・_・;)",
+    "sheetTitle": "Link"
   },
   "mobile": {
     "pull": {

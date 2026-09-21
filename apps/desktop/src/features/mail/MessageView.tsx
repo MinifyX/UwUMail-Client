@@ -2,6 +2,7 @@ import clsx from "clsx";
 import {
   Ban,
   ChevronDown,
+  Copy,
   Download,
   ImageIcon,
   ImageOff,
@@ -11,13 +12,15 @@ import {
   Printer,
   Sun,
 } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useId, useState } from "react";
 import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { translate, useT } from "@/i18n";
-import { displayName, formatFullDate, formatListDate } from "@/lib/format";
+import { addressRows, fullAddress, type AddressRole } from "@/lib/addresses";
+import { displayName, formatFullDate, formatListDate, formatLongDate } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCompanyDomain, useFolders } from "@/lib/queries";
 import { useUi } from "@/state/ui";
@@ -176,9 +179,9 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const [autoDecision, setAutoDecision] = useState<{ key: string; dark: boolean } | null>(null);
 
   const myAddresses = new Set(accounts.map((a) => a.email.toLowerCase()));
-  const recipientNames = message.to
-    .map((address) => (myAddresses.has(address.email.toLowerCase()) ? t("reader.me") : displayName(address)))
-    .join(", ");
+  const showDetails = useSettings((s) => s.showAddressDetails);
+  const toggleDetails = () => useSettings.getState().update({ showAddressDetails: !showDetails });
+  const detailsId = useId();
   const { data: folders = [] } = useFolders();
   // Mail the server filed in Junk was found suspicious; do not auto-load its remote content on the
   // strength of the From address alone, which an attacker controls (webmail security audit W-4). An explicit
@@ -223,10 +226,35 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
         <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-1">
           <div className="min-w-[min(100%,12rem)] flex-1">
             <p className="flex flex-wrap items-baseline gap-x-2">
-              <span className="min-w-0 text-[15px] font-bold break-words">{displayName(message.from)}</span>
+              <Tooltip
+                content={fullAddress(message.from)}
+                onActivate={toggleDetails}
+                className="min-w-0 text-[15px] font-bold break-words"
+              >
+                {displayName(message.from)}
+              </Tooltip>
               <span className="selectable min-w-0 truncate text-[12.5px] text-muted">{message.from.email}</span>
             </p>
-            <p className="truncate text-[12.5px] text-muted">{t("reader.to", { names: recipientNames })}</p>
+            <p className="flex min-w-0 items-center gap-0.5 text-[12.5px] text-muted">
+              <span className="min-w-0 truncate">
+                <RecipientNames recipients={message.to} mine={myAddresses} onActivate={toggleDetails} />
+              </span>
+              <button
+                type="button"
+                aria-expanded={showDetails}
+                aria-controls={detailsId}
+                aria-label={showDetails ? t("reader.hideAddresses") : t("reader.showAddresses")}
+                title={showDetails ? t("reader.hideAddresses") : t("reader.showAddresses")}
+                onClick={toggleDetails}
+                className="grid size-6 shrink-0 place-items-center rounded-full text-muted hover:bg-pink-tint hover:text-pink-ink focus-visible:shadow-focus focus-visible:outline-none"
+              >
+                <ChevronDown
+                  className={clsx("size-3.5 transition-transform", showDetails && "rotate-180")}
+                  strokeWidth={2.4}
+                  aria-hidden
+                />
+              </button>
+            </p>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-3">
             {message.flags.draft && (
@@ -257,6 +285,8 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
         </div>
       </header>
 
+      {showDetails && <AddressDetails id={detailsId} message={message} />}
+
       {message.hasRemoteContent && !allowRemote && (
         <RemoteImagesBanner email={message.from.email} onLoad={() => setLoadRemote(true)} />
       )}
@@ -279,6 +309,82 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
         sender={message.from}
       />
     </article>
+  );
+}
+
+/** "to Mini, Leni": every name shows its full address on hover and keyboard focus. */
+function RecipientNames({
+  recipients,
+  mine,
+  onActivate,
+}: {
+  recipients: Message["to"];
+  mine: Set<string>;
+  onActivate: () => void;
+}) {
+  const { t } = useT();
+  const marker = "@@names@@";
+  const [before = "", after = ""] = t("reader.to", { names: marker }).split(marker);
+  return (
+    <>
+      {before}
+      {recipients.map((address, index) => (
+        <Fragment key={`${address.email}-${index}`}>
+          {index > 0 && ", "}
+          <Tooltip content={fullAddress(address)} onActivate={onActivate}>
+            {mine.has(address.email.toLowerCase()) ? t("reader.me") : displayName(address)}
+          </Tooltip>
+        </Fragment>
+      ))}
+      {after}
+    </>
+  );
+}
+
+/** Every address of a message in full, each with a button to copy it, and the exact date. */
+function AddressDetails({ id, message }: { id: string; message: Message }) {
+  const { t, i18n } = useT();
+  const labels: Record<AddressRole, string> = {
+    from: t("compose.from"),
+    replyTo: t("reader.replyTo"),
+    to: t("compose.to"),
+    cc: t("compose.cc"),
+    bcc: t("compose.bcc"),
+  };
+  const copy = (email: string) =>
+    void navigator.clipboard
+      .writeText(email)
+      .then(() => toast(t("reader.addressCopied"), "success"))
+      .catch(() => undefined);
+  return (
+    <dl
+      id={id}
+      className="-mt-1 grid animate-fade grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-2xl bg-canvas px-4 py-3 text-[12.5px]"
+    >
+      {addressRows(message).map((row) => (
+        <Fragment key={row.role}>
+          <dt className="pt-1 text-muted">{labels[row.role]}</dt>
+          <dd className="flex min-w-0 flex-col">
+            {row.addresses.map((address, index) => (
+              <span key={`${address.email}-${index}`} className="flex min-w-0 items-center gap-1">
+                <span className="selectable min-w-0 break-all">{fullAddress(address)}</span>
+                <button
+                  type="button"
+                  aria-label={t("reader.copyAddress", { email: address.email })}
+                  title={t("reader.copyAddress", { email: address.email })}
+                  onClick={() => copy(address.email)}
+                  className="grid size-6 shrink-0 place-items-center rounded-full text-faint hover:bg-pink-tint hover:text-pink-ink focus-visible:shadow-focus focus-visible:outline-none"
+                >
+                  <Copy className="size-3.5" aria-hidden />
+                </button>
+              </span>
+            ))}
+          </dd>
+        </Fragment>
+      ))}
+      <dt className="text-muted">{t("reader.date")}</dt>
+      <dd className="selectable">{formatLongDate(message.date, i18n.language)}</dd>
+    </dl>
   );
 }
 

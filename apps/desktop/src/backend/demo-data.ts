@@ -8,6 +8,9 @@ type Localized = Record<Lang, string>;
 interface SampleMessage {
   from: Address;
   to?: Address[];
+  cc?: Address[];
+  bcc?: Address[];
+  replyTo?: Address[];
   minutesAgo: number;
   body: Localized;
   html?: boolean;
@@ -38,6 +41,26 @@ const bakery: Address = { name: "Kaffee & Kuchen", email: "hallo@kaffeekuchen.ex
 const shop: Address = { name: "Pixel Parts Shop", email: "orders@pixelparts.example" };
 const bank: Address = { name: "Sparschwein Bank", email: "service@sparschwein.example" };
 const client: Address = { name: "Emma Vogt", email: "emma.vogt@brightlabs.example" };
+const linkLab: Address = { name: "Link-Labor", email: "labor@linklabor.example" };
+
+/** Every kind of link the reader treats differently: plain, disguised, wrapped, tracked, insecure, lookalike, mail. */
+function linkLabMail(lang: Lang) {
+  const de = lang === "de";
+  const item = (label: string, href: string, text: string) =>
+    `<li style="margin:0 0 10px">${label}: <a href="${href}">${text}</a></li>`;
+  return `<div style="font-family:sans-serif;max-width:560px">
+<h2 style="margin:0 0 12px">${de ? "Fahr mit der Maus über die Links" : "Hover over the links"}</h2>
+<ul style="padding-left:18px">
+${item(de ? "Normal" : "Plain", "https://www.pixelparts.example/sets/bubblegum", de ? "Zum Shop" : "To the shop")}
+${item(de ? "Getarnt" : "Disguised", "https://sparschwein-sicherheit.example.net/login", "www.sparschwein.example")}
+${item(de ? "Link-Scanner" : "Link scanner", "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwanders.example%2Fclip%3Fv%3D2&data=05%7C01&reserved=0", de ? "Lenis Clip" : "Leni's clip")}
+${item(de ? "Doppelt verpackt" : "Wrapped twice", "https://www.google.com/url?q=https://urldefense.com/v3/__https://mood.example/playlist__;!!AbC!xyz$&sa=D", "Playlist")}
+${item(de ? "Klick-Tracking" : "Click tracking", "https://pixelparts.us1.list-manage.com/track/click?u=abc123&id=def456", de ? "Angebot ansehen" : "See the deal")}
+${item(de ? "Unverschlüsselt" : "Not encrypted", "http://kaffeekuchen.example/karte", de ? "Speisekarte" : "Menu")}
+${item(de ? "Doppelgänger" : "Lookalike", "https://xn--pypal-4ve.example/konto", de ? "Konto prüfen" : "Check account")}
+${item("Mail", "mailto:hallo@kaffeekuchen.example?cc=team@kaffeekuchen.example&subject=Tisch%20reservieren", de ? "Tisch reservieren" : "Book a table")}
+</ul></div>`;
+}
 const lukas: Address = { name: "Lukas Editz", email: "lukas@pixelstudio.example" };
 
 const p = (de: string, en: string): Localized => ({ de, en });
@@ -124,6 +147,7 @@ export const SAMPLE_THREADS: SampleThread[] = [
       {
         from: ME_PRIVATE,
         to: [leni],
+        bcc: [noah],
         minutesAgo: 170,
         seen: true,
         folder: "sent",
@@ -340,6 +364,21 @@ export const SAMPLE_THREADS: SampleThread[] = [
       },
     ],
   },
+  {
+    account: "private",
+    subject: p("Link-Check: Wohin führen diese Links?", "Link check: where do these links go?"),
+    messages: [
+      {
+        from: linkLab,
+        to: [ME_PRIVATE, leni],
+        cc: [mia],
+        replyTo: [{ name: "Link-Labor Hilfe", email: "hilfe@linklabor.example" }],
+        minutesAgo: 45,
+        html: true,
+        body: p(linkLabMail("de"), linkLabMail("en")),
+      },
+    ],
+  },
 ];
 
 export const DEMO_ACCOUNTS: Account[] = [
@@ -443,8 +482,9 @@ export function buildMessages(lang: Lang, now = Date.now()): Message[] {
         folderId: `${accountId}:${sample.customFolder ?? sample.folder ?? "inbox"}`,
         from: sample.from,
         to: sample.to ?? [me],
-        cc: [],
-        replyTo: [],
+        cc: sample.cc ?? [],
+        bcc: sample.bcc ?? [],
+        replyTo: sample.replyTo ?? [],
         subject: (isReply ? "Re: " : "") + thread.subject[lang],
         date: new Date(now - sample.minutesAgo * 60_000).toISOString(),
         flags: {

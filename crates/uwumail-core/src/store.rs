@@ -158,6 +158,10 @@ CREATE TABLE blocked_senders (
 -- How newsletters say to unsubscribe, as JSON.
 ALTER TABLE messages ADD COLUMN unsubscribe_json TEXT;
 "#,
+    r#"
+-- Blind copies: only known for mail this account sent itself.
+ALTER TABLE messages ADD COLUMN bcc_json TEXT NOT NULL DEFAULT '[]';
+"#,
 ];
 
 /// Prefix of the conversation ids the trash lists: those conversations hold only
@@ -748,9 +752,9 @@ impl Store {
         tx.execute(
             "INSERT INTO messages (id, account_id, folder_id, uid, message_id, in_reply_to, refs, thread_id, subject,
                 from_json, to_json, cc_json, reply_to_json, date, seen, flagged, answered, draft, snippet, size,
-                has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id, unsubscribe_json)
+                has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id, unsubscribe_json, bcc_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
-                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)",
+                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)",
             params![
                 id,
                 account_id,
@@ -780,6 +784,7 @@ impl Store {
                 remote.map(|(remote_id, _)| remote_id),
                 remote.map(|(_, blob_id)| blob_id),
                 parsed.unsubscribe.as_ref().map(json).transpose()?,
+                json(&parsed.bcc)?,
             ],
         )?;
 
@@ -1244,7 +1249,7 @@ impl Store {
     const MESSAGE_COLUMNS: &'static str =
         "m.id, m.thread_id, m.account_id, m.folder_id, m.from_json, m.to_json, m.cc_json,
         m.reply_to_json, m.subject, m.date, m.seen, m.flagged, m.answered, m.draft, m.snippet, m.body_html,
-        m.body_text, m.has_remote, m.attachments_json, m.message_id, m.unsubscribe_json";
+        m.body_text, m.has_remote, m.attachments_json, m.message_id, m.unsubscribe_json, m.bcc_json";
 
     fn message_from_row(row: &Row<'_>) -> rusqlite::Result<Message> {
         Ok(Message {
@@ -1256,6 +1261,7 @@ impl Store {
                 .unwrap_or(Address { name: None, email: String::new() }),
             to: from_json(&row.get::<_, String>(5)?),
             cc: from_json(&row.get::<_, String>(6)?),
+            bcc: from_json(&row.get::<_, String>(21)?),
             reply_to: from_json(&row.get::<_, String>(7)?),
             subject: row.get(8)?,
             date: iso8601(row.get(9)?),
@@ -1751,6 +1757,34 @@ mod tests {
 
         let detail = store.get_thread(&thread.id, true).unwrap();
         assert_eq!(detail.messages[0].body_text.as_deref().map(str::trim), Some("Hast du den Clip gesehen?"));
+    }
+
+    #[test]
+    fn keeps_the_blind_copies_of_sent_mail() {
+        let (store, _, _, sent) = store_with_account();
+        let bytes =
+            b"From: Mini <mini@uwumail.dev>\r\nTo: leni@x.example\r\nBcc: Ben <ben@y.example>, chef@z.example\r\n\
+Reply-To: antwort@uwumail.dev\r\nSubject: Geheim\r\nDate: Mon, 14 Sep 2026 09:00:00 +0000\r\nMessage-ID: <bcc@x>\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
+        insert(&store, &sent, 1, bytes);
+        let page = store
+            .list_threads(&ThreadQuery {
+                view: MailboxView::Unified { role: UnifiedRole::Sent },
+                filter: ListFilter::All,
+                search: None,
+                conversations: true,
+                account_ids: None,
+                cursor: None,
+                limit: 50,
+            })
+            .unwrap();
+        let detail = store.get_thread(&page.threads[0].id, true).unwrap();
+        let message = &detail.messages[0];
+        let bcc: Vec<_> = message.bcc.iter().map(|a| (a.name.as_deref(), a.email.as_str())).collect();
+        assert_eq!(bcc, vec![(Some("Ben"), "ben@y.example"), (None, "chef@z.example")]);
+        assert_eq!(message.reply_to[0].email, "antwort@uwumail.dev");
+        let json = serde_json::to_value(message).unwrap();
+        assert_eq!(json["bcc"][0]["email"], "ben@y.example");
     }
 
     #[test]

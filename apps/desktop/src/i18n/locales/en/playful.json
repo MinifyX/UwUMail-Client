@@ -44,7 +44,12 @@
     "error": {
       "title": "I got tangled in the cable (╥﹏╥)",
       "body": "This message didn't come through. Try again in a moment."
-    }
+    },
+    "showAddresses": "Show all addresses",
+    "hideAddresses": "Fold addresses away",
+    "replyTo": "Reply to",
+    "copyAddress": "Copy {{email}}",
+    "addressCopied": "Address tucked away ✧"
   },
   "compose": {
     "placeholder": "Write something nice ✿",
@@ -116,7 +121,26 @@
     "backgroundPushDesc": "Nyu stays awake and watches your mailbox. Android shows a quiet notification for that, which you can hide ♡",
     "senderAdded": "{{email}} is ready to go (｀・ω・´)ゞ",
     "signatureSaved": "Signature looks great ✧",
-    "signaturePlaceholder": "Kind regards ✿"
+    "signaturePlaceholder": "Kind regards ✿",
+    "linkConfirm": "Ask before opening links",
+    "linkConfirmDesc": "I'll show you where a link from a mail goes first. Disguised links always get a question.",
+    "linkDomains": "Open without asking",
+    "linkDomainsDesc": "I let links to these sites straight through, unless they're in disguise.",
+    "linkDomainsEmpty": "None yet. You add sites right when you open a link ✧",
+    "linkDomainsInactive": "Right now I let every link straight through.",
+    "forgetLinkDomain": "Remove {{domain}}",
+    "syncAccount": "Sync settings",
+    "syncAccountDesc": "Look, language, pictures, links and signatures travel with your UwUMail account, into the app on every device and into the webmail ✧ Layout, density, swipes, app lock and updates stay here with me.",
+    "syncAuto": "Automatic",
+    "syncOff": "Off",
+    "syncNone": "Hmm, none of your accounts lives on a UwUMail server that remembers settings (・・ )? So everything stays here.",
+    "syncSyncing": "Syncing with {{email}} …",
+    "syncDone": "All in step with {{email}} ✧ {{when}}",
+    "syncOffline": "{{email}} isn’t answering right now. I’ll hold on to your changes and send them once it’s back (｡•̀ᴗ-)✧",
+    "syncFailed": "Syncing with {{email}} didn’t work (╥﹏╥) {{detail}}",
+    "syncRefused": "The server doesn’t take {{count}} settings. They stay on this device.",
+    "signatureLocalOnly": "Only here",
+    "signatureLocalOnlyDesc": "This one stays with me on this device: too big to travel (256 KB at most) or with pictures that only work here."
   },
   "attachment": {
     "loading": "Unpacking the attachment…",
@@ -127,7 +151,30 @@
     "readyTitle": "Nyu brought something new ✧"
   },
   "link": {
-    "warningTitle": "Hmm, this link might be fibbing (・_・;)"
+    "warningTitle": "Hmm, this link might be fibbing (・_・;)",
+    "confirmTitle": "Want to open this link? (・ω・)",
+    "confirmBody": "Let's peek at where it goes together ✧",
+    "mailTitle": "Write a mail? ✉",
+    "mailBody": "The link starts a new mail to these folks.",
+    "open": "Open",
+    "compose": "Write mail",
+    "copy": "Copy address",
+    "copyShort": "Copy",
+    "copied": "Link tucked away ✧",
+    "remember": "Stop asking for {{domain}}",
+    "remembered": "I'll let links to {{domain}} straight through now ✧ You can change this in Settings under Reading.",
+    "insecure": "Not encrypted (http): others could read what you type there (・_・;)",
+    "unicodeHost": "Looks like",
+    "lookalike": "Some letters here are only pretending to be others. That's how fake sites dress up (・_・;)",
+    "userinfo": "There's a user name in front of the address that can dress up as another site. It really goes to {{domain}}.",
+    "redirectsTo": "Hops on to",
+    "tracking": "Click tracking via {{host}}",
+    "service": "Redirect service {{host}}",
+    "hiddenTarget": "The link doesn't tell where it hops after that.",
+    "otherTarget": "Different target than shown",
+    "statusRedirect": "hops on to {{target}}",
+    "unsupported": "I'd rather not open links like that (・_・;)",
+    "sheetTitle": "Link"
   },
   "mobile": {
     "pull": {
