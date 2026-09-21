@@ -44,8 +44,10 @@ import {
   type SwipeAction,
 } from "@/state/settings";
 import { toast } from "@/state/toasts";
+import { startAccountSync, useAccountSync } from "@/state/accountSync";
 import { BlockedSenders } from "./BlockedSenders";
 import { LinkSettings } from "./LinkSettings";
+import { SettingsSyncRow } from "./SettingsSync";
 import { Row } from "./Row";
 import { Writing } from "./Writing";
 import { useUi, type SettingsSection } from "@/state/ui";
@@ -406,6 +408,7 @@ function Accounts() {
 
   return (
     <div className="flex flex-col gap-3 py-4">
+      <SettingsSyncRow />
       <WorkspaceSettings />
       <ul className="flex flex-col gap-2">
         {accounts.map((account) => {
@@ -441,6 +444,8 @@ function Accounts() {
                   await backend().removeAccount(account.id);
                   setAccountWorkspace(account.id, "private");
                   await client.invalidateQueries();
+                  // Another account may carry the settings now.
+                  if (useAccountSync.getState().accountId === account.id) void startAccountSync();
                 }}
               >
                 {t("settings.removeAccount")}

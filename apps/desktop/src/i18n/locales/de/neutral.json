@@ -429,7 +429,19 @@
     "linkDomainsDesc": "Links zu diesen Seiten öffnen direkt, außer sie sind getarnt.",
     "linkDomainsEmpty": "Noch keine. Du fügst Seiten direkt beim Öffnen eines Links hinzu.",
     "linkDomainsInactive": "Gerade öffnen alle Links ohne Nachfrage.",
-    "forgetLinkDomain": "{{domain}} entfernen"
+    "forgetLinkDomain": "{{domain}} entfernen",
+    "syncAccount": "Einstellungen synchronisieren",
+    "syncAccountDesc": "Aussehen, Sprache, Bilder, Links und Signaturen folgen deinem UwUMail-Konto: in der App auf jedem Gerät und im Webmail. Layout, Dichte, Wischgesten, App-Sperre und Updates bleiben auf diesem Gerät.",
+    "syncAuto": "Automatisch",
+    "syncOff": "Aus",
+    "syncNone": "Keins deiner Konten liegt auf einem UwUMail-Server, der Einstellungen aufbewahrt. Sie bleiben auf diesem Gerät.",
+    "syncSyncing": "Synchronisiere mit {{email}} …",
+    "syncDone": "Synchronisiert mit {{email}} · {{when}}",
+    "syncOffline": "{{email}} ist gerade nicht erreichbar. Änderungen warten und gehen raus, sobald es wieder geht.",
+    "syncFailed": "Synchronisieren mit {{email}} hat nicht geklappt: {{detail}}",
+    "syncRefused": "{{count}} Einstellungen nimmt der Server nicht an. Sie bleiben auf diesem Gerät.",
+    "signatureLocalOnly": "Nur hier",
+    "signatureLocalOnlyDesc": "Diese Signatur bleibt auf diesem Gerät: Sie ist zu groß zum Synchronisieren (höchstens 256 KB) oder hat Bilder, die nur hier gehen."
   },
   "theme": {
     "system": "System",

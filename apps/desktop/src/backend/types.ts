@@ -318,4 +318,6 @@ export type BackendEvent =
   | { type: "send:done"; sendId: string; accountId: string }
   | { type: "send:failed"; sendId: string; accountId: string; reason: string; message: OutgoingMessage }
   | { type: "compose:mailto" }
+  /** The shared settings of a UwUMail account may have changed; `state` when the server said which. */
+  | { type: "settings:changed"; accountId: string; state?: string }
   | ({ type: "update:ready" } & UpdateInfo);

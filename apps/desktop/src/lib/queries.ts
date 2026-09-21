@@ -12,6 +12,7 @@ import type {
 } from "@/backend/types";
 import { translate, useT } from "@/i18n";
 import { inWorkspace } from "@/lib/workspaces";
+import { useAccountSync } from "@/state/accountSync";
 import { confirmDeleteForever } from "@/state/deleteForever";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
@@ -294,6 +295,17 @@ export function useBackendEvents() {
   useEffect(() => {
     void backend().setUpdateChannel(updateChannel);
   }, [updateChannel]);
+
+  // Signatures that came from another device through the settings sync.
+  useEffect(
+    () =>
+      useAccountSync.subscribe((state, previous) => {
+        if (state.signaturesTaken !== previous.signaturesTaken) {
+          void client.invalidateQueries({ queryKey: queryKeys.signatures });
+        }
+      }),
+    [client],
+  );
 
   useEffect(() => {
     void backend()

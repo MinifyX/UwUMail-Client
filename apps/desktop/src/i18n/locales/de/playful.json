@@ -128,7 +128,19 @@
     "linkDomainsDesc": "Links zu diesen Seiten lass ich direkt durch, außer sie sind verkleidet.",
     "linkDomainsEmpty": "Noch keine. Du fügst Seiten direkt beim Öffnen eines Links hinzu ✧",
     "linkDomainsInactive": "Gerade lass ich alle Links ohne Nachfrage durch.",
-    "forgetLinkDomain": "{{domain}} entfernen"
+    "forgetLinkDomain": "{{domain}} entfernen",
+    "syncAccount": "Einstellungen synchronisieren",
+    "syncAccountDesc": "Aussehen, Sprache, Bilder, Links und Signaturen reisen mit deinem UwUMail-Konto mit, in die App auf jedem Gerät und ins Webmail ✧ Layout, Dichte, Wischgesten, App-Sperre und Updates bleiben hier bei mir.",
+    "syncAuto": "Automatisch",
+    "syncOff": "Aus",
+    "syncNone": "Hmm, keins deiner Konten wohnt auf einem UwUMail-Server, der sich Einstellungen merkt (・・ )? Dann bleibt alles hier.",
+    "syncSyncing": "Synchronisiere mit {{email}} …",
+    "syncDone": "Alles gleich mit {{email}} ✧ {{when}}",
+    "syncOffline": "{{email}} antwortet gerade nicht. Ich halte deine Änderungen fest und schicke sie, sobald es wieder geht (｡•̀ᴗ-)✧",
+    "syncFailed": "Mit {{email}} hat das Synchronisieren nicht geklappt (╥﹏╥) {{detail}}",
+    "syncRefused": "{{count}} Einstellungen nimmt der Server nicht an. Sie bleiben auf diesem Gerät.",
+    "signatureLocalOnly": "Nur hier",
+    "signatureLocalOnlyDesc": "Die hier bleibt bei mir auf diesem Gerät: zu groß zum Mitreisen (höchstens 256 KB) oder mit Bildern, die nur hier gehen."
   },
   "attachment": {
     "loading": "Ich pack den Anhang aus…",

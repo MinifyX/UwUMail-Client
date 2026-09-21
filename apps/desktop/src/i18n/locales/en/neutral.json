@@ -429,7 +429,19 @@
     "linkDomainsDesc": "Links to these sites open right away, unless they are disguised.",
     "linkDomainsEmpty": "None yet. You add sites right when you open a link.",
     "linkDomainsInactive": "Right now every link opens without asking.",
-    "forgetLinkDomain": "Remove {{domain}}"
+    "forgetLinkDomain": "Remove {{domain}}",
+    "syncAccount": "Sync settings",
+    "syncAccountDesc": "Look, language, pictures, links and signatures follow your UwUMail account: in the app on every device and in the webmail. Layout, density, swipes, app lock and updates stay on this device.",
+    "syncAuto": "Automatic",
+    "syncOff": "Off",
+    "syncNone": "None of your accounts is on a UwUMail server that keeps settings. They stay on this device.",
+    "syncSyncing": "Syncing with {{email}} …",
+    "syncDone": "Synced with {{email}} · {{when}}",
+    "syncOffline": "{{email}} can’t be reached right now. Changes wait and go out once it’s back.",
+    "syncFailed": "Syncing with {{email}} didn’t work: {{detail}}",
+    "syncRefused": "The server doesn’t take {{count}} settings. They stay on this device.",
+    "signatureLocalOnly": "Only here",
+    "signatureLocalOnlyDesc": "This signature stays on this device: it’s too big to sync (256 KB at most) or has pictures that only work here."
   },
   "theme": {
     "system": "System",

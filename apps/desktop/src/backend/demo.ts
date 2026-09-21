@@ -1,5 +1,6 @@
 import { BackendError, type Backend } from "./backend";
 import { isDangerous } from "@/lib/attachments";
+import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, welcomeMessage } from "./demo-data";
 import { demoSenderPicture } from "./demo-pictures";
@@ -203,6 +204,43 @@ export class DemoBackend implements Backend {
   async deleteSignature(signatureId: string) {
     await wait(80);
     this.signatures = this.signatures.filter((s) => s.id !== signatureId);
+  }
+
+  async putSyncedSignature(signature: Signature) {
+    await wait(40);
+    const index = this.signatures.findIndex((s) => s.id === signature.id);
+    if (index >= 0) this.signatures[index] = structuredClone(signature);
+    else this.signatures.push(structuredClone(signature));
+    return structuredClone(signature);
+  }
+
+  /** The JMAP demo mailbox plays a UwUMail server with the settings extension, in memory. */
+  private userSettings = new Map<string, { state: number; values: Record<string, unknown> }>();
+
+  async settingsSyncAccounts() {
+    await wait(120);
+    return this.accounts.filter((account) => account.protocol === "jmap").map((account) => account.id);
+  }
+
+  async loadUserSettings(accountId: string) {
+    await wait(60);
+    const settings = this.userSettings.get(accountId) ?? { state: 0, values: {} };
+    return { state: String(settings.state), values: structuredClone(settings.values) };
+  }
+
+  async saveUserSettings(accountId: string, patch: Record<string, unknown>, ifInState?: string): Promise<SaveOutcome> {
+    await wait(80);
+    const current = this.userSettings.get(accountId) ?? { state: 0, values: {} };
+    if (ifInState !== undefined && ifInState !== String(current.state)) return { ok: false, type: "stateMismatch" };
+    const values = { ...current.values };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) delete values[key];
+      else values[key] = structuredClone(value);
+    }
+    const state = current.state + 1;
+    this.userSettings.set(accountId, { state, values });
+    this.emit({ type: "settings:changed", accountId, state: String(state) });
+    return { ok: true, state: String(state) };
   }
 
   async microsoftAdminConsentUrl(email: string): Promise<string> {
