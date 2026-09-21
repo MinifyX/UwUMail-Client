@@ -650,6 +650,8 @@ export class DemoBackend implements Backend {
 
   async saveAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
+    // Stands in for the engine's native warning dialog, as when opening.
+    if (file.dangerous && !window.confirm(`"${file.filename}" can run programs. Save anyway?`)) return false;
     const link = document.createElement("a");
     link.href = file.url;
     link.download = file.filename;
