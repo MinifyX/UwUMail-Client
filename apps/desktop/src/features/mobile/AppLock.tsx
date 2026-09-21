@@ -1,10 +1,10 @@
 import { Fingerprint } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { nativeMobile } from "@/backend/mobile";
 import { NyuScene } from "@/components/nyu/scenes";
 import { Button } from "@/components/ui/Button";
 import { useT } from "@/i18n";
-import { confirmIdentity, useAppLock } from "@/state/lock";
+import { confirmIdentity, noteVisibility, useAppLock } from "@/state/lock";
 import { useSettings } from "@/state/settings";
 
 /**
@@ -17,7 +17,6 @@ export function AppLock() {
   const after = useSettings((s) => s.appLockAfter);
   const locked = useAppLock((s) => s.locked) && enabled;
   const [asking, setAsking] = useState(false);
-  const hiddenAt = useRef<number | null>(null);
 
   const unlock = useCallback(async () => {
     setAsking(true);
@@ -29,15 +28,7 @@ export function AppLock() {
   useEffect(() => {
     if (!enabled) return;
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        // The phone's unlock screen hides UwUMail for a moment; that isn't leaving.
-        if (!useAppLock.getState().prompting) hiddenAt.current = Date.now();
-        return;
-      }
-      if (hiddenAt.current !== null && Date.now() - hiddenAt.current >= after * 60_000) {
-        useAppLock.getState().setLocked(true);
-      }
-      hiddenAt.current = null;
+      if (noteVisibility(document.visibilityState === "visible", after)) useAppLock.getState().setLocked(true);
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
