@@ -31,6 +31,20 @@ describe("links", () => {
     });
   });
 
+  it("doesn't let a shared or public name in the text vouch for pages beneath it", () => {
+    expect(misleadingLink("https://evil.github.io/login", "github.io")).toEqual({
+      shown: "github.io",
+      actual: "evil.github.io",
+    });
+    expect(misleadingLink("https://bank.co.uk.evil.co.uk/", "co.uk")?.actual).toBe("bank.co.uk.evil.co.uk");
+    expect(misleadingLink("https://phish.s3.amazonaws.com/", "s3.amazonaws.com")?.actual).toBe(
+      "phish.s3.amazonaws.com",
+    );
+    // A site's own name still covers its subdomains, and a page on a platform covers itself.
+    expect(misleadingLink("https://login.shop.example/", "shop.example")).toBeNull();
+    expect(misleadingLink("https://docs.mini.github.io/", "mini.github.io")).toBeNull();
+  });
+
   it("sees through invisible characters in the link text (W-8)", () => {
     expect(misleadingLink("https://evil.example/", "paypal​.com")).toEqual({
       shown: "paypal.com",

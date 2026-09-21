@@ -71,8 +71,16 @@ function mailtoHosts(href: string): string[] {
   return hosts;
 }
 
+/**
+ * A host whose subdomains belong to its owner. "github.io", "co.uk" or "amazonaws.com" in a link
+ * text say nothing about who runs a page beneath them.
+ */
+function ownsSubdomains(host: string) {
+  return !isSharedHost(host) && !isSharedHost(registrableDomain(host));
+}
+
 function sameSite(a: string, b: string) {
-  return a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`);
+  return a === b || (a.endsWith(`.${b}`) && ownsSubdomains(b)) || (b.endsWith(`.${a}`) && ownsSubdomains(a));
 }
 
 export interface Misleading {
