@@ -1,0 +1,151 @@
+name: Desktop setups
+
+# Builds UwUMail's own setup for macOS (Apple chip and Intel, separately) and
+# Linux (x86_64 AppImage), then runs each through scripts/desktop-smoke.sh on a
+# real runner: install into a throwaway home folder, start UwUMail, update over
+# the running app, refuse an older version, uninstall.
+#
+# The release workflow calls this with `sign: true` for a tag; only then does
+# the update-signing key reach the build (and there only the signing step).
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "brand/**", "README.md", "CONTRIBUTING.md", "release-notes/**"]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      sign:
+        description: Sign the setups for the updater
+        type: boolean
+        default: false
+    secrets:
+      TAURI_SIGNING_PRIVATE_KEY:
+        required: false
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        required: false
+      UWUMAIL_MICROSOFT_CLIENT_ID:
+        required: false
+      UWUMAIL_GOOGLE_CLIENT_ID:
+        required: false
+      UWUMAIL_GOOGLE_CLIENT_SECRET:
+        required: false
+
+concurrency:
+  group: desktop-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_call' && github.ref_type != 'tag' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple chip
+            id: macos-apple-silicon
+            os: macos-15
+            target: aarch64-apple-darwin
+          - name: macOS Intel
+            id: macos-intel
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+          - name: Linux
+            id: linux
+            # The oldest supported Ubuntu, so the AppImage runs on newer systems too.
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: setup-${{ matrix.target }}
+      - run: pnpm install --frozen-lockfile
+      - id: version
+        run: echo "version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the setup
+        run: node scripts/build-setup.mjs ${{ runner.os == 'macOS' && format('--target {0}', matrix.target) || '' }}
+        env:
+          # Tauri's AppImage tools are AppImages themselves; they unpack instead of needing FUSE.
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.sign && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.sign && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
+      - name: What was built
+        run: ls -la target/setup
+
+      - name: Smoke test
+        if: runner.os == 'macOS'
+        run: bash scripts/desktop-smoke.sh target/setup "${{ steps.version.outputs.version }}" smoke
+
+      # The update program has to stay executable, which a plain artifact zip forgets.
+      - name: Pack for the next jobs
+        run: |
+          cd target/setup
+          tar -cf "$RUNNER_TEMP/desktop-${{ matrix.id }}.tar" UwUMail-*
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-${{ matrix.id }}
+          retention-days: 14
+          if-no-files-found: error
+          path: ${{ runner.temp }}/desktop-${{ matrix.id }}.tar
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && runner.os == 'macOS'
+        with:
+          name: desktop-smoke-${{ matrix.id }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: smoke/
+
+  linux-smoke:
+    name: Smoke test (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: A desktop's basics
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb dbus-x11 desktop-file-utils xdg-utils
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-linux
+          path: ${{ runner.temp }}
+      - run: mkdir setup && tar -xf "$RUNNER_TEMP/desktop-linux.tar" -C setup
+      - run: bash scripts/desktop-smoke.sh setup "${{ needs.build.outputs.version }}" smoke
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: desktop-smoke-${{ matrix.os }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: smoke/
