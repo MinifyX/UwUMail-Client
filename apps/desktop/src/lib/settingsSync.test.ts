@@ -73,6 +73,16 @@ describe("keys the server takes", () => {
   it("drops what it doesn't know from the server's copy", () => {
     expect(syncableValues({ theme: "dark", future: 1, "trustedSenders:@x": true })).toEqual({ theme: "dark" });
   });
+
+  it("takes no built-in object names from the server as choices", () => {
+    // What a server sends is parsed JSON: "__proto__" arrives as an ordinary own key.
+    const server = JSON.parse('{"__proto__":1,"toString":"x","constructor":{},"valueOf":true,"theme":"dark"}');
+    expect(() => syncableValues(server)).not.toThrow();
+    expect(syncableValues(server)).toEqual({ theme: "dark" });
+    const changed = applyToSettings(base, server);
+    expect(changed).toEqual({ theme: "dark" });
+    expect(Object.hasOwn(changed, "toString")).toBe(false);
+  });
 });
 
 describe("settings as keys", () => {
