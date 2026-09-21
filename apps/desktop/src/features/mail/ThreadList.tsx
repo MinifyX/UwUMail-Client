@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
+  ShieldCheck,
   Star,
   Trash,
   Users,
@@ -226,10 +227,10 @@ export function ThreadList({ variant, className }: ThreadListProps) {
               onClick={() => runOnChecked(selection.move)}
             />
             <IconButton
-              icon={ShieldAlert}
+              icon={info.isJunk ? ShieldCheck : ShieldAlert}
               size="sm"
-              label={t("reader.spam")}
-              onClick={() => runOnChecked((ids) => selection.spam(ids, true))}
+              label={info.isJunk ? t("reader.notSpam") : t("reader.spam")}
+              onClick={() => runOnChecked((ids) => selection.spam(ids, !info.isJunk))}
             />
           </div>
         ) : (
@@ -290,6 +291,7 @@ export function ThreadList({ variant, className }: ThreadListProps) {
                 checked={checked.includes(thread.id)}
                 dragIds={checked.includes(thread.id) ? checked : [thread.id]}
                 inTrash={info.isTrash}
+                inJunk={info.isJunk}
                 onSelect={(event) => {
                   const anchor = useUi.getState().selectionAnchor ?? selectedThreadId;
                   if (event.ctrlKey || event.metaKey) {

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import type { LucideIcon } from "lucide-react";
-import { Archive, Check, Mail, MailOpen, Paperclip, Star, Trash } from "lucide-react";
+import { Archive, Check, Mail, MailOpen, Paperclip, ShieldAlert, ShieldCheck, Star, Trash } from "lucide-react";
 import type { Account, ThreadSummary } from "@/backend/types";
 import { AccountDot, Avatar } from "@/components/ui/Avatar";
 import { useT } from "@/i18n";
@@ -24,6 +24,8 @@ interface ThreadRowProps {
   dragIds?: string[];
   /** The row sits in the trash, where deleting means for good. */
   inTrash?: boolean;
+  /** The row sits in junk, where "spam" means "not spam". */
+  inJunk?: boolean;
 }
 
 function QuickAction({
@@ -42,7 +44,7 @@ function QuickAction({
   return (
     <button
       type="button"
-      // Mouse shortcuts only: the keyboard already has e, #, u and s, and a Tab stop per button would drag.
+      // Mouse shortcuts only: the keyboard already has e, !, #, u and s, and a Tab stop per button would drag.
       tabIndex={-1}
       title={label}
       aria-label={label}
@@ -70,6 +72,7 @@ export function ThreadRow({
   checked = false,
   dragIds,
   inTrash = false,
+  inJunk = false,
 }: ThreadRowProps) {
   const { t, i18n } = useT();
   const compact = density === "compact";
@@ -206,6 +209,12 @@ export function ThreadRow({
           label={t("reader.archive")}
           compact={compact}
           onClick={() => void actions.archive(thread)}
+        />
+        <QuickAction
+          icon={inJunk ? ShieldCheck : ShieldAlert}
+          label={inJunk ? t("reader.notSpam") : t("reader.spam")}
+          compact={compact}
+          onClick={() => void actions.spam(thread, !inJunk)}
         />
         <QuickAction
           icon={Trash}
