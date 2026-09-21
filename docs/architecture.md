@@ -322,7 +322,7 @@ without FUSE and starts quicker. The download is the setup as an AppImage.
 | --- | --- |
 | App | `~/.local/share/uwumail/app` (the folder is private, `0700`) |
 | Menu entry and icon | `~/.local/share/applications/uwumail.desktop`, `~/.local/share/icons/hicolor/*/apps/uwumail.png` |
-| Command | `~/.local/bin/uwumail` → `AppRun` (only if nothing else has that name) |
+| Command | `~/.local/bin/uwumail`, a two-line launcher for `AppRun` (only if nothing else has that name; a link would make `AppRun` look for its libraries in `~/.local/bin`) |
 | Start when signing in | `~/.config/autostart/uwumail.desktop` → `… --autostart` |
 | `mailto:` | `MimeType=x-scheme-handler/mailto` in the menu entry, the default in `~/.config/mimeapps.list`, plus `xdg-mime default` |
 | Remembered options | `~/.local/share/uwumail/setup.json` |

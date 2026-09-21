@@ -147,6 +147,20 @@ fn bundled_icons(app: &Path) -> Vec<(String, PathBuf)> {
     icons
 }
 
+/// First line after the shebang of `~/.local/bin/uwumail`, to recognize our own.
+const LAUNCHER_MARK: &str = "# UwUMail launcher, written by UwUMail Setup";
+
+/// A shell script that starts `program`, quoted for sh (single quotes, `'` as `'\''`).
+fn launcher_script(program: &Path) -> String {
+    let quoted = program.to_string_lossy().replace('\'', r"'\''");
+    format!("#!/bin/sh\n{LAUNCHER_MARK}\nexec '{quoted}' \"$@\"\n")
+}
+
+fn is_our_launcher(path: &Path) -> bool {
+    path.symlink_metadata().is_ok_and(|meta| meta.is_file())
+        && std::fs::read_to_string(path).is_ok_and(|text| text.lines().nth(1) == Some(LAUNCHER_MARK))
+}
+
 /// The menu entry, its icon and `~/.local/bin/uwumail`.
 pub fn add_shortcuts(paths: &Paths, sandbox: bool) -> Result<(), String> {
     for (size, png) in bundled_icons(&paths.app) {
@@ -157,18 +171,11 @@ pub fn add_shortcuts(paths: &Paths, sandbox: bool) -> Result<(), String> {
         std::fs::copy(&png, &target).map_err(|e| format!("Couldn't copy the icon: {e}"))?;
     }
 
-    // A link only replaces an earlier link of ours, never someone else's program of that name.
-    let link = &paths.bin_link;
-    let ours = std::fs::read_link(link).is_ok_and(|target| target.starts_with(&paths.base));
-    if ours {
-        let _ = std::fs::remove_file(link);
-    }
-    if link.symlink_metadata().is_err() {
-        if let Some(parent) = link.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("Couldn't create {}: {e}", parent.display()))?;
-        }
-        std::os::unix::fs::symlink(paths.app_run(), link)
-            .map_err(|e| format!("Couldn't create {}: {e}", link.display()))?;
+    // A small launcher, not a link: AppRun finds its libraries next to the path it was started
+    // by. It only replaces an earlier launcher of ours, never someone else's program of that name.
+    let launcher = &paths.bin_link;
+    if launcher.symlink_metadata().is_err() || is_our_launcher(launcher) {
+        system::write_file(launcher, &launcher_script(&paths.app_run()), 0o755)?;
     }
 
     if !sandbox {
@@ -186,7 +193,7 @@ pub fn remove_shortcuts(paths: &Paths) {
     for size in std::fs::read_dir(&paths.icons).into_iter().flatten().flatten() {
         system::remove_file(&size.path().join("apps").join(format!("{ICON_NAME}.png")));
     }
-    if std::fs::read_link(&paths.bin_link).is_ok_and(|target| target.starts_with(&paths.base)) {
+    if is_our_launcher(&paths.bin_link) {
         let _ = std::fs::remove_file(&paths.bin_link);
     }
 }
@@ -295,7 +302,7 @@ pub fn check_registered(paths: &Paths, registered: bool) {
     assert_eq!(menu.contains("MimeType=x-scheme-handler/mailto;"), registered);
     assert_eq!(paths.autostart_entry.exists(), registered);
     assert_eq!(paths.icons.join("128x128/apps/uwumail.png").exists(), registered);
-    assert_eq!(std::fs::read_link(&paths.bin_link).is_ok(), registered);
+    assert_eq!(is_our_launcher(&paths.bin_link), registered);
     let mimeapps = std::fs::read_to_string(&paths.mimeapps).unwrap_or_default();
     assert_eq!(mimeapps.contains("x-scheme-handler/mailto=uwumail.desktop;"), registered);
 }
@@ -313,6 +320,22 @@ mod tests {
         assert_eq!(exec_quote(Path::new("/home/a b/$x`y\"z%/AppRun")).unwrap(), r#""/home/a b/\\$x\\`y\\"z%%/AppRun""#);
         assert_eq!(exec_quote(Path::new(r"/home/back\slash")).unwrap(), r#""/home/back\\\\slash""#);
         assert!(exec_quote(Path::new("/home/new\nline")).is_err());
+    }
+
+    #[test]
+    fn writes_a_launcher_and_leaves_other_programs_alone() {
+        let script = launcher_script(Path::new("/home/it's me/.local/share/uwumail/app/AppRun"));
+        assert_eq!(
+            script,
+            format!("#!/bin/sh\n{LAUNCHER_MARK}\nexec '/home/it'\\''s me/.local/share/uwumail/app/AppRun' \"$@\"\n")
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let ours = dir.path().join("ours");
+        std::fs::write(&ours, &script).unwrap();
+        assert!(is_our_launcher(&ours));
+        let theirs = dir.path().join("theirs");
+        std::fs::write(&theirs, "#!/bin/sh\nexec something-else\n").unwrap();
+        assert!(!is_our_launcher(&theirs));
     }
 
     #[test]
