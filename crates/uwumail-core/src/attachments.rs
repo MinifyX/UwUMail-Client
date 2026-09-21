@@ -99,6 +99,14 @@ const DANGEROUS: &[&str] = &[
     "apkm",
     "xapk",
     "aab",
+    // svg runs script and foreignObject when opened from disk; rdp, wsb, pub and desktop start a
+    // connection, run a command or launch a program.
+    "svg",
+    "svgz",
+    "rdp",
+    "wsb",
+    "pub",
+    "desktop",
 ];
 
 /// Android app packages. On Android UwUMail never hands these to the installer.
@@ -297,6 +305,17 @@ mod tests {
         assert_eq!(clean_display_name("bild.png\n\nGeprüft ✓"), "bild.png  Geprüft ✓");
         assert!(is_dangerous("Update.APK") && is_app_package("Update.APK"));
         assert!(is_app_package("game.xapk. ") && !is_app_package("apk.pdf"));
+    }
+
+    #[test]
+    fn flags_a_name_whose_only_dot_is_first_and_more_lure_formats() {
+        assert!(is_dangerous(".exe"));
+        assert!(is_dangerous("\u{202E}.exe"));
+        assert!(is_dangerous("\u{200E}.html"));
+        assert!(!is_dangerous(".pdf"));
+        for name in ["login.svg", "logo.SVGZ", "remote.rdp", "sandbox.wsb", "flyer.pub", "start.desktop"] {
+            assert!(is_dangerous(name), "{name}");
+        }
     }
 
     #[test]
