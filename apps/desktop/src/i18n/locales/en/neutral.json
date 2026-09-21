@@ -457,7 +457,10 @@
     "goDrafts": "Go to drafts",
     "goFlagged": "Go to flagged",
     "send": "Send (while writing)",
-    "discardDraft": "Discard draft (while writing)"
+    "discardDraft": "Discard draft (while writing)",
+    "extendUp": "Extend selection up",
+    "extendDown": "Extend selection down",
+    "selectAll": "Select all loaded mail"
   },
   "palette": {
     "placeholder": "Type a command",

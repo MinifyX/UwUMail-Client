@@ -457,7 +457,10 @@
     "goDrafts": "Zu Entwürfe",
     "goFlagged": "Zu Markiert",
     "send": "Senden (beim Schreiben)",
-    "discardDraft": "Entwurf verwerfen (beim Schreiben)"
+    "discardDraft": "Entwurf verwerfen (beim Schreiben)",
+    "extendUp": "Auswahl nach oben erweitern",
+    "extendDown": "Auswahl nach unten erweitern",
+    "selectAll": "Alle geladenen Mails auswählen"
   },
   "palette": {
     "placeholder": "Befehl eingeben",

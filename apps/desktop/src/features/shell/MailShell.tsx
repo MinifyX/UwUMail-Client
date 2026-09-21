@@ -15,6 +15,7 @@ import { AccountSetup } from "../accounts/AccountSetup";
 import { Composer } from "../compose/Composer";
 import { loadLocalDraft } from "../compose/localDraft";
 import { MailboxNav } from "../mail/MailboxNav";
+import { scrollReader, wantsTextSelectAll } from "../mail/readerKeys";
 import { MoveDialog } from "../mail/MoveDialog";
 import { MobileShell } from "../mobile/MobileShell";
 import { ThreadList } from "../mail/ThreadList";
@@ -24,6 +25,9 @@ import { useWorkspaceGuard } from "../workspaces/workspaces";
 import { buildCommands } from "./commands";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
+
+/** Keys that scroll the open mail from the list as well. */
+const SCROLL_KEYS = [" ", "PageDown", "PageUp", "Home", "End"];
 
 function AddAccountDialog() {
   const { t } = useT();
@@ -118,9 +122,32 @@ export function MailShell() {
     for (const command of commands) {
       for (const key of command.keys ?? []) map[key] = () => void command.run();
     }
+    // The phone keeps its own gestures and selection; these belong to the list and reader side by side.
+    if (phone) {
+      delete map["mod+a"];
+    } else {
+      // Always the mail above or below, also while reading; with Shift they tick a range instead.
+      map.ArrowDown = (event) => {
+        const ui = useUi.getState();
+        if (event.shiftKey) ui.extendSelection(1);
+        else ui.selectRelative(1);
+      };
+      map.ArrowUp = (event) => {
+        const ui = useUi.getState();
+        if (event.shiftKey) ui.extendSelection(-1);
+        else ui.selectRelative(-1);
+      };
+      // Ticks what the list has loaded, unless the user means the text in a field or the mail.
+      map["mod+a"] = (event) => {
+        const ui = useUi.getState();
+        if (wantsTextSelectAll(event) || ui.visibleThreadIds.length === 0) return false;
+        ui.checkAllVisible();
+      };
+      for (const key of SCROLL_KEYS) map[key] = scrollReader;
+    }
     return map;
-  }, [commands]);
-  useHotkeys(hotkeys, { repeat: ["j", "k"] });
+  }, [commands, phone]);
+  useHotkeys(hotkeys, { repeat: ["j", "k", "ArrowDown", "ArrowUp", ...SCROLL_KEYS] });
 
   return (
     <div className="flex h-full flex-col">

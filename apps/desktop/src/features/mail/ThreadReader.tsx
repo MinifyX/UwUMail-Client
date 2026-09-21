@@ -116,7 +116,11 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const trashed = inTrash(all, folders);
 
   return (
-    <section className={clsx("flex h-full min-w-0 flex-col bg-canvas", className)} aria-label={data.thread.subject}>
+    <section
+      data-reader
+      className={clsx("flex h-full min-w-0 flex-col bg-canvas", className)}
+      aria-label={data.thread.subject}
+    >
       <header className="flex items-center gap-1 border-b border-hairline bg-surface px-3 py-2">
         {variant === "simple" && (
           <IconButton icon={ArrowLeft} label={t("reader.back")} onClick={() => selectThread(null)} className="mr-1" />
@@ -170,7 +174,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
         />
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div data-reader-scroll className="min-h-0 flex-1 overflow-y-auto">
         <div className={clsx("mx-auto flex max-w-[820px] flex-col gap-3", variant === "pro" ? "p-5" : "p-4")}>
           <h2 className="selectable px-1 pt-1 pb-2 text-[22px] leading-tight font-extrabold tracking-[-0.01em]">
             {data.thread.subject || t("reader.noSubject")}

@@ -6,6 +6,7 @@ import { replaceContentIds } from "@/lib/inlineImages";
 import { requestOpenLink } from "@/state/links";
 import type { MailAppearance } from "@/state/settings";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
+import { forwardFrameKeys } from "./readerKeys";
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)"'\]]/g;
 
@@ -258,6 +259,8 @@ export function MessageBody({ message, allowRemote, appearance, onAutoDecision, 
     observer.observe(root);
     // Images load after the document; their size changes the height too.
     doc.addEventListener("load", updateHeight, true);
+    // ↑/↓ and the other shortcuts keep working while the focus is inside the mail.
+    forwardFrameKeys(frame, doc);
     doc.addEventListener("click", (event) => {
       // `area` as well as `a`: an image map is a link with no text, and today it only ever gets
       // here without its href because a table of attributes in the sanitizer happens to drop it.

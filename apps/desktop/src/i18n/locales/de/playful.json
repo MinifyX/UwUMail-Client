@@ -164,5 +164,10 @@
   "workspace": {
     "setupTitle": "Welche Postfächer ziehen zu {{name}}? (｀・ω・´)ゞ",
     "enabled": "{{private}} und {{business}} haben jetzt eigene Zimmer ✧"
+  },
+  "shortcuts": {
+    "extendUp": "Auswahl nach oben ziehen",
+    "extendDown": "Auswahl nach unten ziehen",
+    "selectAll": "Alle geladenen Mails schnappen"
   }
 }
