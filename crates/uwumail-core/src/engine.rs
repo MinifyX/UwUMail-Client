@@ -1992,6 +1992,12 @@ fn unsubscribe_mail(mailto: &str) -> Option<UnsubscribeMail> {
     {
         return None;
     }
+    // A domain name with a dot, like the dialog wants before it names the address: never an IP
+    // address or a bare host name, which the dialog wouldn't show.
+    let domain = address.rsplit_once('@').map(|(_, domain)| domain).unwrap_or_default();
+    if domain.starts_with('[') || domain.split('.').count() < 2 || domain.split('.').any(str::is_empty) {
+        return None;
+    }
     let subject = target
         .query_pairs()
         .find(|(key, _)| key.eq_ignore_ascii_case("subject"))
@@ -2038,6 +2044,11 @@ mod tests {
             // A line break, which would become a header of its own further down the line.
             "mailto:leave@list.example%0D%0Abcc:boss@work.example",
             "mailto:Name%20%3Cleave@list.example%3E",
+            // A domain without a dot or an IP address: the dialog, which names the address first,
+            // wouldn't show it, so nothing may be sent there either.
+            "mailto:leave@intranet",
+            "mailto:leave@[192.0.2.1]",
+            "mailto:leave@list.example.",
             "mailto:not-an-address",
             "mailto:",
             "https://list.example/leave",
