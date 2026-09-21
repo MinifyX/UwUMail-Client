@@ -19,7 +19,7 @@ export type MailAppearance = "auto" | "light" | "dark";
 export const UNDO_SEND_CHOICES = [0, 5, 10, 20, 30] as const;
 export type UndoSendSeconds = (typeof UNDO_SEND_CHOICES)[number];
 /** What swiping a mail in the phone list does. */
-export type SwipeAction = "read" | "archive" | "trash" | "flag" | "none";
+export type SwipeAction = "read" | "archive" | "spam" | "trash" | "flag" | "none";
 /** Minutes in the background before the app lock asks again; 0 locks right away. */
 export type LockAfter = 0 | 1 | 5 | 15;
 /** Android: days of mail kept complete on the phone; 0 keeps everything. */

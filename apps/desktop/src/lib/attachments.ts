@@ -66,6 +66,9 @@ const DANGEROUS = new Set(
     "ps1xml ps2 psc1 psd1 psm1 jar jnlp app dmg pkg command sh run appimage deb rpm docm dotm xlsm xltm xlam xll",
     "pptm potm ppam sldm one iqy slk iso img vhd vhdx html htm xhtml shtml mht mhtml apk apks apkm xapk aab",
     "mobileconfig ipa shortcut wf webloc",
+    // svg renders script and foreignObject when opened from disk; rdp/wsb/pub/desktop start a
+    // connection, run a command or launch a program (webmail security audit W-7).
+    "svg svgz rdp wsb pub desktop",
   ]
     .join(" ")
     .split(" "),
@@ -81,8 +84,10 @@ const IOS_INSTALLABLE = new Set(["mobileconfig", "ipa", "shortcut", "wf"]);
 const BIDI_CONTROLS = /[‎‏‪-‮⁦-⁩]/g;
 
 export function extensionOf(filename: string): string {
+  // A leading dot still names an extension ("‮.exe" cleans to ".exe"), so a name whose only dot is
+  // first must not read as "no extension" and skip the dangerous-file check (webmail security audit W-6).
   const dot = filename.lastIndexOf(".");
-  return dot > 0 ? filename.slice(dot + 1).toLowerCase() : "";
+  return dot < 0 ? "" : filename.slice(dot + 1).toLowerCase();
 }
 
 export function attachmentKind(filename: string, mimeType: string): AttachmentKind {

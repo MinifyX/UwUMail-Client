@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Address, ListFilter, MailboxView, Message, OutgoingAttachment } from "@/backend/types";
+import { extendSelection, stepThrough } from "@/lib/listSelection";
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
 
@@ -65,6 +66,10 @@ interface UiState {
   shortcutsOpen: boolean;
   /** Conversations ticked in the list (Ctrl/Shift+click or x). */
   checkedThreadIds: string[];
+  /** Where a Shift range starts: the conversation last clicked or opened. */
+  selectionAnchor: string | null;
+  /** Where a Shift range ends: the row Shift+↑/↓ last reached. */
+  selectionCursor: string | null;
   moving: MoveRequest | null;
 
   setView: (view: MailboxView) => void;
@@ -84,6 +89,11 @@ interface UiState {
   setPaletteOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
   setCheckedThreadIds: (ids: string[]) => void;
+  setSelectionAnchor: (id: string | null, cursor?: string | null) => void;
+  /** Shift+↑/↓: grows or shrinks the ticked range from the anchor by one row. */
+  extendSelection: (offset: 1 | -1) => void;
+  /** Ticks every conversation the list has loaded so far. */
+  checkAllVisible: () => void;
   openMove: (request: MoveRequest) => void;
   closeMove: () => void;
 }
@@ -103,19 +113,29 @@ export const useUi = create<UiState>()((set, get) => ({
   paletteOpen: false,
   shortcutsOpen: false,
   checkedThreadIds: [],
+  selectionAnchor: null,
+  selectionCursor: null,
   moving: null,
 
-  setView: (view) => set({ view, selectedThreadId: null, folderDrawerOpen: false, checkedThreadIds: [] }),
-  setFilter: (filter) => set({ filter, selectedThreadId: null, checkedThreadIds: [] }),
+  setView: (view) =>
+    set({
+      view,
+      selectedThreadId: null,
+      folderDrawerOpen: false,
+      checkedThreadIds: [],
+      selectionAnchor: null,
+      selectionCursor: null,
+    }),
+  setFilter: (filter) =>
+    set({ filter, selectedThreadId: null, checkedThreadIds: [], selectionAnchor: null, selectionCursor: null }),
   setSearch: (search) => set({ search }),
-  selectThread: (id) => set({ selectedThreadId: id }),
+  selectThread: (id) =>
+    set(id ? { selectedThreadId: id, selectionAnchor: id, selectionCursor: null } : { selectedThreadId: null }),
   setVisibleThreadIds: (ids) => set({ visibleThreadIds: ids }),
   selectRelative: (offset) => {
     const { visibleThreadIds, selectedThreadId } = get();
-    if (visibleThreadIds.length === 0) return;
-    const index = selectedThreadId ? visibleThreadIds.indexOf(selectedThreadId) : -1;
-    const next = Math.min(Math.max(index + offset, 0), visibleThreadIds.length - 1);
-    set({ selectedThreadId: visibleThreadIds[next] ?? null });
+    const next = stepThrough(visibleThreadIds, selectedThreadId, offset);
+    if (next) set({ selectedThreadId: next, selectionAnchor: next, selectionCursor: null });
   },
   setFolderDrawerOpen: (open) => set({ folderDrawerOpen: open }),
   openCompose: (request) => set({ compose: { ...request, key: Date.now() }, composeMinimized: false }),
@@ -127,7 +147,24 @@ export const useUi = create<UiState>()((set, get) => ({
   setAddAccountOpen: (open) => set({ addAccountOpen: open }),
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
-  setCheckedThreadIds: (ids) => set({ checkedThreadIds: ids }),
+  setCheckedThreadIds: (ids) =>
+    set(ids.length > 0 ? { checkedThreadIds: ids } : { checkedThreadIds: [], selectionCursor: null }),
+  setSelectionAnchor: (id, cursor = null) => set({ selectionAnchor: id, selectionCursor: cursor }),
+  extendSelection: (offset) => {
+    const { visibleThreadIds, checkedThreadIds, selectionAnchor, selectionCursor, selectedThreadId } = get();
+    const next = extendSelection(
+      visibleThreadIds,
+      {
+        checked: checkedThreadIds,
+        anchor: selectionAnchor ?? selectedThreadId,
+        // A fresh range starts at the anchor again once nothing is ticked.
+        cursor: checkedThreadIds.length > 0 ? selectionCursor : null,
+      },
+      offset,
+    );
+    set({ checkedThreadIds: next.checked, selectionAnchor: next.anchor, selectionCursor: next.cursor });
+  },
+  checkAllVisible: () => set((state) => ({ checkedThreadIds: [...state.visibleThreadIds] })),
   openMove: (request) => set({ moving: request }),
   closeMove: () => set({ moving: null }),
 }));

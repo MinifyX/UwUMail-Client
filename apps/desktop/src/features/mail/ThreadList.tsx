@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
+  ShieldCheck,
   Star,
   Trash,
   Users,
@@ -82,8 +83,9 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   const checked = useUi((s) => s.checkedThreadIds);
   const setChecked = useUi((s) => s.setCheckedThreadIds);
   const selection = useSelectionActions();
-  // Where a Shift+click range starts.
-  const anchor = useRef<string | null>(null);
+  // Where a Shift+click range starts, and where Shift+↑/↓ last got to.
+  const cursor = useUi((s) => s.selectionCursor);
+  const setAnchor = useUi((s) => s.setSelectionAnchor);
 
   const [draft, setDraft] = useState(search);
   useEffect(() => {
@@ -99,12 +101,12 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   }, [ids, setVisibleThreadIds]);
 
   const listRef = useRef<HTMLDivElement>(null);
+  // Keeps the row the keyboard moved to in sight.
+  const focusRow = cursor ?? selectedThreadId;
   useEffect(() => {
-    if (!selectedThreadId) return;
-    listRef.current
-      ?.querySelector(`[data-thread-id="${CSS.escape(selectedThreadId)}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [selectedThreadId]);
+    if (!focusRow) return;
+    listRef.current?.querySelector(`[data-thread-id="${CSS.escape(focusRow)}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [focusRow]);
 
   const showAccount = shown.length > 1 && view.kind === "unified";
   const checkedThreads = threads.filter((thread) => checked.includes(thread.id));
@@ -225,10 +227,10 @@ export function ThreadList({ variant, className }: ThreadListProps) {
               onClick={() => runOnChecked(selection.move)}
             />
             <IconButton
-              icon={ShieldAlert}
+              icon={info.isJunk ? ShieldCheck : ShieldAlert}
               size="sm"
-              label={t("reader.spam")}
-              onClick={() => runOnChecked((ids) => selection.spam(ids, true))}
+              label={info.isJunk ? t("reader.notSpam") : t("reader.spam")}
+              onClick={() => runOnChecked((ids) => selection.spam(ids, !info.isJunk))}
             />
           </div>
         ) : (
@@ -244,6 +246,7 @@ export function ThreadList({ variant, className }: ThreadListProps) {
 
       <div
         ref={listRef}
+        data-thread-list
         className={clsx(
           "flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-4",
           density === "compact" ? "gap-px" : "gap-1",
@@ -288,24 +291,28 @@ export function ThreadList({ variant, className }: ThreadListProps) {
                 checked={checked.includes(thread.id)}
                 dragIds={checked.includes(thread.id) ? checked : [thread.id]}
                 inTrash={info.isTrash}
+                inJunk={info.isJunk}
                 onSelect={(event) => {
+                  const anchor = useUi.getState().selectionAnchor ?? selectedThreadId;
                   if (event.ctrlKey || event.metaKey) {
-                    anchor.current = thread.id;
                     setChecked(
                       checked.includes(thread.id) ? checked.filter((id) => id !== thread.id) : [...checked, thread.id],
                     );
-                  } else if (event.shiftKey && anchor.current) {
+                    setAnchor(thread.id);
+                  } else if (event.shiftKey && anchor) {
                     const order = threads.map((item) => item.id);
-                    const start = order.indexOf(anchor.current);
+                    const start = order.indexOf(anchor);
                     const end = order.indexOf(thread.id);
                     if (start >= 0) {
                       const range = order.slice(Math.min(start, end), Math.max(start, end) + 1);
                       setChecked([...new Set([...checked, ...range])]);
+                      // Shift+↑/↓ carry on from here.
+                      setAnchor(anchor, thread.id);
                     }
                   } else if (info.isDrafts) {
+                    setAnchor(thread.id);
                     void openDraftThread(thread.id);
                   } else {
-                    anchor.current = thread.id;
                     selectThread(thread.id);
                   }
                 }}

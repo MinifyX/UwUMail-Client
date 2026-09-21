@@ -81,7 +81,9 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const [initial] = useState(() => initialDraft(request, accounts, identities ?? [], t, i18n.language));
   const [draft, setDraft] = useState<DraftState>(initial);
   const accountId = draft.accountId || accounts[0]?.id || "";
-  const [showCc, setShowCc] = useState(initial.cc.length > 0);
+  // Show the Cc/Bcc rows when either is set, so a Bcc that arrived (e.g. from a mailto link) is
+  // never present but invisible (webmail security audit W-1).
+  const [showCc, setShowCc] = useState(initial.cc.length > 0 || initial.bcc.length > 0);
   const [large, setLarge] = useState(false);
   const [attachments, setAttachments] = useState<OutgoingAttachment[]>(request.attachments ?? []);
   const [sending, setSending] = useState(false);
@@ -387,7 +389,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const account = accounts.find((a) => a.id === accountId);
 
   if (minimized && phone) {
-    const names = [...draft.to, ...draft.cc].map((a) => a.name || a.email).join(", ");
+    const names = [...draft.to, ...draft.cc, ...draft.bcc].map((a) => a.name || a.email).join(", ");
     return (
       <div className="fixed inset-x-3 bottom-[84px] z-30 flex animate-slide-up items-center gap-2 rounded-2xl bg-[#1c1420] py-1.5 pr-1.5 pl-4 text-white shadow-float dark:bg-elevated dark:text-ink">
         <PenLine className="size-4 shrink-0 text-[#ff7fac]" aria-hidden />
@@ -571,13 +573,33 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         <div
           ref={(node) => {
             editor.current = node;
-            if (node && node.innerHTML === "") node.innerHTML = body.current;
+            // Clean the restored body too, so nothing remote survives a re-mount (webmail security audit W-2).
+            if (node && node.innerHTML === "") node.innerHTML = quotableHtml(body.current);
           }}
           contentEditable
           role="textbox"
           aria-multiline
           aria-label={t("compose.placeholder")}
           data-placeholder={t("compose.placeholder")}
+          onPaste={(event) => {
+            // Pasted mail HTML goes through the same cleaner as saving and sending, so a remote
+            // image (a tracking pixel) copied out of a message does not load from the app page
+            // (webmail security audit W-2). Files/images with no markup are left to the browser.
+            const html = event.clipboardData.getData("text/html");
+            const text = event.clipboardData.getData("text/plain");
+            if (!html && !text) return;
+            event.preventDefault();
+            const cleaned = html
+              ? quotableHtml(html)
+              : text
+                  .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)
+                  .replace(/\r?\n/g, "<br>");
+            document.execCommand("insertHTML", false, cleaned);
+            setError(null);
+            changed();
+            body.current = event.currentTarget.innerHTML;
+            setEdits((count) => count + 1);
+          }}
           onInput={(event) => {
             setError(null);
             changed();

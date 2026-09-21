@@ -26,6 +26,18 @@ describe("attachmentKind", () => {
     expect(isDangerous("rechnung.pdf")).toBe(false);
   });
 
+  it("flags a name whose only dot is first, and more lure formats (W-6, W-7)", () => {
+    expect(isDangerous(".exe")).toBe(true);
+    expect(isDangerous("‮.exe")).toBe(true);
+    expect(isDangerous("‎.html")).toBe(true);
+    expect(isDangerous("login.svg")).toBe(true);
+    expect(isDangerous("remote.rdp")).toBe(true);
+    expect(isDangerous("sandbox.wsb")).toBe(true);
+    expect(isDangerous(".pdf")).toBe(false);
+    // svg stays an image for its preview, even though saving it warns.
+    expect(attachmentKind("logo.svg", "image/svg+xml")).toBe("image");
+  });
+
   it("knows Android app packages", () => {
     expect(isDangerous("Update.APK")).toBe(true);
     expect(isAppPackage("spiel.xapk. ")).toBe(true);

@@ -168,6 +168,7 @@
     "draftLocal": "The draft is only saved on this device. UwUMail will try again later.",
     "draftDiscarded": "Draft discarded",
     "draftOpenFailed": "The draft couldn't be opened. {{reason}}",
+    "draftGone": "There is no draft left in this conversation.",
     "sending": "Sending mail …",
     "undo": "Undo",
     "sendUndone": "Sending stopped. You can keep writing.",
@@ -456,7 +457,10 @@
     "goDrafts": "Go to drafts",
     "goFlagged": "Go to flagged",
     "send": "Send (while writing)",
-    "discardDraft": "Discard draft (while writing)"
+    "discardDraft": "Discard draft (while writing)",
+    "extendUp": "Extend selection up",
+    "extendDown": "Extend selection down",
+    "selectAll": "Select all loaded mail"
   },
   "palette": {
     "placeholder": "Type a command",
@@ -540,7 +544,9 @@
       "archive": "Archive",
       "trash": "Delete",
       "flag": "Flag",
-      "none": "Nothing"
+      "none": "Nothing",
+      "spam": "Spam",
+      "notSpam": "Not spam"
     },
     "pull": {
       "pull": "Pull to refresh",
@@ -579,6 +585,8 @@
   },
   "unsubscribe": {
     "title": "Unsubscribe from {{name}}?",
+    "mailTo": "That sends a mail from you to {{address}}.",
+    "mailToFallback": "If that doesn't work directly, a mail goes from you to {{address}}.",
     "body": "UwUMail unsubscribes you with the sender directly. After that, no more mail should come from there.",
     "bodyPage": "The sender has its own page for this. UwUMail opens it for you, and you confirm there.",
     "archive": "Archive earlier mail from there"

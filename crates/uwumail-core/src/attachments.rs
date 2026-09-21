@@ -104,6 +104,14 @@ const DANGEROUS: &[&str] = &[
     "shortcut",
     "wf",
     "webloc",
+    // svg runs script and foreignObject when opened from disk; rdp, wsb, pub and desktop start a
+    // connection, run a command or launch a program.
+    "svg",
+    "svgz",
+    "rdp",
+    "wsb",
+    "pub",
+    "desktop",
 ];
 
 /// Android app packages. On Android UwUMail never hands these to the installer.
@@ -313,6 +321,17 @@ mod tests {
         // A profile can add certificates, a VPN or device management to an iPhone.
         assert!(is_dangerous("wlan.mobileconfig") && is_ios_installable("wlan.mobileconfig"));
         assert!(is_ios_installable("UwUMail.ipa") && !is_ios_installable("urlaub.jpg"));
+    }
+
+    #[test]
+    fn flags_a_name_whose_only_dot_is_first_and_more_lure_formats() {
+        assert!(is_dangerous(".exe"));
+        assert!(is_dangerous("\u{202E}.exe"));
+        assert!(is_dangerous("\u{200E}.html"));
+        assert!(!is_dangerous(".pdf"));
+        for name in ["login.svg", "logo.SVGZ", "remote.rdp", "sandbox.wsb", "flyer.pub", "start.desktop"] {
+            assert!(is_dangerous(name), "{name}");
+        }
     }
 
     #[test]

@@ -24,7 +24,8 @@ export function useThreadActions() {
     return details.flatMap((detail) => detail.messages);
   };
 
-  const run = async (action: Exclude<SwipeAction, "none">, threads: ThreadSummary[]) => {
+  /** `inJunk`: the threads lie in junk, so "spam" takes them back out. */
+  const run = async (action: Exclude<SwipeAction, "none">, threads: ThreadSummary[], inJunk = false) => {
     const messages = await messagesOf(threads);
     const ids = messages.map((message) => message.id);
     switch (action) {
@@ -44,6 +45,8 @@ export function useThreadActions() {
       }
       case "archive":
         return actions.archive(ids);
+      case "spam":
+        return actions.spam(ids, !inJunk);
       case "trash":
         return actions.trash(messages);
     }

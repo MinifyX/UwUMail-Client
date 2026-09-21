@@ -242,44 +242,70 @@ fn german() -> bool {
 async fn open_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_id: String) -> CommandResult<bool> {
     let file = engine.attachment(&attachment_id).await?;
     platform::check_openable(&file)?;
-    if file.dangerous {
-        // Names saved by older versions may still carry line breaks that could reword the dialog.
-        let name = uwumail_core::attachments::clean_display_name(&file.filename);
-        let (title, text, open, cancel) = if german() {
-            (
-                "Diese Datei kann Programme ausführen",
-                format!(
-                    "„{}“ kann Programme auf deinem Gerät starten. Öffne die Datei nur, wenn du sie erwartet hast und dem Absender vertraust.",
-                    name
-                ),
-                "Trotzdem öffnen",
-                "Nicht öffnen",
-            )
-        } else {
-            (
-                "This file can run programs",
-                format!(
-                    "“{}” can start programs on your device. Only open it if you expected it and trust the sender.",
-                    name
-                ),
-                "Open anyway",
-                "Don't open",
-            )
-        };
-        if !platform::confirm(&app, title, text, open, cancel).await? {
-            return Ok(false);
-        }
+    if file.dangerous && !confirm_dangerous(&app, &file, DangerousAction::Open).await? {
+        return Ok(false);
     }
     platform::open_file(&app, &file)?;
     Ok(true)
 }
 
+#[derive(Clone, Copy)]
+enum DangerousAction {
+    Open,
+    Save,
+}
+
+/// Asks in a native dialog before a file that can run programs is opened or saved.
+async fn confirm_dangerous(app: &AppHandle, file: &AttachmentFile, action: DangerousAction) -> CommandResult<bool> {
+    // Names saved by older versions may still carry line breaks that could reword the dialog.
+    let name = uwumail_core::attachments::clean_display_name(&file.filename);
+    let (title, text, ok, cancel) = match (german(), action) {
+        (true, DangerousAction::Open) => (
+            "Diese Datei kann Programme ausführen",
+            format!(
+                "„{name}“ kann Programme auf deinem Gerät starten. Öffne die Datei nur, wenn du sie erwartet hast und dem Absender vertraust."
+            ),
+            "Trotzdem öffnen",
+            "Nicht öffnen",
+        ),
+        (true, DangerousAction::Save) => (
+            "Diese Datei speichern?",
+            format!(
+                "„{name}“ kann Programme auf deinem Gerät starten. Speichere die Datei nur, wenn du sie erwartet hast und dem Absender vertraust."
+            ),
+            "Trotzdem speichern",
+            "Nicht speichern",
+        ),
+        (false, DangerousAction::Open) => (
+            "This file can run programs",
+            format!(
+                "“{name}” can start programs on your device. Only open it if you expected it and trust the sender."
+            ),
+            "Open anyway",
+            "Don't open",
+        ),
+        (false, DangerousAction::Save) => (
+            "Save this file?",
+            format!(
+                "“{name}” can start programs on your device. Only save it if you expected it and trust the sender."
+            ),
+            "Save anyway",
+            "Don't save",
+        ),
+    };
+    platform::confirm(app, title, text, ok, cancel).await
+}
+
 /// Saves an attachment. The destination never comes from the web page: on
 /// desktop from the native save dialog, on Android it's Downloads/UwUMail.
-/// Returns false when the user cancelled.
+/// Files that can run programs are confirmed first, like opening them: a saved
+/// file is one double-click away from running. Returns false when the user cancelled.
 #[tauri::command]
 async fn save_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_id: String) -> CommandResult<bool> {
     let file = engine.attachment(&attachment_id).await?;
+    if file.dangerous && !confirm_dangerous(&app, &file, DangerousAction::Save).await? {
+        return Ok(false);
+    }
     platform::save_file(&app, &file).await
 }
 

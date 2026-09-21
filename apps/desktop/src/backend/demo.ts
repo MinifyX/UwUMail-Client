@@ -75,7 +75,14 @@ export class DemoBackend implements Backend {
   // Newsletters and offers carry a List-Unsubscribe like the real ones.
   private messages: Message[] = buildMessages(lang()).map((message) =>
     /newsletter|aktion|offer|deal/i.test(message.subject)
-      ? { ...message, unsubscribe: { oneClick: true, url: "https://pixelparts.example/unsubscribe" } }
+      ? {
+          ...message,
+          unsubscribe: {
+            oneClick: true,
+            url: "https://pixelparts.example/unsubscribe",
+            mailto: "mailto:leave@pixelparts.example?subject=unsubscribe",
+          },
+        }
       : message,
   );
   private listeners = new Set<(event: BackendEvent) => void>();
@@ -650,6 +657,8 @@ export class DemoBackend implements Backend {
 
   async saveAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
+    // Stands in for the engine's native warning dialog, as when opening.
+    if (file.dangerous && !window.confirm(`"${file.filename}" can run programs. Save anyway?`)) return false;
     const link = document.createElement("a");
     link.href = file.url;
     link.download = file.filename;

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
-export type HotkeyMap = Record<string, (event: KeyboardEvent) => void>;
+/** A handler that returns false leaves the key to the browser, e.g. Ctrl+A in a text field. */
+export type HotkeyMap = Record<string, (event: KeyboardEvent) => void | boolean>;
 
 interface HotkeyOptions {
   enabled?: boolean;
@@ -8,9 +9,11 @@ interface HotkeyOptions {
   repeat?: string[];
 }
 
-function isTyping(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+/** Also answers for elements inside the mail frame, which come from another window. */
+export function isTyping(target: EventTarget | null) {
+  const element = target as Partial<HTMLElement> | null;
+  if (!element || typeof element.tagName !== "string") return false;
+  return element.isContentEditable === true || ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName);
 }
 
 /**
@@ -45,6 +48,8 @@ export function useHotkeys(map: HotkeyMap, { enabled = true, repeat = [] }: Hotk
       const combo = comboOf(event);
       if (!combo.startsWith("mod+") && isTyping(event.target)) return;
       if (document.querySelector("dialog[open]") && combo !== "mod+k") return;
+      // An open menu keeps the arrows and letters to itself.
+      if (document.querySelector('[role="menu"]')) return;
       const started = pending && event.timeStamp - pending.at < SEQUENCE_WAIT ? pending.key : null;
       pending = null;
       const handler = (started && latest.current[`${started} ${combo}`]) || latest.current[combo];
@@ -56,9 +61,11 @@ export function useHotkeys(map: HotkeyMap, { enabled = true, repeat = [] }: Hotk
         }
         return;
       }
-      event.preventDefault();
-      if (event.repeat && !repeating.current.includes(combo)) return;
-      handler(event);
+      if (event.repeat && !repeating.current.includes(combo)) {
+        event.preventDefault();
+        return;
+      }
+      if (handler(event) !== false) event.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

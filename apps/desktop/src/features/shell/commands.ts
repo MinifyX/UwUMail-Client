@@ -6,6 +6,7 @@ import {
   FolderInput,
   Forward,
   Keyboard,
+  ListChecks,
   Mailbox,
   MailOpen,
   Moon,
@@ -170,6 +171,14 @@ export function buildCommands(
             : [...checkedThreadIds, selectedThreadId],
         );
       },
+    },
+    {
+      id: "selectAll",
+      title: t("shortcuts.selectAll"),
+      icon: ListChecks,
+      // The shell only takes Ctrl+A where no text is meant; see MailShell.
+      keys: ["mod+a"],
+      run: () => useUi.getState().checkAllVisible(),
     },
     {
       id: "undo",

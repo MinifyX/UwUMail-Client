@@ -72,7 +72,8 @@
     "unsubscribed": "Abgemeldet (≧▽≦) Keine Post mehr von {{name}}",
     "messageSaved": "Mail sicher abgelegt (˘ω˘)",
     "deletedForever_one": "Für immer weg (｡•́︿•̀｡)",
-    "deletedForever_other": "{{count}} Mails für immer weg (｡•́︿•̀｡)"
+    "deletedForever_other": "{{count}} Mails für immer weg (｡•́︿•̀｡)",
+    "draftGone": "Hier ist kein Entwurf mehr, Nyu hat überall nachgeschaut (・_・;)"
   },
   "status": {
     "syncing": "Hole frische Mails…",
@@ -143,10 +144,16 @@
     "serverSearch": {
       "searching": "Nyu fragt beim Server nach (｡･ω･｡)",
       "nothingMore": "Der Server hat auch nichts Neues für dich (・・ )"
+    },
+    "swipe": {
+      "spam": "Spam!",
+      "notSpam": "Doch kein Spam"
     }
   },
   "unsubscribe": {
-    "title": "Tschüss {{name}}?"
+    "title": "Tschüss {{name}}?",
+    "mailTo": "Dafür schickt Nyu eine Mail von dir an {{address}}.",
+    "mailToFallback": "Klappt das nicht direkt, schickt Nyu eine Mail von dir an {{address}}."
   },
   "deleteForever": {
     "title_one": "Diese Mail für immer löschen? (｡•́︿•̀｡)",
@@ -161,5 +168,10 @@
   "workspace": {
     "setupTitle": "Welche Postfächer ziehen zu {{name}}? (｀・ω・´)ゞ",
     "enabled": "{{private}} und {{business}} haben jetzt eigene Zimmer ✧"
+  },
+  "shortcuts": {
+    "extendUp": "Auswahl nach oben ziehen",
+    "extendDown": "Auswahl nach unten ziehen",
+    "selectAll": "Alle geladenen Mails schnappen"
   }
 }

@@ -307,7 +307,8 @@ export function MobileList() {
                       left={swipeLeft}
                       unread={thread.unreadCount > 0}
                       selecting={selecting}
-                      onSwipe={(action) => void threadActions.run(action, [thread])}
+                      inJunk={info.isJunk}
+                      onSwipe={(action) => void threadActions.run(action, [thread], info.isJunk)}
                       onLongPress={() => toggle(thread.id)}
                     >
                       <div className="relative">
@@ -320,6 +321,7 @@ export function MobileList() {
                           showAccount={showAccount}
                           actions={cardActions}
                           inTrash={info.isTrash}
+                          inJunk={info.isJunk}
                           onSelect={() =>
                             selecting
                               ? toggle(thread.id)

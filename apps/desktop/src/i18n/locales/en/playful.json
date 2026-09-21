@@ -72,7 +72,8 @@
     "unsubscribed": "Unsubscribed (≧▽≦) No more mail from {{name}}",
     "messageSaved": "Mail tucked away safely (˘ω˘)",
     "deletedForever_one": "Gone forever (｡•́︿•̀｡)",
-    "deletedForever_other": "{{count}} messages gone forever (｡•́︿•̀｡)"
+    "deletedForever_other": "{{count}} messages gone forever (｡•́︿•̀｡)",
+    "draftGone": "No draft left here, Nyu looked everywhere (・_・;)"
   },
   "status": {
     "syncing": "Fetching fresh mail…",
@@ -143,10 +144,16 @@
     "serverSearch": {
       "searching": "Nyu is asking the server (｡･ω･｡)",
       "nothingMore": "The server has nothing else either (・・ )"
+    },
+    "swipe": {
+      "spam": "Spam!",
+      "notSpam": "Not spam after all"
     }
   },
   "unsubscribe": {
-    "title": "Bye bye {{name}}?"
+    "title": "Bye bye {{name}}?",
+    "mailTo": "Nyu sends a mail from you to {{address}} for that.",
+    "mailToFallback": "If that doesn't work directly, Nyu sends a mail from you to {{address}}."
   },
   "deleteForever": {
     "title_one": "Say goodbye to this one forever? (｡•́︿•̀｡)",
@@ -161,5 +168,10 @@
   "workspace": {
     "setupTitle": "Which mailboxes move to {{name}}? (｀・ω・´)ゞ",
     "enabled": "{{private}} and {{business}} have their own rooms now ✧"
+  },
+  "shortcuts": {
+    "extendUp": "Stretch the selection up",
+    "extendDown": "Stretch the selection down",
+    "selectAll": "Grab all loaded mail"
   }
 }

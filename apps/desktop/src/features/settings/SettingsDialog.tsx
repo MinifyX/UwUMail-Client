@@ -193,7 +193,7 @@ function TrustedSenders() {
   );
 }
 
-const SWIPE_ACTIONS: SwipeAction[] = ["read", "archive", "trash", "flag", "none"];
+const SWIPE_ACTIONS: SwipeAction[] = ["read", "archive", "spam", "trash", "flag", "none"];
 
 function SwipeSelect({ value, onChange }: { value: SwipeAction; onChange: (value: SwipeAction) => void }) {
   const { t } = useT();

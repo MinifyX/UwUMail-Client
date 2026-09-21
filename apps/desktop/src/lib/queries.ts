@@ -260,6 +260,12 @@ export function useThreadActions() {
         leaveThread(thread.id);
         return actions.archive(ids(messages));
       }),
+    /** Into junk (and the filter learns where the server does), or back out of it with `spam` false. */
+    spam: (thread: ThreadSummary, spam: boolean) =>
+      withMessages(thread, (messages) => {
+        leaveThread(thread.id);
+        return actions.spam(ids(messages), spam);
+      }),
     trash: (thread: ThreadSummary) =>
       withMessages(thread, (messages) => actions.trash(messages, () => leaveThread(thread.id))),
     toggleRead: (thread: ThreadSummary) =>
