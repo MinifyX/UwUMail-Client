@@ -431,7 +431,7 @@
     "linkDomainsInactive": "Gerade öffnen alle Links ohne Nachfrage.",
     "forgetLinkDomain": "{{domain}} entfernen",
     "syncAccount": "Einstellungen synchronisieren",
-    "syncAccountDesc": "Aussehen, Sprache, Bilder, Links und Signaturen folgen deinem UwUMail-Konto: in der App auf jedem Gerät und im Webmail. Layout, Dichte, Wischgesten, App-Sperre und Updates bleiben auf diesem Gerät.",
+    "syncAccountDesc": "Aussehen, Sprache, Bilder, Links und Signaturen folgen deinem UwUMail-Konto: in der App auf jedem Gerät und im Webmail. Layout, Dichte, Wischgesten, App-Sperre und Updates bleiben auf diesem Gerät. Schaltest du die Nachfrage vor Links oder das Blockieren von Bildern aus, gilt das nur auf dem Gerät, auf dem du es tust.",
     "syncAuto": "Automatisch",
     "syncOff": "Aus",
     "syncNone": "Keins deiner Konten liegt auf einem UwUMail-Server, der Einstellungen aufbewahrt. Sie bleiben auf diesem Gerät.",

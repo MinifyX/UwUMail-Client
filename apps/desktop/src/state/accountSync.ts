@@ -11,6 +11,7 @@ import {
   SYNCED_FIELDS,
   type SettingsPatch,
   type SettingsValues,
+  type SyncedSettings,
 } from "@/lib/settingsSync";
 import { SettingsSyncQueue, type SyncMeta, type SyncStatus } from "@/lib/settingsSyncQueue";
 import { useSettings } from "./settings";
@@ -133,6 +134,36 @@ async function applySignatures(patch: SettingsPatch): Promise<SettingsPatch> {
   return stored;
 }
 
+// -------------------------------------------------------------------- protections
+
+/**
+ * Choices that switch a protection off: links open without the question, remote images load for
+ * everyone. The server's copy could have been changed by someone else (a taken-over server), so
+ * from there these only ever get stricter. Switching one off takes a choice on this device.
+ */
+const WEAKER: Partial<Record<keyof SyncedSettings, unknown>> = { linkConfirm: false, remoteImages: "always" };
+
+/**
+ * Splits what came from the server into what this device takes and the choices it keeps as they
+ * are (with this device's value, so the queue doesn't see a change here to send back).
+ */
+export function holdBackWeakening(
+  patch: SettingsPatch,
+  settings: SyncedSettings,
+): { take: SettingsPatch; kept: SettingsPatch } {
+  const take: SettingsPatch = {};
+  const kept: SettingsPatch = {};
+  for (const [key, value] of Object.entries(patch)) {
+    const field = key as keyof SyncedSettings;
+    if (Object.hasOwn(WEAKER, key) && value === WEAKER[field] && settings[field] !== value) {
+      kept[key] = settings[field];
+    } else {
+      take[key] = value;
+    }
+  }
+  return { take, kept };
+}
+
 // -------------------------------------------------------------------- the queue
 
 let queue: SettingsSyncQueue | null = null;
@@ -191,8 +222,9 @@ export async function startAccountSync(): Promise<void> {
       },
       keep: () => new Set(useAccountSync.getState().unsynced.map(signatureKey)),
       apply: async (patch) => {
-        useSettings.setState(applyToSettings(useSettings.getState(), patch));
-        return applySignatures(patch);
+        const { take, kept } = holdBackWeakening(patch, useSettings.getState());
+        useSettings.setState(applyToSettings(useSettings.getState(), take));
+        return { ...kept, ...(await applySignatures(take)) };
       },
     },
     storage: { load: loadMeta, save: saveMeta },

@@ -130,7 +130,7 @@
     "linkDomainsInactive": "Right now I let every link straight through.",
     "forgetLinkDomain": "Remove {{domain}}",
     "syncAccount": "Sync settings",
-    "syncAccountDesc": "Look, language, pictures, links and signatures travel with your UwUMail account, into the app on every device and into the webmail ✧ Layout, density, swipes, app lock and updates stay here with me.",
+    "syncAccountDesc": "Look, language, pictures, links and signatures travel with your UwUMail account, into the app on every device and into the webmail ✧ Layout, density, swipes, app lock and updates stay here with me. Turning off the question before links or the image blocker only applies on the device where you do it – better safe than sorry!",
     "syncAuto": "Automatic",
     "syncOff": "Off",
     "syncNone": "Hmm, none of your accounts lives on a UwUMail server that remembers settings (・・ )? So everything stays here.",

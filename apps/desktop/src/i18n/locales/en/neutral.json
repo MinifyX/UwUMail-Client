@@ -431,7 +431,7 @@
     "linkDomainsInactive": "Right now every link opens without asking.",
     "forgetLinkDomain": "Remove {{domain}}",
     "syncAccount": "Sync settings",
-    "syncAccountDesc": "Look, language, pictures, links and signatures follow your UwUMail account: in the app on every device and in the webmail. Layout, density, swipes, app lock and updates stay on this device.",
+    "syncAccountDesc": "Look, language, pictures, links and signatures follow your UwUMail account: in the app on every device and in the webmail. Layout, density, swipes, app lock and updates stay on this device. Turning off the question before links or the image blocker only applies on the device where you do it.",
     "syncAuto": "Automatic",
     "syncOff": "Off",
     "syncNone": "None of your accounts is on a UwUMail server that keeps settings. They stay on this device.",

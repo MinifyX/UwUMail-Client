@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Signature } from "@/backend/types";
 import { sinceText } from "@/features/settings/SettingsSync";
 import { MAX_VALUE_BYTES } from "@/lib/settingsSync";
-import { cleanSyncedSignature, signatureTravels } from "./accountSync";
+import { cleanSyncedSignature, holdBackWeakening, signatureTravels } from "./accountSync";
+import { DEFAULT_SETTINGS } from "./settings";
 
 const signature = (html: string): Signature => ({
   id: "0f8a1c2e-5b7d-4e3f-9a61-2c4b8d0e7f13",
@@ -41,5 +42,28 @@ describe("the sync status line", () => {
     expect(sinceText(now - 2 * 60_000, now, "de")).toBe("vor 2 Min.");
     expect(sinceText(now - 10_000, now, "en")).toBe("now");
     expect(sinceText(now - 3 * 3_600_000, now, "en")).toBe("3 hr. ago");
+  });
+});
+
+describe("protections from the server", () => {
+  const here = { ...DEFAULT_SETTINGS, linkConfirm: true, remoteImages: "ask" as const };
+
+  it("never switches the link question or the image blocker off from the server", () => {
+    const { take, kept } = holdBackWeakening(
+      { linkConfirm: false, remoteImages: "always", theme: "dark", "linkDomains:shop.example": true },
+      here,
+    );
+    expect(take).toEqual({ theme: "dark", "linkDomains:shop.example": true });
+    // Kept with this device's value, so the queue sees nothing to send back.
+    expect(kept).toEqual({ linkConfirm: true, remoteImages: "ask" });
+  });
+
+  it("takes stricter choices and ones this device already has", () => {
+    expect(holdBackWeakening({ linkConfirm: true, remoteImages: "ask" }, here).take).toEqual({
+      linkConfirm: true,
+      remoteImages: "ask",
+    });
+    const relaxed = { ...here, linkConfirm: false, remoteImages: "always" as const };
+    expect(holdBackWeakening({ linkConfirm: false, remoteImages: "always" }, relaxed).kept).toEqual({});
   });
 });
