@@ -342,8 +342,8 @@ question with remembered domains, status line, redirect detection and long-press
 `redirects.ts`, `domains.ts`), the full address details, keeping the Bcc of sent mail (`bcc_json`), and the settings
 sync with a UwUMail server (`jmap_settings.rs`, `lib/settingsSync.ts`, `settingsSyncQueue.ts`,
 `state/accountSync.ts`). The Tauri capabilities, CSP, attachment handling, sender pictures, autoconfig, TLS, logs and
-the Android components were checked again. The Windows setup, the release scripts and the updater changes for
-macOS and Linux were still being built and are left for their own review.
+the Android components were checked again. The Windows setup, the release scripts, the updater changes for macOS
+and Linux and the iOS app were still being built and are left for their own review.
 
 Done with Claude, like the audits above.
 
