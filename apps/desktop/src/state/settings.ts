@@ -39,6 +39,12 @@ export interface Settings {
   remoteImages: RemoteImages;
   /** Addresses and `@domains` whose remote images are always allowed, see lib/trustedSenders. */
   trustedSenders: string[];
+  /** Ask before a link from a mail opens. Disguised links ask anyway. */
+  linkConfirm: boolean;
+  /** Registrable domains (lower-case, punycode) whose links open without asking, see lib/links. */
+  linkDomains: string[];
+  /** The message header shows every address in full. Kept on this device only. */
+  showAddressDetails: boolean;
   mailAppearance: MailAppearance;
   /** Light/dark choices remembered per sender address (lowercase). */
   senderAppearance: Record<string, "light" | "dark">;
@@ -71,6 +77,8 @@ interface SettingsActions {
   /** An address or an `@domain`. */
   trustSender: (entry: string) => void;
   untrustSenders: (entries: string[]) => void;
+  rememberLinkDomain: (domain: string) => void;
+  forgetLinkDomains: (domains: string[]) => void;
   rememberAppearance: (email: string, appearance: "light" | "dark") => void;
   forgetAppearances: () => void;
   toggleFolder: (folderId: string) => void;
@@ -88,6 +96,9 @@ export const DEFAULT_SETTINGS: Settings = {
   conversations: true,
   remoteImages: "ask",
   trustedSenders: [],
+  linkConfirm: true,
+  linkDomains: [],
+  showAddressDetails: false,
   mailAppearance: "auto",
   senderAppearance: {},
   collapsedFolders: [],
@@ -118,6 +129,10 @@ export const useSettings = create<Settings & SettingsActions>()(
         })),
       untrustSenders: (entries) =>
         set((state) => ({ trustedSenders: state.trustedSenders.filter((entry) => !entries.includes(entry)) })),
+      rememberLinkDomain: (domain) =>
+        set((state) => ({ linkDomains: [...new Set([...state.linkDomains, domain.toLowerCase()])] })),
+      forgetLinkDomains: (domains) =>
+        set((state) => ({ linkDomains: state.linkDomains.filter((domain) => !domains.includes(domain)) })),
       rememberAppearance: (email, appearance) =>
         set((state) => ({ senderAppearance: { ...state.senderAppearance, [email.toLowerCase()]: appearance } })),
       forgetAppearances: () => set({ senderAppearance: {} }),

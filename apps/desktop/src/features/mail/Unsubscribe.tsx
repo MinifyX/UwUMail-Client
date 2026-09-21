@@ -9,7 +9,7 @@ import { Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { displayName } from "@/lib/format";
 import { unsubscribeMail } from "@/lib/unsubscribe";
-import { openLinkNow } from "@/state/links";
+import { requestOpenLink } from "@/state/links";
 import { toast } from "@/state/toasts";
 import { announceMove } from "@/state/undo";
 import { useUi } from "@/state/ui";
@@ -49,8 +49,8 @@ function UnsubscribeQuestion({ message, onDone }: { message: Message; onDone: ()
     try {
       const outcome = await backend().unsubscribe(message.id);
       if (outcome.kind === "openPage") {
-        await openLinkNow(outcome.url);
-        toast(t("toast.unsubscribePage", { name }));
+        // The page comes from the mail like any link in it, so it goes through the same question.
+        if (requestOpenLink(outcome.url, "") === "opened") toast(t("toast.unsubscribePage", { name }));
       } else {
         toast(t("toast.unsubscribed", { name }), "success");
       }

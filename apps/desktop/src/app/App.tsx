@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/Toaster";
 import { MailShell } from "@/features/shell/MailShell";
 import { Onboarding } from "@/features/onboarding/Onboarding";
 import { DeleteForeverQuestion } from "@/features/mail/DeleteForeverQuestion";
+import { LinkSheet, LinkStatus } from "@/features/mail/LinkPreview";
 import { LinkWarning } from "@/features/mail/LinkWarning";
 import { AppLock } from "@/features/mobile/AppLock";
 import { useAndroidBridge } from "@/features/mobile/useAndroidBridge";
@@ -28,6 +29,8 @@ export function App() {
       {onboarded ? <MailShell /> : <Onboarding />}
       <UpdateHint />
       <LinkWarning />
+      <LinkSheet />
+      <LinkStatus />
       <DeleteForeverQuestion />
       <Toaster />
       <AppLock />
