@@ -1,13 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions of the main UwUMail window on every platform. Addon frames never get Tauri access.",
+  "description": "Permissions of the main UwUMail window on every platform. Addon frames never get Tauri access. Links open through the app's own open_link command, which checks them in Rust, not through the opener plugin's page API.",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    {
-      "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://*" }, { "url": "http://*" }, { "url": "mailto:*" }]
-    }
-  ]
+  "permissions": ["core:default"]
 }

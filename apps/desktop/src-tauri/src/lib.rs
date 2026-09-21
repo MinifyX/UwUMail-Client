@@ -11,6 +11,7 @@ mod platform;
 
 use platform::{Channel, ReadyUpdate};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 use tokio::sync::broadcast::error::RecvError;
 use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::mailto::MailtoDraft;
@@ -352,6 +353,14 @@ fn clear_sender_pictures(engine: State<'_, Engine>) -> CommandResult<()> {
     engine.clear_sender_pictures()
 }
 
+/// Opens a web link in the system browser. The page asks first where that is due; the address
+/// itself is checked and normalized here, so the page can't hand the system anything but a web link.
+#[tauri::command]
+fn open_link(app: AppHandle, url: String) -> CommandResult<()> {
+    let url = uwumail_core::links::external_url(&url)?;
+    app.opener().open_url(url, None::<&str>).map_err(|e| Error::internal(format!("Couldn't open the link: {e}")))
+}
+
 /// The main domain of a company address, or `None` for mail providers.
 #[tauri::command]
 fn get_company_domain(email: String) -> Option<String> {
@@ -495,6 +504,7 @@ pub fn run() {
             get_sender_picture,
             clear_sender_pictures,
             get_company_domain,
+            open_link,
             set_run_in_background,
             take_mailto,
             take_launch_action,

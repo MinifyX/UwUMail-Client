@@ -1,10 +1,13 @@
 import { isTauri } from "@/backend/backend";
 
-/** Opens a link in the user's browser or mail app, never inside UwUMail. */
+/**
+ * Opens a web link in the user's browser, never inside UwUMail. The engine accepts only http(s)
+ * and hands the browser the normalized address (`open_link` in src-tauri/src/lib.rs).
+ */
 export async function openExternal(url: string) {
   if (isTauri()) {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("open_link", { url });
     return;
   }
   window.open(url, "_blank", "noopener,noreferrer");

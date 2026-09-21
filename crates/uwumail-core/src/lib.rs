@@ -12,6 +12,7 @@ pub mod imap;
 pub mod jmap;
 pub mod jmap_settings;
 pub mod jmap_sync;
+pub mod links;
 pub mod mailto;
 pub mod mime;
 pub mod model;
