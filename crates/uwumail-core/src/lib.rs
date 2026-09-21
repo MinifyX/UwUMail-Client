@@ -10,6 +10,7 @@ pub mod engine;
 pub mod error;
 pub mod imap;
 pub mod jmap;
+pub mod jmap_settings;
 pub mod jmap_sync;
 pub mod mailto;
 pub mod mime;

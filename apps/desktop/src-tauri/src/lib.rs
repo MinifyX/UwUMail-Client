@@ -40,6 +40,31 @@ fn delete_signature(engine: State<'_, Engine>, signature_id: String) -> CommandR
 }
 
 #[tauri::command]
+fn put_synced_signature(engine: State<'_, Engine>, signature: Signature) -> CommandResult<Signature> {
+    engine.put_synced_signature(signature)
+}
+
+#[tauri::command]
+async fn settings_sync_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<String>> {
+    engine.settings_sync_accounts().await
+}
+
+#[tauri::command]
+async fn load_user_settings(engine: State<'_, Engine>, account_id: String) -> CommandResult<UserSettings> {
+    engine.user_settings(&account_id).await
+}
+
+#[tauri::command]
+async fn save_user_settings(
+    engine: State<'_, Engine>,
+    account_id: String,
+    changes: serde_json::Map<String, serde_json::Value>,
+    if_in_state: Option<String>,
+) -> CommandResult<UserSettingsSaved> {
+    engine.save_user_settings(&account_id, &changes, if_in_state.as_deref()).await
+}
+
+#[tauri::command]
 fn list_identities(engine: State<'_, Engine>) -> CommandResult<Vec<Identity>> {
     engine.list_identities()
 }
@@ -426,6 +451,10 @@ pub fn run() {
             list_signatures,
             save_signature,
             delete_signature,
+            put_synced_signature,
+            settings_sync_accounts,
+            load_user_settings,
+            save_user_settings,
             add_identity,
             rename_identity,
             remove_identity,

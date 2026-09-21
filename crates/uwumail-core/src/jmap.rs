@@ -16,6 +16,8 @@ pub const MAIL: &str = "urn:ietf:params:jmap:mail";
 pub const SUBMISSION: &str = "urn:ietf:params:jmap:submission";
 /// A UwUMail server's allowed and blocked senders (UwUMail-Server docs/jmap-senders.md).
 pub const SENDERS: &str = "urn:uwumail:jmap:senders";
+/// A UwUMail server's settings document shared by the webmail and the apps (UwUMail-Server docs/jmap-settings.md).
+pub const SETTINGS: &str = "urn:uwumail:jmap:settings";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -71,6 +73,8 @@ pub struct Session {
     pub username: String,
     /// The server keeps a list of blocked senders for this login (a UwUMail server).
     pub sender_lists: bool,
+    /// The server keeps this login's settings for all its devices (a UwUMail server).
+    pub user_settings: bool,
 }
 
 impl Session {
@@ -105,6 +109,7 @@ impl Session {
             max_calls_in_request: limit("maxCallsInRequest", 16),
             username: text("username").unwrap_or_default().to_string(),
             sender_lists: capabilities.contains_key(SENDERS),
+            user_settings: capabilities.contains_key(SETTINGS),
         })
     }
 
@@ -289,6 +294,9 @@ impl Client {
         if self.session.sender_lists {
             using.push(SENDERS);
         }
+        if self.session.user_settings {
+            using.push(SETTINGS);
+        }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self
             .http
@@ -387,7 +395,7 @@ impl Client {
         if !response.status().is_success() {
             return Err(Error::connection(format!("Push failed with {}.", response.status())));
         }
-        Ok(Some(Push { response, buffer: String::new() }))
+        Ok(Some(Push { response, buffer: String::new(), account_id: self.session.account_id.clone() }))
     }
 }
 
@@ -455,16 +463,42 @@ async fn fetch_session(http: &reqwest::Client, url: &Url, auth: &Auth) -> Result
 pub struct Push {
     response: reqwest::Response,
     buffer: String,
+    account_id: String,
+}
+
+/// What a push said changed for the account.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StateChange {
+    /// The new state per type, e.g. `Email` → `s12`. `None` when the event couldn't be read, so
+    /// anything may have changed.
+    pub types: Option<HashMap<String, String>>,
+}
+
+impl StateChange {
+    /// The new state of `kind`, if the push named it.
+    pub fn state_of(&self, kind: &str) -> Option<&str> {
+        self.types.as_ref().and_then(|types| types.get(kind)).map(String::as_str)
+    }
+
+    /// Whether `kind` may have changed: named, or the event didn't say.
+    pub fn may_have_changed(&self, kind: &str) -> bool {
+        self.types.as_ref().is_none_or(|types| types.contains_key(kind))
+    }
+
+    /// Whether only these types changed (and the event said so).
+    pub fn only(&self, kinds: &[&str]) -> bool {
+        self.types.as_ref().is_some_and(|types| types.keys().all(|kind| kinds.contains(&kind.as_str())))
+    }
 }
 
 impl Push {
-    /// Waits until the server reports that something changed.
-    pub async fn changed(&mut self) -> Result<()> {
+    /// Waits until the server reports that something changed, and says what.
+    pub async fn changed(&mut self) -> Result<StateChange> {
         loop {
             while let Some(end) = self.buffer.find("\n\n") {
                 let event: String = self.buffer.drain(..end + 2).collect();
                 if is_state_change(&event) {
-                    return Ok(());
+                    return Ok(state_change(&event, &self.account_id));
                 }
             }
             let chunk = timeout(PUSH_SILENCE, self.response.chunk())
@@ -477,6 +511,22 @@ impl Push {
             }
         }
     }
+}
+
+/// The changed types of one account in a `StateChange` event block.
+pub fn state_change(event: &str, account_id: &str) -> StateChange {
+    let data: String =
+        event.lines().filter_map(|line| line.strip_prefix("data:")).map(str::trim_start).collect::<Vec<_>>().join("\n");
+    let Ok(document) = serde_json::from_str::<Value>(&data) else { return StateChange::default() };
+    let Some(changed) = document.get("changed").and_then(Value::as_object) else { return StateChange::default() };
+    let types = changed
+        .get(account_id)
+        .and_then(Value::as_object)
+        .map(|types| {
+            types.iter().filter_map(|(kind, state)| Some((kind.clone(), state.as_str()?.to_string()))).collect()
+        })
+        .unwrap_or_default();
+    StateChange { types: Some(types) }
 }
 
 /// Whether one server-sent event block is a JMAP `StateChange`.
@@ -715,6 +765,37 @@ mod tests {
         assert!(is_state_change("event: state\ndata: {\"@type\":\"StateChange\",\"changed\":{}}\n\n"));
         assert!(is_state_change("data: {\"@type\":\"StateChange\"}\n\n"));
         assert!(!is_state_change("event: ping\ndata: {\"interval\":60}\n\n"));
+    }
+
+    #[test]
+    fn reads_what_a_push_says_changed() {
+        let event = "event: state\ndata: {\"@type\":\"StateChange\",\"changed\":{\"a1\":{\"UserSettings\":\"43\"},\"a2\":{\"Email\":\"9\"}}}\n\n";
+        let change = state_change(event, "a1");
+        assert_eq!(change.state_of("UserSettings"), Some("43"));
+        assert!(change.may_have_changed("UserSettings"));
+        assert!(!change.may_have_changed("Email"));
+        assert!(change.only(&["UserSettings"]));
+
+        // Another account's change is nothing for this one.
+        let other = state_change(event, "a3");
+        assert!(!other.may_have_changed("Email") && other.only(&["UserSettings"]));
+
+        // An event that can't be read may mean anything.
+        let unreadable = state_change("data: {\"@type\":\"StateChange\"\n\n", "a1");
+        assert!(unreadable.may_have_changed("Email") && !unreadable.only(&["UserSettings"]));
+    }
+
+    #[test]
+    fn notices_the_settings_extension() {
+        let base = Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let mut document = json!({
+            "capabilities": { CORE: {}, MAIL: {}, SETTINGS: {} },
+            "primaryAccounts": { MAIL: "a1" },
+            "apiUrl": "/jmap/api", "downloadUrl": "/jmap/download", "uploadUrl": "/jmap/upload",
+        });
+        assert!(Session::parse(&document, &base).unwrap().user_settings);
+        document["capabilities"].as_object_mut().unwrap().remove(SETTINGS);
+        assert!(!Session::parse(&document, &base).unwrap().user_settings);
     }
 
     #[test]

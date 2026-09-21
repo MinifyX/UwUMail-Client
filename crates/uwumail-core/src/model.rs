@@ -398,6 +398,32 @@ pub struct Signature {
     pub for_replies: bool,
 }
 
+/// The settings a UwUMail server keeps for one login, shared by the webmail and the apps
+/// (`UserSettings`, see UwUMail-Server docs/jmap-settings.md). Values are untrusted.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserSettings {
+    /// Changes with every write.
+    pub state: String,
+    pub values: serde_json::Map<String, serde_json::Value>,
+}
+
+/// How a write to the shared settings went. A request that didn't get through is an error instead.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserSettingsSaved {
+    pub ok: bool,
+    /// The new state after a write.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// The JMAP error when it didn't work, e.g. `stateMismatch` or `invalidProperties`.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "type")]
+    pub kind: Option<String>,
+    /// The refused keys of `invalidProperties`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<String>,
+}
+
 /// A blocked sender: on this device, or on the UwUMail server of one account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -571,6 +597,13 @@ pub enum EngineEvent {
     /// A queued message couldn't be sent; it was kept as a draft where possible.
     #[serde(rename = "send:failed", rename_all = "camelCase")]
     SendFailed { send_id: String, account_id: String, reason: String, message: Box<OutgoingMessage> },
+    /// The shared settings of a UwUMail account may have changed; `state` when the server said which.
+    #[serde(rename = "settings:changed", rename_all = "camelCase")]
+    SettingsChanged {
+        account_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        state: Option<String>,
+    },
 }
 
 impl EngineEvent {
@@ -581,6 +614,7 @@ impl EngineEvent {
             Self::AccountStatus { .. } => "account:status",
             Self::SendDone { .. } => "send:done",
             Self::SendFailed { .. } => "send:failed",
+            Self::SettingsChanged { .. } => "settings:changed",
         }
     }
 }
