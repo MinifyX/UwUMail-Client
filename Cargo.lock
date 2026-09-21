@@ -5971,9 +5971,11 @@ dependencies = [
 name = "uwumail-setup"
 version = "0.2.0-beta.3"
 dependencies = [
+ "libc",
  "semver",
  "serde",
  "serde_json",
+ "tar",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

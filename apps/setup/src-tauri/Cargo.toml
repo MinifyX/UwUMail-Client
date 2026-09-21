@@ -1,6 +1,6 @@
 [package]
 name = "uwumail-setup"
-description = "UwUMail's own installer, updater and uninstaller for Windows"
+description = "UwUMail's own installer, updater and uninstaller for Windows, macOS and Linux"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [build-dependencies]
+tar = { version = "0.4", default-features = false }
 tauri-build = { version = "2", features = [] }
 zstd = "0.13"
 
@@ -18,6 +19,10 @@ serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 zstd = "0.13"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+tar = { version = "0.4", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

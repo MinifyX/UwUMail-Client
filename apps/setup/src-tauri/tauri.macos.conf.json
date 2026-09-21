@@ -1,0 +1,8 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": ["../../desktop/src-tauri/icons/128x128.png", "../../desktop/src-tauri/icons/icon.icns"]
+  }
+}

@@ -9,8 +9,11 @@ export interface Options {
   defaultMailApp: boolean;
 }
 
+export type Platform = "windows" | "macos" | "linux";
+
 export interface Info {
   mode: "install" | "update" | "uninstall";
+  platform: Platform;
   version: string;
   installed: { dir: string; version?: string | null; legacy: boolean } | null;
   options: Options;
@@ -58,7 +61,8 @@ const tauriApi: SetupApi = {
 
 /**
  * Pretends to install, for working on the page in a normal browser.
- * `?mode=update`, `?mode=uninstall`, `?running` and `?fail` show the other states.
+ * `?mode=update`, `?mode=uninstall`, `?running` and `?fail` show the other states,
+ * `?platform=macos` or `?platform=linux` the other systems.
  */
 function previewApi(): SetupApi {
   const params = new URLSearchParams(window.location.search);
@@ -75,6 +79,7 @@ function previewApi(): SetupApi {
   return {
     info: async () => ({
       mode: (params.get("mode") as Info["mode"] | null) ?? "install",
+      platform: (params.get("platform") as Platform | null) ?? "windows",
       version: "0.2.0",
       installed: params.get("mode")
         ? { dir: "C:\\Users\\Mini\\AppData\\Local\\Programs\\UwUMail", version: "0.1.0", legacy: false }

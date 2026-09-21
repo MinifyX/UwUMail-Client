@@ -263,6 +263,10 @@ export function App() {
     if (info.appRunning) setScreen("running");
     else void run("install", options, info);
   };
+  const windows = info.platform === "windows";
+  const pick = <T,>(forWindows: T, forMac: T, forLinux: T) =>
+    info.platform === "macos" ? forMac : info.platform === "linux" ? forLinux : forWindows;
+  const device = pick(t.devicePc, t.deviceMac, t.deviceComputer);
 
   if (screen === "welcome") {
     return shell(
@@ -272,7 +276,9 @@ export function App() {
           compact={showOptions}
           title={installed ? t.againTitle : t.welcomeTitle}
           body={
-            installed ? fill(t.againBody, { installed: installed.version ?? "", version: info.version }) : t.welcomeBody
+            installed
+              ? fill(t.againBody, { installed: installed.version ?? "", version: info.version })
+              : fill(t.welcomeBody, { device })
           }
         />
         <div className="flex flex-col items-center gap-2 pt-5">
@@ -299,34 +305,49 @@ export function App() {
                   {options.dir}
                 </span>
               </span>
-              <button
-                type="button"
-                className="hover:bg-blush shrink-0 rounded-full px-3 py-1 text-[12.5px] font-bold text-pink-solid"
-                onClick={async () => {
-                  const dir = await api.pickFolder(options.dir);
-                  if (dir) setOptions({ ...options, dir });
-                }}
-              >
-                {t.change}
-              </button>
+              {/* macOS and Linux have one fixed place for a user's apps. */}
+              {windows && (
+                <button
+                  type="button"
+                  className="hover:bg-blush shrink-0 rounded-full px-3 py-1 text-[12.5px] font-bold text-pink-solid"
+                  onClick={async () => {
+                    const dir = await api.pickFolder(options.dir);
+                    if (dir) setOptions({ ...options, dir });
+                  }}
+                >
+                  {t.change}
+                </button>
+              )}
             </div>
-            <Switch
-              checked={options.desktopShortcut}
-              onChange={(desktopShortcut) => setOptions({ ...options, desktopShortcut })}
-              label={t.desktopShortcut}
-            />
+            {windows && (
+              <Switch
+                checked={options.desktopShortcut}
+                onChange={(desktopShortcut) => setOptions({ ...options, desktopShortcut })}
+                label={t.desktopShortcut}
+              />
+            )}
             <Switch
               checked={options.autostart}
               onChange={(autostart) => setOptions({ ...options, autostart })}
-              label={t.autostart}
-              hint={t.autostartHint}
+              label={pick(t.autostart, t.autostartMac, t.autostartLinux)}
+              hint={pick(t.autostartHint, t.autostartHintMac, t.autostartHintLinux)}
             />
             <Switch
               checked={options.defaultMailApp}
               onChange={(defaultMailApp) => setOptions({ ...options, defaultMailApp })}
               label={t.defaultMailApp}
-              hint={t.defaultMailAppHint}
+              hint={pick(t.defaultMailAppHint, t.defaultMailAppHintMac, t.defaultMailAppHintLinux)}
             />
+            {/* Windows uninstalls from its "Installed apps" list; elsewhere the setup does it. */}
+            {installed && !windows && (
+              <button
+                type="button"
+                onClick={() => setScreen("uninstall")}
+                className="text-plum-soft hover:text-plum mt-1 w-full rounded-2xl px-2 py-2 text-left text-[12.5px] font-bold"
+              >
+                {t.uninstallLink}
+              </button>
+            )}
           </div>
         )}
         <p className="text-plum-soft mt-auto pt-3 text-center text-[11.5px]">
@@ -415,8 +436,10 @@ export function App() {
               </li>
             ))}
           </ul>
-          {options.defaultMailApp && (
-            <p className="bg-blush mt-2 rounded-xl px-3 py-2 text-[12px] font-semibold">{t.defaultAppsHint}</p>
+          {options.defaultMailApp && info.platform !== "linux" && (
+            <p className="bg-blush mt-2 rounded-xl px-3 py-2 text-[12px] font-semibold">
+              {windows ? t.defaultAppsHint : t.defaultAppsHintMac}
+            </p>
           )}
         </div>
         <div className="mt-auto flex items-center gap-2 pt-3">
@@ -468,12 +491,15 @@ export function App() {
   if (screen === "uninstall") {
     return shell(
       <>
-        <Stage scene={<GoodbyeScene />} title={t.uninstallTitle} body={t.uninstallBody} />
+        <Stage scene={<GoodbyeScene />} title={t.uninstallTitle} body={fill(t.uninstallBody, { device })} />
         <div className="setup-card mt-5 w-full rounded-[22px] p-2">
           <Switch checked={keepData} onChange={setKeepData} label={t.keepData} hint={t.keepDataHint} />
         </div>
         <div className="mt-auto flex items-center gap-2 pt-3">
-          <Button variant="quiet" onClick={() => void api.finish()}>
+          <Button
+            variant="quiet"
+            onClick={() => (info.mode === "uninstall" ? void api.finish() : setScreen("welcome"))}
+          >
             {t.keep}
           </Button>
           <Button autoFocus onClick={() => void run("uninstall", options, info, keepData)}>

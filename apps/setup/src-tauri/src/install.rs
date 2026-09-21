@@ -12,10 +12,11 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
 
+pub use crate::common::{Installed, Options, Progress, Step, check_not_older, has_payload};
+use crate::common::{PAYLOAD, PAYLOAD_SIZE};
 use crate::system;
 
 pub const APP_EXE: &str = "UwUMail.exe";
@@ -31,31 +32,6 @@ const MAILTO_CLASS: &str = r"Software\Classes\UwUMail.mailto";
 const REGISTERED_APPS: &str = r"Software\RegisteredApplications";
 /// Where Tauri's standard NSIS installer put UwUMail 0.1.0.
 const LEGACY_PRODUCT_KEY: &str = r"Software\UwUMail contributors\UwUMail";
-
-static PAYLOAD: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/payload.zst"));
-const PAYLOAD_SIZE: &str = env!("UWUMAIL_SETUP_PAYLOAD_SIZE");
-
-pub fn has_payload() -> bool {
-    !PAYLOAD.is_empty()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Options {
-    pub dir: String,
-    pub desktop_shortcut: bool,
-    pub autostart: bool,
-    pub default_mail_app: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Installed {
-    pub dir: String,
-    pub version: Option<String>,
-    /// Installed by the old standard installer.
-    pub legacy: bool,
-}
 
 /// Where things go on this machine.
 pub struct Layout {
@@ -170,19 +146,6 @@ impl Layout {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Step {
-    Prepare,
-    Copy,
-    Shortcuts,
-    Register,
-    Cleanup,
-    Done,
-}
-
-pub type Progress<'a> = &'a mut dyn FnMut(Step, f64);
-
 /// Writes a file next to its destination first, then swaps it in. A running
 /// program keeps its file locked for a moment after it ends, hence the retries.
 fn replace_file(from: &Path, to: &Path) -> Result<(), String> {
@@ -262,16 +225,12 @@ fn remove_legacy(layout: &Layout, new_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// The version in an update feed isn't signed, only the setup is. So an update may carry an
-/// older (validly signed) setup; it must not replace a newer UwUMail.
-pub fn check_not_older(installed: Option<&str>, update: &str) -> Result<(), String> {
-    let parse = |version: &str| semver::Version::parse(version.trim()).ok();
-    match (installed.and_then(parse), parse(update)) {
-        (Some(installed), Some(update)) if update < installed => Err(format!(
-            "UwUMail {installed} is already installed. This update is older ({update}), so it was skipped."
-        )),
-        _ => Ok(()),
+/// Starts the installed UwUMail. Skipped in the sandbox.
+pub fn launch(layout: &Layout, dir: &Path) -> Result<(), String> {
+    if layout.sandbox {
+        return Ok(());
     }
+    system::spawn_detached(&dir.join(APP_EXE), &[])
 }
 
 pub fn install(layout: &Layout, options: &Options, version: &str, progress: Progress) -> Result<(), String> {
@@ -456,16 +415,6 @@ mod tests {
             let _ = RegKey::predef(HKEY_CURRENT_USER).delete_subkey_all(key);
             let _ = &self.dir;
         }
-    }
-
-    #[test]
-    fn updates_never_go_back() {
-        assert!(check_not_older(Some("0.3.0"), "0.2.0-beta.1").is_err());
-        assert!(check_not_older(Some("0.2.0"), "0.2.0-beta.1").is_err());
-        assert!(check_not_older(Some("0.2.0-beta.1"), "0.2.0-beta.2").is_ok());
-        assert!(check_not_older(Some("0.2.0-beta.1"), "0.2.0-beta.1").is_ok(), "repairing is fine");
-        assert!(check_not_older(None, "0.2.0").is_ok());
-        assert!(check_not_older(Some("unknown"), "0.2.0").is_ok());
     }
 
     #[test]
