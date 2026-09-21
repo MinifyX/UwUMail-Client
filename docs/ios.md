@@ -6,7 +6,7 @@ build is, how it gets onto a phone, and what iOS doesn't let UwUMail do.
 
 ## What CI builds
 
-Every run on `main` (and on `feat/ios`) produces two things:
+Every run on `main` produces two things:
 
 | Artifact | What it is |
 | --- | --- |
@@ -31,7 +31,11 @@ the IPA leaves CI with no signature at all — iOS refuses to install it as it i
 The way around it, for your own phone: a sideloading tool signs the app with
 your own free Apple ID right before it installs it.
 
-1. Download the `UwUMail-iOS-…` artifact from the workflow run and unzip it.
+1. Download `UwUMail-<version>-unsigned.ipa` from the
+   [releases page](https://github.com/MinifyX/UwUMail-Client/releases). Every
+   release carries the IPA the iOS workflow built and tried for that commit.
+   (For something newer than the last release: the `UwUMail-iOS-…` artifact of
+   a workflow run on `main`, unzipped.)
 2. Install [Sideloadly](https://sideloadly.io/) (Windows or macOS) or
    [AltStore](https://altstore.io/).
 3. Plug in the iPhone, drag the `.ipa` into the tool, sign in with your Apple

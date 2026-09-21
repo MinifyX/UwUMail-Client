@@ -37,11 +37,12 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Addon SDK: manifest validation, wire protocol, typed client
 - [ ] Addon catalog (`MinifyX/UwUMail-Addons`) with one-click install
 - [x] Installers for Windows and Linux in CI, release workflow with macOS
+- [x] UwUMail's own setup on macOS (Apple chip and Intel) and Linux (AppImage), tested on GitHub's runners ([install.md](install.md))
 - [x] UwUMail's own Windows installer with Nyu: one click, no admin, options, uninstaller that can keep mail
 - [x] Auto-update on Windows: signed, downloaded quietly, Stable and Beta channels
 - [ ] Releases and update feeds in this repo, old `UwUMail-Releases` archived (ships with 0.2.0-beta.3)
 - [x] Keep running in the notification area, start with Windows, default mail app (`mailto:` links)
-- [ ] Auto-update on macOS and Linux
+- [x] Auto-update on macOS and Linux (same signed feed as Windows)
 - [x] Security audit with fixes, `SECURITY.md`, dependency audit in CI ([report](security-audit.md))
 - [x] Warning for links whose text shows a different site than the target
 - [x] First beta: 0.2.0-beta.1
@@ -63,6 +64,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 ## iOS
 
 - [x] Same app and engine on the iPhone, unsigned IPA from CI, simulator smoke test ([how it works](ios.md))
+- [x] Unsigned IPA on every release, for sideloading
 - [x] Phone layout, swipe actions, app lock with Face ID, haptics, passwords in the iOS keychain
 - [x] Notifications for mail that arrives while UwUMail runs
 - [x] Attachments saved into UwUMail's folder in the Files app; profiles and apps from mail refused
@@ -82,5 +84,4 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 
 - [ ] CardDAV contact sync
 - [ ] Self-hostable sync server for settings, signatures and addons (AGPL-3.0)
-- [ ] iOS app
 - [ ] Code signing for Windows and macOS

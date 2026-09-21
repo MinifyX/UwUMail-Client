@@ -264,11 +264,17 @@ result (including "nothing found") for 30 days. Addresses at mail providers
 request, and icon links or redirects to IP addresses, `localhost` or local
 names are ignored. The setting lives under Reading and is on by default.
 
-## Windows installer and updates
+## Installer and updates
 
-`apps/setup` is UwUMail's own installer: a small Tauri app with Nyu that
-carries the UwUMail executable inside (zstd-packed at build time,
-`pnpm build:setup`). It installs for the current user without admin rights:
+`apps/setup` is UwUMail's own installer, the same small Tauri app with Nyu on
+Windows, macOS and Linux. It carries UwUMail inside (zstd-packed at build time
+by `pnpm build:setup`, see [install.md](install.md) for the user's side) and
+installs for the current user without admin rights. `--silent` does the same
+without a window, which CI uses to test it.
+
+### Windows
+
+The payload is the UwUMail executable.
 
 | What | Where |
 | --- | --- |
@@ -285,15 +291,84 @@ mail data and keychain entries only if asked. Without WebView2 it offers to
 download it first. `UWUMAIL_SETUP_SANDBOX=<folder>` redirects files, shortcuts
 and registry keys for testing.
 
-Updates: the app checks `stable.json` or `beta.json` on the `updates` branch
-of this repo 20 seconds after start and every six hours
-(`tauri-plugin-updater`, signature checked against the public key in
-`tauri.conf.json`). It downloads the new `UwUMail-Setup-<version>.exe` into
-`%LOCALAPPDATA%\app.uwumail.desktop\updates`, shows Nyu's hint, and either
-restarts into it now or on the next start (`--update --relaunch --wait-pid`).
-Right before the setup runs, its signature is checked again, and in update mode
-the setup refuses to replace a newer installed version, because the version
-number in the feed isn't signed.
+### macOS
+
+Separate builds for Apple chips (`aarch64-apple-darwin`) and Intel
+(`x86_64-apple-darwin`). The payload is a tar of `UwUMail.app`; the download is
+a `.dmg` with `UwUMail Setup.app`. Both bundles are signed ad hoc
+(`codesign --sign -`): there's no Apple developer ID, and Apple chips refuse
+unsigned code.
+
+| What | Where |
+| --- | --- |
+| App | `~/Applications/UwUMail.app` |
+| Start with the Mac | LaunchAgent `~/Library/LaunchAgents/app.uwumail.autostart.plist` → `… --autostart` |
+| `mailto:` | `CFBundleURLTypes` in UwUMail's Info.plist (`Info.macos.plist`); the setup registers the app with Launch Services and calls `LSSetDefaultHandlerForURLScheme` |
+| Remembered options | `~/Library/Application Support/app.uwumail.setup/setup.json` |
+
+A LaunchAgent and not `SMAppService`: the setup has to switch autostart on for
+another app, while `SMAppService` only lets an app register itself, and wants a
+properly signed one. macOS may ignore or confirm the default-handler request;
+the setup doesn't insist. UwUMail receives `mailto:` links as "open URL" events
+(`RunEvent::Opened`), not on the command line.
+
+### Linux
+
+x86_64 only. The payload is Tauri's AppImage of UwUMail, unpacked at build
+time and packed as a tar: the installed app runs through its own `AppRun`
+without FUSE and starts quicker. The download is the setup as an AppImage.
+
+| What | Where |
+| --- | --- |
+| App | `~/.local/share/uwumail/app` (the folder is private, `0700`) |
+| Menu entry and icon | `~/.local/share/applications/uwumail.desktop`, `~/.local/share/icons/hicolor/*/apps/uwumail.png` |
+| Command | `~/.local/bin/uwumail` → `AppRun` (only if nothing else has that name) |
+| Start when signing in | `~/.config/autostart/uwumail.desktop` → `… --autostart` |
+| `mailto:` | `MimeType=x-scheme-handler/mailto` in the menu entry, the default in `~/.config/mimeapps.list`, plus `xdg-mime default` |
+| Remembered options | `~/.local/share/uwumail/setup.json` |
+
+Everything the setup starts gets a clean environment without the variables an
+AppImage's start script sets, so UwUMail never looks for libraries in the
+setup's (by then gone) AppImage and vice versa.
+
+### How macOS and Linux install
+
+The app is unpacked next to its place (`.UwUMail.app.new-<pid>`), checked, and
+renamed into place; the old version is moved aside first and only deleted once
+the new one is there. The tar can't set setuid bits or make anything writable
+for others, and can't write outside its folder. Uninstalling works from the
+setup's page ("Uninstall UwUMail" under Options); the folder to remove never
+comes from the command line.
+
+### Updates
+
+The app checks `stable.json` or `beta.json` on the `updates` branch of this
+repo 20 seconds after start and every six hours (`tauri-plugin-updater`,
+signature checked against the public key in `tauri.conf.json`). Each feed has
+one entry per system, under Tauri's platform keys:
+
+| Key | Download |
+| --- | --- |
+| `windows-x86_64` | `UwUMail-Setup-<version>.exe` |
+| `darwin-aarch64` | `UwUMail-Update-<version>-macos-apple-silicon` |
+| `darwin-x86_64` | `UwUMail-Update-<version>-macos-intel` |
+| `linux-x86_64` | `UwUMail-Setup-<version>-x86_64.AppImage` |
+
+On macOS the download is the setup program from inside `UwUMail Setup.app`, on
+its own (and signed ad hoc on its own): one file the signature covers
+completely, with nothing to unpack before it is checked. It runs fine outside
+its bundle.
+
+The app saves the download into its local data folder (`…/updates`, private to
+the user on macOS and Linux, the file only executable by the user), shows Nyu's
+hint, and either restarts into it now or on the next start (`--update
+--relaunch --wait-pid`). Right before the setup runs, its signature is checked
+again, and in update mode the setup refuses to replace a newer installed
+version, because the version number in the feed isn't signed. On Linux the
+setup AppImage unpacks itself into that private folder
+(`APPIMAGE_EXTRACT_AND_RUN`, `TMPDIR`) instead of mounting with FUSE. On macOS
+and Linux only a UwUMail running from where the setup installed it updates
+itself.
 
 ## Security
 
@@ -309,16 +384,21 @@ different site than the target.
 - Every push: typecheck, lint, unit tests, `cargo clippy`, `cargo test`
   (including integration tests against GreenMail and Stalwart), `cargo audit`
   and `pnpm audit --prod`. All actions are pinned to commit SHAs.
-- Every push to `main`: `UwUMail-Setup-<version>.exe` for Windows and the Linux
-  packages as workflow artifacts, and the signed Android APK with its emulator
-  test.
+- Every push to `main`: `UwUMail-Setup-<version>.exe` for Windows as a workflow
+  artifact; the macOS setups (Apple chip on `macos-15`, Intel on
+  `macos-15-intel`) and the Linux AppImage setup, each installed, started,
+  updated and uninstalled in a throwaway home folder
+  (`.github/workflows/desktop.yml`, Linux on Ubuntu 22.04 and 24.04); the
+  signed Android APK with its emulator test; the unsigned iPhone IPA with its
+  simulator test.
 - Tags `vX.Y.Z` (or `vX.Y.Z-beta.N`): a GitHub release here with the signed
-  setup and the APK the Android workflow built and tested for that commit, and
-  the update feeds on the `updates` branch (`scripts/release-feeds.mjs`, see
+  setups for Windows, macOS and Linux, the APK and the IPA the Android and iOS
+  workflows built and tested for that commit, and the update feeds on the
+  `updates` branch (`scripts/release-feeds.mjs`, see
   `release-notes/README.md`). The branch holds nothing else and is protected
-  against deletion and force pushes. macOS and Linux packages are only workflow
-  artifacts. When GitHub can't run the workflow, `pnpm release` on a Windows PC
-  publishes the setup the same way (without the APK).
+  against deletion and force pushes. When GitHub can't run the workflow,
+  `pnpm release` on a Windows PC publishes the Windows setup the same way; its
+  feeds then only list Windows, so Macs and Linux PCs skip that version.
 - Until everyone is past 0.2.0-beta.2, releases also update the feeds in the
   old `MinifyX/UwUMail-Releases` repo, which those versions still ask. After
   that it is archived.

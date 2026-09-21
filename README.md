@@ -50,18 +50,38 @@ Server). It's what I wanted from a mail client:
   SDK exists, the addon host doesn't yet.
 
 > **Status:** beta. It works, but expect rough edges and things that change.
-> Windows and Android builds are on the
-> [releases page](https://github.com/MinifyX/UwUMail-Client/releases); the
-> [roadmap](docs/roadmap.md) shows what's done and what I'd like to do next.
-> The iPhone build comes out of CI unsigned and is sideloaded — how that works,
-> and what iOS doesn't allow, is in [docs/ios.md](docs/ios.md).
+> The [roadmap](docs/roadmap.md) shows what's done and what I'd like to do next.
+
+## Download
+
+Everything is on the
+[releases page](https://github.com/MinifyX/UwUMail-Client/releases). I mostly
+use it on Windows and Android; the other builds are tested automatically on
+GitHub's machines, not by me every day.
+
+| System | File |
+| --- | --- |
+| Windows (x64) | `UwUMail-Setup-<version>.exe` |
+| macOS with Apple chip | `UwUMail-Setup-<version>-macos-apple-silicon.dmg` |
+| macOS with Intel | `UwUMail-Setup-<version>-macos-intel.dmg` |
+| Linux (x86_64) | `UwUMail-Setup-<version>-x86_64.AppImage` |
+| Android | `UwUMail-<version>-<build>.apk` |
+| iPhone | `UwUMail-<version>-unsigned.ipa`, sideload only |
+
+On Windows, macOS and Linux the setup installs just for you, without an
+administrator password, and UwUMail keeps itself up to date after that. The
+Mac builds aren't signed by Apple, so macOS wants one extra click the first
+time. That, the Linux details and how to uninstall are in
+[docs/install.md](docs/install.md). The iPhone build is unsigned and has to be
+sideloaded; how that works, and what iOS doesn't allow, is in
+[docs/ios.md](docs/ios.md).
 
 ## Project layout
 
 | Path | What lives there |
 | --- | --- |
 | `apps/desktop` | The Tauri 2 app for desktop, Android and iOS (React UI + Rust shell) |
-| `apps/setup` | UwUMail's own installer, updater and uninstaller for Windows |
+| `apps/setup` | UwUMail's own installer, updater and uninstaller for Windows, macOS and Linux |
 | `crates/uwumail-core` | Mail engine: accounts, IMAP and JMAP sync, sending, local store, search |
 | `crates/uwumail-android` | Android side of the engine: background service, keystore, notifications |
 | `packages/addon-sdk` | `@uwumail/addon-sdk` — types and runtime for addon authors (MIT) |
@@ -102,6 +122,7 @@ docker compose -f dev/mailserver.compose.yml up -d
 ## Documentation
 
 - [Vision](docs/vision.md) — what I want UwUMail to be and what it will never do
+- [Installing](docs/install.md) — the setup on each system, first start on a Mac, updates, uninstalling
 - [Architecture](docs/architecture.md) — how the pieces fit together
 - [Addons](docs/addons.md) — manifest, permissions and the addon API
 - [Design](docs/design.md) — colors, type, tone of voice
