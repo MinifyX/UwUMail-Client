@@ -78,7 +78,14 @@ else
 fi
 
 # Still alive after the start, not quietly gone.
-xcrun simctl spawn "$device" launchctl list 2>/dev/null | grep -q "$bundle" || fail "UwUMail isn't running any more"
+# Simulator apps are processes of the Mac; newer runtimes don't list them in the
+# simulator's launchctl any more, so either place counts.
+if xcrun simctl spawn "$device" launchctl list 2>/dev/null | grep -q "$bundle" \
+  || pgrep -f "/$(basename "$app")/" > /dev/null; then
+  echo "UwUMail is still running"
+else
+  fail "UwUMail isn't running any more"
+fi
 
 if grep -Ei "panicked at|fatal error|Abort trap" "$out/console.txt" > "$out/crashes.txt" 2>/dev/null; then
   fail "Crash in the log, see crashes.txt"
