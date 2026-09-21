@@ -172,4 +172,22 @@ describe("buildPrintDocument", () => {
     expect(doc).not.toContain("<script>");
     expect(doc).toContain("img-src data: blob:;");
   });
+
+  it("does not let the mail's CSS hide or overlay the printed header (W-3)", () => {
+    const doc = buildPrintDocument(
+      message({
+        subject: "Echt",
+        to: [{ name: "Mini", email: "mini@uwumail.dev" }],
+        bodyHtml: "<style>table.head,h1{display:none}</style><h1>Gefälscht</h1><p>Text</p>",
+      }),
+      false,
+      new Map(),
+      labels,
+      "14. September 2026",
+    );
+    // The style block that could reach the app's header is gone; the body sits in a contained box.
+    expect(doc).not.toContain("display:none");
+    expect(doc).not.toContain("<style>table.head");
+    expect(doc).toContain("contain:content");
+  });
 });

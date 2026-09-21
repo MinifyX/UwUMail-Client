@@ -121,10 +121,15 @@ export function buildPrintDocument(
   const escape = (text: string) => text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
   const people = (list: Message["to"]) =>
     escape(list.map((a) => (a.name ? `${a.name} <${a.email}>` : a.email)).join(", "));
-  const body =
+  const rendered =
     message.bodyHtml !== null
       ? replaceContentIds(sanitize(message.bodyHtml), inlineImages)
       : `<div style="white-space:pre-wrap">${textToHtml(message.bodyText ?? "")}</div>`;
+  // The mail shares this one document with the app's own trusted header. Strip its <style> blocks --
+  // only a selector there can reach the header's h1/table to hide it -- and contain the body in its
+  // own stacking/paint box so an absolutely-positioned element cannot overlay the header above it
+  // (webmail security audit W-3). Inline styles, which is what mail uses in practice, are kept.
+  const body = `<section style="position:relative;isolation:isolate;contain:content">${rendered.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")}</section>`;
   const imageSources = allowRemote ? "data: blob: https: http:" : "data: blob:";
   const rows = [
     [labels.from, people([message.from])],
@@ -254,7 +259,10 @@ export function MessageBody({ message, allowRemote, appearance, onAutoDecision, 
     // Images load after the document; their size changes the height too.
     doc.addEventListener("load", updateHeight, true);
     doc.addEventListener("click", (event) => {
-      const anchor = (event.target as Element | null)?.closest?.("a[href]");
+      // `area` as well as `a`: an image map is a link with no text, and today it only ever gets
+      // here without its href because a table of attributes in the sanitizer happens to drop it.
+      // Catching it here does not depend on that staying true.
+      const anchor = (event.target as Element | null)?.closest?.("a[href], area[href]");
       if (!anchor) return;
       event.preventDefault();
       requestOpenLink(anchor.getAttribute("href") ?? "", anchor.textContent ?? "");
