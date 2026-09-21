@@ -261,7 +261,14 @@ fn finish(app: AppHandle) {
 /// `--silent`: the same jobs without a window.
 fn run_silent(setup: &Setup, args: &[String]) -> Result<String, String> {
     let flag = |name: &str| args.iter().any(|a| a == name);
-    let mut report = |step: Step, overall: f64| println!("{:>3} % {step:?}", (overall * 100.0).round());
+    // One line per step is enough for a log.
+    let mut last = None;
+    let mut report = |step: Step, overall: f64| {
+        if last != Some(step) {
+            last = Some(step);
+            println!("{:>3} % {step:?}", (overall * 100.0).round());
+        }
+    };
     if let Mode::Uninstall { .. } = setup.mode {
         let dir = current_dir(setup);
         let mut progress = reporter(UNINSTALL_WEIGHTS, &mut report);
