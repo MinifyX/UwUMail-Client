@@ -40,12 +40,24 @@ export function formatSize(bytes: number, locale: string): string {
   return `${value.toLocaleString(locale, { maximumFractionDigits: digits })} ${units[unit]}`;
 }
 
+/**
+ * Characters that change the direction of the text after them. A sender picks their own name, and
+ * one of these left open in it would turn the address shown next to it around. Right-to-left names
+ * show correctly without them.
+ */
+const DIRECTION_CONTROLS = /[‎‏‪-‮⁦-⁩]/g;
+
+export function withoutDirectionControls(text: string): string {
+  return text.replace(DIRECTION_CONTROLS, "");
+}
+
 export function displayName(address: Address): string {
-  return address.name?.trim() || address.email.split("@")[0] || address.email;
+  return withoutDirectionControls(address.name ?? "").trim() || address.email.split("@")[0] || address.email;
 }
 
 export function formatAddress(address: Address): string {
-  return address.name ? `${address.name} <${address.email}>` : address.email;
+  const name = withoutDirectionControls(address.name ?? "").trim();
+  return name ? `${name} <${address.email}>` : address.email;
 }
 
 export function initials(address: Address): string {

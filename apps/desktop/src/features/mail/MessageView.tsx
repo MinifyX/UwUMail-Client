@@ -20,6 +20,7 @@ import { Menu } from "@/components/ui/Menu";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { translate, useT } from "@/i18n";
 import { addressRows, fullAddress, type AddressRole } from "@/lib/addresses";
+import { visibleText } from "@/lib/links";
 import { displayName, formatFullDate, formatListDate, formatLongDate } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCompanyDomain, useFolders } from "@/lib/queries";
@@ -233,7 +234,9 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
               >
                 {displayName(message.from)}
               </Tooltip>
-              <span className="selectable min-w-0 truncate text-[12.5px] text-muted">{message.from.email}</span>
+              <span className="selectable min-w-0 truncate text-[12.5px] text-muted">
+                {visibleText(message.from.email)}
+              </span>
             </p>
             <p className="flex min-w-0 items-center gap-0.5 text-[12.5px] text-muted">
               <span className="min-w-0 truncate">
