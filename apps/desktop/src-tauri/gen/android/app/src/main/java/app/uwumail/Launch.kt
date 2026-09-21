@@ -17,6 +17,9 @@ object Launch {
     /** Bigger shared files don't fit a mail; copying stops here (the engine applies the same limit). */
     private const val MAX_SHARED_BYTES = 25L * 1024 * 1024
 
+    /** More files than this in one share are left out. */
+    private const val MAX_SHARED_FILES = 100
+
     /** `app.uwumail://oauth?…`, where signing in with Microsoft or Google comes back to. */
     private const val OAUTH_SCHEME = "app.uwumail"
     private const val OAUTH_HOST = "oauth"
@@ -51,7 +54,16 @@ object Launch {
                 // Copying can take a moment for big videos, so not on the main thread.
                 thread(name = "uwumail-share") {
                     val files = JSONArray()
-                    uris.forEach { uri -> copy(app, uri)?.let { files.put(it) } }
+                    // All files together have to fit one mail, so a share can't fill the storage
+                    // with copies: once the budget is used up, the rest is only named, not copied.
+                    var budget = MAX_SHARED_BYTES
+                    uris.take(MAX_SHARED_FILES).forEach { uri ->
+                        copy(app, uri, budget)?.let { file ->
+                            files.put(file)
+                            val size = file.getLong("size")
+                            if (size <= budget) budget -= size
+                        }
+                    }
                     report(JSONObject().put("kind", "share").put("subject", subject).put("text", text).put("files", files))
                 }
             }
@@ -90,37 +102,47 @@ object Launch {
         return true
     }
 
-    /** Copies a shared file into the cache, where the engine can read it. */
-    private fun copy(context: Context, uri: Uri): JSONObject? = try {
-        val resolver = context.contentResolver
-        var name = uri.lastPathSegment ?: "attachment"
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst() && !cursor.isNull(0)) name = cursor.getString(0)
-        }
-        val folder = File(context.cacheDir, "shared/${UUID.randomUUID()}").apply { mkdirs() }
-        val target = File(folder, Files.safeName(name))
-        var size = 0L
-        resolver.openInputStream(uri).use { input ->
-            requireNotNull(input) { "Nothing to read" }
-            target.outputStream().use { output ->
-                val buffer = ByteArray(64 * 1024)
-                while (size <= MAX_SHARED_BYTES) {
-                    val read = input.read(buffer)
-                    if (read < 0) break
-                    output.write(buffer, 0, read)
-                    size += read
+    /**
+     * Copies a shared file into the cache, where the engine can read it, as long as it fits the
+     * `limit` left for this share. A file that doesn't is reported as too big, without its bytes.
+     */
+    private fun copy(context: Context, uri: Uri, limit: Long): JSONObject? {
+        val folder = File(context.cacheDir, "shared/${UUID.randomUUID()}")
+        return try {
+            val resolver = context.contentResolver
+            var name = uri.lastPathSegment ?: "attachment"
+            resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) name = cursor.getString(0)
+            }
+            folder.mkdirs()
+            val target = File(folder, Files.safeName(name))
+            var size = 0L
+            resolver.openInputStream(uri).use { input ->
+                requireNotNull(input) { "Nothing to read" }
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (size <= limit) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        size += read
+                    }
                 }
             }
+            // Too big: keep the name for the "left out" hint, not the bytes.
+            if (size > limit) {
+                target.writeBytes(ByteArray(0))
+                size = MAX_SHARED_BYTES + 1
+            }
+            JSONObject()
+                .put("path", target.absolutePath)
+                .put("filename", target.name)
+                .put("mimeType", resolver.getType(uri) ?: "application/octet-stream")
+                .put("size", size)
+        } catch (error: Exception) {
+            Log.w("UwUMail", "Couldn't read a shared file", error)
+            folder.deleteRecursively()
+            null
         }
-        // Too big: keep the name for the "left out" hint, not the bytes.
-        if (size > MAX_SHARED_BYTES) target.writeBytes(ByteArray(0))
-        JSONObject()
-            .put("path", target.absolutePath)
-            .put("filename", target.name)
-            .put("mimeType", resolver.getType(uri) ?: "application/octet-stream")
-            .put("size", size)
-    } catch (error: Exception) {
-        Log.w("UwUMail", "Couldn't read a shared file", error)
-        null
     }
 }
