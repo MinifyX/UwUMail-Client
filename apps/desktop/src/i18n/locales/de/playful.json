@@ -72,7 +72,8 @@
     "unsubscribed": "Abgemeldet (≧▽≦) Keine Post mehr von {{name}}",
     "messageSaved": "Mail sicher abgelegt (˘ω˘)",
     "deletedForever_one": "Für immer weg (｡•́︿•̀｡)",
-    "deletedForever_other": "{{count}} Mails für immer weg (｡•́︿•̀｡)"
+    "deletedForever_other": "{{count}} Mails für immer weg (｡•́︿•̀｡)",
+    "draftGone": "Hier ist kein Entwurf mehr, Nyu hat überall nachgeschaut (・_・;)"
   },
   "status": {
     "syncing": "Hole frische Mails…",

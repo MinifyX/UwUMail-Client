@@ -168,6 +168,7 @@
     "draftLocal": "The draft is only saved on this device. UwUMail will try again later.",
     "draftDiscarded": "Draft discarded",
     "draftOpenFailed": "The draft couldn't be opened. {{reason}}",
+    "draftGone": "There is no draft left in this conversation.",
     "sending": "Sending mail …",
     "undo": "Undo",
     "sendUndone": "Sending stopped. You can keep writing.",

@@ -168,6 +168,7 @@
     "draftLocal": "Der Entwurf ist nur auf diesem Gerät gespeichert. UwUMail versucht es später erneut.",
     "draftDiscarded": "Entwurf verworfen",
     "draftOpenFailed": "Der Entwurf konnte nicht geöffnet werden. {{reason}}",
+    "draftGone": "In dieser Unterhaltung liegt kein Entwurf mehr.",
     "sending": "Mail wird gesendet …",
     "undo": "Rückgängig",
     "sendUndone": "Senden abgebrochen. Du kannst weiterschreiben.",

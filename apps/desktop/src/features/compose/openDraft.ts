@@ -31,12 +31,20 @@ export async function openDraftMessage(messageId: string) {
   }
 }
 
-/** The newest message of a conversation in the Drafts folder, opened in the composer. */
+/**
+ * The draft of a conversation in the Drafts folder, opened in the composer.
+ *
+ * Only a message that really is a draft: whatever else sits in that conversation is somebody
+ * else's mail, and a draft is opened into the composer itself, where the reader's frame and its
+ * rules are not around it. The whole conversation is asked for, so the draft is in the list even
+ * when a newer message arrived after it.
+ */
 export async function openDraftThread(threadId: string) {
   try {
-    const detail = await backend().getThread(threadId, false);
-    const draft = [...detail.messages].reverse().find((message) => message.flags.draft) ?? detail.messages.at(-1);
+    const detail = await backend().getThread(threadId, true);
+    const draft = [...detail.messages].reverse().find((message) => message.flags.draft);
     if (draft) await openDraftMessage(draft.id);
+    else toast(translate("toast.draftGone"), "error");
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : String(reason);
     toast(translate("toast.draftOpenFailed", { reason: message }), "error");

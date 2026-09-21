@@ -59,7 +59,11 @@ export function initialDraft(
       cc,
       bcc,
       subject,
-      html,
+      // A restored body goes into the composer itself, not into the reader's sandboxed frame, and
+      // it does not always come from the person writing it: a draft read back from the server is
+      // whatever that mail holds. It goes through the same cleaning as a quote, which is also what
+      // sending would do to it anyway.
+      html: quotableHtml(html),
     };
   }
   const source = request.source;
