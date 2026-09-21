@@ -329,3 +329,161 @@ jar; the Android update client only follows HTTPS.
 2. An opt-in to trust user-installed certificate authorities, for self-hosted servers (AI1).
 3. When background push is off, bind the Keystore key to the unlocked phone (AI2).
 4. Include the Android IPC bridge in the addon host review (AI5, I11).
+
+---
+
+# Addendum — changes since 17 September 2026
+
+22 September 2026. Scope: everything added to the client since the Android addendum — the fixes ported from the
+webmail audit (links, `mailto:`, attachments including the native question before saving dangerous files,
+unsubscribing by mail, cleaning pasted mail, drafts), blocking senders on a UwUMail server, the edit dialogs,
+keyboard forwarding from the mail frame and Ctrl+A bulk actions, spam from the list and as a swipe, the link
+question with remembered domains, status line, redirect detection and long-press sheet (`lib/links.ts`,
+`redirects.ts`, `domains.ts`), the full address details, keeping the Bcc of sent mail (`bcc_json`), and the settings
+sync with a UwUMail server (`jmap_settings.rs`, `lib/settingsSync.ts`, `settingsSyncQueue.ts`,
+`state/accountSync.ts`). The Tauri capabilities, CSP, attachment handling, sender pictures, autoconfig, TLS, logs and
+the Android components were checked again. The Windows setup, the release scripts and the updater changes for
+macOS and Linux were still being built and are left for their own review.
+
+Done with Claude, like the audits above.
+
+## Summary
+
+| Severity | Found | Fixed | Accepted |
+| --- | --- | --- | --- |
+| High | 1 | 1 | 0 |
+| Medium | 2 | 2 | 0 |
+| Low | 8 | 8 | 0 |
+| Informational | 9 | — | 9 |
+
+All earlier findings (H1–H3, M1–M7, L1–L10, AM1–AM4, AL1–AL8) still hold; M8 and the release pipeline weren't part
+of this pass.
+
+## Threat model additions
+
+The settings sync adds **the mail server** as a source of settings. A UwUMail server the user signs in to is trusted
+with their mail, but its copy of the settings is treated like any other input: someone who took the server over
+should not be able to switch the client's protections off or run code in it.
+
+## Findings
+
+### High
+
+**NH1 — A Unicode space after a dangerous extension switched off the warning.** *Fixed.*
+The dangerous-file check ignored trailing dots and ASCII spaces only, while the attachment cache trims every kind
+of space before it writes the file. A name ending in an invisible space was therefore not flagged, but landed on
+disk as a plain program and opened without the native question (M1).
+Fix: the check trims the same spaces and also checks the name the file gets on disk (`attachments.rs`,
+`is_dangerous`; the UI in `lib/attachments.ts` follows). Installer, theme, search-connector, add-in and Access
+formats were added to the list.
+
+### Medium
+
+**NM1 — Attachments weren't marked as downloaded from the internet.** *Fixed.*
+Browsers and other mail programs tag downloaded files with Windows' "Mark of the Web". Without it, SmartScreen,
+Office's Protected View and its macro block never applied to attachments opened or saved from UwUMail, so any gap in
+the dangerous list, or a click on "Open anyway", met no second line of defence.
+Fix: cached attachments, saved copies and saved `.eml` files get the `Zone.Identifier` stream
+(`mark_from_internet` in `attachments.rs`, `save_file` in `desktop.rs`).
+
+**NM2 — The server's settings copy could switch protections off silently.** *Fixed.*
+Every device took all synced choices from the server, including "ask before opening links" off and "always load
+remote images". A server someone else controls could have removed both protections from every device at once.
+Fix: those two choices only ever get stricter from the server; switching one off takes a choice on the device
+itself (`holdBackWeakening` in `state/accountSync.ts`). Settings explains this under the sync account.
+
+### Low
+
+**NL1 — Links reached the system as raw text.** *Fixed.* The page called the opener plugin directly; its scope only
+matched the link text against a pattern and handed it on unchanged, so characters the dialog never showed (quotes,
+spaces, line breaks) could reach the browser's command line. Links now go through the app's own `open_link`
+command, which accepts only `https`/`http` and opens the parsed, normalized address (`links.rs`); the page lost the
+opener permission.
+
+**NL2 — Built-in object names in synced settings.** *Fixed.* Choices were recognized with an `in` check, which is
+also true for names like `toString` or `__proto__`. A server could put such keys into the app's settings or stop
+the sync. Only the list's own keys count now (`isChoiceKey`).
+
+**NL3 — Link text naming a shared or public name vouched for everything beneath it.** *Fixed.* Text saying
+`github.io`, `co.uk` or a storage host counted as the same site as any page under it, so such a link wasn't flagged
+as going elsewhere. A name covers its subdomains only where its owner owns them (`sameSite` in `lib/links.ts`).
+
+**NL4 — Direction controls in display names.** *Fixed.* A right-to-left override left open in a sender's name could
+turn the address shown next to it around. Names lose these characters; the header shows any in the address instead
+of obeying them.
+
+**NL5 — Unsubscribing by mail to an address the dialog didn't name.** *Fixed.* The engine accepted bare host names
+and IP addresses that the dialog, which names the address first, doesn't show. Both now want a dotted domain.
+
+**NL6 — Markup dropped into the composer wasn't cleaned.** *Fixed.* A passage dragged out of a mail went into the
+composer as it was, and its remote images loaded in the app page past the image blocker. Dropped markup goes
+through the same cleaner as pasted markup.
+
+**NL7 — Leaving during an unlock question skipped the app lock.** *Fixed.* Time in the background wasn't noted
+while a fingerprint or PIN question was up (for example the check before turning the lock off). It counts now
+unless UwUMail is back in front when the question is answered (`state/lock.ts`).
+
+**NL8 — Shared files were all copied before the size budget applied.** *Fixed.* The 25 MB limit for a whole share
+(AL5) was enforced after copying, so one share of many large files could fill the phone's storage. Copying stops
+at the budget and at 100 files, and failed copies are removed (`Launch.kt`).
+
+### Informational (accepted for now)
+
+- **NI1 — Synced list entries are taken from the server as they are.** Trusted senders, remembered link domains and
+  per-sender looks are one entry each. The server already knows when mail is read, a misleading link always asks,
+  and every entry is visible and removable in Settings. Signatures from the server are cleaned before they are kept.
+- **NI2 — Misleading-link detection reads the link's text content.** Styles can make the visible text differ from
+  it. That's why every link asks by default and the question always shows the real address; with the question off,
+  the detection is a best effort.
+- **NI3 — "Registrable domain" is a heuristic,** not the full Public Suffix List. Remembering a domain covers all of
+  its subdomains; shared hosting and storage hosts are never offered.
+- **NI4 — "Also archive" when unsubscribing matches the From address,** which a sender can forge. The switch is
+  visible in the dialog and the move can be undone.
+- **NI5 — A Bcc line in a received mail shows in the address details.** A sender can write it, just like a forged
+  To or Cc. Outgoing mail never carries Bcc, and replies don't use it.
+- **NI6 — Link handling in the mail frame starts once the frame has loaded.** A click before that navigates the
+  frame itself, which the sandbox (no scripts, popups, top navigation or external protocols) and the app's
+  `frame-src` stop: nothing opens outside UwUMail.
+- **NI7 — The main window has no navigation guard in the engine.** Nothing known can navigate it: the page's CSP
+  forbids forms and scripts from elsewhere, drops from outside the window are off, and a link dragged within the
+  window doesn't navigate. A guard would be a cheap extra layer once it can be tested on Android too.
+- **NI8 — Android intents.** A malformed intent from another app can crash UwUMail on Android 10–12 while it reads
+  the extras; the check that keeps app packages away from the installer compares the claimed type exactly; the
+  main activity uses the default task affinity. None of this gets past a check today.
+- **NI9 — JMAP answers have no size limit.** A hostile server can make the app use a lot of memory (the push stream
+  is capped).
+
+## What was checked and held up
+
+- Links from mail open only after the question (or for a remembered domain): forms, `<base>`, `<meta>`, SVG and
+  script URLs are removed by both sanitizers; middle clicks, `target=_blank` and new windows are blocked by the
+  frame sandbox and the WebView; keyboard activation arrives as a click; the system's own link menu is suppressed.
+- Remembered domains are never offered for disguised, plain-`http`, internationalized, IP-address, user-name or
+  shared-hosting links; ports and a trailing dot don't change the domain. The dialog, status line and sheet show the
+  parsed address with user names, decoded internationalized names and lookalike warnings; redirect detection only
+  informs and never decides what opens.
+- Signatures from the server go through the composer's cleaner and keep only embedded pictures; the page's CSP
+  blocks inline scripts anyway. Oversized values are refused on both sides.
+- Keys forwarded from the mail frame are the reader's own key presses; the frame runs no scripts.
+- Bcc of sent mail stays in the local store only; SQL is parametrized throughout, including the `bcc_json`
+  migration and the full-text search.
+- Sender pictures, autoconfig, TLS verification, OAuth and logs are as described above; no secrets are logged.
+- Android: only the main activity is exported; the file provider, backups, cleartext traffic, notification
+  actions and the WebView settings are as in the addendum above.
+
+## Verification
+
+- New unit tests: Unicode spaces and new lure formats (engine and UI), the mark of the web on Windows, web links for
+  the system, shared names in link text, built-in names and weakened protections from the server, direction
+  controls in names, unsubscribe addresses and the app lock timer.
+- `cargo fmt --check`, `cargo clippy -D warnings` (core and app), `cargo test` (core), `pnpm typecheck`, `lint`,
+  `test` and `format:check`: clean. `cargo audit`: no vulnerabilities (the unmaintained crates from I9 remain);
+  `pnpm audit --prod`: clean.
+- The Android change was built by CI only; it wasn't tried on a phone. That Windows honours the mark on an opened
+  attachment was not tried by hand; the test checks that the stream is written.
+
+## Recommendations for later
+
+1. Port NL2 and NM2 to UwUMail-Webmail, which shares `settingsSync.ts` but keeps its own sync glue.
+2. A navigation guard for the main window (NI7) and a size limit for JMAP answers (NI9).
+3. Hardening for Android intents (NI8): catch unreadable extras, normalize claimed types, an empty task affinity.
