@@ -580,6 +580,8 @@
   },
   "unsubscribe": {
     "title": "Unsubscribe from {{name}}?",
+    "mailTo": "That sends a mail from you to {{address}}.",
+    "mailToFallback": "If that doesn't work directly, a mail goes from you to {{address}}.",
     "body": "UwUMail unsubscribes you with the sender directly. After that, no more mail should come from there.",
     "bodyPage": "The sender has its own page for this. UwUMail opens it for you, and you confirm there.",
     "archive": "Archive earlier mail from there"

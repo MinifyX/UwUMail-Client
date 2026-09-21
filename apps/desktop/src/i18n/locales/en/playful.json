@@ -147,7 +147,9 @@
     }
   },
   "unsubscribe": {
-    "title": "Bye bye {{name}}?"
+    "title": "Bye bye {{name}}?",
+    "mailTo": "Nyu sends a mail from you to {{address}} for that.",
+    "mailToFallback": "If that doesn't work directly, Nyu sends a mail from you to {{address}}."
   },
   "deleteForever": {
     "title_one": "Say goodbye to this one forever? (｡•́︿•̀｡)",

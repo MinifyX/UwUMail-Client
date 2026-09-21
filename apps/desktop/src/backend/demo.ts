@@ -75,7 +75,14 @@ export class DemoBackend implements Backend {
   // Newsletters and offers carry a List-Unsubscribe like the real ones.
   private messages: Message[] = buildMessages(lang()).map((message) =>
     /newsletter|aktion|offer|deal/i.test(message.subject)
-      ? { ...message, unsubscribe: { oneClick: true, url: "https://pixelparts.example/unsubscribe" } }
+      ? {
+          ...message,
+          unsubscribe: {
+            oneClick: true,
+            url: "https://pixelparts.example/unsubscribe",
+            mailto: "mailto:leave@pixelparts.example?subject=unsubscribe",
+          },
+        }
       : message,
   );
   private listeners = new Set<(event: BackendEvent) => void>();

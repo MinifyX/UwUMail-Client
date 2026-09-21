@@ -791,36 +791,32 @@ impl Engine {
             }
         }
 
-        if let Some(mailto) = options.mailto.as_deref().and_then(|mailto| url::Url::parse(mailto).ok()) {
-            let address = percent_encoding::percent_decode_str(mailto.path()).decode_utf8_lossy().to_string();
-            if address.parse::<lettre::Address>().is_ok() {
-                let pairs: HashMap<String, String> =
-                    mailto.query_pairs().map(|(k, v)| (k.to_lowercase(), v.into_owned())).collect();
-                let identities = self.list_identities()?;
-                let addressed: Vec<String> =
-                    message.to.iter().chain(&message.cc).map(|a| a.email.to_lowercase()).collect();
-                // From the address the newsletter was sent to, if that's one of the mailbox's.
-                let from_email = identities
-                    .iter()
-                    .find(|i| i.account_id == message.account_id && addressed.contains(&i.email.to_lowercase()))
-                    .map(|i| i.email.clone());
-                let text = pairs.get("body").cloned().unwrap_or_else(|| "unsubscribe".into());
-                self.send(OutgoingMessage {
-                    account_id: message.account_id.clone(),
-                    to: vec![Address { name: None, email: address }],
-                    cc: vec![],
-                    bcc: vec![],
-                    subject: pairs.get("subject").cloned().unwrap_or_else(|| "unsubscribe".into()),
-                    html: mime::text_to_html(&text),
-                    text,
-                    in_reply_to: None,
-                    attachments: vec![],
-                    draft_key: None,
-                    from_email,
-                })
-                .await?;
-                return Ok(UnsubscribeOutcome::Done);
-            }
+        if let Some(target) = options.mailto.as_deref().and_then(unsubscribe_mail) {
+            let identities = self.list_identities()?;
+            let addressed: Vec<String> = message.to.iter().chain(&message.cc).map(|a| a.email.to_lowercase()).collect();
+            // From the address the newsletter was sent to, if that's one of the mailbox's.
+            let from_email = identities
+                .iter()
+                .find(|i| i.account_id == message.account_id && addressed.contains(&i.email.to_lowercase()))
+                .map(|i| i.email.clone());
+            // Never the header's own body: the mail goes out under the reader's name, and a
+            // stranger's text has no place in it.
+            let text = "unsubscribe".to_string();
+            self.send(OutgoingMessage {
+                account_id: message.account_id.clone(),
+                to: vec![Address { name: None, email: target.address }],
+                cc: vec![],
+                bcc: vec![],
+                subject: target.subject,
+                html: mime::text_to_html(&text),
+                text,
+                in_reply_to: None,
+                attachments: vec![],
+                draft_key: None,
+                from_email,
+            })
+            .await?;
+            return Ok(UnsubscribeOutcome::Done);
         }
 
         match options.url {
@@ -1892,8 +1888,89 @@ async fn run_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<(
     }
 }
 
+/// What unsubscribing by mail sends.
+#[derive(Debug, PartialEq, Eq)]
+struct UnsubscribeMail {
+    address: String,
+    subject: String,
+}
+
+const UNSUBSCRIBE_SUBJECT_LIMIT: usize = 200;
+
+/// Reads the `mailto:` form of `List-Unsubscribe`.
+///
+/// Every part of that header was written by whoever sent the mail, and what comes out of it is a
+/// message sent from the reader's own account. So only two pieces are taken, and both are held to
+/// something: one address that really is a single address, and a subject on one line (list
+/// managers match on it). The body is never taken. The web app's `unsubscribeMail` follows the
+/// same rules, and so does the dialog that names the address before anything is sent.
+fn unsubscribe_mail(mailto: &str) -> Option<UnsubscribeMail> {
+    let target = url::Url::parse(mailto).ok()?;
+    if target.scheme() != "mailto" {
+        return None;
+    }
+    let address = percent_encoding::percent_decode_str(target.path()).decode_utf8().ok()?.trim().to_string();
+    // One recipient, and nothing in it that could turn into a second one or into a header of its own.
+    if address.contains(|c: char| c == ',' || c.is_whitespace() || c.is_control() || "<>;\"".contains(c))
+        || address.parse::<lettre::Address>().is_err()
+    {
+        return None;
+    }
+    let subject = target
+        .query_pairs()
+        .find(|(key, _)| key.eq_ignore_ascii_case("subject"))
+        .map(|(_, value)| value.split_whitespace().collect::<Vec<_>>().join(" "))
+        .map(|subject| subject.chars().take(UNSUBSCRIBE_SUBJECT_LIMIT).collect::<String>())
+        .filter(|subject| !subject.is_empty())
+        .unwrap_or_else(|| "unsubscribe".to_string());
+    Some(UnsubscribeMail { address, subject })
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn unsubscribing_by_mail_takes_one_address_and_a_subject() {
+        let mail = |address: &str, subject: &str| {
+            Some(UnsubscribeMail { address: address.to_string(), subject: subject.to_string() })
+        };
+        assert_eq!(unsubscribe_mail("mailto:leave@list.example"), mail("leave@list.example", "unsubscribe"));
+        assert_eq!(
+            unsubscribe_mail("mailto:leave@list.example?subject=unsubscribe%20a1b2"),
+            mail("leave@list.example", "unsubscribe a1b2")
+        );
+        // Never text somebody else wrote.
+        let target = unsubscribe_mail("mailto:leave@list.example?subject=bye&body=I%20quit%2C%20and%20here%20is%20why");
+        assert_eq!(target, mail("leave@list.example", "bye"));
+    }
+
+    #[test]
+    fn unsubscribing_by_mail_keeps_the_subject_to_one_short_line() {
+        let subject = |mailto: &str| unsubscribe_mail(mailto).unwrap().subject;
+        assert_eq!(subject("mailto:leave@list.example?subject=one%0D%0Atwo"), "one two");
+        assert_eq!(subject(&format!("mailto:leave@list.example?subject={}", "x".repeat(500))).chars().count(), 200);
+        assert_eq!(subject(&format!("mailto:leave@list.example?subject={}", "ü".repeat(300))), "ü".repeat(200));
+        assert_eq!(subject("mailto:leave@list.example?subject=%20%20"), "unsubscribe");
+    }
+
+    #[test]
+    fn unsubscribing_by_mail_refuses_anything_but_one_plain_address() {
+        for mailto in [
+            // A second recipient smuggled into the header.
+            "mailto:leave@list.example,boss@work.example",
+            "mailto:leave@list.example%2Cboss@work.example",
+            // A line break, which would become a header of its own further down the line.
+            "mailto:leave@list.example%0D%0Abcc:boss@work.example",
+            "mailto:Name%20%3Cleave@list.example%3E",
+            "mailto:not-an-address",
+            "mailto:",
+            "https://list.example/leave",
+            "javascript:alert(1)",
+            "not a url at all",
+        ] {
+            assert_eq!(unsubscribe_mail(mailto), None, "{mailto}");
+        }
+    }
 
     #[test]
     fn shared_mailboxes_sign_in_under_their_own_address() {

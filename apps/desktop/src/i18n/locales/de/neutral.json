@@ -580,6 +580,8 @@
   },
   "unsubscribe": {
     "title": "Von {{name}} abmelden?",
+    "mailTo": "Dafür geht eine Mail von dir an {{address}}.",
+    "mailToFallback": "Klappt das nicht direkt, geht eine Mail von dir an {{address}}.",
     "body": "UwUMail meldet dich direkt beim Absender ab. Danach sollten keine Mails mehr von dort kommen.",
     "bodyPage": "Der Absender hat dafür eine eigene Seite. UwUMail öffnet sie für dich, dort bestätigst du die Abmeldung.",
     "archive": "Bisherige Mails von dort archivieren"

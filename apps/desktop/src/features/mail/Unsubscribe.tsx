@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { displayName } from "@/lib/format";
+import { unsubscribeMail } from "@/lib/unsubscribe";
 import { openLinkNow } from "@/state/links";
 import { toast } from "@/state/toasts";
 import { announceMove } from "@/state/undo";
@@ -36,7 +37,12 @@ function UnsubscribeQuestion({ message, onDone }: { message: Message; onDone: ()
   const [archive, setArchive] = useState(true);
   const [busy, setBusy] = useState(false);
   const name = displayName(message.from);
-  const pageOnly = !message.unsubscribe?.oneClick && !message.unsubscribe?.mailto;
+  // The engine tries a One-Click request first and sends a mail when that is missing or fails, so
+  // whenever a usable mailto address is there the dialog names it: the mail goes out under the
+  // reader's name to an address the newsletter picked.
+  const byMail = message.unsubscribe?.mailto ? unsubscribeMail(message.unsubscribe.mailto) : null;
+  const oneClick = message.unsubscribe?.oneClick ?? false;
+  const pageOnly = !oneClick && !byMail;
 
   const unsubscribe = async () => {
     setBusy(true);
@@ -74,6 +80,11 @@ function UnsubscribeQuestion({ message, onDone }: { message: Message; onDone: ()
       <NyuScene name="pick" className="w-40" />
       <h2 className="text-[18px] font-extrabold text-balance">{t("unsubscribe.title", { name })}</h2>
       <p className="text-[13px] text-muted">{pageOnly ? t("unsubscribe.bodyPage") : t("unsubscribe.body")}</p>
+      {byMail && (
+        <p className="text-[13px] text-muted">
+          {t(oneClick ? "unsubscribe.mailToFallback" : "unsubscribe.mailTo", { address: byMail.address })}
+        </p>
+      )}
       <div className="w-full rounded-2xl bg-canvas px-4 py-1 text-left">
         <Toggle checked={archive} onChange={setArchive} label={t("unsubscribe.archive")} />
       </div>
