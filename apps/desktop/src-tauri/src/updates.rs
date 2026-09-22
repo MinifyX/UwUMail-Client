@@ -231,13 +231,18 @@ fn hand_over(update: &ReadyUpdate, relaunch: bool) -> Result<(), Error> {
     {
         // UwUMail runs from its unpacked AppImage; the setup must not inherit where that one keeps
         // its libraries. It unpacks itself into the private updates folder instead of mounting,
-        // so FUSE isn't needed and nothing lands in the shared /tmp.
+        // so FUSE isn't needed and nothing lands in the shared /tmp. The AppImage runtime also
+        // reads a few variables of its own, one of which would make it run another image than
+        // the one just checked; none of them may come along.
         for name in [
             "APPDIR",
             "APPIMAGE",
             "ARGV0",
             "OWD",
+            "TARGET_APPIMAGE",
+            "NO_CLEANUP",
             "LD_LIBRARY_PATH",
+            "LD_PRELOAD",
             "GDK_PIXBUF_MODULEDIR",
             "GDK_PIXBUF_MODULE_FILE",
             "GIO_EXTRA_MODULES",
@@ -247,6 +252,11 @@ fn hand_over(update: &ReadyUpdate, relaunch: bool) -> Result<(), Error> {
             "GTK_EXE_PREFIX",
             "GTK_IM_MODULE_FILE",
             "GTK_PATH",
+            "GTK_THEME",
+            "GDK_BACKEND",
+            "PYTHONHOME",
+            "PERLLIB",
+            "QT_PLUGIN_PATH",
         ] {
             command.env_remove(name);
         }
