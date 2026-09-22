@@ -38,7 +38,7 @@ export function targetHost(href: string): string | null {
 export function claimedHost(text: string): string | null {
   // Strip invisible format characters first (zero-width spaces, soft hyphens): rendered they show
   // nothing, so "paypal<U+200B>.com" reads as paypal.com but would otherwise slip past the check
-  // (webmail security audit W-8).
+  // (security-audit W-8).
   const trimmed = text
     .replace(/[\p{Cf}­]/gu, "")
     .trim()
@@ -93,7 +93,7 @@ export function misleadingLink(href: string, text: string): Misleading | null {
   const shown = claimedHost(text);
   if (!shown) return null;
   // A mailto: link may carry several recipients -- more in the path or in the cc/bcc fields than
-  // the text names. Warn if any recipient host is not the one the text shows (webmail security audit W-9).
+  // the text names. Warn if any recipient host is not the one the text shows (security-audit W-9).
   if (/^mailto:/i.test(href.trim())) {
     const elsewhere = mailtoHosts(href).find((host) => !sameSite(shown, host));
     return elsewhere ? { shown, actual: elsewhere } : null;
@@ -213,7 +213,11 @@ export function checkLink(href: string, text: string): LinkCheck | null {
   const insecure = url.protocol === "http:";
   const userinfo = url.username !== "" || url.password !== "";
   const domain = registrableDomain(host);
+  const redirect = detectRedirect(trimmed);
+  // A link that passes through a redirect goes somewhere else than its domain says, so trusting
+  // the domain would wave through wherever it forwards to (security-audit W-13).
   const rememberable =
+    !redirect &&
     !misleading &&
     !insecure &&
     !punycode &&
@@ -232,7 +236,7 @@ export function checkLink(href: string, text: string): LinkCheck | null {
     insecure,
     userinfo,
     misleading,
-    redirect: detectRedirect(trimmed),
+    redirect,
     mailto: null,
     rememberable,
   };
@@ -245,9 +249,13 @@ export interface LinkPreferences {
   domains: readonly string[];
 }
 
-/** Whether a link opens right away or the dialog asks first. Disguised links always ask. */
+/**
+ * Whether a link opens right away or the dialog asks first. Disguised links always ask: text that
+ * names another address, a host that only looks like a Latin one, and a user name in front of
+ * the host (security-audit W-14).
+ */
 export function needsConfirmation(check: LinkCheck, preferences: LinkPreferences): boolean {
-  if (check.misleading) return true;
+  if (check.misleading || check.lookalike || check.userinfo) return true;
   if (!preferences.confirm) return false;
   return check.rememberable === null || !preferences.domains.includes(check.rememberable);
 }
