@@ -138,4 +138,8 @@ UwUMail-Setup --silent --uninstall [--delete-data]          # remove
 On a Mac the program is `UwUMail Setup.app/Contents/MacOS/uwumail-setup`. The
 [desktop workflow](../.github/workflows/desktop.yml) uses exactly this to test
 every macOS and Linux setup on GitHub's runners
-([scripts/desktop-smoke.sh](../scripts/desktop-smoke.sh)).
+([scripts/desktop-smoke.sh](../scripts/desktop-smoke.sh)), and the Windows
+setups for x64 and ARM ([scripts/windows-smoke.ps1](../scripts/windows-smoke.ps1),
+the x64 one in the [release workflow](../.github/workflows/release.yml)). On
+Windows the setup is a windowed program: in PowerShell, wait for it with
+`Start-Process -Wait`.
