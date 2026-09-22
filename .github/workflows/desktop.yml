@@ -3,7 +3,8 @@ name: Desktop setups
 # Builds UwUMail's own setup for macOS (Apple chip and Intel, separately) and
 # Linux (x86_64 AppImage), then runs each through scripts/desktop-smoke.sh on a
 # real runner: install into a throwaway home folder, start UwUMail, update over
-# the running app, refuse an older version, uninstall.
+# the running app, refuse an older version, uninstall. The Windows on ARM setup
+# goes through the same with scripts/windows-smoke.ps1.
 #
 # Nothing here is signed for the updater: the release workflow signs what it
 # publishes in a job of its own, on a runner that never built anything.
@@ -136,6 +137,54 @@ jobs:
         if: always()
         with:
           name: desktop-smoke-${{ matrix.os }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: smoke/
+
+  # Windows on ARM, built natively on GitHub's ARM runner. The x64 setup is built and tried by the
+  # release workflow, which this one runs for a release as well.
+  windows-arm64:
+    name: Build and smoke test (Windows on ARM)
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: setup-aarch64-pc-windows-msvc
+      - run: pnpm install --frozen-lockfile
+      - id: version
+        shell: bash
+        run: echo "version=$(node -p 'require("./apps/desktop/src-tauri/tauri.conf.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Build the setup
+        run: node scripts/build-setup.mjs --target aarch64-pc-windows-msvc
+        env:
+          UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
+
+      - name: Smoke test
+        shell: pwsh
+        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-Setup-${{ steps.version.outputs.version }}-arm64.exe" "${{ steps.version.outputs.version }}" arm64 smoke
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-windows-arm64
+          retention-days: 14
+          if-no-files-found: error
+          path: target/release/UwUMail-Setup-${{ steps.version.outputs.version }}-arm64.exe
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: desktop-smoke-windows-arm64
           retention-days: 7
           if-no-files-found: ignore
           path: smoke/

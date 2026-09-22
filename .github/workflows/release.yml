@@ -5,9 +5,10 @@ name: Release
 # release-notes/<version>.json must exist.
 #
 # Publishes a GitHub release here with
-#   - the Windows setup,
-#   - the macOS setups (Apple chip and Intel) and the Linux AppImage setup,
-#     built and smoke-tested by the desktop workflow called from here,
+#   - the Windows setup (x64), built and smoke-tested here,
+#   - the Windows on ARM setup, the macOS setups (Apple chip and Intel) and the
+#     Linux AppImage setup, built and smoke-tested by the desktop workflow
+#     called from here,
 #   - the Android APK the Android workflow built, signed and smoke-tested for
 #     the same commit,
 #   - the unsigned iPhone IPA the iOS workflow built and tried in the simulator,
@@ -21,7 +22,7 @@ name: Release
 #
 # Started by hand on a branch it builds the setups but publishes nothing (the
 # APK and IPA are only picked up for a tag). If GitHub can't run it,
-# `pnpm release` (scripts/release.mjs) publishes the Windows setup from a PC.
+# `pnpm release` (scripts/release.mjs) publishes the Windows x64 setup from a PC.
 
 on:
   push:
@@ -73,14 +74,25 @@ jobs:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
+      # The same install, start, update, refuse-older and uninstall as for the other systems.
+      - name: Smoke test
+        shell: pwsh
+        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-Setup-${{ needs.check.outputs.version }}.exe" "${{ needs.check.outputs.version }}" x64 smoke
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-windows
           if-no-files-found: error
           path: target/release/UwUMail-Setup-${{ needs.check.outputs.version }}.exe
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: smoke-windows-x64
+          retention-days: 7
+          if-no-files-found: ignore
+          path: smoke/
 
   desktop:
-    name: Release (macOS, Linux)
+    name: Release (macOS, Linux, Windows on ARM)
     needs: check
     uses: ./.github/workflows/desktop.yml
     secrets:
@@ -114,6 +126,10 @@ jobs:
           path: files
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
+          name: desktop-windows-arm64
+          path: files
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
           pattern: desktop-macos-*
           path: ${{ runner.temp }}/desktop
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -129,7 +145,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          for setup in "UwUMail-Setup-$VERSION.exe" "UwUMail-Setup-$VERSION-x86_64.AppImage" \
+          for setup in "UwUMail-Setup-$VERSION.exe" "UwUMail-Setup-$VERSION-arm64.exe" \
+            "UwUMail-Setup-$VERSION-x86_64.AppImage" \
             "UwUMail-Update-$VERSION-macos-apple-silicon" "UwUMail-Update-$VERSION-macos-intel"; do
             pnpm --filter @uwumail/desktop exec tauri signer sign "$GITHUB_WORKSPACE/files/$setup"
           done
@@ -138,6 +155,7 @@ jobs:
         run: |
           node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/check-feeds" \
             --setup "files/UwUMail-Setup-$VERSION.exe" \
+            --update "windows-aarch64=files/UwUMail-Setup-$VERSION-arm64.exe" \
             --update "darwin-aarch64=files/UwUMail-Update-$VERSION-macos-apple-silicon" \
             --update "darwin-x86_64=files/UwUMail-Update-$VERSION-macos-intel" \
             --update "linux-x86_64=files/UwUMail-Setup-$VERSION-x86_64.AppImage"
@@ -284,6 +302,10 @@ jobs:
           path: files
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
+          name: desktop-windows-arm64
+          path: files
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
           pattern: desktop-macos-*
           path: ${{ runner.temp }}/desktop
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -301,6 +323,7 @@ jobs:
           apks=(files/UwUMail-"$VERSION"-*.apk)
           node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/new-feeds" \
             --setup "files/UwUMail-Setup-$VERSION.exe" \
+            --update "windows-aarch64=files/UwUMail-Setup-$VERSION-arm64.exe" \
             --update "darwin-aarch64=files/UwUMail-Update-$VERSION-macos-apple-silicon" \
             --update "darwin-x86_64=files/UwUMail-Update-$VERSION-macos-intel" \
             --update "linux-x86_64=files/UwUMail-Setup-$VERSION-x86_64.AppImage" \
@@ -312,6 +335,7 @@ jobs:
           apks=(files/UwUMail-"$VERSION"-*.apk)
           files=(
             "UwUMail-Setup-$VERSION.exe"
+            "UwUMail-Setup-$VERSION-arm64.exe"
             "UwUMail-Setup-$VERSION-macos-apple-silicon.dmg"
             "UwUMail-Setup-$VERSION-macos-intel.dmg"
             "UwUMail-Setup-$VERSION-x86_64.AppImage"
@@ -330,7 +354,8 @@ jobs:
 
           | | |
           | --- | --- |
-          | Windows | `UwUMail-Setup-…exe` |
+          | Windows (x64) | `UwUMail-Setup-…exe` |
+          | Windows on ARM | `UwUMail-Setup-…-arm64.exe` |
           | macOS, Apple chip | `UwUMail-Setup-…-macos-apple-silicon.dmg` |
           | macOS, Intel | `UwUMail-Setup-…-macos-intel.dmg` |
           | Linux (x86_64) | `UwUMail-Setup-…-x86_64.AppImage` |
