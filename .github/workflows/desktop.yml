@@ -5,8 +5,8 @@ name: Desktop setups
 # real runner: install into a throwaway home folder, start UwUMail, update over
 # the running app, refuse an older version, uninstall.
 #
-# The release workflow calls this with `sign: true` for a tag; only then does
-# the update-signing key reach the build (and there only the signing step).
+# Nothing here is signed for the updater: the release workflow signs what it
+# publishes in a job of its own, on a runner that never built anything.
 
 on:
   push:
@@ -14,16 +14,7 @@ on:
     paths-ignore: ["docs/**", "brand/**", "README.md", "CONTRIBUTING.md", "release-notes/**"]
   workflow_dispatch:
   workflow_call:
-    inputs:
-      sign:
-        description: Sign the setups for the updater
-        type: boolean
-        default: false
     secrets:
-      TAURI_SIGNING_PRIVATE_KEY:
-        required: false
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
-        required: false
       UWUMAIL_MICROSOFT_CLIENT_ID:
         required: false
       UWUMAIL_GOOGLE_CLIENT_ID:
@@ -91,8 +82,6 @@ jobs:
         env:
           # Tauri's AppImage tools are AppImages themselves; they unpack instead of needing FUSE.
           APPIMAGE_EXTRACT_AND_RUN: 1
-          TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.sign && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.sign && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}

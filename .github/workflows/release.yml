@@ -5,13 +5,19 @@ name: Release
 # release-notes/<version>.json must exist.
 #
 # Publishes a GitHub release here with
-#   - the signed Windows setup,
+#   - the Windows setup,
 #   - the macOS setups (Apple chip and Intel) and the Linux AppImage setup,
-#     built, signed and smoke-tested by the desktop workflow called from here,
+#     built and smoke-tested by the desktop workflow called from here,
 #   - the Android APK the Android workflow built, signed and smoke-tested for
 #     the same commit,
 #   - the unsigned iPhone IPA the iOS workflow built and tried in the simulator,
 # then updates the feeds on the `updates` branch that installed apps check.
+#
+# The update-signing key never reaches a runner that built anything: the builds
+# run thousands of third-party build scripts, and one of them could leave
+# something behind that waits for the key. A separate job on a fresh runner
+# signs what the updater downloads, and publishing checks every signature
+# against the key the apps carry.
 #
 # Started by hand on a branch it builds the setups but publishes nothing (the
 # APK and IPA are only picked up for a tag). If GitHub can't run it,
@@ -64,9 +70,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:setup
         env:
-          # Only releases are signed, so no signed test build of an unreleased commit lies around.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ github.ref_type == 'tag' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.ref_type == 'tag' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
@@ -74,23 +77,75 @@ jobs:
         with:
           name: release-windows
           if-no-files-found: error
-          path: |
-            target/release/UwUMail-Setup-${{ needs.check.outputs.version }}.exe
-            target/release/UwUMail-Setup-${{ needs.check.outputs.version }}.exe.sig
+          path: target/release/UwUMail-Setup-${{ needs.check.outputs.version }}.exe
 
   desktop:
     name: Release (macOS, Linux)
     needs: check
     uses: ./.github/workflows/desktop.yml
-    with:
-      # Only releases are signed, so no signed test build of an unreleased commit lies around.
-      sign: ${{ github.ref_type == 'tag' }}
     secrets:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
       UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
       UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
+
+  sign:
+    name: Sign for the updater
+    needs: [check, windows, desktop]
+    # Only releases are signed, so no signed test build of an unreleased commit lies around.
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          # Nothing from a cache that other runs wrote.
+          package-manager-cache: false
+      # Only for the Tauri CLI, pinned by the lockfile. No install script runs on this runner.
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter @uwumail/desktop
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-windows
+          path: files
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-macos-*
+          path: ${{ runner.temp }}/desktop
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-linux
+          path: ${{ runner.temp }}/desktop/desktop-linux
+      - name: Unpack the macOS and Linux setups
+        run: |
+          for tar in "$RUNNER_TEMP"/desktop/*/*.tar; do tar -xf "$tar" -C files; done
+          ls -la files
+      - name: Sign
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          for setup in "UwUMail-Setup-$VERSION.exe" "UwUMail-Setup-$VERSION-x86_64.AppImage" \
+            "UwUMail-Update-$VERSION-macos-apple-silicon" "UwUMail-Update-$VERSION-macos-intel"; do
+            pnpm --filter @uwumail/desktop exec tauri signer sign "$GITHUB_WORKSPACE/files/$setup"
+          done
+      # The same check the feeds get: the key the apps carry, and each signature names its file.
+      - name: Check the signatures
+        run: |
+          node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/check-feeds" \
+            --setup "files/UwUMail-Setup-$VERSION.exe" \
+            --update "darwin-aarch64=files/UwUMail-Update-$VERSION-macos-apple-silicon" \
+            --update "darwin-x86_64=files/UwUMail-Update-$VERSION-macos-intel" \
+            --update "linux-x86_64=files/UwUMail-Setup-$VERSION-x86_64.AppImage"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-signatures
+          if-no-files-found: error
+          path: files/*.sig
 
   ios:
     name: Release (iOS)
@@ -202,7 +257,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [check, windows, desktop, android, ios]
+    needs: [check, windows, desktop, sign, android, ios]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     concurrency:
@@ -240,15 +295,20 @@ jobs:
           for tar in "$RUNNER_TEMP"/desktop/*/*.tar; do tar -xf "$tar" -C files; done
           ls -la files
 
+      # Checks every updater signature against the key the apps carry, before anything is published.
+      - name: Write the update feeds
+        run: |
+          apks=(files/UwUMail-"$VERSION"-*.apk)
+          node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/new-feeds" \
+            --setup "files/UwUMail-Setup-$VERSION.exe" \
+            --update "darwin-aarch64=files/UwUMail-Update-$VERSION-macos-apple-silicon" \
+            --update "darwin-x86_64=files/UwUMail-Update-$VERSION-macos-intel" \
+            --update "linux-x86_64=files/UwUMail-Setup-$VERSION-x86_64.AppImage" \
+            --apk "${apks[0]}"
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Everything the updater downloads must carry its signature.
-          for setup in "UwUMail-Setup-$VERSION.exe" "UwUMail-Setup-$VERSION-x86_64.AppImage" \
-            "UwUMail-Update-$VERSION-macos-apple-silicon" "UwUMail-Update-$VERSION-macos-intel"; do
-            test -f "files/$setup.sig" || { echo "::error::$setup isn't signed"; exit 1; }
-          done
           jq -r '"## Deutsch\n\n" + .de + "\n\n## English\n\n" + .en' "release-notes/$VERSION.json" > "$RUNNER_TEMP/notes.md"
           cat >> "$RUNNER_TEMP/notes.md" <<'EOF'
 
@@ -289,15 +349,6 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "UwUMail $VERSION" \
             --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"
 
-      - name: Write the update feeds
-        run: |
-          apks=(files/UwUMail-"$VERSION"-*.apk)
-          node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/new-feeds" \
-            --setup "files/UwUMail-Setup-$VERSION.exe" \
-            --update "darwin-aarch64=files/UwUMail-Update-$VERSION-macos-apple-silicon" \
-            --update "darwin-x86_64=files/UwUMail-Update-$VERSION-macos-intel" \
-            --update "linux-x86_64=files/UwUMail-Setup-$VERSION-x86_64.AppImage" \
-            --apk "${apks[0]}"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: updates
