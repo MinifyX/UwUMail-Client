@@ -17,6 +17,11 @@ it keeps UwUMail up to date afterwards.
 Not sure which Mac you have? Apple menu → About This Mac: "Chip: Apple M…"
 means Apple chip, "Processor: Intel" means Intel.
 
+Each release also lists the SHA-256 checksum of every file in
+`SHA256SUMS.txt`. To check a download, compare it with what your system
+prints: `sha256sum <file>` on Linux, `shasum -a 256 <file>` on macOS,
+`Get-FileHash <file>` in PowerShell on Windows.
+
 The `UwUMail-Update-…` files next to them are what UwUMail on a Mac downloads
 for its updates; you don't need them.
 
@@ -35,7 +40,11 @@ switch it on, and the next update remembers your choice.
   - Linux: the setup sets it in `~/.config/mimeapps.list` and with `xdg-mime`.
     Desktops with their own settings page may show it there too.
 - **Desktop shortcut** (Windows only) and **folder** (Windows only; macOS and
-  Linux have one fixed place for a user's apps).
+  Linux have one fixed place for a user's apps). The setup closes the folder
+  it installs into to other accounts on the PC: only you, the system and
+  administrators get in, also when it lies outside your user folder, say
+  right under `C:\`. Drives without permissions (FAT, some network shares)
+  can't do that.
 
 ## macOS: the first start
 
@@ -66,8 +75,13 @@ nothing, or it says it needs FUSE, start it once from a terminal like this:
 
 ```bash
 chmod +x UwUMail-Setup-*-x86_64.AppImage
-./UwUMail-Setup-*-x86_64.AppImage --appimage-extract-and-run
+mkdir -p ~/.cache/uwumail-setup && chmod 700 ~/.cache/uwumail-setup
+TMPDIR=~/.cache/uwumail-setup ./UwUMail-Setup-*-x86_64.AppImage --appimage-extract-and-run
 ```
+
+`--appimage-extract-and-run` unpacks the setup into the temporary folder
+first. `TMPDIR` points it at a folder of your own instead of the shared
+`/tmp`, where other accounts on the same computer could get in the way.
 
 The installed UwUMail itself is unpacked and never needs FUSE. The setup adds a
 menu entry, an icon, `~/.local/bin/uwumail` (if nothing else is called that)
@@ -86,7 +100,9 @@ started from somewhere else (a folder you dragged it to, a build of your own)
 leaves updating to you.
 
 The setup never replaces a newer UwUMail with an older one, even if an older
-setup carries a valid signature.
+setup carries a valid signature. UwUMail itself only takes a setup whose
+signature names that version's file, so a feed can't pass off an older setup
+as a newer one either.
 
 ## Uninstalling
 
