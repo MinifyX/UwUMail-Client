@@ -34,8 +34,8 @@ use windows::Win32::System::Threading::{
 use windows::Win32::System::Variant::VT_LPWSTR;
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
 use windows::Win32::UI::Shell::{
-    FOLDERID_Desktop, FOLDERID_LocalAppData, FOLDERID_Programs, FOLDERID_RoamingAppData, FOLDERID_UserProgramFiles,
-    IShellLinkW, KF_FLAG_CREATE, SHGetKnownFolderPath, ShellExecuteW, ShellLink,
+    FOLDERID_Desktop, FOLDERID_LocalAppData, FOLDERID_Programs, FOLDERID_RoamingAppData, FOLDERID_System,
+    FOLDERID_UserProgramFiles, IShellLinkW, KF_FLAG_CREATE, SHGetKnownFolderPath, ShellExecuteW, ShellLink,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     IDYES, MB_ICONERROR, MB_ICONQUESTION, MB_OK, MB_YESNO, MessageBoxW, SW_SHOWNORMAL,
@@ -296,7 +296,20 @@ pub fn spawn_detached(exe: &Path, args: &[&str]) -> Result<(), String> {
 pub fn delete_after_exit(file: &Path) {
     // cmd has its own quoting rules, so the command line goes in as it is.
     let command = format!("/c ping 127.0.0.1 -n 4 > nul & del /f /q \"{}\"", file.display());
-    let _ = std::process::Command::new("cmd").raw_arg(command).creation_flags(CREATE_NO_WINDOW).spawn();
+    // By full path, and running in System32: started by name, Windows and cmd would look in the
+    // folder of the uninstaller's copy (the temp folder) first, for cmd as well as for ping.
+    let system = system_dir();
+    let _ = std::process::Command::new(system.join("cmd.exe"))
+        .raw_arg(command)
+        .current_dir(&system)
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn();
+}
+
+fn system_dir() -> PathBuf {
+    known_folder(&FOLDERID_System)
+        .or_else(|| std::env::var_os("SystemRoot").map(|root| PathBuf::from(root).join("System32")))
+        .unwrap_or_else(|| PathBuf::from(r"C:\Windows\System32"))
 }
 
 pub fn open_uri(uri: &str) {
@@ -333,7 +346,17 @@ pub fn webview2_installed() -> bool {
 
 /// Downloads Microsoft's WebView2 bootstrapper and runs it.
 pub fn install_webview2() -> Result<(), String> {
-    let target = std::env::temp_dir().join("MicrosoftEdgeWebview2Setup.exe");
+    // A fresh folder of its own: nothing someone put in the temp folder beforehand, a file of
+    // that name or a DLL next to it, comes along when the bootstrapper starts.
+    let folder = std::env::temp_dir().join(format!("UwUMail-WebView2-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    std::fs::create_dir(&folder).map_err(|e| format!("Couldn't create {}: {e}", folder.display()))?;
+    let result = download_and_run_webview2(&folder.join("MicrosoftEdgeWebview2Setup.exe"));
+    let _ = std::fs::remove_dir_all(&folder);
+    result
+}
+
+fn download_and_run_webview2(target: &Path) -> Result<(), String> {
     unsafe {
         URLDownloadToFileW(
             None,
@@ -344,10 +367,9 @@ pub fn install_webview2() -> Result<(), String> {
         )
         .map_err(|e| format!("Couldn't download WebView2: {e}"))?;
     }
-    let status = std::process::Command::new(&target)
+    let status = std::process::Command::new(target)
         .args(["/silent", "/install"])
         .status()
         .map_err(|e| format!("Couldn't start the WebView2 setup: {e}"))?;
-    let _ = std::fs::remove_file(&target);
     if status.success() && webview2_installed() { Ok(()) } else { Err("WebView2 couldn't be installed.".into()) }
 }
