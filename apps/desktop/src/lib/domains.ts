@@ -95,7 +95,61 @@ const MULTI_LABEL_SUFFIXES = new Set([
   "ngrok.io",
   "ngrok-free.app",
   "duckdns.org",
+  "a.run.app",
+  "trycloudflare.com",
+  "ngrok.app",
+  "replit.app",
+  "repl.co",
+  "surge.sh",
+  "neocities.org",
+  "webflow.io",
+  "framer.app",
+  "notion.site",
+  "weebly.com",
+  "000webhostapp.com",
+  "azurestaticapps.net",
+  "cloudfunctions.net",
+  "deno.dev",
+  "csb.app",
+  "loca.lt",
 ]);
+
+/**
+ * Second levels that many country domains sell names under (`shop.co.ke`, `bank.com.ng`,
+ * `amt.gov.br`). Not every country is in the list above, so under a two-letter country domain
+ * these always count as part of the suffix. Wrong for the rare site that is itself called
+ * `co.xx`, but that only means it can't be remembered as a whole (security-audit W-15).
+ */
+const GENERIC_SECOND_LEVELS = new Set([
+  "ac",
+  "biz",
+  "co",
+  "com",
+  "edu",
+  "go",
+  "gob",
+  "gouv",
+  "gov",
+  "govt",
+  "gv",
+  "info",
+  "ltd",
+  "mil",
+  "ne",
+  "net",
+  "nom",
+  "or",
+  "org",
+  "plc",
+  "sch",
+]);
+
+/** A public suffix: nobody owns a site by owning this name, anyone can register below it. */
+function isPublicSuffix(name: string): boolean {
+  if (MULTI_LABEL_SUFFIXES.has(name)) return true;
+  const labels = name.split(".");
+  return labels.length === 2 && /^[a-z]{2}$/.test(labels[1]!) && GENERIC_SECOND_LEVELS.has(labels[0]!);
+}
 
 /**
  * Shared storage and delivery hosts: anyone can put a page there, so trusting the whole name is
@@ -120,19 +174,24 @@ export function isIpAddress(host: string): boolean {
 
 /**
  * The part of a host name its owner registered: `mail.shop.example.co.uk` → `example.co.uk`.
- * A heuristic (last two labels, three under the suffixes above), not the full Public Suffix List.
+ * A heuristic (the label below the longest known suffix, otherwise the last two labels), not the
+ * full Public Suffix List.
  */
 export function registrableDomain(host: string): string {
   const clean = host.toLowerCase().replace(/\.$/, "");
   if (isIpAddress(clean)) return clean;
   const labels = clean.split(".");
-  if (labels.length <= 2) return clean;
-  return labels.slice(MULTI_LABEL_SUFFIXES.has(labels.slice(-2).join(".")) ? -3 : -2).join(".");
+  for (const suffixLength of [3, 2]) {
+    if (labels.length > suffixLength && isPublicSuffix(labels.slice(-suffixLength).join("."))) {
+      return labels.slice(-suffixLength - 1).join(".");
+    }
+  }
+  return labels.slice(-2).join(".");
 }
 
 /** A name where anyone can host a page, so a whole site cannot be trusted by it. */
 export function isSharedHost(domain: string): boolean {
-  return SHARED_HOSTS.has(domain) || MULTI_LABEL_SUFFIXES.has(domain);
+  return SHARED_HOSTS.has(domain) || isPublicSuffix(domain);
 }
 
 // Punycode (RFC 3492), decoding only: shows `xn--mnchen-3ya` as `münchen`.

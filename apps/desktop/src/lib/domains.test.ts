@@ -25,6 +25,18 @@ describe("registrableDomain", () => {
     expect(registrableDomain("co.uk")).toBe("co.uk");
   });
 
+  it("treats the usual second levels under country domains as suffixes too", () => {
+    expect(registrableDomain("login.shop.co.ke")).toBe("shop.co.ke");
+    expect(registrableDomain("www.bank.com.ng")).toBe("bank.com.ng");
+    expect(registrableDomain("amt.gov.br")).toBe("amt.gov.br");
+    expect(registrableDomain("service-abc.a.run.app")).toBe("service-abc.a.run.app");
+    // A generic word under a real top-level domain is an ordinary name.
+    expect(registrableDomain("www.co.example")).toBe("co.example");
+    expect(isSharedHost("co.ke")).toBe(true);
+    expect(isSharedHost("com.ng")).toBe(true);
+    expect(isSharedHost("shop.co.ke")).toBe(false);
+  });
+
   it("leaves IP addresses whole", () => {
     expect(registrableDomain("192.0.2.10")).toBe("192.0.2.10");
     expect(isIpAddress("192.0.2.10")).toBe(true);
