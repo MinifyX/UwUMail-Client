@@ -28,6 +28,7 @@ tar = { version = "0.4", default-features = false }
 winreg = "0.55"
 windows = { version = "0.61", features = [
   "Win32_Foundation",
+  "Win32_Security_Authorization",
   "Win32_Security_Credentials",
   "Win32_Storage_EnhancedStorage",
   "Win32_System_Com",

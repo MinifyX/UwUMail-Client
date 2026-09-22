@@ -240,6 +240,11 @@ pub fn install(layout: &Layout, options: &Options, version: &str, progress: Prog
     }
     progress(Step::Prepare, 0.0);
     std::fs::create_dir_all(&dir).map_err(|e| format!("Couldn't create {}: {e}", dir.display()))?;
+    // Changes nothing in the profile, which is private anyway; elsewhere it closes the folder to
+    // other accounts. Best effort: FAT drives and some network shares have no permissions at all.
+    if let Err(error) = system::restrict_to_user(&dir) {
+        eprintln!("UwUMail Setup: {error}");
+    }
     stop_app(layout, &dir)?;
     remove_legacy(layout, &dir)?;
     progress(Step::Prepare, 1.0);
@@ -435,6 +440,24 @@ mod tests {
         assert!(installed.legacy);
         remove_legacy(&sandbox.layout, &sandbox.layout.default_dir).unwrap();
         assert!(!sandbox.layout.legacy_dir.exists());
+    }
+
+    #[test]
+    fn closes_the_folder_to_other_accounts() {
+        let sandbox = Sandbox::new();
+        let dir = sandbox.layout.default_dir.clone();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(APP_EXE), b"app").unwrap();
+        system::restrict_to_user(&dir).unwrap();
+
+        // The folder inherits nothing any more (icacls marks inherited entries with "(I)") and
+        // the user can still work in it.
+        let output = std::process::Command::new("icacls").arg(&dir).output().unwrap();
+        let listing = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success() && !listing.contains("(I)"), "{listing}");
+        std::fs::write(dir.join(UNINSTALL_EXE), b"setup").unwrap();
+        std::fs::remove_file(dir.join(UNINSTALL_EXE)).unwrap();
+        std::fs::remove_file(dir.join(APP_EXE)).unwrap();
     }
 
     #[test]

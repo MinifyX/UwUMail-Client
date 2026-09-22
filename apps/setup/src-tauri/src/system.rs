@@ -6,8 +6,16 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, LocalFree, WAIT_OBJECT_0};
+use windows::Win32::Security::Authorization::{
+    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1, SE_FILE_OBJECT,
+    SetNamedSecurityInfoW,
+};
 use windows::Win32::Security::Credentials::{CRED_TYPE_GENERIC, CREDENTIALW, CredDeleteW, CredEnumerateW, CredFree};
+use windows::Win32::Security::{
+    ACL, DACL_SECURITY_INFORMATION, GetSecurityDescriptorDacl, GetTokenInformation,
+    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, TOKEN_QUERY, TOKEN_USER, TokenUser,
+};
 use windows::Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID;
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::Urlmon::URLDownloadToFileW;
@@ -20,8 +28,8 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows::Win32::System::LibraryLoader::{LOAD_LIBRARY_SEARCH_SYSTEM32, SetDefaultDllDirectories};
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
-    QueryFullProcessImageNameW, TerminateProcess, WaitForSingleObject,
+    GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, QueryFullProcessImageNameW, TerminateProcess, WaitForSingleObject,
 };
 use windows::Win32::System::Variant::VT_LPWSTR;
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
@@ -78,6 +86,68 @@ pub fn folders() -> Folders {
         desktop: known_folder(&FOLDERID_Desktop).unwrap_or_else(|| env("USERPROFILE").join("Desktop")),
         roaming,
         local,
+    }
+}
+
+/// The current user's SID as text (`S-1-5-21-…`).
+fn user_sid() -> Result<String, String> {
+    let fail = |e: windows::core::Error| format!("Couldn't read the current user: {e}");
+    unsafe {
+        let mut token = HANDLE::default();
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).map_err(fail)?;
+        let mut size = 0u32;
+        let _ = GetTokenInformation(token, TokenUser, None, 0, &mut size);
+        // u64 keeps the buffer aligned for the pointer inside TOKEN_USER.
+        let mut buffer = vec![0u64; (size as usize).div_ceil(8).max(1)];
+        let read = GetTokenInformation(token, TokenUser, Some(buffer.as_mut_ptr().cast()), size, &mut size);
+        let _ = CloseHandle(token);
+        read.map_err(fail)?;
+        let user = &*(buffer.as_ptr() as *const TOKEN_USER);
+        let mut text = PWSTR::null();
+        ConvertSidToStringSidW(user.User.Sid, &mut text).map_err(fail)?;
+        let sid = text.to_string().map_err(|e| format!("Couldn't read the current user: {e}"));
+        LocalFree(Some(HLOCAL(text.0.cast())));
+        sid
+    }
+}
+
+/// Lets only this user, the system and administrators into `dir` and everything in it.
+///
+/// A folder the user picks outside their profile inherits that place's permissions: one made
+/// right under `C:\` is writable for every account on the PC, which could then swap UwUMail's
+/// program for their own. Replaces whatever `dir` inherited with a protected list of its own.
+pub fn restrict_to_user(dir: &Path) -> Result<(), String> {
+    let sddl = format!("D:P(A;OICI;FA;;;{})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)", user_sid()?);
+    let fail = |e: windows::core::Error| format!("Couldn't protect {}: {e}", dir.display());
+    unsafe {
+        let mut descriptor = PSECURITY_DESCRIPTOR::default();
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            &HSTRING::from(sddl),
+            SDDL_REVISION_1,
+            &mut descriptor,
+            None,
+        )
+        .map_err(fail)?;
+        let mut present = windows::core::BOOL(0);
+        let mut defaulted = windows::core::BOOL(0);
+        let mut dacl: *mut ACL = std::ptr::null_mut();
+        let result = GetSecurityDescriptorDacl(descriptor, &mut present, &mut dacl, &mut defaulted)
+            .map_err(fail)
+            .and_then(|()| {
+                SetNamedSecurityInfoW(
+                    &HSTRING::from(dir.as_os_str()),
+                    SE_FILE_OBJECT,
+                    DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                    None,
+                    None,
+                    Some(dacl),
+                    None,
+                )
+                .ok()
+                .map_err(fail)
+            });
+        LocalFree(Some(HLOCAL(descriptor.0)));
+        result
     }
 }
 
