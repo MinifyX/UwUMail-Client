@@ -8,6 +8,7 @@ it keeps UwUMail up to date afterwards.
 | System | File | Where UwUMail goes |
 | --- | --- | --- |
 | Windows 10/11 (x64) | `UwUMail-Setup-<version>.exe` | `%LOCALAPPDATA%\Programs\UwUMail` (changeable) |
+| Windows 11 on ARM | `UwUMail-Setup-<version>-arm64.exe` | `%LOCALAPPDATA%\Programs\UwUMail` (changeable) |
 | macOS, Apple chip (M1 and later) | `UwUMail-Setup-<version>-macos-apple-silicon.dmg` | `~/Applications/UwUMail.app` |
 | macOS, Intel | `UwUMail-Setup-<version>-macos-intel.dmg` | `~/Applications/UwUMail.app` |
 | Linux (x86_64) | `UwUMail-Setup-<version>-x86_64.AppImage` | `~/.local/share/uwumail` |
@@ -16,6 +17,12 @@ it keeps UwUMail up to date afterwards.
 
 Not sure which Mac you have? Apple menu → About This Mac: "Chip: Apple M…"
 means Apple chip, "Processor: Intel" means Intel.
+
+Not sure which Windows PC you have? Settings → System → About, "System type":
+"ARM-based processor" takes the `-arm64` setup, "x64-based processor" the
+other one. The x64 setup also runs on an ARM PC, through Windows' emulation,
+just slower; that UwUMail keeps updating itself as x64. To switch, run the
+`-arm64` setup over it: mail and settings stay.
 
 Each release also lists the SHA-256 checksum of every file in
 `SHA256SUMS.txt`. To check a download, compare it with what your system

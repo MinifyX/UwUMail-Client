@@ -307,7 +307,13 @@ without a window, which CI uses to test it.
 
 ### Windows
 
-The payload is the UwUMail executable.
+The payload is the UwUMail executable. There are two builds, x64 and ARM64
+(`aarch64-pc-windows-msvc`, built natively on GitHub's `windows-11-arm`
+runner); both install into the same place, so either replaces the other. The
+key for updates is fixed when UwUMail is built: an x64 UwUMail on an ARM PC
+(emulated) keeps asking for `windows-x86_64`. The WebView2 bootstrapper picks
+the runtime for the system itself, and an ARM64 process finds WebView2's
+registry entry under `WOW6432Node` just like an x64 one.
 
 | What | Where |
 | --- | --- |
@@ -383,6 +389,7 @@ one entry per system, under Tauri's platform keys:
 | Key | Download |
 | --- | --- |
 | `windows-x86_64` | `UwUMail-Setup-<version>.exe` |
+| `windows-aarch64` | `UwUMail-Setup-<version>-arm64.exe` |
 | `darwin-aarch64` | `UwUMail-Update-<version>-macos-apple-silicon` |
 | `darwin-x86_64` | `UwUMail-Update-<version>-macos-intel` |
 | `linux-x86_64` | `UwUMail-Setup-<version>-x86_64.AppImage` |

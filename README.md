@@ -62,6 +62,7 @@ GitHub's machines, not by me every day.
 | System | File |
 | --- | --- |
 | Windows (x64) | `UwUMail-Setup-<version>.exe` |
+| Windows on ARM | `UwUMail-Setup-<version>-arm64.exe` |
 | macOS with Apple chip | `UwUMail-Setup-<version>-macos-apple-silicon.dmg` |
 | macOS with Intel | `UwUMail-Setup-<version>-macos-intel.dmg` |
 | Linux (x86_64) | `UwUMail-Setup-<version>-x86_64.AppImage` |

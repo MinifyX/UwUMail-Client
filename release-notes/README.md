@@ -18,11 +18,18 @@ without it. The text appears under "What's new" in UwUMail's update hint and on 
 3. Push the release commit to `main` and wait for the Android and iOS workflows of that commit (the release
    takes their APK and IPA).
 4. Tag `v<version>` and push the tag. The release workflow does the rest: it builds and signs the setups for
-   Windows, macOS (Apple chip and Intel) and Linux, tests the macOS and Linux ones, and publishes them with
-   the APK and the unsigned IPA. Which file is which is in [docs/install.md](../docs/install.md).
+   Windows (x64 and ARM), macOS (Apple chip and Intel) and Linux, tests each of them on a runner of its kind,
+   and publishes them with the APK, the unsigned IPA and `SHA256SUMS.txt`. The files:
+   - `UwUMail-Setup-<version>.exe` (Windows x64) and `UwUMail-Setup-<version>-arm64.exe` (Windows on ARM)
+   - `UwUMail-Setup-<version>-macos-apple-silicon.dmg`, `UwUMail-Setup-<version>-macos-intel.dmg`
+   - `UwUMail-Update-<version>-macos-apple-silicon`, `UwUMail-Update-<version>-macos-intel` (Mac updates)
+   - `UwUMail-Setup-<version>-x86_64.AppImage` (Linux)
+   - `UwUMail-<version>-<build>.apk`, `UwUMail-<version>-unsigned.ipa`
+
+   Which file is for whom is in [docs/install.md](../docs/install.md).
 
 If GitHub can't run the workflow, publish the Windows setup from a PC instead: with the tag checked out,
-run `pnpm release`. That publishes Windows only; Macs and Linux PCs then skip this version. It needs the update signing key, either as `TAURI_SIGNING_PRIVATE_KEY` +
+run `pnpm release`. That publishes Windows x64 only; ARM PCs, Macs and Linux PCs then skip this version. It needs the update signing key, either as `TAURI_SIGNING_PRIVATE_KEY` +
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` or as a folder with `uwumail-update.key` and `PASSWORT.txt` in
 `UWUMAIL_UPDATE_KEY_DIR`. It waits until the release and the update feed are online and checks them.
 
