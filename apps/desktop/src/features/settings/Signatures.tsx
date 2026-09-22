@@ -15,6 +15,12 @@ import { useUi } from "@/state/ui";
 import { insertDroppedHtml } from "@/features/compose/droppedHtml";
 import { Row } from "./Row";
 
+/**
+ * Without a sync account. One array for every render: a selector that returns a new `[]` each time
+ * never settles, and React gives up on the whole app (a black window, until a restart).
+ */
+const NOTHING_UNSYNCED: string[] = [];
+
 export function Signatures() {
   const { t } = useT();
   const client = useQueryClient();
@@ -31,7 +37,7 @@ export function Signatures() {
     return () => setSettingsFormDirty(false);
   }, [editing, setSettingsFormDirty]);
 
-  const unsynced = useAccountSync((s) => (s.accountId ? s.unsynced : []));
+  const unsynced = useAccountSync((s) => (s.accountId ? s.unsynced : NOTHING_UNSYNCED));
   const refresh = () => {
     signaturesChangedHere();
     return client.invalidateQueries({ queryKey: queryKeys.signatures });
