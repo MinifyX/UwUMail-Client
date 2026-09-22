@@ -39,6 +39,17 @@ describe("keys the server takes", () => {
     expect(isSyncable("listDensity", "compact")).toBe(false);
   });
 
+  it("takes names every object inherits for nothing", () => {
+    // What the server sends is parsed JSON: "__proto__" arrives as a key of its own.
+    const values = JSON.parse(
+      '{"__proto__":{"theme":"dark"},"constructor":"x","toString":true,"hasOwnProperty":1,"theme":"light"}',
+    ) as Record<string, unknown>;
+    expect(() => syncableValues(values)).not.toThrow();
+    expect(syncableValues(values)).toEqual({ theme: "light" });
+    expect(isSyncable("constructor", "x")).toBe(false);
+    expect(applyToSettings(base, values)).toEqual({ theme: "light" });
+  });
+
   it("checks list entries like the server", () => {
     expect(isSyncable("trustedSenders:@shop.example", true)).toBe(true);
     expect(isSyncable("trustedSenders:news@shop.example", true)).toBe(true);
@@ -72,16 +83,6 @@ describe("keys the server takes", () => {
 
   it("drops what it doesn't know from the server's copy", () => {
     expect(syncableValues({ theme: "dark", future: 1, "trustedSenders:@x": true })).toEqual({ theme: "dark" });
-  });
-
-  it("takes no built-in object names from the server as choices", () => {
-    // What a server sends is parsed JSON: "__proto__" arrives as an ordinary own key.
-    const server = JSON.parse('{"__proto__":1,"toString":"x","constructor":{},"valueOf":true,"theme":"dark"}');
-    expect(() => syncableValues(server)).not.toThrow();
-    expect(syncableValues(server)).toEqual({ theme: "dark" });
-    const changed = applyToSettings(base, server);
-    expect(changed).toEqual({ theme: "dark" });
-    expect(Object.hasOwn(changed, "toString")).toBe(false);
   });
 });
 
