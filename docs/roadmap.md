@@ -38,6 +38,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [ ] Addon catalog (`MinifyX/UwUMail-Addons`) with one-click install
 - [x] Installers for Windows and Linux in CI, release workflow with macOS
 - [x] UwUMail's own setup on macOS (Apple chip and Intel) and Linux (AppImage), tested on GitHub's runners ([install.md](install.md))
+- [x] Release files with stable names: one universal Mac setup, .deb/.rpm/portable for Linux x64 and arm64, AUR package `uwumail-bin`
 - [x] UwUMail's own Windows installer with Nyu: one click, no admin, options, uninstaller that can keep mail
 - [x] Auto-update on Windows: signed, downloaded quietly, Stable and Beta channels
 - [x] Releases and update feeds in this repo, old `UwUMail-Releases` archived (ships with 0.2.0-beta.3)

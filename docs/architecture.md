@@ -332,8 +332,8 @@ and registry keys for testing.
 
 ### macOS
 
-Separate builds for Apple chips (`aarch64-apple-darwin`) and Intel
-(`x86_64-apple-darwin`). The payload is a tar of `UwUMail.app`; the download is
+One universal build for Apple chips and Intel (`universal-apple-darwin`:
+Tauri builds both and joins them with `lipo`), app and setup alike. The payload is a tar of `UwUMail.app`; the download is
 a `.dmg` with `UwUMail Setup.app`. Both bundles are signed ad hoc
 (`codesign --sign -`): there's no Apple developer ID, and Apple chips refuse
 unsigned code.
@@ -353,9 +353,17 @@ the setup doesn't insist. UwUMail receives `mailto:` links as "open URL" events
 
 ### Linux
 
-x86_64 only. The payload is Tauri's AppImage of UwUMail, unpacked at build
-time and packed as a tar: the installed app runs through its own `AppRun`
-without FUSE and starts quicker. The download is the setup as an AppImage.
+New installs come from Tauri's own `.deb` and `.rpm` (x86_64 and arm64,
+package `uwumail`, system-wide in `/usr`), the AUR package `uwumail-bin`
+(the `.deb`'s files, `packaging/aur/`, written by `scripts/aur.mjs`) or the
+portable folder (the unpacked AppImage with a small launcher). The setup
+below is no longer offered as a download; it is still built for x86_64 and
+published as `UwUMail-update-linux-x64.AppImage`, because the copies it
+installed before update through it.
+
+The setup's payload is Tauri's AppImage of UwUMail, unpacked at build time and
+packed as a tar: the installed app runs through its own `AppRun` without FUSE
+and starts quicker.
 
 | What | Where |
 | --- | --- |
@@ -384,20 +392,38 @@ comes from the command line.
 The app checks `stable.json` or `beta.json` on the `updates` branch of this
 repo 20 seconds after start and every six hours (`tauri-plugin-updater`,
 signature checked against the public key in `tauri.conf.json`). Each feed has
-one entry per system, under Tauri's platform keys:
+one entry per system, under Tauri's platform keys. The plugin looks for
+`<os>-<arch>-<bundle>` first and then `<os>-<arch>`, where the bundle type is
+patched into the program when Tauri packs it: a UwUMail from the `.deb` finds
+`linux-x86_64-deb`, the unpacked AppImage the setup installed finds
+`linux-x86_64`.
 
-| Key | Download |
-| --- | --- |
-| `windows-x86_64` | `UwUMail-Setup-<version>.exe` |
-| `windows-aarch64` | `UwUMail-Setup-<version>-arm64.exe` |
-| `darwin-aarch64` | `UwUMail-Update-<version>-macos-apple-silicon` |
-| `darwin-x86_64` | `UwUMail-Update-<version>-macos-intel` |
-| `linux-x86_64` | `UwUMail-Setup-<version>-x86_64.AppImage` |
+| Key | Release file | Name in the signature |
+| --- | --- | --- |
+| `windows-x86_64` | `UwUMail-windows-x64-setup.exe` | `UwUMail-Setup-<version>.exe` |
+| `windows-aarch64` | `UwUMail-windows-arm64-setup.exe` | `UwUMail-Setup-<version>-arm64.exe` |
+| `darwin-aarch64` | `UwUMail-update-macos-universal` | `UwUMail-Update-<version>-macos-apple-silicon` |
+| `darwin-x86_64` | `UwUMail-update-macos-universal` | `UwUMail-Update-<version>-macos-intel` |
+| `linux-x86_64` | `UwUMail-update-linux-x64.AppImage` | `UwUMail-Setup-<version>-x86_64.AppImage` |
+| `linux-{x86_64,aarch64}-deb` | `UwUMail-linux-{x64,arm64}.deb` | `UwUMail-<version>-linux-{x86_64,aarch64}.deb` |
+| `linux-{x86_64,aarch64}-rpm` | `UwUMail-linux-{x64,arm64}.rpm` | `UwUMail-<version>-linux-{x86_64,aarch64}.rpm` |
+
+Release files carry no version, so the website can always link to the latest
+one. UwUMail, however, only takes an update whose signature's trusted comment
+names the versioned file of the version the feed announces
+(`release_file_name` in `updates.rs`): the feed's version number isn't signed,
+and without this an altered feed could pass off an older, validly signed
+update as a newer one. The signature covers the bytes and that comment, not the
+download address, so the release job signs a copy under the versioned name and
+publishes the same bytes under the stable one (`scripts/release-feeds.mjs`).
+The versioned names for the setups are what every released UwUMail expects and
+never change.
 
 On macOS the download is the setup program from inside `UwUMail Setup.app`, on
 its own (and signed ad hoc on its own): one file the signature covers
 completely, with nothing to unpack before it is checked. It runs fine outside
-its bundle.
+its bundle. It is universal, so both Mac keys point to the same file, signed
+once under each name.
 
 The app saves the download into its local data folder (`…/updates`, private to
 the user on macOS and Linux, the file only executable by the user), shows Nyu's
@@ -408,7 +434,18 @@ version, because the version number in the feed isn't signed. On Linux the
 setup AppImage unpacks itself into that private folder
 (`APPIMAGE_EXTRACT_AND_RUN`, `TMPDIR`) instead of mounting with FUSE. On macOS
 and Linux only a UwUMail running from where the setup installed it updates
-itself.
+itself through the setup.
+
+A UwUMail from the `.deb` or `.rpm` updates through its package instead, but
+only if dpkg (`/var/lib/dpkg/info/uwumail.list` lists the program) or rpm
+(`rpm -qf` names `uwumail`) really installed it: the AUR package carries the
+`.deb`'s program, which says "deb" inside, and pacman keeps that one up to
+date. The package waits in the private updates folder until "Restart now",
+which checks the signature again and runs `pkexec dpkg -i` or `pkexec rpm -U
+--oldpackage` (rpm orders `0.3.0-beta.2` after `0.3.0` and would refuse the
+final version otherwise), then restarts UwUMail. The plugin's own package
+install isn't used: it only works on the update it just downloaded, not on one
+waiting from before a restart.
 
 ## Security
 
@@ -424,18 +461,20 @@ different site than the target.
 - Every push: typecheck, lint, unit tests, `cargo clippy`, `cargo test`
   (including integration tests against GreenMail and Stalwart), `cargo audit`
   and `pnpm audit --prod`. All actions are pinned to commit SHAs.
-- Every push to `main`: `UwUMail-Setup-<version>.exe` for Windows as a workflow
-  artifact; the macOS setups (Apple chip on `macos-15`, Intel on
-  `macos-15-intel`) and the Linux AppImage setup, each installed, started,
-  updated and uninstalled in a throwaway home folder
-  (`.github/workflows/desktop.yml`, Linux on Ubuntu 22.04 and 24.04); the
-  signed Android APK with its emulator test; the unsigned iPhone IPA with its
-  simulator test.
-- Tags `vX.Y.Z` (or `vX.Y.Z-beta.N`): a GitHub release here with the signed
-  setups for Windows, macOS and Linux, the APK and the IPA the Android and iOS
-  workflows built and tested for that commit, and the update feeds on the
-  `updates` branch (`scripts/release-feeds.mjs`, see
-  `release-notes/README.md`). The branch holds nothing else and is protected
+- Every push to `main`: the Windows setup as a workflow artifact; the
+  universal macOS setup (built on `macos-15`, installed, started, updated and
+  uninstalled in a throwaway home folder there and on `macos-15-intel`), and
+  for Linux x64 and arm64 the `.deb`, `.rpm` and portable folder (the `.deb`
+  installed and started, the portable folder started, on Ubuntu 22.04 and
+  24.04 of each processor) plus the x64 setup AppImage put through the same
+  paces as the Mac setup (`.github/workflows/desktop.yml`); the signed Android
+  APK with its emulator test; the unsigned iPhone IPA with its simulator test.
+- Tags `vX.Y.Z` (or `vX.Y.Z-beta.N`): a GitHub release here with every file
+  under a stable name (Windows and Mac setups, Linux packages and portable
+  folders, the APK and the IPA the Android and iOS workflows built and tested
+  for that commit, the updater's files), the update feeds on the `updates`
+  branch (`scripts/release-feeds.mjs`, see `release-notes/README.md`), and the
+  AUR package `uwumail-bin` (only with the `AUR_SSH_PRIVATE_KEY` secret). The branch holds nothing else and is protected
   against deletion and force pushes. When GitHub can't run the workflow,
   `pnpm release` on a Windows PC publishes the Windows setup the same way; its
   feeds then only list Windows, so Macs and Linux PCs skip that version.

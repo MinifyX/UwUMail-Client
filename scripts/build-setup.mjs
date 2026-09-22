@@ -1,27 +1,46 @@
-// Builds UwUMail's setup for this system: the app, packed into UwUMail's own installer.
+// Builds UwUMail for this system, under the names the release publishes:
 //
-//   pnpm build:setup                                  Windows x64: UwUMail-Setup-<version>.exe
-//   pnpm build:setup --target aarch64-pc-windows-msvc Windows on ARM: UwUMail-Setup-<version>-arm64.exe
-//   pnpm build:setup --target aarch64-apple-darwin    macOS (Apple chip), or x86_64-apple-darwin (Intel)
-//   pnpm build:setup                                  Linux: UwUMail-Setup-<version>-x86_64.AppImage
+//   pnpm build:setup                                  Windows x64: UwUMail-windows-x64-setup.exe
+//   pnpm build:setup --target aarch64-pc-windows-msvc Windows on ARM: UwUMail-windows-arm64-setup.exe
+//   pnpm build:setup                                  macOS: one universal setup (Apple chip and Intel)
+//   pnpm build:setup                                  Linux x64 or arm64: packages, portable folder
 //
-// Without --target, Windows builds for the PC it runs on (an ARM PC makes the -arm64 setup).
+// Without --target, Windows builds for the PC it runs on (an ARM PC makes the ARM setup).
 // Windows writes into target/release, as it always did. macOS and Linux write into target/setup:
 //
-//   UwUMail-Setup-<version>-macos-apple-silicon.dmg   the setup app to download (…-macos-intel.dmg)
-//   UwUMail-Update-<version>-macos-apple-silicon      the same setup program on its own, for updates
-//   UwUMail-Setup-<version>-x86_64.AppImage           Linux setup, also used for updates
+//   UwUMail-macos-universal.dmg              the setup app to download
+//   UwUMail-update-macos-universal           the same setup program on its own, for updates
+//   UwUMail-linux-<x64|arm64>.deb / .rpm     Tauri's packages, installed system-wide
+//   UwUMail-linux-<x64|arm64>-portable.tar.gz  the unpacked AppImage in a folder, runs in place
+//   UwUMail-update-linux-x64.AppImage        the per-user Linux setup (x64 only), which UwUMail
+//                                            installed by it downloads for its updates
+//
+// On Windows and macOS the download is UwUMail's own setup with the app packed inside. On Linux
+// new installs come from the .deb/.rpm (or the AUR, built from the .deb); the setup AppImage is
+// only still built so that copies it installed before keep updating.
 //
 // Nothing is signed by Apple (there is no developer account): both app bundles get an ad-hoc
 // signature, which Apple chips need to run them at all.
 //
 // With TAURI_SIGNING_PRIVATE_KEY (and _PASSWORD) set, whatever the updater downloads is also
-// signed for it, which writes a .sig next to the file.
+// signed for it: a copy under the versioned name installed apps expect in the signature
+// (scripts/release-feeds.mjs) gets signed, which leaves `<versioned name>.sig` next to the file.
 
 import { execFileSync, execSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { signedName, updateAsset } from "./release-feeds.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const run = (command, env = {}) => execSync(command, { cwd: root, stdio: "inherit", env: { ...process.env, ...env } });
@@ -55,23 +74,37 @@ if (process.env.TAURI_SIGNING_PRIVATE_KEY || process.env.TAURI_SIGNING_PRIVATE_K
   throw new Error("The update-signing key must be removed from the environment before building.");
 }
 
-function signForUpdater(file) {
+/**
+ * Signs `file` (under its release name) for the updater of each platform key: a copy under the
+ * name that platform's installed apps expect in the signature is signed and removed again, which
+ * leaves `<that name>.sig` next to the file.
+ */
+function signForUpdater(file, ...platforms) {
   if (!signingKey) return;
-  console.log(`\n▸ Signing ${file} for the updater`);
-  exec("pnpm", ["--filter", "@uwumail/desktop", "exec", "tauri", "signer", "sign", file], {
-    env: { TAURI_SIGNING_PRIVATE_KEY: signingKey, TAURI_SIGNING_PRIVATE_KEY_PASSWORD: signingPassword },
-  });
+  for (const platform of platforms) {
+    const copy = join(dirname(file), signedName(platform, version));
+    console.log(`\n▸ Signing ${file} for the updater (${platform}, as ${signedName(platform, version)})`);
+    copyFileSync(file, copy);
+    const env = { TAURI_SIGNING_PRIVATE_KEY: signingKey, TAURI_SIGNING_PRIVATE_KEY_PASSWORD: signingPassword };
+    try {
+      // pnpm is a .cmd on Windows, so it goes through the shell there, as the builds do.
+      if (process.platform === "win32") run(`pnpm --filter @uwumail/desktop exec tauri signer sign "${copy}"`, env);
+      else exec("pnpm", ["--filter", "@uwumail/desktop", "exec", "tauri", "signer", "sign", copy], { env });
+    } finally {
+      rmSync(copy, { force: true });
+    }
+  }
 }
 
-/** Windows targets and what their setup's name ends with; x64 keeps the name it always had. */
-const WINDOWS_SUFFIXES = { "x86_64-pc-windows-msvc": "", "aarch64-pc-windows-msvc": "-arm64" };
+/** Windows targets, the platform key their updater looks up and the release file. */
+const WINDOWS_TARGETS = { "x86_64-pc-windows-msvc": "windows-x86_64", "aarch64-pc-windows-msvc": "windows-aarch64" };
 
 function buildWindows() {
   const explicit = option("--target");
   const target = explicit ?? (process.arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc");
-  const suffix = WINDOWS_SUFFIXES[target];
-  if (suffix === undefined) {
-    throw new Error(`Unknown Windows target ${target}; use one of ${Object.keys(WINDOWS_SUFFIXES).join(", ")}`);
+  const platform = WINDOWS_TARGETS[target];
+  if (!platform) {
+    throw new Error(`Unknown Windows target ${target}; use one of ${Object.keys(WINDOWS_TARGETS).join(", ")}`);
   }
   // Cargo puts a build for an explicit --target into a folder of its own.
   const built = explicit ? join(targetDir, target, "release") : join(targetDir, "release");
@@ -88,16 +121,10 @@ function buildWindows() {
   // Every Windows setup lands in target/release, as it always did.
   const release = join(targetDir, "release");
   mkdirSync(release, { recursive: true });
-  const setup = join(release, `UwUMail-Setup-${version}${suffix}.exe`);
+  const setup = join(release, updateAsset(platform));
   copyFileSync(join(built, "uwumail-setup.exe"), setup);
 
-  if (signingKey) {
-    console.log("\n▸ Signing for the updater");
-    run(`pnpm --filter @uwumail/desktop exec tauri signer sign "${setup}"`, {
-      TAURI_SIGNING_PRIVATE_KEY: signingKey,
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: signingPassword,
-    });
-  }
+  signForUpdater(setup, platform);
   console.log(`\n✧ ${setup}`);
 }
 
@@ -109,12 +136,12 @@ function adHocSign(path, identifier) {
   exec("codesign", ["--verify", "--strict", "--verbose=2", path]);
 }
 
-const MAC_LABELS = { "aarch64-apple-darwin": "apple-silicon", "x86_64-apple-darwin": "intel" };
+/** One build for both kinds of Mac: Tauri builds each and joins them with lipo. */
+const MAC_TARGET = "universal-apple-darwin";
 
 function buildMac() {
-  const target = option("--target") ?? (process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin");
-  const label = MAC_LABELS[target];
-  if (!label) throw new Error(`Unknown macOS target ${target}; use one of ${Object.keys(MAC_LABELS).join(", ")}`);
+  const target = option("--target") ?? MAC_TARGET;
+  if (target !== MAC_TARGET) throw new Error(`The macOS setup is built as ${MAC_TARGET} only, not ${target}`);
   const bundles = join(targetDir, target, "release", "bundle", "macos");
   const out = join(targetDir, "setup");
   mkdirSync(out, { recursive: true });
@@ -135,62 +162,147 @@ function buildMac() {
   if (!existsSync(setupApp)) throw new Error(`Missing ${setupApp}`);
   adHocSign(setupApp);
 
-  // The updater downloads the setup program on its own: one file, checked as a whole.
+  // The updater downloads the setup program on its own: one file, checked as a whole. The same
+  // universal program serves both kinds of Mac.
   const program = readdirSync(join(setupApp, "Contents", "MacOS"))[0];
-  const update = join(out, `UwUMail-Update-${version}-macos-${label}`);
+  const update = join(out, updateAsset("darwin-aarch64"));
   rmSync(update, { force: true });
   copyFileSync(join(setupApp, "Contents", "MacOS", program), update);
   adHocSign(update, "app.uwumail.setup");
 
   console.log("\n▸ Making the disk image");
-  const stage = join(out, `dmg-${label}`);
+  const stage = join(out, "dmg-universal");
   rmSync(stage, { recursive: true, force: true });
   mkdirSync(stage);
   exec("ditto", [setupApp, join(stage, "UwUMail Setup.app")]);
-  const dmg = join(out, `UwUMail-Setup-${version}-macos-${label}.dmg`);
+  const dmg = join(out, "UwUMail-macos-universal.dmg");
   rmSync(dmg, { force: true });
   exec("hdiutil", ["create", "-volname", "UwUMail Setup", "-srcfolder", stage, "-format", "UDZO", "-ov", dmg]);
   rmSync(stage, { recursive: true, force: true });
 
-  signForUpdater(update);
+  // Installed apps on Apple chips and on Intel each expect their own name in the signature.
+  signForUpdater(update, "darwin-aarch64", "darwin-x86_64");
   console.log(`\n✧ ${dmg}\n✧ ${update}`);
 }
 
+/** Linux processors: the name in the release files and the one Tauri's updater uses. */
+const LINUX_ARCHES = { x64: { label: "x64", arch: "x86_64" }, arm64: { label: "arm64", arch: "aarch64" } };
+
+/**
+ * Tauri names the .deb/.rpm package after the product, in kebab case, which would turn "UwUMail"
+ * into "uw-u-mail". Built as "uwumail" instead; the menu entry still says UwUMail. The package
+ * name is what UwUMail asks dpkg and rpm about before updating itself (`PACKAGE` in updates.rs).
+ */
+const PACKAGE_CONFIG = {
+  productName: "uwumail",
+  bundle: {
+    linux: {
+      deb: { desktopTemplate: join(root, "apps/desktop/src-tauri/linux/uwumail.desktop"), section: "mail" },
+      rpm: { desktopTemplate: join(root, "apps/desktop/src-tauri/linux/uwumail.desktop") },
+    },
+  },
+};
+
+/** How to start the portable folder; it sits next to AppRun. */
+const PORTABLE_LAUNCHER = `#!/bin/sh
+# Starts UwUMail from this folder. AppRun finds the libraries next to itself, so it is started by
+# its real path, also when this script is reached through a link.
+here="$(dirname "$(readlink -f "$0")")"
+exec "$here/AppRun" "$@"
+`;
+
+const PORTABLE_README = `UwUMail ${version}, portable
+
+Runs from this folder without installing anything. Start it with
+
+    ./UwUMail/uwumail
+
+(or ./UwUMail/AppRun). The folder can live anywhere, a USB stick too; mail
+and settings are kept in your home folder like for an installed UwUMail.
+
+This copy does not update itself. For updates, download the newest
+UwUMail-linux-<x64|arm64>-portable.tar.gz again, or install the .deb/.rpm
+(or uwumail-bin from the AUR), which update themselves:
+https://github.com/MinifyX/UwUMail-Client/releases/latest
+`;
+
 function buildLinux() {
-  if (process.arch !== "x64") throw new Error("The Linux setup is built for x86_64 only.");
-  const bundles = join(targetDir, "release", "bundle", "appimage");
+  const linux = LINUX_ARCHES[process.arch];
+  if (!linux) throw new Error(`There's no UwUMail for Linux on ${process.arch}.`);
+  const bundleRoot = join(targetDir, "release", "bundle");
   const out = join(targetDir, "setup");
   mkdirSync(out, { recursive: true });
 
-  console.log(`\n▸ Building UwUMail ${version}`);
-  rmSync(bundles, { recursive: true, force: true });
+  console.log(`\n▸ Building UwUMail ${version} (AppImage)`);
+  rmSync(bundleRoot, { recursive: true, force: true });
   exec("pnpm", ["--filter", "@uwumail/desktop", "tauri", "build", "--bundles", "appimage"]);
-  const appImage = readdirSync(bundles).find((name) => name.endsWith(".AppImage"));
-  if (!appImage) throw new Error(`No AppImage in ${bundles}`);
+  const appImageDir = join(bundleRoot, "appimage");
+  const appImage = readdirSync(appImageDir).find((name) => name.endsWith(".AppImage"));
+  if (!appImage) throw new Error(`No AppImage in ${appImageDir}`);
 
-  // Unpacked, so the installed app runs without FUSE. The setup keeps modes and links.
+  // Unpacked, so the app runs without FUSE, for the setup and the portable folder alike.
   console.log("\n▸ Unpacking the AppImage");
   const work = join(out, "appdir");
   rmSync(work, { recursive: true, force: true });
   mkdirSync(work);
-  exec(join(bundles, appImage), ["--appimage-extract"], { cwd: work, stdio: ["ignore", "ignore", "inherit"] });
+  exec(join(appImageDir, appImage), ["--appimage-extract"], { cwd: work, stdio: ["ignore", "ignore", "inherit"] });
   const appDir = join(work, "squashfs-root");
   if (!existsSync(join(appDir, "AppRun"))) throw new Error(`The unpacked AppImage has no AppRun: ${appDir}`);
 
-  console.log("\n▸ Packing it into the setup");
-  rmSync(bundles, { recursive: true, force: true });
-  exec("pnpm", ["--filter", "@uwumail/setup", "tauri", "build", "--bundles", "appimage"], {
-    env: { UWUMAIL_SETUP_PAYLOAD: appDir },
-  });
-  const setupImage = readdirSync(bundles).find((name) => name.endsWith(".AppImage"));
-  if (!setupImage) throw new Error(`No setup AppImage in ${bundles}`);
-  const setup = join(out, `UwUMail-Setup-${version}-x86_64.AppImage`);
-  rmSync(setup, { force: true });
-  copyFileSync(join(bundles, setupImage), setup);
+  if (linux.label === "x64") {
+    // Only for the copies the per-user setup installed before: they update through it.
+    console.log("\n▸ Packing it into the setup");
+    rmSync(appImageDir, { recursive: true, force: true });
+    exec("pnpm", ["--filter", "@uwumail/setup", "tauri", "build", "--bundles", "appimage"], {
+      env: { UWUMAIL_SETUP_PAYLOAD: appDir },
+    });
+    const setupImage = readdirSync(appImageDir).find((name) => name.endsWith(".AppImage"));
+    if (!setupImage) throw new Error(`No setup AppImage in ${appImageDir}`);
+    const setup = join(out, updateAsset("linux-x86_64"));
+    rmSync(setup, { force: true });
+    copyFileSync(join(appImageDir, setupImage), setup);
+    signForUpdater(setup, "linux-x86_64");
+  }
+
+  // One folder UwUMail/ that runs in place. tar, not zip, so modes and links stay.
+  console.log("\n▸ Packing the portable folder");
+  const stage = join(out, "portable");
+  rmSync(stage, { recursive: true, force: true });
+  mkdirSync(stage);
+  exec("mv", [appDir, join(stage, "UwUMail")]);
+  writeFileSync(join(stage, "UwUMail", "uwumail"), PORTABLE_LAUNCHER);
+  chmodSync(join(stage, "UwUMail", "uwumail"), 0o755);
+  writeFileSync(join(stage, "UwUMail", "README.txt"), PORTABLE_README);
+  const portable = join(out, `UwUMail-linux-${linux.label}-portable.tar.gz`);
+  rmSync(portable, { force: true });
+  exec("tar", ["--owner=0", "--group=0", "--numeric-owner", "-czf", portable, "-C", stage, "UwUMail"]);
+  rmSync(stage, { recursive: true, force: true });
   rmSync(work, { recursive: true, force: true });
 
-  signForUpdater(setup);
-  console.log(`\n✧ ${setup}`);
+  console.log(`\n▸ Building the .deb and .rpm`);
+  exec("pnpm", [
+    "--filter",
+    "@uwumail/desktop",
+    "tauri",
+    "build",
+    "--bundles",
+    "deb,rpm",
+    "--config",
+    JSON.stringify(PACKAGE_CONFIG),
+  ]);
+  const packages = [];
+  for (const kind of ["deb", "rpm"]) {
+    const dir = join(bundleRoot, kind);
+    const built = readdirSync(dir).filter((name) => name.endsWith(`.${kind}`));
+    if (built.length !== 1) throw new Error(`Expected one .${kind} in ${dir}, found: ${built.join(", ")}`);
+    const file = join(out, `UwUMail-linux-${linux.label}.${kind}`);
+    rmSync(file, { force: true });
+    copyFileSync(join(dir, built[0]), file);
+    signForUpdater(file, `linux-${linux.arch}-${kind}`);
+    packages.push(file);
+  }
+
+  console.log(`\n✧ ${[...packages, portable].join("\n✧ ")}`);
 }
 
 if (process.platform === "win32") buildWindows();

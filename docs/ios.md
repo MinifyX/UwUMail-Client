@@ -10,7 +10,7 @@ Every run on `main` produces two things:
 
 | Artifact | What it is |
 | --- | --- |
-| `UwUMail-<version>-unsigned.ipa` | The app for a real iPhone, **without any signature** |
+| `UwUMail-<version>-unsigned.ipa` | The app for a real iPhone, **without any signature** (released as `UwUMail-ios.ipa`) |
 | `UwUMail-simulator.tar.gz` | The same app for the iOS simulator, used by the smoke test |
 
 The Xcode project is not in this repository. `tauri ios init` generates it on
@@ -31,7 +31,7 @@ the IPA leaves CI with no signature at all — iOS refuses to install it as it i
 The way around it, for your own phone: a sideloading tool signs the app with
 your own free Apple ID right before it installs it.
 
-1. Download `UwUMail-<version>-unsigned.ipa` from the
+1. Download `UwUMail-ios.ipa` from the
    [releases page](https://github.com/MinifyX/UwUMail-Client/releases). Every
    release carries the IPA the iOS workflow built and tried for that commit.
    (For something newer than the last release: the `UwUMail-iOS-…` artifact of

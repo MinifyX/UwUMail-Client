@@ -5,12 +5,20 @@
 //! "Restart now" hands over to that setup in `--update` mode; otherwise the
 //! update is applied the next time UwUMail starts.
 //!
-//! The setup is `UwUMail-Setup-<version>.exe` on Windows (`…-arm64.exe` for an
-//! ARM build, which Tauri's updater looks up as `windows-aarch64`; that is fixed
-//! when UwUMail is built, so an x64 UwUMail on an ARM PC keeps the x64 setup),
-//! the setup program itself on macOS and the setup AppImage on Linux. On macOS and Linux only a
-//! UwUMail the setup installed updates itself, so a copy started from
-//! somewhere else never installs a second one.
+//! The setup is UwUMail's Windows setup (the ARM one for an ARM build, which
+//! Tauri's updater looks up as `windows-aarch64`; that is fixed when UwUMail is
+//! built, so an x64 UwUMail on an ARM PC keeps the x64 setup), the universal
+//! setup program itself on macOS and the setup AppImage on Linux. On macOS and
+//! Linux only a UwUMail the setup installed updates itself, so a copy started
+//! from somewhere else (the portable folder, a build of your own) never
+//! installs a second one.
+//!
+//! A UwUMail from the .deb or .rpm updates through its package instead: the
+//! updater finds it under `linux-<arch>-deb` / `-rpm` in the feed, and "Restart
+//! now" installs it with `pkexec dpkg -i` / `pkexec rpm -U`, which asks for an
+//! administrator's password. Only when dpkg or rpm really owns this UwUMail: the
+//! AUR package is built from the .deb's files, so it looks like a .deb inside,
+//! but pacman keeps that one up to date.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -74,8 +82,30 @@ fn is_newer(app: &AppHandle, version: &str) -> bool {
     semver::Version::parse(version).is_ok_and(|v| v > current_version(app))
 }
 
-fn setup_file(dir: &Path, version: &str) -> PathBuf {
-    if cfg!(windows) {
+/// How this UwUMail came onto the computer, which decides how it updates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Install {
+    /// UwUMail's own setup: Windows, macOS, and the per-user install on Linux.
+    Setup,
+    /// The .deb, installed by dpkg.
+    Deb,
+    /// The .rpm, installed by rpm.
+    Rpm,
+}
+
+/// The package name of the .deb and .rpm (scripts/build-setup.mjs builds them under it).
+#[cfg(target_os = "linux")]
+const PACKAGE: &str = "uwumail";
+
+/// The updater's name for this processor, as in the packages' signed names.
+const ARCH: &str = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
+
+fn setup_file(dir: &Path, version: &str, install: Install) -> PathBuf {
+    if install == Install::Deb {
+        dir.join(format!("UwUMail-{version}.deb"))
+    } else if install == Install::Rpm {
+        dir.join(format!("UwUMail-{version}.rpm"))
+    } else if cfg!(windows) {
         dir.join(format!("UwUMail-Setup-{version}.exe"))
     } else if cfg!(target_os = "linux") {
         dir.join(format!("UwUMail-Setup-{version}.AppImage"))
@@ -89,18 +119,51 @@ fn real(path: &Path) -> Option<PathBuf> {
     std::fs::canonicalize(path).ok()
 }
 
-/// Whether this UwUMail is the one the setup installed and may replace.
-fn updates_itself() -> bool {
+/// How this UwUMail updates itself, if it does: when the setup installed it (where the setup puts
+/// it), or when dpkg or rpm installed it.
+fn installed_by() -> Option<Install> {
     if cfg!(debug_assertions) {
-        return false;
+        return None;
     }
     if cfg!(windows) {
-        return true;
+        return Some(Install::Setup);
     }
-    let (Some(exe), Some(home)) = (
-        std::env::current_exe().ok().and_then(|exe| real(&exe)),
-        std::env::var_os("HOME").map(PathBuf::from).filter(|home| home.is_absolute()),
-    ) else {
+    let exe = std::env::current_exe().ok().and_then(|exe| real(&exe))?;
+    #[cfg(target_os = "linux")]
+    {
+        use tauri::utils::{config::BundleType, platform::bundle_type};
+        // Written into the program when the .deb or .rpm was made; the setup's says AppImage.
+        match bundle_type() {
+            Some(BundleType::Deb) => return owned_by_dpkg(&exe).then_some(Install::Deb),
+            Some(BundleType::Rpm) => return owned_by_rpm(&exe).then_some(Install::Rpm),
+            _ => {}
+        }
+    }
+    installed_by_setup(&exe).then_some(Install::Setup)
+}
+
+/// Whether dpkg installed this program as part of UwUMail's package.
+#[cfg(target_os = "linux")]
+fn owned_by_dpkg(exe: &Path) -> bool {
+    std::fs::read_to_string(format!("/var/lib/dpkg/info/{PACKAGE}.list"))
+        .is_ok_and(|files| files.lines().any(|line| Path::new(line) == exe))
+}
+
+/// Whether rpm installed this program as part of UwUMail's package.
+#[cfg(target_os = "linux")]
+fn owned_by_rpm(exe: &Path) -> bool {
+    std::process::Command::new("rpm")
+        .args(["-qf", "--queryformat", "%{NAME}"])
+        .arg(exe)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .is_ok_and(|out| out.status.success() && out.stdout == PACKAGE.as_bytes())
+}
+
+/// Whether this program lies where UwUMail's setup installs it on macOS and Linux.
+fn installed_by_setup(exe: &Path) -> bool {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from).filter(|home| home.is_absolute()) else {
         return false;
     };
     let installed = if cfg!(target_os = "macos") {
@@ -144,23 +207,29 @@ fn write_setup(file: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// A waiting update, if it is where UwUMail put it and still carries a valid
 /// release signature. `pending.json` lives in a folder any program of the
 /// user can write to, so neither its path nor the file is trusted blindly.
-fn read_pending(app: &AppHandle) -> Option<ReadyUpdate> {
+fn read_pending(app: &AppHandle, install: Install) -> Option<ReadyUpdate> {
     let dir = updates_dir(app)?;
     let raw = std::fs::read(dir.join(PENDING)).ok()?;
     let update = serde_json::from_slice::<ReadyUpdate>(&raw).ok()?;
     semver::Version::parse(&update.version).ok()?;
-    let expected = setup_file(&dir, &update.version);
+    let expected = setup_file(&dir, &update.version, install);
     if update.file != expected {
         return None;
     }
     let bytes = std::fs::read(&expected).ok()?;
-    verify(app, &bytes, &update.signature, &update.version).then_some(update)
+    verify(app, &bytes, &update.signature, &update.version, install).then_some(update)
 }
 
-/// The name the release gives the setup of `version` for this system, as `tauri signer sign`
-/// wrote it into the signature.
-fn release_file_name(version: &str) -> String {
-    if cfg!(all(windows, target_arch = "aarch64")) {
+/// The name the update of `version` for this system carries in its signature, as `tauri signer
+/// sign` wrote it there. The release publishes the file under a name without the version
+/// (UwUMail-windows-x64-setup.exe, ...) but signs a copy under this one (scripts/release-feeds.mjs).
+/// Every released UwUMail expects these, so the names of the setups must never change.
+fn release_file_name(version: &str, install: Install) -> String {
+    if install == Install::Deb {
+        format!("UwUMail-{version}-linux-{ARCH}.deb")
+    } else if install == Install::Rpm {
+        format!("UwUMail-{version}-linux-{ARCH}.rpm")
+    } else if cfg!(all(windows, target_arch = "aarch64")) {
         format!("UwUMail-Setup-{version}-arm64.exe")
     } else if cfg!(windows) {
         format!("UwUMail-Setup-{version}.exe")
@@ -176,14 +245,14 @@ fn release_file_name(version: &str) -> String {
 /// Whether a signature's trusted comment (`timestamp:…<tab>file:<name>`) names the setup of
 /// `version` for this system. The feed's version number isn't signed, the comment is: without
 /// this, an altered feed could hand out an older setup, still validly signed, as a newer one.
-fn signed_for_version(trusted_comment: &str, version: &str) -> bool {
-    let expected = release_file_name(version);
+fn signed_for_version(trusted_comment: &str, version: &str, install: Install) -> bool {
+    let expected = release_file_name(version, install);
     trusted_comment.split('\t').any(|part| part.strip_prefix("file:") == Some(expected.as_str()))
 }
 
 /// Checks a setup against the release key from `tauri.conf.json`, and that the signature was
 /// made for this version's setup.
-fn verify(app: &AppHandle, bytes: &[u8], signature: &str, version: &str) -> bool {
+fn verify(app: &AppHandle, bytes: &[u8], signature: &str, version: &str, install: Install) -> bool {
     use base64::Engine as _;
     let decode = |text: &str| {
         base64::engine::general_purpose::STANDARD.decode(text.trim()).ok().and_then(|raw| String::from_utf8(raw).ok())
@@ -205,7 +274,7 @@ fn verify(app: &AppHandle, bytes: &[u8], signature: &str, version: &str) -> bool
     ) else {
         return false;
     };
-    key.verify(bytes, &signature, false).is_ok() && signed_for_version(signature.trusted_comment(), version)
+    key.verify(bytes, &signature, false).is_ok() && signed_for_version(signature.trusted_comment(), version, install)
 }
 
 /// Starts the downloaded setup to replace this UwUMail, which then quits.
@@ -272,14 +341,49 @@ fn hand_over(update: &ReadyUpdate, relaunch: bool) -> Result<(), Error> {
     command.spawn().map(|_| ()).map_err(|e| Error::internal(format!("Couldn't start the update: {e}")))
 }
 
+/// Installs a downloaded .deb or .rpm with the package manager, as an administrator: `pkexec`
+/// asks for the password in a window of the desktop's own. The same commands as
+/// tauri-plugin-updater's own package install, which can't be used here: it needs the update it
+/// just downloaded in memory, not one waiting from before a restart, and has rpm refuse to go
+/// from a beta to the final version.
+#[cfg(target_os = "linux")]
+fn install_package(file: &Path, install: Install) -> Result<(), Error> {
+    // `--oldpackage`: rpm orders a beta (0.3.0-beta.2) after its final version (0.3.0). That the
+    // update is newer, UwUMail has checked itself.
+    let (program, args): (&str, &[&str]) =
+        if install == Install::Deb { ("dpkg", &["-i"]) } else { ("rpm", &["-U", "--oldpackage"]) };
+    let status = std::process::Command::new("pkexec")
+        .arg(program)
+        .args(args)
+        .arg(file)
+        .stdin(std::process::Stdio::null())
+        .status()
+        .map_err(|e| Error::internal(format!("Couldn't ask for the administrator password (pkexec): {e}")))?;
+    if status.success() {
+        return Ok(());
+    }
+    Err(Error::internal(format!(
+        "The update wasn't installed. You can also install it yourself: sudo {program} {} '{}'",
+        args.join(" "),
+        file.display()
+    )))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn install_package(_file: &Path, _install: Install) -> Result<(), Error> {
+    Err(Error::internal("Only Linux has UwUMail packages."))
+}
+
 /// Called first thing on start: installs a waiting update, or cleans up after one.
 /// Returns true when UwUMail must quit right away because the setup takes over.
 pub fn apply_pending_on_start(app: &AppHandle) -> bool {
-    if !updates_itself() {
+    let Some(install) = installed_by() else {
         return false;
-    }
-    match read_pending(app) {
-        Some(update) if is_newer(app, &update.version) => hand_over(&update, true).is_ok(),
+    };
+    match read_pending(app, install) {
+        // A package wants an administrator's password, so it waits for "Restart now" instead of
+        // asking out of the blue while UwUMail starts.
+        Some(update) if is_newer(app, &update.version) => install == Install::Setup && hand_over(&update, true).is_ok(),
         _ => {
             if let Some(dir) = updates_dir(app) {
                 let _ = std::fs::remove_dir_all(dir);
@@ -304,9 +408,9 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
     if let Some(update) = ready(app) {
         return Ok(Some(update));
     }
-    if !updates_itself() {
+    let Some(install) = installed_by() else {
         return Ok(None);
-    }
+    };
     let channel = *state.channel.lock().unwrap();
     let feed = match channel {
         Channel::Stable => format!("{FEED}/stable.json"),
@@ -324,12 +428,12 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
 
     // The plugin checks the signature against the public key before handing out the bytes.
     let bytes = found.download(|_, _| {}, || {}).await.map_err(fail)?;
-    if !verify(app, &bytes, &found.signature, &found.version) {
+    if !verify(app, &bytes, &found.signature, &found.version, install) {
         return Err(Error::internal(format!("The update to {} isn't signed for that version.", found.version)));
     }
     let dir = updates_dir(app).ok_or_else(|| Error::internal("No folder for updates"))?;
     create_private_dir(&dir).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
-    let file = setup_file(&dir, &found.version);
+    let file = setup_file(&dir, &found.version, install);
     write_setup(&file, &bytes).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
     let update = ReadyUpdate {
         version: found.version.clone(),
@@ -346,19 +450,32 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
 }
 
 /// "Restart now".
-pub fn install_now(app: &AppHandle) -> Result<(), Error> {
+pub async fn install_now(app: &AppHandle) -> Result<(), Error> {
     ready(app).ok_or_else(|| Error::not_found("There's no update waiting."))?;
+    let install = installed_by().ok_or_else(|| Error::internal("This UwUMail doesn't update itself."))?;
     // Read it back from disk, so the signature is checked on the file that runs.
-    let update = read_pending(app).ok_or_else(|| Error::internal("The downloaded update is damaged."))?;
-    hand_over(&update, true)?;
-    app.exit(0);
-    Ok(())
+    let update = read_pending(app, install).ok_or_else(|| Error::internal("The downloaded update is damaged."))?;
+    if install == Install::Setup {
+        hand_over(&update, true)?;
+        app.exit(0);
+        return Ok(());
+    }
+    // Off the main thread, so the window keeps drawing while the password is asked for.
+    let file = update.file.clone();
+    tauri::async_runtime::spawn_blocking(move || install_package(&file, install))
+        .await
+        .map_err(|e| Error::internal(format!("The update failed: {e}")))??;
+    if let Some(dir) = updates_dir(app) {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    app.restart()
 }
 
 /// Checks in the background for as long as UwUMail runs.
 pub fn start(app: &AppHandle) {
     app.manage(Updates::default());
-    if let Some(update) = read_pending(app).filter(|update| is_newer(app, &update.version)) {
+    let pending = installed_by().and_then(|install| read_pending(app, install));
+    if let Some(update) = pending.filter(|update| is_newer(app, &update.version)) {
         *app.state::<Updates>().ready.lock().unwrap() = Some(update);
     }
     if cfg!(debug_assertions) {
@@ -382,19 +499,30 @@ mod tests {
 
     #[test]
     fn signatures_must_name_the_version_they_were_made_for() {
-        let comment = |version: &str| format!("timestamp:1789548634\tfile:{}", release_file_name(version));
-        assert!(signed_for_version(&comment("0.3.0-beta.1"), "0.3.0-beta.1"));
-        assert!(!signed_for_version(&comment("0.2.0"), "0.3.0"), "an older setup under a newer number");
-        assert!(!signed_for_version(&comment("0.3.0-beta.1"), "0.3.0"));
-        assert!(!signed_for_version("timestamp:1789548634", "0.3.0"));
-        assert!(!signed_for_version(&format!("timestamp:1\tfile:x{}", release_file_name("0.3.0")), "0.3.0"));
-        if cfg!(all(windows, target_arch = "aarch64")) {
-            assert!(signed_for_version("timestamp:1\tfile:UwUMail-Setup-0.4.0-arm64.exe", "0.4.0"));
-            assert!(!signed_for_version("timestamp:1\tfile:UwUMail-Setup-0.4.0.exe", "0.4.0"), "the x64 setup");
-        } else if cfg!(windows) {
-            assert!(!signed_for_version("timestamp:1\tfile:UwUMail-Setup-0.4.0-arm64.exe", "0.4.0"), "the ARM setup");
-            // As the release of 0.2.0-beta.3 signed it.
-            assert!(signed_for_version("timestamp:1789548634\tfile:UwUMail-Setup-0.2.0-beta.3.exe", "0.2.0-beta.3"));
+        for install in [Install::Setup, Install::Deb, Install::Rpm] {
+            let comment = |version: &str| format!("timestamp:1789548634\tfile:{}", release_file_name(version, install));
+            let signed = |comment: &str, version: &str| signed_for_version(comment, version, install);
+            assert!(signed(&comment("0.3.0-beta.1"), "0.3.0-beta.1"));
+            assert!(!signed(&comment("0.2.0"), "0.3.0"), "an older update under a newer number");
+            assert!(!signed(&comment("0.3.0-beta.1"), "0.3.0"));
+            assert!(!signed("timestamp:1789548634", "0.3.0"));
+            assert!(!signed(&format!("timestamp:1\tfile:x{}", release_file_name("0.3.0", install)), "0.3.0"));
         }
+        let setup = |comment: &str, version: &str| signed_for_version(comment, version, Install::Setup);
+        if cfg!(all(windows, target_arch = "aarch64")) {
+            assert!(setup("timestamp:1\tfile:UwUMail-Setup-0.4.0-arm64.exe", "0.4.0"));
+            assert!(!setup("timestamp:1\tfile:UwUMail-Setup-0.4.0.exe", "0.4.0"), "the x64 setup");
+        } else if cfg!(windows) {
+            assert!(!setup("timestamp:1\tfile:UwUMail-Setup-0.4.0-arm64.exe", "0.4.0"), "the ARM setup");
+            // As the release of 0.2.0-beta.3 signed it.
+            assert!(setup("timestamp:1789548634\tfile:UwUMail-Setup-0.2.0-beta.3.exe", "0.2.0-beta.3"));
+        }
+        // A package only takes the package for its own processor, never the setup and vice versa.
+        let deb = |comment: &str| signed_for_version(comment, "0.4.0", Install::Deb);
+        assert_eq!(deb("timestamp:1\tfile:UwUMail-0.4.0-linux-x86_64.deb"), cfg!(target_arch = "x86_64"));
+        assert_eq!(deb("timestamp:1\tfile:UwUMail-0.4.0-linux-aarch64.deb"), cfg!(target_arch = "aarch64"));
+        assert!(!deb("timestamp:1\tfile:UwUMail-0.4.0-linux-x86_64.rpm"), "the .rpm");
+        assert!(!deb("timestamp:1\tfile:UwUMail-Setup-0.4.0-x86_64.AppImage"), "the setup");
+        assert!(!setup("timestamp:1\tfile:UwUMail-0.4.0-linux-x86_64.deb", "0.4.0"), "the .deb");
     }
 }

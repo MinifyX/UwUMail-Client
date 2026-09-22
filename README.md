@@ -61,19 +61,27 @@ GitHub's machines, not by me every day.
 
 | System | File |
 | --- | --- |
-| Windows (x64) | `UwUMail-Setup-<version>.exe` |
-| Windows on ARM | `UwUMail-Setup-<version>-arm64.exe` |
-| macOS with Apple chip | `UwUMail-Setup-<version>-macos-apple-silicon.dmg` |
-| macOS with Intel | `UwUMail-Setup-<version>-macos-intel.dmg` |
-| Linux (x86_64) | `UwUMail-Setup-<version>-x86_64.AppImage` |
-| Android | `UwUMail-<version>-<build>.apk` |
-| iPhone | `UwUMail-<version>-unsigned.ipa`, sideload only |
+| Windows (x64) | `UwUMail-windows-x64-setup.exe` |
+| Windows on ARM | `UwUMail-windows-arm64-setup.exe` |
+| macOS (Intel & Apple chip) | `UwUMail-macos-universal.dmg` |
+| Ubuntu / Debian | `UwUMail-linux-x64.deb` · ARM: `UwUMail-linux-arm64.deb` |
+| Fedora / openSUSE | `UwUMail-linux-x64.rpm` · ARM: `UwUMail-linux-arm64.rpm` |
+| Arch Linux | AUR: `yay -S uwumail-bin` |
+| Linux portable | `UwUMail-linux-x64-portable.tar.gz` · ARM: `UwUMail-linux-arm64-portable.tar.gz` |
+| Android | `UwUMail-android.apk` |
+| iPhone | `UwUMail-ios.ipa`, sideload only |
 
-On Windows, macOS and Linux the setup installs just for you, without an
-administrator password, and UwUMail keeps itself up to date after that. The
-Mac builds aren't signed by Apple, so macOS wants one extra click the first
-time. That, the Linux details and how to uninstall are in
-[docs/install.md](docs/install.md). The iPhone build is unsigned and has to be
+The names stay the same from release to release, so
+`https://github.com/MinifyX/UwUMail-Client/releases/latest/download/<file>`
+always gets the newest one.
+
+On Windows and macOS the setup installs just for you, without an
+administrator password, and UwUMail keeps itself up to date after that. On
+Linux the .deb and .rpm install for everyone and update themselves too (asking
+for the administrator password); the AUR package updates with pacman, and the
+portable folder doesn't update at all. The Mac build isn't signed by Apple, so
+macOS wants one extra click the first time. That, the Linux details and how to
+uninstall are in [docs/install.md](docs/install.md). The iPhone build is unsigned and has to be
 sideloaded; how that works, and what iOS doesn't allow, is in
 [docs/ios.md](docs/ios.md).
 

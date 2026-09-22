@@ -5,8 +5,9 @@
 #
 # Usage: scripts/desktop-smoke.sh <folder with the setup files> <version> <evidence folder>
 #
-# macOS wants UwUMail-Setup-<version>-macos-<arch>.dmg and UwUMail-Update-<version>-macos-<arch>;
-# Linux wants UwUMail-Setup-<version>-x86_64.AppImage.
+# macOS wants UwUMail-macos-universal.dmg and UwUMail-update-macos-universal; Linux (x86_64) wants
+# UwUMail-update-linux-x64.AppImage, the per-user setup that copies it installed update through.
+# The .deb, .rpm and portable folder have scripts/linux-packages-smoke.sh.
 set -euo pipefail
 
 files="$(cd "$1" && pwd)"
@@ -42,9 +43,8 @@ still_running_after() {
 }
 
 if [ "$os" = "Darwin" ]; then
-  arch_label=$([ "$(uname -m)" = "arm64" ] && echo apple-silicon || echo intel)
-  dmg="$files/UwUMail-Setup-$version-macos-$arch_label.dmg"
-  update="$files/UwUMail-Update-$version-macos-$arch_label"
+  dmg="$files/UwUMail-macos-universal.dmg"
+  update="$files/UwUMail-update-macos-universal"
   app="$HOME/Applications/UwUMail.app"
   agent="$HOME/Library/LaunchAgents/app.uwumail.autostart.plist"
   state="$HOME/Library/Application Support/app.uwumail.setup/setup.json"
@@ -60,9 +60,9 @@ if [ "$os" = "Darwin" ]; then
   check '[ -d "$setup_app" ]' "the image holds UwUMail Setup.app"
   check 'codesign --verify --strict "$setup_app"' "the setup app carries a valid (ad-hoc) signature"
   setup="$(find "$setup_app/Contents/MacOS" -type f -perm -u+x | head -n 1)"
-  check 'lipo -archs "$setup" | grep -qw "$(uname -m)"' "the setup is built for $(uname -m)"
+  check 'lipo -archs "$setup" | grep -qw arm64 && lipo -archs "$setup" | grep -qw x86_64' "the setup is universal (Apple chip and Intel)"
   check 'codesign --verify --strict "$update"' "the update program carries a valid signature"
-  check 'lipo -archs "$update" | grep -qw "$(uname -m)"' "the update program is built for $(uname -m)"
+  check 'lipo -archs "$update" | grep -qw arm64 && lipo -archs "$update" | grep -qw x86_64' "the update program is universal"
 
   step "Silent install from the disk image"
   limit 300 "$setup" --silent --autostart --default-mail-app
@@ -76,6 +76,7 @@ if [ "$os" = "Darwin" ]; then
   check 'grep -q "\"version\": \"$version\"" "$state"' "the setup remembers version $version"
   check '/usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes:0:CFBundleURLSchemes:0" "$app/Contents/Info.plist" | grep -qx mailto' "UwUMail declares mailto: links"
   program="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$app/Contents/Info.plist")"
+  check 'lipo -archs "$program" | grep -qw "$(uname -m)"' "UwUMail runs natively on $(uname -m)"
 
   step "UwUMail starts"
   still_running_after 20 "UwUMail" "$evidence/app.log" "$program"
@@ -105,7 +106,8 @@ if [ "$os" = "Darwin" ]; then
   check '[ ! -e "$state" ]' "the setup's record is gone"
   check '[ ! -e "$data" ]' "mail data is deleted on request"
 else
-  setup="$files/UwUMail-Setup-$version-x86_64.AppImage"
+  [ "$(uname -m)" = x86_64 ] || fail "The Linux setup exists for x86_64 only"
+  setup="$files/UwUMail-update-linux-x64.AppImage"
   test -f "$setup" || fail "Missing $setup"
   chmod +x "$setup"
   base="$HOME/.local/share/uwumail"

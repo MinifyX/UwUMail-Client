@@ -1,10 +1,14 @@
 name: Desktop setups
 
-# Builds UwUMail's own setup for macOS (Apple chip and Intel, separately) and
-# Linux (x86_64 AppImage), then runs each through scripts/desktop-smoke.sh on a
-# real runner: install into a throwaway home folder, start UwUMail, update over
-# the running app, refuse an older version, uninstall. The Windows on ARM setup
-# goes through the same with scripts/windows-smoke.ps1.
+# Builds UwUMail for macOS (one universal setup for Apple chip and Intel) and
+# Linux (x64 and arm64: .deb, .rpm, portable folder, and on x64 the per-user
+# setup AppImage that older installs update through), then tries each on a real
+# runner. scripts/desktop-smoke.sh puts the setups through their paces in a
+# throwaway home folder: install, start UwUMail, update over the running app,
+# refuse an older version, uninstall; the universal Mac setup on both an Apple
+# chip and an Intel Mac. scripts/linux-packages-smoke.sh installs the .deb,
+# starts UwUMail from it and from the portable folder, and checks the .rpm. The
+# Windows on ARM setup goes through the same with scripts/windows-smoke.ps1.
 #
 # Nothing here is signed for the updater: the release workflow signs what it
 # publishes in a job of its own, on a runner that never built anything.
@@ -42,19 +46,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS Apple chip
-            id: macos-apple-silicon
+          - name: macOS universal
+            id: macos-universal
             os: macos-15
-            target: aarch64-apple-darwin
-          - name: macOS Intel
-            id: macos-intel
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-          - name: Linux
-            id: linux
-            # The oldest supported Ubuntu, so the AppImage runs on newer systems too.
+            # Tauri builds both and joins them into one universal app.
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+          # The oldest supported Ubuntu, so the packages run on newer systems too. arm64 is built
+          # natively on GitHub's ARM runner.
+          - name: Linux x64
+            id: linux-x64
             os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
+            targets: x86_64-unknown-linux-gnu
+          - name: Linux arm64
+            id: linux-arm64
+            os: ubuntu-22.04-arm
+            targets: aarch64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -64,7 +70,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 rpm
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -72,16 +78,16 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.targets }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: setup-${{ matrix.target }}
+          key: setup-${{ matrix.id }}
       - run: pnpm install --frozen-lockfile
       - id: version
         run: echo "version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
 
       - name: Build the setup
-        run: node scripts/build-setup.mjs ${{ runner.os == 'macOS' && format('--target {0}', matrix.target) || '' }}
+        run: node scripts/build-setup.mjs
         env:
           # Tauri's AppImage tools are AppImages themselves; they unpack instead of needing FUSE.
           APPIMAGE_EXTRACT_AND_RUN: 1
@@ -95,7 +101,7 @@ jobs:
         if: runner.os == 'macOS'
         run: bash scripts/desktop-smoke.sh target/setup "${{ steps.version.outputs.version }}" smoke
 
-      # The update program has to stay executable, which a plain artifact zip forgets.
+      # The update programs have to stay executable, which a plain artifact zip forgets.
       - name: Pack for the next jobs
         run: |
           cd target/setup
@@ -120,7 +126,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        include:
+          - { os: ubuntu-22.04, arch: x64 }
+          - { os: ubuntu-24.04, arch: x64 }
+          - { os: ubuntu-22.04-arm, arch: arm64 }
+          - { os: ubuntu-24.04-arm, arch: arm64 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -128,17 +138,43 @@ jobs:
         run: |
           sudo apt-get update
           # Graphics drivers never come inside an AppImage; every desktop has them.
-          sudo apt-get install -y xvfb dbus-x11 desktop-file-utils xdg-utils libegl1 libgl1 libgles2 libgl1-mesa-dri
+          sudo apt-get install -y xvfb dbus-x11 desktop-file-utils xdg-utils libegl1 libgl1 libgles2 libgl1-mesa-dri rpm
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: desktop-linux
+          name: desktop-linux-${{ matrix.arch }}
           path: ${{ runner.temp }}
-      - run: mkdir setup && tar -xf "$RUNNER_TEMP/desktop-linux.tar" -C setup
-      - run: bash scripts/desktop-smoke.sh setup "${{ needs.build.outputs.version }}" smoke
+      - run: mkdir setup && tar -xf "$RUNNER_TEMP/desktop-linux-${{ matrix.arch }}.tar" -C setup
+      # The per-user setup only exists for x64, for the copies it installed before.
+      - name: Setup
+        if: matrix.arch == 'x64'
+        run: bash scripts/desktop-smoke.sh setup "${{ needs.build.outputs.version }}" smoke/setup
+      - name: Packages and portable folder
+        run: bash scripts/linux-packages-smoke.sh setup "${{ needs.build.outputs.version }}" smoke/packages
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: desktop-smoke-${{ matrix.os }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: smoke/
+
+  # The universal setup was tried on an Apple chip right after the build; this tries it on Intel.
+  macos-intel-smoke:
+    name: Smoke test (macOS Intel)
+    needs: build
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-macos-universal
+          path: ${{ runner.temp }}
+      - run: mkdir setup && tar -xf "$RUNNER_TEMP/desktop-macos-universal.tar" -C setup
+      - run: bash scripts/desktop-smoke.sh setup "${{ needs.build.outputs.version }}" smoke
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: desktop-smoke-macos-intel
           retention-days: 7
           if-no-files-found: ignore
           path: smoke/
@@ -175,14 +211,14 @@ jobs:
 
       - name: Smoke test
         shell: pwsh
-        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-Setup-${{ steps.version.outputs.version }}-arm64.exe" "${{ steps.version.outputs.version }}" arm64 smoke
+        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-windows-arm64-setup.exe" "${{ steps.version.outputs.version }}" arm64 smoke
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-windows-arm64
           retention-days: 14
           if-no-files-found: error
-          path: target/release/UwUMail-Setup-${{ steps.version.outputs.version }}-arm64.exe
+          path: target/release/UwUMail-windows-arm64-setup.exe
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

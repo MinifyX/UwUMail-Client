@@ -4,15 +4,24 @@ name: Release
 # must match the version in apps/desktop/src-tauri/tauri.conf.json, and
 # release-notes/<version>.json must exist.
 #
-# Publishes a GitHub release here with
+# Publishes a GitHub release here, every file under a stable name without the
+# version (so https://github.com/<repo>/releases/latest/download/<file> always
+# works), with
 #   - the Windows setup (x64), built and smoke-tested here,
-#   - the Windows on ARM setup, the macOS setups (Apple chip and Intel) and the
-#     Linux AppImage setup, built and smoke-tested by the desktop workflow
-#     called from here,
+#   - the Windows on ARM setup, the universal macOS setup, and for Linux x64 and
+#     arm64 the .deb, the .rpm and the portable folder, built and smoke-tested
+#     by the desktop workflow called from here,
+#   - the files only the in-app updater downloads (UwUMail-update-…),
 #   - the Android APK the Android workflow built, signed and smoke-tested for
 #     the same commit,
 #   - the unsigned iPhone IPA the iOS workflow built and tried in the simulator,
-# then updates the feeds on the `updates` branch that installed apps check.
+# then updates the feeds on the `updates` branch that installed apps check,
+# and the AUR package uwumail-bin.
+#
+# Installed apps only take an update whose signature names the versioned file
+# they expect (UwUMail-Setup-0.4.0.exe, ...). The signature covers the bytes and
+# that name, not the address, so each update file is signed as a copy under its
+# versioned name and published under its stable one (scripts/release-feeds.mjs).
 #
 # The update-signing key never reaches a runner that built anything: the builds
 # run thousands of third-party build scripts, and one of them could leave
@@ -77,12 +86,12 @@ jobs:
       # The same install, start, update, refuse-older and uninstall as for the other systems.
       - name: Smoke test
         shell: pwsh
-        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-Setup-${{ needs.check.outputs.version }}.exe" "${{ needs.check.outputs.version }}" x64 smoke
+        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-windows-x64-setup.exe" "${{ needs.check.outputs.version }}" x64 smoke
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-windows
           if-no-files-found: error
-          path: target/release/UwUMail-Setup-${{ needs.check.outputs.version }}.exe
+          path: target/release/UwUMail-windows-x64-setup.exe
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -134,31 +143,31 @@ jobs:
           path: ${{ runner.temp }}/desktop
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: desktop-linux
-          path: ${{ runner.temp }}/desktop/desktop-linux
-      - name: Unpack the macOS and Linux setups
+          pattern: desktop-linux-*
+          path: ${{ runner.temp }}/desktop
+      - name: Unpack the macOS and Linux files
         run: |
           for tar in "$RUNNER_TEMP"/desktop/*/*.tar; do tar -xf "$tar" -C files; done
           ls -la files
+      # Each update file as a copy under the versioned name installed apps expect in the signature
+      # (the universal Mac program twice, once per name), which leaves <versioned name>.sig behind.
       - name: Sign
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          for setup in "UwUMail-Setup-$VERSION.exe" "UwUMail-Setup-$VERSION-arm64.exe" \
-            "UwUMail-Setup-$VERSION-x86_64.AppImage" \
-            "UwUMail-Update-$VERSION-macos-apple-silicon" "UwUMail-Update-$VERSION-macos-intel"; do
-            pnpm --filter @uwumail/desktop exec tauri signer sign "$GITHUB_WORKSPACE/files/$setup"
-          done
+          mkdir signing
+          node scripts/release-feeds.mjs --names "$VERSION" > "$RUNNER_TEMP/names.txt"
+          while read -r platform asset versioned; do
+            echo "▸ $asset for $platform, signed as $versioned"
+            cp "files/$asset" "signing/$versioned"
+            pnpm --filter @uwumail/desktop exec tauri signer sign "$GITHUB_WORKSPACE/signing/$versioned"
+            mv "signing/$versioned.sig" files/
+            rm "signing/$versioned"
+          done < "$RUNNER_TEMP/names.txt"
       # The same check the feeds get: the key the apps carry, and each signature names its file.
       - name: Check the signatures
-        run: |
-          node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/check-feeds" \
-            --setup "files/UwUMail-Setup-$VERSION.exe" \
-            --update "windows-aarch64=files/UwUMail-Setup-$VERSION-arm64.exe" \
-            --update "darwin-aarch64=files/UwUMail-Update-$VERSION-macos-apple-silicon" \
-            --update "darwin-x86_64=files/UwUMail-Update-$VERSION-macos-intel" \
-            --update "linux-x86_64=files/UwUMail-Setup-$VERSION-x86_64.AppImage"
+        run: node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/check-feeds" --desktop files
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-signatures
@@ -201,7 +210,7 @@ jobs:
           done
           echo "::error::The iOS build for this commit didn't finish within an hour"
           exit 1
-      - name: Name the IPA after the release
+      - name: Give the IPA its release name
         env:
           VERSION: ${{ needs.check.outputs.version }}
         run: |
@@ -209,8 +218,8 @@ jobs:
           ipas=(ios/UwUMail-"$VERSION"-*-unsigned.ipa)
           [ "${#ipas[@]}" = 1 ] || { echo "::error::Expected one IPA for $VERSION, found: $(ls ios)"; exit 1; }
           mkdir ipa
-          mv "${ipas[0]}" "ipa/UwUMail-$VERSION-unsigned.ipa"
-          unzip -l "ipa/UwUMail-$VERSION-unsigned.ipa" | grep -q 'Payload/.*\.app/Info.plist' \
+          mv "${ipas[0]}" "ipa/UwUMail-ios.ipa"
+          unzip -l "ipa/UwUMail-ios.ipa" | grep -q 'Payload/.*\.app/Info.plist' \
             || { echo "::error::The IPA holds no app"; exit 1; }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -267,11 +276,14 @@ jobs:
           "$tools/apksigner" verify --print-certs "${apks[0]}" > certs.txt
           grep -qi "certificate SHA-256 digest: $CERTIFICATE_SHA256" certs.txt \
             || { echo "::error::The APK isn't signed with UwUMail's certificate"; exit 1; }
+          # The release name; the app checks the download by the SHA-256 in its feed.
+          mkdir release
+          mv "${apks[0]}" release/UwUMail-android.apk
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-android
           if-no-files-found: error
-          path: apk/*.apk
+          path: release/UwUMail-android.apk
 
   publish:
     name: Publish
@@ -310,39 +322,35 @@ jobs:
           path: ${{ runner.temp }}/desktop
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: desktop-linux
-          path: ${{ runner.temp }}/desktop/desktop-linux
-      - name: Unpack the macOS and Linux setups
+          pattern: desktop-linux-*
+          path: ${{ runner.temp }}/desktop
+      - name: Unpack the macOS and Linux files
         run: |
           for tar in "$RUNNER_TEMP"/desktop/*/*.tar; do tar -xf "$tar" -C files; done
           ls -la files
 
       # Checks every updater signature against the key the apps carry, before anything is published.
       - name: Write the update feeds
-        run: |
-          apks=(files/UwUMail-"$VERSION"-*.apk)
-          node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/new-feeds" \
-            --setup "files/UwUMail-Setup-$VERSION.exe" \
-            --update "windows-aarch64=files/UwUMail-Setup-$VERSION-arm64.exe" \
-            --update "darwin-aarch64=files/UwUMail-Update-$VERSION-macos-apple-silicon" \
-            --update "darwin-x86_64=files/UwUMail-Update-$VERSION-macos-intel" \
-            --update "linux-x86_64=files/UwUMail-Setup-$VERSION-x86_64.AppImage" \
-            --apk "${apks[0]}"
+        run: node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/new-feeds" --desktop files --apk files/UwUMail-android.apk
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          apks=(files/UwUMail-"$VERSION"-*.apk)
           files=(
-            "UwUMail-Setup-$VERSION.exe"
-            "UwUMail-Setup-$VERSION-arm64.exe"
-            "UwUMail-Setup-$VERSION-macos-apple-silicon.dmg"
-            "UwUMail-Setup-$VERSION-macos-intel.dmg"
-            "UwUMail-Setup-$VERSION-x86_64.AppImage"
-            "UwUMail-Update-$VERSION-macos-apple-silicon"
-            "UwUMail-Update-$VERSION-macos-intel"
-            "${apks[0]#files/}"
-            "UwUMail-$VERSION-unsigned.ipa"
+            UwUMail-windows-x64-setup.exe
+            UwUMail-windows-arm64-setup.exe
+            UwUMail-macos-universal.dmg
+            UwUMail-linux-x64.deb
+            UwUMail-linux-arm64.deb
+            UwUMail-linux-x64.rpm
+            UwUMail-linux-arm64.rpm
+            UwUMail-linux-x64-portable.tar.gz
+            UwUMail-linux-arm64-portable.tar.gz
+            UwUMail-android.apk
+            UwUMail-ios.ipa
+            # For the in-app updater only.
+            UwUMail-update-macos-universal
+            UwUMail-update-linux-x64.AppImage
           )
           # Checksums for everyone who downloads a file by hand.
           (cd files && sha256sum "${files[@]}" > SHA256SUMS.txt)
@@ -354,13 +362,15 @@ jobs:
 
           | | |
           | --- | --- |
-          | Windows (x64) | `UwUMail-Setup-…exe` |
-          | Windows on ARM | `UwUMail-Setup-…-arm64.exe` |
-          | macOS, Apple chip | `UwUMail-Setup-…-macos-apple-silicon.dmg` |
-          | macOS, Intel | `UwUMail-Setup-…-macos-intel.dmg` |
-          | Linux (x86_64) | `UwUMail-Setup-…-x86_64.AppImage` |
-          | Android | `UwUMail-…apk` |
-          | iPhone | `UwUMail-…-unsigned.ipa` (sideload only) |
+          | Windows (x64) | `UwUMail-windows-x64-setup.exe` |
+          | Windows on ARM | `UwUMail-windows-arm64-setup.exe` |
+          | macOS (Intel & Apple chip) | `UwUMail-macos-universal.dmg` |
+          | Ubuntu / Debian | `UwUMail-linux-x64.deb` · ARM: `UwUMail-linux-arm64.deb` |
+          | Fedora / openSUSE | `UwUMail-linux-x64.rpm` · ARM: `UwUMail-linux-arm64.rpm` |
+          | Arch Linux | AUR: `yay -S uwumail-bin` |
+          | Linux portable | `UwUMail-linux-x64-portable.tar.gz` · ARM: `UwUMail-linux-arm64-portable.tar.gz` |
+          | Android | `UwUMail-android.apk` |
+          | iPhone | `UwUMail-ios.ipa` (sideload with AltStore or Sideloadly, own Apple ID; push notifications limited) |
 
           **macOS:** UwUMail has no Apple developer ID, so macOS blocks the setup the first time.
           Open it once, then *System Settings → Privacy & Security → Open Anyway*. /
@@ -371,8 +381,12 @@ jobs:
           or AltStore, which signs it with your own Apple ID. / Die IPA ist unsigniert und lässt sich nur
           per Sideloading (Sideloadly, AltStore) mit der eigenen Apple-ID installieren.
 
-          The `UwUMail-Update-…` files are for the updater inside UwUMail on macOS. / Die `UwUMail-Update-…`-Dateien
-          holt sich UwUMail auf dem Mac für seine Updates.
+          **Linux:** the .deb and .rpm update themselves (asking for the administrator password), the portable
+          folder doesn't. / Die .deb und .rpm aktualisieren sich selbst (mit Administrator-Passwort), der
+          portable Ordner nicht.
+
+          The `UwUMail-update-…` files are for the updater inside UwUMail; you don't need them. /
+          Die `UwUMail-update-…`-Dateien holt sich UwUMail für seine Updates, du brauchst sie nicht.
 
           `SHA256SUMS.txt` lists the checksum of every file. / `SHA256SUMS.txt` enthält die Prüfsumme jeder Datei.
           EOF
@@ -395,3 +409,48 @@ jobs:
           git add -- *.json
           git commit -m "UwUMail $VERSION"
           git push origin HEAD:updates
+
+  aur:
+    name: AUR package
+    needs: [check, publish]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    # Only reads the public release; the AUR key is the one secret it gets.
+    permissions: {}
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Update uwumail-bin
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          # aur.archlinux.org's host key, as the AUR's home page lists its fingerprint
+          # (SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4).
+          AUR_HOST_KEY: aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN
+        run: |
+          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo "::notice::No AUR_SSH_PRIVATE_KEY secret, so uwumail-bin isn't updated. Once the AUR account and its key exist, add the key as that secret."
+            exit 0
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          printf '%s\n' "$AUR_HOST_KEY" > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          git clone ssh://aur@aur.archlinux.org/uwumail-bin.git "$RUNNER_TEMP/aur"
+          node scripts/aur.mjs "$VERSION" "$RUNNER_TEMP/aur"
+          cd "$RUNNER_TEMP/aur"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "uwumail-bin is already at $VERSION"
+            exit 0
+          fi
+          git -c user.name="UwUMail Release" -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit -m "UwUMail $VERSION"
+          git push origin HEAD:master

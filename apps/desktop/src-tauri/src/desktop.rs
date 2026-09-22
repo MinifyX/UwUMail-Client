@@ -190,6 +190,6 @@ pub async fn check_for_updates(app: &AppHandle) -> Result<Option<ReadyUpdate>, E
     updates::check(app).await
 }
 
-pub fn install_update(app: &AppHandle) -> Result<(), Error> {
-    updates::install_now(app)
+pub async fn install_update(app: &AppHandle) -> Result<(), Error> {
+    updates::install_now(app).await
 }

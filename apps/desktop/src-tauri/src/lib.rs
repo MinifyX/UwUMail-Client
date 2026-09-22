@@ -421,9 +421,10 @@ async fn check_for_updates(app: AppHandle) -> CommandResult<Option<ReadyUpdate>>
     platform::check_for_updates(&app).await
 }
 
+// Async, so it runs off the main thread: on Linux a package update waits for the password meanwhile.
 #[tauri::command]
-fn install_update(app: AppHandle) -> CommandResult<()> {
-    platform::install_update(&app)
+async fn install_update(app: AppHandle) -> CommandResult<()> {
+    platform::install_update(&app).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

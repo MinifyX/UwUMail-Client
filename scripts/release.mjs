@@ -10,16 +10,20 @@
 // or a folder with uwumail-update.key and PASSWORT.txt in UWUMAIL_UPDATE_KEY_DIR
 // (default: Documents\UwUMail-Update-Schluessel).
 //
-// Creates the GitHub release with the setup (no APK: that only comes from the Android
-// workflow) and updates the Windows feeds on the `updates` branch.
+// Creates the GitHub release with the setup under its release name, UwUMail-windows-x64-setup.exe,
+// and SHA256SUMS.txt (no APK: that only comes from the Android workflow; no Linux packages, so no
+// AUR update either, see scripts/aur.mjs), and updates the Windows feeds on the `updates` branch.
+// The signature is made for the versioned name installed apps expect (UwUMail-Setup-<version>.exe,
+// see scripts/release-feeds.mjs).
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FEED_BRANCH, REPOSITORY, checkSignature, releaseFeeds } from "./release-feeds.mjs";
+import { FEED_BRANCH, REPOSITORY, checkSignature, releaseFeeds, signedName, updateAsset } from "./release-feeds.mjs";
 
 /** Still asked by 0.2.0-beta.2 and older; drop once that repo is archived. */
 const OLD_FEEDS = "MinifyX/UwUMail-Releases";
@@ -36,8 +40,9 @@ const build = !process.argv.includes("--no-build");
 const conf = JSON.parse(readFileSync(join(root, "apps/desktop/src-tauri/tauri.conf.json"), "utf8"));
 const version = conf.version;
 const tag = `v${version}`;
-const setupName = `UwUMail-Setup-${version}.exe`;
+const setupName = updateAsset("windows-x86_64");
 const setup = join(root, "target", "release", setupName);
+const signatureFile = join(root, "target", "release", `${signedName("windows-x86_64", version)}.sig`);
 
 console.log(`\n▸ Checking UwUMail ${version}`);
 if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(version)) fail(`Unexpected version ${version}`);
@@ -70,10 +75,10 @@ if (build) {
 }
 
 console.log("\n▸ Checking the signature against the updater key");
-if (!existsSync(`${setup}.sig`)) fail(`${setup}.sig is missing: the setup wasn't signed.`);
-const signature = readFileSync(`${setup}.sig`, "utf8").trim();
+if (!existsSync(signatureFile)) fail(`${signatureFile} is missing: the setup wasn't signed.`);
+const signature = readFileSync(signatureFile, "utf8").trim();
 try {
-  checkSignature(readFileSync(setup), signature, conf.plugins.updater.pubkey, setupName);
+  checkSignature(readFileSync(setup), signature, conf.plugins.updater.pubkey, signedName("windows-x86_64", version));
 } catch (error) {
   fail(error.message);
 }
@@ -84,6 +89,8 @@ try {
   console.log(`\n▸ Creating the release on ${REPOSITORY}`);
   const notesPath = join(work, "notes.md");
   writeFileSync(notesPath, `## Deutsch\n\n${notes.de}\n\n## English\n\n${notes.en}\n`);
+  const sums = join(work, "SHA256SUMS.txt");
+  writeFileSync(sums, `${createHash("sha256").update(readFileSync(setup)).digest("hex")}  ${setupName}\n`);
   const channel = version.includes("-") ? "--prerelease" : "--latest";
   execFileSync(
     "gh",
@@ -92,6 +99,7 @@ try {
       "create",
       tag,
       setup,
+      sums,
       "--repo",
       REPOSITORY,
       "--verify-tag",
@@ -104,7 +112,7 @@ try {
     { stdio: "inherit" },
   );
 
-  const feeds = releaseFeeds({ version, notes, setup: { name: setupName, signature } });
+  const feeds = releaseFeeds({ version, notes, updates: { "windows-x86_64": { name: setupName, signature } } });
   const publishFeeds = (repository, branch, message) => {
     const dir = join(work, repository.replace("/", "-"));
     git(["clone", "-q", "--depth", "1", "--branch", branch, `https://github.com/${repository}.git`, dir], work);

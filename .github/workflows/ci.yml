@@ -139,4 +139,4 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: |
-            target/release/UwUMail-Setup-*.exe
+            target/release/UwUMail-windows-*-setup.exe

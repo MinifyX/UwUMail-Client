@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=UwUMail
+GenericName=Mail Client
+GenericName[de]=E-Mail-Programm
+Comment=A cute, modern mail client, built just for fun
+Comment[de]=Ein niedliches, modernes Mailprogramm, einfach zum Spaß gebaut
+Exec={{exec}} %u
+StartupWMClass={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories=Network;Email;
+MimeType=x-scheme-handler/mailto;

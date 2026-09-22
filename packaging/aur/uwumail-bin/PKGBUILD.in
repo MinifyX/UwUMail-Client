@@ -1,0 +1,23 @@
+# Maintainer: MinifyX <https://github.com/MinifyX>
+# Written by scripts/aur.mjs from packaging/aur/uwumail-bin/PKGBUILD.in; change it there.
+pkgname=uwumail-bin
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc='A cute, modern mail client, built just for fun (IMAP, SMTP, JMAP)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/MinifyX/UwUMail-Client'
+license=('GPL-3.0-only')
+# What the .deb depends on (libwebkit2gtk-4.1-0, libgtk-3-0, libayatana-appindicator3-1).
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'hicolor-icon-theme')
+provides=('uwumail')
+conflicts=('uwumail')
+options=('!strip' '!debug')
+source_x86_64=("uwumail-bin-${pkgver}-x86_64.deb::https://github.com/MinifyX/UwUMail-Client/releases/download/v@VERSION@/UwUMail-linux-x64.deb")
+source_aarch64=("uwumail-bin-${pkgver}-aarch64.deb::https://github.com/MinifyX/UwUMail-Client/releases/download/v@VERSION@/UwUMail-linux-arm64.deb")
+sha256sums_x86_64=('@SHA256_X86_64@')
+sha256sums_aarch64=('@SHA256_AARCH64@')
+
+package() {
+  # The .deb's files, as the release built them; pacman keeps them up to date, not UwUMail itself.
+  bsdtar -xf data.tar.* -C "$pkgdir"
+}
