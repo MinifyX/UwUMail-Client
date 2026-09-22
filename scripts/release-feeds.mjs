@@ -2,8 +2,8 @@
 //
 //   node scripts/release-feeds.mjs <version> <out-dir> [--setup <exe>] [--update <platform>=<file> ...] [--apk <apk>]
 //
-// --setup is the Windows setup (windows-x86_64). --update adds another desktop system under
-// Tauri's platform key: darwin-aarch64, darwin-x86_64 or linux-x86_64. Every setup needs its
+// --setup is the Windows x64 setup (windows-x86_64). --update adds another desktop system under
+// Tauri's platform key: windows-aarch64, darwin-aarch64, darwin-x86_64 or linux-x86_64. Every setup needs its
 // updater signature (.sig) next to it. Versions with a suffix (-beta.1) only go into the Beta
 // feeds, plain versions into Stable and Beta. Every signature is checked against the updater key
 // in tauri.conf.json and must name its own file, as installed apps require.
@@ -16,7 +16,20 @@ import { fileURLToPath } from "node:url";
 export const REPOSITORY = "MinifyX/UwUMail-Client";
 export const FEED_BRANCH = "updates";
 /** The platform keys Tauri's updater looks up (`<os>-<arch>`), as UwUMail builds them. */
-export const PLATFORMS = ["windows-x86_64", "darwin-aarch64", "darwin-x86_64", "linux-x86_64"];
+export const PLATFORMS = ["windows-x86_64", "windows-aarch64", "darwin-aarch64", "darwin-x86_64", "linux-x86_64"];
+
+/**
+ * The file each platform's updater downloads for `version`, as installed apps expect it in the
+ * signature (`release_file_name` in apps/desktop/src-tauri/src/updates.rs).
+ */
+export const setupName = (platform, version) =>
+  ({
+    "windows-x86_64": `UwUMail-Setup-${version}.exe`,
+    "windows-aarch64": `UwUMail-Setup-${version}-arm64.exe`,
+    "darwin-aarch64": `UwUMail-Update-${version}-macos-apple-silicon`,
+    "darwin-x86_64": `UwUMail-Update-${version}-macos-intel`,
+    "linux-x86_64": `UwUMail-Setup-${version}-x86_64.AppImage`,
+  })[platform];
 
 export const downloadUrl = (version, name) => `https://github.com/${REPOSITORY}/releases/download/v${version}/${name}`;
 
@@ -31,6 +44,10 @@ export function releaseFeeds({ version, notes, setup, updates = {}, apk, date = 
   for (const platform of Object.keys(desktop)) {
     if (!PLATFORMS.includes(platform)) throw new Error(`Unknown platform ${platform}`);
     if (!desktop[platform].signature) throw new Error(`The setup for ${platform} isn't signed`);
+    // Apps only take the file named for their system and this version; anything else fails there.
+    if (desktop[platform].name !== setupName(platform, version)) {
+      throw new Error(`${desktop[platform].name} isn't the ${platform} setup of ${version}`);
+    }
   }
   const feeds = {};
   for (const channel of channels) {
