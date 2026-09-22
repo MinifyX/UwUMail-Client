@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { AlertTriangle, Copy, LockOpen, Route } from "lucide-react";
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import type { Address } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { Button } from "@/components/ui/Button";
@@ -40,6 +40,21 @@ const EXACT = "[font-variant-ligatures:none] [font-feature-settings:'calt'_0,'li
 export function LinkAddress({ href, compact = false }: { href: string; compact?: boolean }) {
   const parts = urlParts(href);
   if (!parts) return <span className="font-mono break-all">{visibleText(href)}</span>;
+  if (compact) {
+    // One line that may be too short: the registrable domain never gives way. The path goes
+    // first, then the subdomains, so a long chain of them can't push the real domain out of
+    // sight (security-audit W-16).
+    return (
+      <span className={clsx("flex min-w-0 overflow-hidden whitespace-nowrap", EXACT)}>
+        <span className="shrink-0 text-muted">{parts.scheme}</span>
+        {parts.userinfo && <span className="min-w-0 truncate text-danger line-through">{parts.userinfo}</span>}
+        <span className="min-w-0 truncate">{parts.subdomain}</span>
+        <span className="shrink-0 font-extrabold">{parts.domain}</span>
+        <span className="shrink-0 text-muted">{parts.port}</span>
+        <span className="min-w-0 shrink-[1000] truncate text-muted">{parts.rest}</span>
+      </span>
+    );
+  }
   const host = (
     <span className={clsx("break-all", EXACT)}>
       <span className="text-muted">{parts.scheme}</span>
@@ -49,14 +64,6 @@ export function LinkAddress({ href, compact = false }: { href: string; compact?:
       <span className="text-muted">{parts.port}</span>
     </span>
   );
-  if (compact) {
-    return (
-      <span className="min-w-0 truncate">
-        {host}
-        <span className="text-muted">{parts.rest}</span>
-      </span>
-    );
-  }
   return (
     <span className="flex min-w-0 flex-col gap-1">
       <span className="text-[14px]">{host}</span>
@@ -191,10 +198,30 @@ export function LinkWarning() {
   );
 }
 
+/**
+ * How long after the question appears its buttons still ignore a click: the second click of a
+ * double click, or the rest of the gesture that opened the question, must not answer it.
+ */
+export const ARMING_MS = 600;
+
+/** Props for a button that opens the link: no answer while arming, none from a held-down key. */
+export function armedActivation(shownAt: number, action: () => void) {
+  return {
+    onClick: () => {
+      if (performance.now() - shownAt >= ARMING_MS) action();
+    },
+    onKeyDown: (event: KeyboardEvent) => {
+      if (event.repeat) event.preventDefault();
+    },
+  };
+}
+
 function LinkQuestion({ check, onDone }: { check: LinkCheck; onDone: () => void }) {
   const { t } = useT();
   const rememberLinkDomain = useSettings((s) => s.rememberLinkDomain);
   const [remember, setRemember] = useState(false);
+  // The gesture that asked (a double click, a held Enter) must not also answer (security-audit W-18).
+  const [shownAt] = useState(() => performance.now());
   const risky = isRisky(check);
   const mail = check.kind === "mail" ? check.mailto : null;
 
@@ -251,13 +278,13 @@ function LinkQuestion({ check, onDone }: { check: LinkCheck; onDone: () => void 
             <Button variant="primary" autoFocus ref={markAutofocus} onClick={onDone}>
               {t("link.dontOpen")}
             </Button>
-            <Button variant="ghost" onClick={open}>
+            <Button variant="ghost" {...armedActivation(shownAt, open)}>
               {t("link.openAnyway")}
             </Button>
           </>
         ) : (
           <>
-            <Button variant="primary" autoFocus ref={markAutofocus} onClick={open}>
+            <Button variant="primary" autoFocus ref={markAutofocus} {...armedActivation(shownAt, open)}>
               {mail ? t("link.compose") : t("link.open")}
             </Button>
             <Button variant="secondary" onClick={onDone}>
