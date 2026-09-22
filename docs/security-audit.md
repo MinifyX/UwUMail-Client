@@ -511,3 +511,162 @@ W-19 (inherited names in synced settings) is NL2, W-20 is NL6 and W-21 is NL4 ab
    otherwise identical in both.
 2. A navigation guard for the main window (NI7) and a size limit for JMAP answers (NI9).
 3. Hardening for Android intents (NI8): catch unreadable extras, normalize claimed types, an empty task affinity.
+
+---
+
+# 2026-09-22 — Installer, Updater und Release
+
+22 September 2026. Scope: UwUMail's own setup on all three desktop systems (`apps/setup`: install, update,
+uninstall, the Windows registry and shortcuts, the macOS LaunchAgent and Launch Services, the Linux launcher,
+menu and autostart entries and `mimeapps.list`), the updater and its hand-over (`updates.rs`), how the app takes
+start arguments and `mailto:` links, the single-instance check, the build and release scripts
+(`scripts/build-setup.mjs`, `release.mjs`, `release-feeds.mjs`) and the workflows (`release.yml`, `desktop.yml`,
+`android.yml`, `ios.yml`, `ci.yml`), including the iOS build. The rest of the app had its own pass the same day.
+
+Done with Claude, like the audits above.
+
+## Summary
+
+| Severity | Found | Fixed | Accepted |
+| --- | --- | --- | --- |
+| Medium | 3 | 3 | 0 |
+| Low | 9 | 9 | 0 |
+| Informational | 8 | — | 8 |
+
+M3, M4, M7 and M8 from the first audit still hold; IR4 closes the gap M4 left.
+
+## Threat model additions
+
+Two attackers matter here beyond the sender of a mail. **The release supply chain**: every build runs thousands of
+third-party build scripts (npm, Cargo, Gradle), so nothing that runs later on the same runner can be assumed
+clean. **Another account on the same computer**: it can't read the user's files, but it shares `C:\`, `/tmp` and
+whatever else is open to everyone. Programs already running as the same user are still out of scope (I4).
+
+## Findings
+
+### Medium
+
+**IR1 — The update-signing key reached runners that had just built the app.** *Fixed.*
+The Windows, macOS and Linux release builds received the updater key. The build script took it out of the
+environment before building and handed it only to the signing command, but a build script that ran earlier could
+leave a process behind that waits for that command on the same runner.
+Fix: the builds are unsigned. A job of its own on a fresh runner signs the four files the updater downloads,
+installs nothing but the Tauri CLI from the lockfile (no install scripts) and checks every signature before
+uploading it (`release.yml`, job `sign`; `desktop.yml` no longer takes the key at all).
+
+**IR2 — The Android keystore was decoded on the runner that built the APK.** *Fixed.*
+AM4 moved signing into a step after the build; the same leftover-process argument as in IR1 applies within one job.
+Fix: the build job uploads the unsigned APK, a separate job signs it with Android's own tools and checks the
+certificate (`android.yml`).
+
+**IR3 — An install folder outside the profile could be open to every account on the PC.** *Fixed.*
+On Windows the folder can be changed. A folder created right under `C:\` (and on many other drives) inherits
+permissions that let every signed-in account change files in it, so another account could have replaced UwUMail's
+program or the uninstaller and had it run as the user.
+Fix: the setup gives the install folder a protected permission list (the user, SYSTEM and administrators), so
+nothing inherited applies any more (`system.rs`, `restrict_to_user`). Best effort on drives without permissions.
+
+### Low
+
+**IR4 — An older setup could still be announced as a newer version.** *Fixed.*
+M4 made the setup refuse to replace a newer UwUMail. That check needs to know the installed version; on Linux it
+comes from the setup's own record, and without it an older, validly signed setup would have been installed. A
+refused update was also downloaded and handed over again and again.
+Fix: the signature's signed comment names the file it was made for, which carries the version. UwUMail only takes
+a setup whose signature names this version's file for its own system, both after the download and right before
+the hand-over (`updates.rs`, `signed_for_version`).
+
+**IR5 — macOS: the single-instance socket lay in the shared `/tmp`.** *Fixed.*
+tauri-plugin-single-instance listens on a fixed name in `/tmp`. Another account on the Mac could create that socket
+first; UwUMail would then quit on every start and send that account its start arguments, `mailto:` links included.
+Fix: on macOS a small check of UwUMail's own keeps the socket in the user's private temporary folder, and only if
+that folder really belongs to the user alone (`background.rs`, `single_instance`). Windows (session-local mutex)
+and Linux (session D-Bus) keep the plugin.
+
+**IR6 — The uninstaller's temporary copy started `cmd` and `ping` by name.** *Fixed.*
+The copy runs from the temp folder, where Windows looks for a program started by name first, and cmd looks for
+`ping` in its current folder. Fix: `cmd.exe` by its full System32 path, running in System32.
+
+**IR7 — The WebView2 bootstrapper had a fixed name in the temp folder.** *Fixed.*
+A file of that name, or a DLL next to it, placed there earlier would have been used. Fix: it is downloaded into a
+fresh folder of its own, which is removed afterwards.
+
+**IR8 — The Linux update setup inherited variables of the AppImage runtime.** *Fixed.*
+UwUMail starts the verified setup AppImage with the runtime's extract-and-run mode. The runtime also reads
+variables that point it at another image than the one just checked (`TARGET_APPIMAGE`) or keep what it unpacked.
+Fix: these, `LD_PRELOAD` and everything else AppRun sets are cleared before the hand-over, as the setup does when it
+starts the app.
+
+**IR9 — Publishing only checked that a signature file existed.** *Fixed.*
+A wrong key or a mix-up of files would have gone out and failed on every installed app. Fix: writing the feeds
+verifies each signature against the key in `tauri.conf.json` and its file name, before the release is created
+(`release-feeds.mjs`, `checkSignature`; also used by `release.mjs`).
+
+**IR10 — The push to the old feed repository trusted the first SSH host key it saw.** *Fixed.*
+Fix: GitHub's published ed25519 host key is pinned for that push.
+
+**IR11 — Files downloaded by hand had nothing to be checked against.** *Fixed.*
+Fix: every release carries `SHA256SUMS.txt`; [install.md](install.md) says how to compare.
+
+**IR12 — The FUSE workaround in the docs unpacked the setup into the shared `/tmp`.** *Fixed.*
+Fix: [install.md](install.md) points `TMPDIR` at a private folder for `--appimage-extract-and-run`.
+
+### Informational (accepted for now)
+
+- **IRI1 — Between checking a setup and starting it.** The signature is verified on the file that then runs by
+  path; a program of the same user could swap it in that moment, just as it could replace the installed app (I4).
+- **IRI2 — Signing secrets are repository secrets.** A workflow started by someone with write access, on any branch,
+  could read them. Only the owner has write access today. A GitHub environment for releases, limited to `v*` tags
+  and with a required reviewer, would bind the keys to releases; it needs a change in the repository settings.
+- **IRI3 — The signing job still runs the Tauri CLI with the key.** It is pinned by the lockfile and installed
+  without scripts; a minimal minisign signer would shrink this further.
+- **IRI4 — Library variables of the user's own session apply.** `DYLD_*` on macOS (ad-hoc signed, no hardened
+  runtime) and `LD_*` on Linux reach UwUMail and the setup when the user's session sets them. Only the same user can.
+- **IRI5 — Download addresses in the feed aren't restricted.** The feed address itself is fixed and HTTPS-only; the
+  signature decides what runs. A tampered feed could point elsewhere and learn IP addresses, but not install anything.
+- **IRI6 — Permission limits of IR3.** A folder that another account created beforehand stays under that account's
+  ownership, which keeps the right to change permissions; FAT drives and some network shares have none.
+- **IRI7 — Unsigned platforms.** The macOS setups are signed ad hoc and not notarized, the iPhone IPA is unsigned
+  (I3). Their integrity rests on GitHub's HTTPS and the checksums.
+- **IRI8 — The Windows `mailto:` command line.** `"UwUMail.exe" "%1"` could get an extra argument from a link with a
+  quote in it; the app only knows `--autostart` and `mailto:` links, so nothing more can be switched on that way.
+
+## What was checked and held up
+
+- Every update path verifies the release signature on the downloaded bytes and again on the file right before it
+  runs; the setup's path is fixed by version inside a private folder (0700 on macOS and Linux, the setup itself
+  0700, written with `create_new`); `pending.json` names nothing that is trusted.
+- The feed address is compiled in and HTTPS-only (the updater refuses anything else in release builds); the channel
+  is a local setting, not part of the settings sync. Release notes are shown as text.
+- Start arguments: the setup knows `--update`, `--relaunch`, `--wait-pid`, `--silent` and `--uninstall`; on macOS
+  and Linux the place to remove never comes from the command line, on Windows `--dir` only removes UwUMail's own
+  file names. The app reads only `--autostart` and `mailto:` links; GTK is initialized without the command line,
+  the desktop entry passes the link as one argument (`%u`), macOS delivers it as an Apple event.
+- Unpacking: the app comes out of the setup itself, without setuid bits (`mask 022`, permissions not preserved),
+  every entry inside the target folder, next to its place and then swapped in. Removing never follows links: the
+  app folder, leftovers and data folders are removed as links if they are links.
+- Launcher (`sh` single quotes), desktop entries (Desktop Entry quoting, control characters refused) and the
+  LaunchAgent (XML-escaped, program arguments without a shell, 0644) are quoted correctly; `~/.local/bin/uwumail`
+  only replaces a launcher of UwUMail's own; `~/.local/share/uwumail` is 0700.
+- Windows: DLLs load from System32 only (M7); shortcuts, the uninstall entry, autostart and `mailto:` quote the
+  program path; the setup's web view data stays in the user's temp folder.
+- CI: every action is pinned to a commit; permissions are read-only except for the publishing job; no workflow puts
+  `github.event` values into a script; pull requests from forks get no secrets; the release checks the APK
+  certificate and takes APK and IPA only from successful runs of the same commit.
+
+## Verification
+
+- New unit tests: the protected install folder on Windows (`closes_the_folder_to_other_accounts`), signatures
+  bound to their version (`signatures_must_name_the_version_they_were_made_for`). The signature check of the
+  release scripts was tried with a throwaway key: right file, wrong name, changed bytes and another key.
+- `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test` for the setup and the app on Windows;
+  `pnpm typecheck`, `lint`, `test` and `format:check`: clean.
+- The macOS and Linux code (single-instance check, update hand-over) was built and smoke-tested by the desktop
+  workflow on GitHub's runners, not on a real Mac or Linux desktop. The new signing job only runs for a release tag
+  and hasn't run yet; the next release is its first test.
+
+## Recommendations for later
+
+1. A GitHub environment for the signing secrets, limited to release tags (IRI2).
+2. A minimal minisign signer for the signing job instead of the Tauri CLI (IRI3).
+3. Code signing and notarization once there is a certificate (I3, IRI7).
