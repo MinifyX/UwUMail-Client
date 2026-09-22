@@ -152,11 +152,34 @@ fn read_pending(app: &AppHandle) -> Option<ReadyUpdate> {
         return None;
     }
     let bytes = std::fs::read(&expected).ok()?;
-    verify(app, &bytes, &update.signature).then_some(update)
+    verify(app, &bytes, &update.signature, &update.version).then_some(update)
 }
 
-/// Checks a setup against the release key from `tauri.conf.json`.
-fn verify(app: &AppHandle, bytes: &[u8], signature: &str) -> bool {
+/// The name the release gives the setup of `version` for this system, as `tauri signer sign`
+/// wrote it into the signature.
+fn release_file_name(version: &str) -> String {
+    if cfg!(windows) {
+        format!("UwUMail-Setup-{version}.exe")
+    } else if cfg!(target_os = "linux") {
+        format!("UwUMail-Setup-{version}-x86_64.AppImage")
+    } else if cfg!(target_arch = "aarch64") {
+        format!("UwUMail-Update-{version}-macos-apple-silicon")
+    } else {
+        format!("UwUMail-Update-{version}-macos-intel")
+    }
+}
+
+/// Whether a signature's trusted comment (`timestamp:…<tab>file:<name>`) names the setup of
+/// `version` for this system. The feed's version number isn't signed, the comment is: without
+/// this, an altered feed could hand out an older setup, still validly signed, as a newer one.
+fn signed_for_version(trusted_comment: &str, version: &str) -> bool {
+    let expected = release_file_name(version);
+    trusted_comment.split('\t').any(|part| part.strip_prefix("file:") == Some(expected.as_str()))
+}
+
+/// Checks a setup against the release key from `tauri.conf.json`, and that the signature was
+/// made for this version's setup.
+fn verify(app: &AppHandle, bytes: &[u8], signature: &str, version: &str) -> bool {
     use base64::Engine as _;
     let decode = |text: &str| {
         base64::engine::general_purpose::STANDARD.decode(text.trim()).ok().and_then(|raw| String::from_utf8(raw).ok())
@@ -178,7 +201,7 @@ fn verify(app: &AppHandle, bytes: &[u8], signature: &str) -> bool {
     ) else {
         return false;
     };
-    key.verify(bytes, &signature, false).is_ok()
+    key.verify(bytes, &signature, false).is_ok() && signed_for_version(signature.trusted_comment(), version)
 }
 
 /// Starts the downloaded setup to replace this UwUMail, which then quits.
@@ -287,6 +310,9 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
 
     // The plugin checks the signature against the public key before handing out the bytes.
     let bytes = found.download(|_, _| {}, || {}).await.map_err(fail)?;
+    if !verify(app, &bytes, &found.signature, &found.version) {
+        return Err(Error::internal(format!("The update to {} isn't signed for that version.", found.version)));
+    }
     let dir = updates_dir(app).ok_or_else(|| Error::internal("No folder for updates"))?;
     create_private_dir(&dir).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
     let file = setup_file(&dir, &found.version);
@@ -334,4 +360,23 @@ pub fn start(app: &AppHandle) {
             tokio::time::sleep(CHECK_EVERY).await;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signatures_must_name_the_version_they_were_made_for() {
+        let comment = |version: &str| format!("timestamp:1789548634\tfile:{}", release_file_name(version));
+        assert!(signed_for_version(&comment("0.3.0-beta.1"), "0.3.0-beta.1"));
+        assert!(!signed_for_version(&comment("0.2.0"), "0.3.0"), "an older setup under a newer number");
+        assert!(!signed_for_version(&comment("0.3.0-beta.1"), "0.3.0"));
+        assert!(!signed_for_version("timestamp:1789548634", "0.3.0"));
+        assert!(!signed_for_version(&format!("timestamp:1\tfile:x{}", release_file_name("0.3.0")), "0.3.0"));
+        if cfg!(windows) {
+            // As the release of 0.2.0-beta.3 signed it.
+            assert!(signed_for_version("timestamp:1789548634\tfile:UwUMail-Setup-0.2.0-beta.3.exe", "0.2.0-beta.3"));
+        }
+    }
 }
