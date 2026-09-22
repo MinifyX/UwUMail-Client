@@ -28,8 +28,14 @@ uwumail-core.workspace = true
 base64.workspace = true
 minisign-verify = "0.2"
 semver = "1"
-tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
+
+# macOS has its own single-instance check in a private folder (background.rs).
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
 
 # Android shows dialogs and notifications from Kotlin; desktop and iOS use the plugins.
 [target.'cfg(not(target_os = "android"))'.dependencies]

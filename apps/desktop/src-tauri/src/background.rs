@@ -69,6 +69,88 @@ pub fn on_second_instance(app: &AppHandle, args: Vec<String>) {
     }
 }
 
+/// macOS: one UwUMail at a time. tauri-plugin-single-instance keeps its socket in the shared
+/// `/tmp`, where another account on the Mac could put a socket of its own first: UwUMail would
+/// then quit on start and hand that account its start arguments, `mailto:` links included. This
+/// works the same way, with the socket in the user's own temporary folder that only they reach.
+#[cfg(target_os = "macos")]
+pub mod single_instance {
+    use std::io::{Read, Write};
+    use std::os::unix::net::{UnixListener, UnixStream};
+    use std::path::PathBuf;
+    use std::time::Duration;
+
+    use tauri::plugin::{Builder, TauriPlugin};
+    use tauri::{RunEvent, Wry};
+
+    const SOCKET: &str = "app.uwumail.desktop.sock";
+    /// Far more than any start arguments; a stuck or chatty peer can't hold the listener.
+    const MAX_MESSAGE: u64 = 64 * 1024;
+
+    /// The user's temporary folder (`/var/folders/…/T/`) as macOS reports it, set `TMPDIR` or
+    /// not, and only when it really belongs to this user alone.
+    fn private_dir() -> Option<PathBuf> {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let mut buffer = vec![0u8; 1024];
+        let length = unsafe { libc::confstr(libc::_CS_DARWIN_USER_TEMP_DIR, buffer.as_mut_ptr().cast(), buffer.len()) };
+        if length == 0 || length > buffer.len() {
+            return None;
+        }
+        // The length counts the closing NUL.
+        buffer.truncate(length - 1);
+        let dir = PathBuf::from(std::ffi::OsStr::from_bytes(&buffer));
+        let meta = std::fs::metadata(&dir).ok()?;
+        let own = meta.is_dir() && meta.uid() == unsafe { libc::getuid() } && meta.permissions().mode() & 0o077 == 0;
+        own.then_some(dir)
+    }
+
+    fn socket_path() -> Option<PathBuf> {
+        private_dir().map(|dir| dir.join(SOCKET))
+    }
+
+    pub fn init() -> TauriPlugin<Wry> {
+        Builder::new("uwumail-single-instance")
+            .setup(|app, _api| {
+                // Without a private folder UwUMail rather runs twice than listens in a shared place.
+                let Some(socket) = socket_path() else { return Ok(()) };
+                if let Ok(mut stream) = UnixStream::connect(&socket) {
+                    let args = std::env::args().collect::<Vec<_>>().join("\0");
+                    if stream.write_all(args.as_bytes()).is_ok() {
+                        std::process::exit(0);
+                    }
+                }
+                let _ = std::fs::remove_file(&socket);
+                let listener = match UnixListener::bind(&socket) {
+                    Ok(listener) => listener,
+                    Err(error) => {
+                        tracing::warn!("Couldn't listen for a second start of UwUMail: {error}");
+                        return Ok(());
+                    }
+                };
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    for stream in listener.incoming().flatten() {
+                        let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                        let mut text = String::new();
+                        if stream.take(MAX_MESSAGE).read_to_string(&mut text).is_ok() {
+                            super::on_second_instance(&app, text.split('\0').map(String::from).collect());
+                        }
+                    }
+                });
+                Ok(())
+            })
+            .on_event(|_app, event| {
+                if let RunEvent::Exit = event
+                    && let Some(socket) = socket_path()
+                {
+                    let _ = std::fs::remove_file(socket);
+                }
+            })
+            .build()
+    }
+}
+
 struct Labels {
     open: &'static str,
     sync: &'static str,

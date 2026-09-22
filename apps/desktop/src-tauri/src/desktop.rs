@@ -38,9 +38,13 @@ fn restrict_dll_search() {
 }
 
 pub fn plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
+    // Must come first, so a second start hands over before anything else runs.
+    #[cfg(not(target_os = "macos"))]
+    let builder =
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| background::on_second_instance(app, args)));
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(background::single_instance::init());
     builder
-        // Must come first, so a second start hands over before anything else runs.
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| background::on_second_instance(app, args)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
