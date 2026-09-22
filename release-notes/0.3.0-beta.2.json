@@ -1,0 +1,4 @@
+{
+  "de": "- Behoben: Einstellungen → Schreiben machte das ganze Fenster schwarz, wenn kein Konto die Einstellungen synchronisiert\n- Stürzt ein Teil der Oberfläche ab, bleibt jetzt ein Hinweis mit „Neu laden“ stehen statt eines leeren Fensters\n- Neu: UwUMail für Windows auf ARM (z. B. Snapdragon-Laptops)",
+  "en": "- Fixed: Settings → Writing turned the whole window black when no account syncs the settings\n- If part of the interface crashes, a note with “Reload” now stays instead of an empty window\n- New: UwUMail for Windows on ARM (e.g. Snapdragon laptops)"
+}
