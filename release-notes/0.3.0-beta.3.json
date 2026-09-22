@@ -1,0 +1,4 @@
+{
+  "de": "- Neues Icon in der Taskleiste und im Infobereich: Nyu steht jetzt gerade und ohne Kachel da und bleibt auch klein gut erkennbar\n- Neu: Linux-Pakete (.deb und .rpm) für x64 und ARM, dazu eine portable Version zum Entpacken\n- Mac: ein gemeinsames Setup für Apple-Chip und Intel",
+  "en": "- New icon on the taskbar and in the tray: Nyu now stands upright without the tile and stays easy to spot when small\n- New: Linux packages (.deb and .rpm) for x64 and ARM, plus a portable version to unpack\n- Mac: one setup for Apple chips and Intel"
+}
