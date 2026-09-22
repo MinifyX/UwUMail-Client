@@ -108,9 +108,16 @@ mono symbol) and `apps/desktop/src/components/nyu/` (React).
   edge keeps the outlines visible on dark backgrounds.
 - **App icon.** Nyu slightly tilted on a pastel pink tile with two yellow
   sparkles and a heart. Never on a saturated pink tile, which reads as a
-  telecom app. Regenerate the platform icons with
-  `pnpm tauri icon ../../brand/uwumail-app-icon.svg` in `apps/desktop`
-  (delete the generated `android/` and `ios/` folders).
+  telecom app. It stays the icon for the website, GitHub, the macOS Dock
+  (`icon.icns`), Android and iOS; regenerate those with
+  `pnpm tauri icon ../../brand/uwumail-app-icon.svg` in `apps/desktop` and
+  copy back only what you need.
+- **Taskbar icon.** On the Windows taskbar, in the tray and in Linux menus
+  Nyu stands alone: upright, no tile, with the white die-cut edge so it reads
+  on dark and light taskbars (`brand/uwumail-taskbar-icon.svg`). Up to 24 px,
+  and in the tray, a simplified cut takes over with thicker outlines and no
+  blush or inner ears (`uwumail-taskbar-icon-small.svg`). `node
+  scripts/icons.mjs` writes `icon.ico`, the desktop PNGs and `tray.png`.
 - **Scenes** (`NyuScene`, 320 × 220): inbox zero, no search results, empty
   folder, nothing selected, no preview, no addons, welcome, setup done,
   message failed to load, offline, no account yet. `EmptyState` shows them at

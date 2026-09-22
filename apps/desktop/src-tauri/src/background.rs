@@ -4,6 +4,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
@@ -199,7 +200,10 @@ pub fn setup(app: &mut tauri::App) -> tauri::Result<()> {
                 show_main_window(tray.app_handle());
             }
         });
-    if let Some(icon) = app.default_window_icon() {
+    // Drawn for 16–32 px (scripts/icons.mjs); the window icon would be scaled down from 256.
+    if let Ok(icon) = Image::from_bytes(include_bytes!("../icons/tray.png")) {
+        tray = tray.icon(icon);
+    } else if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
