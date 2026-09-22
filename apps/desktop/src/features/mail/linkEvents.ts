@@ -1,16 +1,24 @@
 import { checkLink } from "@/lib/links";
 import { requestOpenLink, useLinks, type ReaderArea } from "@/state/links";
 
-const LINK_SELECTOR = "a[href], area[href]";
+/** HTML links and image-map areas, and SVG links, which may carry their target as `xlink:href`. */
+const LINK_SELECTOR = "a, area";
+const XLINK = "http://www.w3.org/1999/xlink";
 /** How long a finger rests on a link before the sheet opens. */
 const LONG_PRESS_MS = 500;
 /** A finger moving further than this scrolls instead. */
 const MOVE_TOLERANCE = 10;
 
+/** Where a link points, from `href` or, in SVG, `xlink:href`; null for an anchor that isn't a link. */
+function hrefOf(anchor: Element): string | null {
+  return anchor.getAttribute("href") ?? anchor.getAttributeNS(XLINK, "href");
+}
+
 // Events come from the mail's own document, a different realm: `instanceof Element` would fail
 // there, so elements are recognized by what they can do.
 function linkOf(target: EventTarget | null): Element | null {
-  return (target as Element | null)?.closest?.(LINK_SELECTOR) ?? null;
+  const anchor = (target as Element | null)?.closest?.(LINK_SELECTOR) ?? null;
+  return anchor && hrefOf(anchor) !== null ? anchor : null;
 }
 
 function linkText(anchor: Element) {
@@ -51,11 +59,25 @@ export function watchLinks(frame: HTMLIFrameElement, doc: Document) {
     // The click that ends a long press belongs to the sheet.
     if (performance.now() < ignoreClicksUntil) return;
     hideLinkStatus();
-    requestOpenLink(anchor.getAttribute("href") ?? "", linkText(anchor));
+    requestOpenLink(hrefOf(anchor) ?? "", linkText(anchor));
+  });
+  // The middle button opens a link in a new tab without a `click`, and dragging one onto the tab
+  // bar opens it too: both would go past the question (security-audit W-17). A middle click asks
+  // like a click; other buttons and dragging do nothing.
+  doc.addEventListener("auxclick", (event) => {
+    const anchor = linkOf(event.target);
+    if (!anchor) return;
+    event.preventDefault();
+    if (event.button !== 1) return;
+    hideLinkStatus();
+    requestOpenLink(hrefOf(anchor) ?? "", linkText(anchor));
+  });
+  doc.addEventListener("dragstart", (event) => {
+    if (linkOf(event.target)) event.preventDefault();
   });
 
   const show = (anchor: Element) => {
-    const check = checkLink(anchor.getAttribute("href") ?? "", linkText(anchor));
+    const check = checkLink(hrefOf(anchor) ?? "", linkText(anchor));
     if (check) useLinks.setState({ hover: { check, area: readerArea(frame) } });
     else hideLinkStatus();
   };
@@ -92,7 +114,7 @@ export function watchLinks(frame: HTMLIFrameElement, doc: Document) {
       start = { x: touch.clientX, y: touch.clientY };
       timer = window.setTimeout(() => {
         start = null;
-        const check = checkLink(anchor.getAttribute("href") ?? "", linkText(anchor));
+        const check = checkLink(hrefOf(anchor) ?? "", linkText(anchor));
         if (!check) return;
         ignoreClicksUntil = performance.now() + 1000;
         useLinks.setState({ sheet: check, hover: null });
