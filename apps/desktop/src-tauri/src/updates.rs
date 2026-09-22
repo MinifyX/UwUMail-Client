@@ -5,8 +5,10 @@
 //! "Restart now" hands over to that setup in `--update` mode; otherwise the
 //! update is applied the next time UwUMail starts.
 //!
-//! The setup is `UwUMail-Setup-<version>.exe` on Windows, the setup program
-//! itself on macOS and the setup AppImage on Linux. On macOS and Linux only a
+//! The setup is `UwUMail-Setup-<version>.exe` on Windows (`…-arm64.exe` for an
+//! ARM build, which Tauri's updater looks up as `windows-aarch64`; that is fixed
+//! when UwUMail is built, so an x64 UwUMail on an ARM PC keeps the x64 setup),
+//! the setup program itself on macOS and the setup AppImage on Linux. On macOS and Linux only a
 //! UwUMail the setup installed updates itself, so a copy started from
 //! somewhere else never installs a second one.
 
@@ -158,7 +160,9 @@ fn read_pending(app: &AppHandle) -> Option<ReadyUpdate> {
 /// The name the release gives the setup of `version` for this system, as `tauri signer sign`
 /// wrote it into the signature.
 fn release_file_name(version: &str) -> String {
-    if cfg!(windows) {
+    if cfg!(all(windows, target_arch = "aarch64")) {
+        format!("UwUMail-Setup-{version}-arm64.exe")
+    } else if cfg!(windows) {
         format!("UwUMail-Setup-{version}.exe")
     } else if cfg!(target_os = "linux") {
         format!("UwUMail-Setup-{version}-x86_64.AppImage")
@@ -384,7 +388,11 @@ mod tests {
         assert!(!signed_for_version(&comment("0.3.0-beta.1"), "0.3.0"));
         assert!(!signed_for_version("timestamp:1789548634", "0.3.0"));
         assert!(!signed_for_version(&format!("timestamp:1\tfile:x{}", release_file_name("0.3.0")), "0.3.0"));
-        if cfg!(windows) {
+        if cfg!(all(windows, target_arch = "aarch64")) {
+            assert!(signed_for_version("timestamp:1\tfile:UwUMail-Setup-0.4.0-arm64.exe", "0.4.0"));
+            assert!(!signed_for_version("timestamp:1\tfile:UwUMail-Setup-0.4.0.exe", "0.4.0"), "the x64 setup");
+        } else if cfg!(windows) {
+            assert!(!signed_for_version("timestamp:1\tfile:UwUMail-Setup-0.4.0-arm64.exe", "0.4.0"), "the ARM setup");
             // As the release of 0.2.0-beta.3 signed it.
             assert!(signed_for_version("timestamp:1789548634\tfile:UwUMail-Setup-0.2.0-beta.3.exe", "0.2.0-beta.3"));
         }
