@@ -353,11 +353,12 @@ Done with Claude, like the audits above.
 | --- | --- | --- | --- |
 | High | 1 | 1 | 0 |
 | Medium | 2 | 2 | 0 |
-| Low | 8 | 8 | 0 |
-| Informational | 9 | — | 9 |
+| Low | 8 + 6 from the webmail | 14 | 0 |
+| Informational | 10 | — | 10 |
 
 All earlier findings (H1–H3, M1–M7, L1–L10, AM1–AM4, AL1–AL8) still hold; M8 and the release pipeline weren't part
-of this pass.
+of this pass. The webmail's review of the same days ([its audit](https://github.com/MinifyX/UwUMail-Webmail)) found
+issues in code both share; those that apply to the app were ported (W-13 to W-21 below).
 
 ## Threat model additions
 
@@ -409,15 +410,16 @@ the sync. Only the list's own keys count now (`isChoiceKey`).
 as going elsewhere. A name covers its subdomains only where its owner owns them (`sameSite` in `lib/links.ts`).
 
 **NL4 — Direction controls in display names.** *Fixed.* A right-to-left override left open in a sender's name could
-turn the address shown next to it around. Names lose these characters; the header shows any in the address instead
-of obeying them.
+turn the address or the names shown next to it around. Every name in the header is isolated from its neighbours
+(webmail W-21), and the address shows any such characters instead of obeying them.
 
 **NL5 — Unsubscribing by mail to an address the dialog didn't name.** *Fixed.* The engine accepted bare host names
 and IP addresses that the dialog, which names the address first, doesn't show. Both now want a dotted domain.
 
 **NL6 — Markup dropped into the composer wasn't cleaned.** *Fixed.* A passage dragged out of a mail went into the
-composer as it was, and its remote images loaded in the app page past the image blocker. Dropped markup goes
-through the same cleaner as pasted markup.
+composer as it was, and its remote images loaded in the app page past the image blocker. The signature editor
+cleaned neither pasted nor dropped markup. Both editors now clean both (`droppedHtml.ts`, shared with the webmail,
+W-20).
 
 **NL7 — Leaving during an unlock question skipped the app lock.** *Fixed.* Time in the background wasn't noted
 while a fingerprint or PIN question was up (for example the check before turning the lock off). It counts now
@@ -426,6 +428,22 @@ unless UwUMail is back in front when the question is answered (`state/lock.ts`).
 **NL8 — Shared files were all copied before the size budget applied.** *Fixed.* The 25 MB limit for a whole share
 (AL5) was enforced after copying, so one share of many large files could fill the phone's storage. Copying stops
 at the budget and at 100 files, and failed copies are removed (`Launch.kt`).
+
+### Ported from the webmail review
+
+The link and settings code is shared with UwUMail-Webmail; these fixes from its review apply to the app as well and
+were taken over unchanged (all Low, all fixed):
+
+- **W-13** — a link on a remembered domain that forwards to another site asks again and never offers its domain.
+- **W-14** — with the question switched off, lookalike hosts and user names in front of the host still ask.
+- **W-15** — common second levels under country domains (`co.ke`, `com.ng`) and more hosting platforms count as
+  suffixes, so a remembered site no longer stands for a whole country suffix.
+- **W-16** — the status line never truncates the registrable domain of a long address.
+- **W-17** — middle clicks, dragged links and SVG links go through the question too (the frame sandbox already
+  stopped them; the check no longer depends on it).
+- **W-18** — the click or held key that opened the link question can't also answer it.
+
+W-19 (inherited names in synced settings) is NL2, W-20 is NL6 and W-21 is NL4 above.
 
 ### Informational (accepted for now)
 
@@ -444,6 +462,10 @@ at the budget and at 100 files, and failed copies are removed (`Launch.kt`).
 - **NI6 — Link handling in the mail frame starts once the frame has loaded.** A click before that navigates the
   frame itself, which the sandbox (no scripts, popups, top navigation or external protocols) and the app's
   `frame-src` stop: nothing opens outside UwUMail.
+- **NI10 — Switching the sync account adds this device's lists there.** Picking another account (or the automatic
+  choice after the old one was removed) merges this device's trusted senders, link domains and signatures into the
+  new server's copy. In the webmail that could mix two people's data in one browser (W-12); in the app all accounts
+  belong to the person using the device, so the merge is intended.
 - **NI7 — The main window has no navigation guard in the engine.** Nothing known can navigate it: the page's CSP
   forbids forms and scripts from elsewhere, drops from outside the window are off, and a link dragged within the
   window doesn't navigate. A guard would be a cheap extra layer once it can be tested on Android too.
@@ -456,8 +478,8 @@ at the budget and at 100 files, and failed copies are removed (`Launch.kt`).
 ## What was checked and held up
 
 - Links from mail open only after the question (or for a remembered domain): forms, `<base>`, `<meta>`, SVG and
-  script URLs are removed by both sanitizers; middle clicks, `target=_blank` and new windows are blocked by the
-  frame sandbox and the WebView; keyboard activation arrives as a click; the system's own link menu is suppressed.
+  script URLs are removed by both sanitizers; `target=_blank` and new windows are blocked by the frame sandbox and
+  the WebView; keyboard activation arrives as a click; the system's own link menu is suppressed.
 - Remembered domains are never offered for disguised, plain-`http`, internationalized, IP-address, user-name or
   shared-hosting links; ports and a trailing dot don't change the domain. The dialog, status line and sheet show the
   parsed address with user names, decoded internationalized names and lookalike warnings; redirect detection only
@@ -475,7 +497,8 @@ at the budget and at 100 files, and failed copies are removed (`Launch.kt`).
 
 - New unit tests: Unicode spaces and new lure formats (engine and UI), the mark of the web on Windows, web links for
   the system, shared names in link text, built-in names and weakened protections from the server, direction
-  controls in names, unsubscribe addresses and the app lock timer.
+  controls in names, unsubscribe addresses and the app lock timer; with the webmail's tests for the ported link,
+  drop and settings fixes.
 - `cargo fmt --check`, `cargo clippy -D warnings` (core and app), `cargo test` (core), `pnpm typecheck`, `lint`,
   `test` and `format:check`: clean. `cargo audit`: no vulnerabilities (the unmaintained crates from I9 remain);
   `pnpm audit --prod`: clean.
@@ -484,6 +507,7 @@ at the budget and at 100 files, and failed copies are removed (`Launch.kt`).
 
 ## Recommendations for later
 
-1. Port NL2 and NM2 to UwUMail-Webmail, which shares `settingsSync.ts` but keeps its own sync glue.
+1. Port NM2 and NL3 to UwUMail-Webmail: NM2 lives in the app's own sync glue, NL3 in `lib/links.ts`, which is
+   otherwise identical in both.
 2. A navigation guard for the main window (NI7) and a size limit for JMAP answers (NI9).
 3. Hardening for Android intents (NI8): catch unreadable extras, normalize claimed types, an empty task affinity.
