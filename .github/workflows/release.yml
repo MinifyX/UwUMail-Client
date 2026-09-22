@@ -367,7 +367,7 @@ jobs:
           | macOS (Intel & Apple chip) | `UwUMail-macos-universal.dmg` |
           | Ubuntu / Debian | `UwUMail-linux-x64.deb` · ARM: `UwUMail-linux-arm64.deb` |
           | Fedora / openSUSE | `UwUMail-linux-x64.rpm` · ARM: `UwUMail-linux-arm64.rpm` |
-          | Arch Linux | AUR: `yay -S uwumail-bin` |
+          | Arch Linux | @ARCH_ROW@ |
           | Linux portable | `UwUMail-linux-x64-portable.tar.gz` · ARM: `UwUMail-linux-arm64-portable.tar.gz` |
           | Android | `UwUMail-android.apk` |
           | iPhone | `UwUMail-ios.ipa` (sideload with AltStore or Sideloadly, own Apple ID; push notifications limited) |
@@ -390,6 +390,13 @@ jobs:
 
           `SHA256SUMS.txt` lists the checksum of every file. / `SHA256SUMS.txt` enthält die Prüfsumme jeder Datei.
           EOF
+          # The AUR package only once it exists there; AUR registration can be closed for a while.
+          if curl -fsSg --max-time 15 'https://aur.archlinux.org/rpc/v5/info?arg[]=uwumail-bin' | jq -e '.resultcount > 0' > /dev/null; then
+            arch_row='AUR: `yay -S uwumail-bin`'
+          else
+            arch_row='`UwUMail-linux-x64-portable.tar.gz` (AUR: `uwumail-bin` coming / folgt)'
+          fi
+          sed -i "s|@ARCH_ROW@|$arch_row|" "$RUNNER_TEMP/notes.md"
           flags=(--latest)
           case "$VERSION" in *-*) flags=(--prerelease) ;; esac
           gh release create "v$VERSION" "${files[@]/#/files/}" files/SHA256SUMS.txt \
