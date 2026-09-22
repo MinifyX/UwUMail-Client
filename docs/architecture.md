@@ -432,6 +432,5 @@ different site than the target.
   against deletion and force pushes. When GitHub can't run the workflow,
   `pnpm release` on a Windows PC publishes the Windows setup the same way; its
   feeds then only list Windows, so Macs and Linux PCs skip that version.
-- Until everyone is past 0.2.0-beta.2, releases also update the feeds in the
-  old `MinifyX/UwUMail-Releases` repo, which those versions still ask. After
-  that it is archived.
+- The old `MinifyX/UwUMail-Releases` repo, which 0.2.0-beta.2 and older ask for
+  updates, is archived; releases no longer write to it.

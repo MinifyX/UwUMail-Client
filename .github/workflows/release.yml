@@ -370,25 +370,3 @@ jobs:
           git add -- *.json
           git commit -m "UwUMail $VERSION"
           git push origin HEAD:updates
-
-      # 0.2.0-beta.2 and older still ask the old MinifyX/UwUMail-Releases repo for updates. Once
-      # everyone is past that, archive the repo and remove this step and RELEASES_DEPLOY_KEY.
-      - name: Update the old feeds in UwUMail-Releases
-        env:
-          DEPLOY_KEY: ${{ secrets.RELEASES_DEPLOY_KEY }}
-        run: |
-          key="$RUNNER_TEMP/releases-key"
-          printf '%s\n' "$DEPLOY_KEY" > "$key"
-          chmod 600 "$key"
-          trap 'rm -f "$key" "$known"' EXIT
-          # GitHub's published host key (api.github.com/meta), not whatever answers first.
-          known="$RUNNER_TEMP/known_hosts"
-          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$known"
-          export GIT_SSH_COMMAND="ssh -i '$key' -o IdentitiesOnly=yes -o UserKnownHostsFile='$known' -o StrictHostKeyChecking=yes"
-          git clone -q --depth 1 git@github.com:MinifyX/UwUMail-Releases.git "$RUNNER_TEMP/old"
-          cp "$RUNNER_TEMP"/new-feeds/*.json "$RUNNER_TEMP/old/"
-          cd "$RUNNER_TEMP/old"
-          git add -- *.json
-          git -c user.name="UwUMail Release" -c user.email="github-actions[bot]@users.noreply.github.com" \
-            commit -qm "UwUMail $VERSION (now released in MinifyX/UwUMail-Client)"
-          git push -q origin main

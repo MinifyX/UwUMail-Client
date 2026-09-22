@@ -40,7 +40,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] UwUMail's own setup on macOS (Apple chip and Intel) and Linux (AppImage), tested on GitHub's runners ([install.md](install.md))
 - [x] UwUMail's own Windows installer with Nyu: one click, no admin, options, uninstaller that can keep mail
 - [x] Auto-update on Windows: signed, downloaded quietly, Stable and Beta channels
-- [ ] Releases and update feeds in this repo, old `UwUMail-Releases` archived (ships with 0.2.0-beta.3)
+- [x] Releases and update feeds in this repo, old `UwUMail-Releases` archived (ships with 0.2.0-beta.3)
 - [x] Keep running in the notification area, start with Windows, default mail app (`mailto:` links)
 - [x] Auto-update on macOS and Linux (same signed feed as Windows)
 - [x] Security audit with fixes, `SECURITY.md`, dependency audit in CI ([report](security-audit.md))
