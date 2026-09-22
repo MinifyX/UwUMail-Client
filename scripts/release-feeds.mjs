@@ -5,9 +5,10 @@
 // --setup is the Windows setup (windows-x86_64). --update adds another desktop system under
 // Tauri's platform key: darwin-aarch64, darwin-x86_64 or linux-x86_64. Every setup needs its
 // updater signature (.sig) next to it. Versions with a suffix (-beta.1) only go into the Beta
-// feeds, plain versions into Stable and Beta.
+// feeds, plain versions into Stable and Beta. Every signature is checked against the updater key
+// in tauri.conf.json and must name its own file, as installed apps require.
 
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,8 +60,55 @@ export function releaseFeeds({ version, notes, setup, updates = {}, apk, date = 
   return feeds;
 }
 
-/** A setup file and its updater signature from the .sig next to it. */
-const signed = (path) => ({ name: basename(path), signature: readFileSync(`${path}.sig`, "utf8").trim() });
+/**
+ * Checks a Tauri updater signature (base64 minisign) the way installed apps do: made with the key
+ * `pubkeyBase64`, over exactly these bytes, and with `file:<name>` in its signed comment, which
+ * is how an app knows the setup belongs to the version the feed announces. Throws otherwise.
+ */
+export function checkSignature(file, signatureBase64, pubkeyBase64, name) {
+  const lines = (text) => Buffer.from(text, "base64").toString("utf8").split(/\r?\n/);
+  const pub = Buffer.from(lines(pubkeyBase64)[1] ?? "", "base64");
+  const [, signatureLine = "", trustedLine = "", globalLine = ""] = lines(signatureBase64);
+  const sig = Buffer.from(signatureLine, "base64");
+  if (pub.length !== 42 || sig.length !== 74) throw new Error(`${name}: malformed key or signature`);
+  if (!sig.subarray(2, 10).equals(pub.subarray(2, 10))) throw new Error(`${name} was signed with a different key`);
+  const key = createPublicKey({
+    key: { kty: "OKP", crv: "Ed25519", x: pub.subarray(10).toString("base64url") },
+    format: "jwk",
+  });
+  const algorithm = sig.subarray(0, 2).toString("latin1");
+  // Installed apps only take prehashed signatures ("ED"), as `tauri signer sign` makes them.
+  if (algorithm !== "ED") throw new Error(`${name}: unexpected signature algorithm ${algorithm}`);
+  const signed = createHash("blake2b512").update(file).digest();
+  if (!verify(null, signed, key, sig.subarray(10))) throw new Error(`The signature doesn't match ${name}`);
+  if (!trustedLine.startsWith("trusted comment: ")) throw new Error(`${name}: the signature has no trusted comment`);
+  const trusted = trustedLine.slice("trusted comment: ".length);
+  if (
+    !verify(
+      null,
+      Buffer.concat([sig.subarray(10), Buffer.from(trusted, "utf8")]),
+      key,
+      Buffer.from(globalLine, "base64"),
+    )
+  ) {
+    throw new Error(`${name}: the signature's trusted comment doesn't verify`);
+  }
+  if (!trusted.split("\t").includes(`file:${name}`))
+    throw new Error(`The signature was made for another file than ${name}`);
+}
+
+/** The updater key installed apps carry. */
+export const updaterPubkey = () =>
+  JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "apps/desktop/src-tauri/tauri.conf.json"), "utf8"),
+  ).plugins.updater.pubkey;
+
+/** A setup file and its updater signature from the .sig next to it, checked against the updater key. */
+const signed = (path) => {
+  const signature = readFileSync(`${path}.sig`, "utf8").trim();
+  checkSignature(readFileSync(path), signature, updaterPubkey(), basename(path));
+  return { name: basename(path), signature };
+};
 
 if (import.meta.main) {
   const [version, out] = process.argv.slice(2);

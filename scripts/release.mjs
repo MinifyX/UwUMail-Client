@@ -14,13 +14,12 @@
 // workflow) and updates the Windows feeds on the `updates` branch.
 
 import { execFileSync } from "node:child_process";
-import { createHash, createPublicKey, verify } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FEED_BRANCH, REPOSITORY, releaseFeeds } from "./release-feeds.mjs";
+import { FEED_BRANCH, REPOSITORY, checkSignature, releaseFeeds } from "./release-feeds.mjs";
 
 /** Still asked by 0.2.0-beta.2 and older; drop once that repo is archived. */
 const OLD_FEEDS = "MinifyX/UwUMail-Releases";
@@ -73,7 +72,11 @@ if (build) {
 console.log("\n▸ Checking the signature against the updater key");
 if (!existsSync(`${setup}.sig`)) fail(`${setup}.sig is missing: the setup wasn't signed.`);
 const signature = readFileSync(`${setup}.sig`, "utf8").trim();
-checkSignature(readFileSync(setup), signature, conf.plugins.updater.pubkey);
+try {
+  checkSignature(readFileSync(setup), signature, conf.plugins.updater.pubkey, setupName);
+} catch (error) {
+  fail(error.message);
+}
 console.log("  ✓ matches tauri.conf.json");
 
 const work = mkdtempSync(join(tmpdir(), "uwumail-release-"));
@@ -147,27 +150,6 @@ function signingKey() {
     TAURI_SIGNING_PRIVATE_KEY: readFileSync(key, "utf8").trim(),
     TAURI_SIGNING_PRIVATE_KEY_PASSWORD: existsSync(password) ? readFileSync(password, "utf8").trim() : "",
   };
-}
-
-/** Verifies a Tauri updater signature (base64 minisign) the way installed apps do. */
-function checkSignature(file, signatureBase64, pubkeyBase64) {
-  const lines = (text) => Buffer.from(text, "base64").toString("utf8").split(/\r?\n/);
-  const pub = Buffer.from(lines(pubkeyBase64)[1], "base64");
-  const [, signatureLine, trustedLine, globalLine] = lines(signatureBase64);
-  const sig = Buffer.from(signatureLine, "base64");
-  if (pub.length !== 42 || sig.length !== 74) fail("Malformed key or signature.");
-  if (!sig.subarray(2, 10).equals(pub.subarray(2, 10))) fail("The setup was signed with a different key.");
-  const key = createPublicKey({
-    key: { kty: "OKP", crv: "Ed25519", x: pub.subarray(10).toString("base64url") },
-    format: "jwk",
-  });
-  const algorithm = sig.subarray(0, 2).toString("latin1");
-  const signed = algorithm === "ED" ? createHash("blake2b512").update(file).digest() : file;
-  if (!verify(null, signed, key, sig.subarray(10))) fail("The signature doesn't match the setup.");
-  const trusted = Buffer.from(trustedLine.replace(/^trusted comment: /, ""), "utf8");
-  if (!verify(null, Buffer.concat([sig.subarray(10), trusted]), key, Buffer.from(globalLine, "base64"))) {
-    fail("The signature's trusted comment doesn't verify.");
-  }
 }
 
 async function github(path) {
