@@ -23,6 +23,7 @@ import { Menu } from "@/components/ui/Menu";
 import { defaultSignature, withSignature, withoutSignatureMarker } from "@/lib/signatures";
 import { useBackLayer } from "@/lib/backStack";
 import { useIsPhone } from "@/lib/device";
+import { insertDroppedHtml } from "./droppedHtml";
 import { clearLocalDraft, markLocalDraftSaved, saveLocalDraft } from "./localDraft";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -89,7 +90,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editor = useRef<HTMLDivElement | null>(null);
-  /** Text is being moved within the editor itself; it is clean already and moves as usual. */
+  /** A drag that started in the editor itself: moving text, not markup from elsewhere. */
   const draggingInside = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   // Signatures: the address's default goes in when the draft starts, or once they've loaded.
@@ -602,21 +603,15 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             body.current = event.currentTarget.innerHTML;
             setEdits((count) => count + 1);
           }}
-          onDragStart={() => (draggingInside.current = true)}
-          onDragEnd={() => (draggingInside.current = false)}
+          onDragStart={() => {
+            draggingInside.current = true;
+          }}
+          onDragEnd={() => {
+            draggingInside.current = false;
+          }}
           onDrop={(event) => {
-            // Markup dragged in (a picture or a passage out of a mail) goes through the same cleaner
-            // as pasted markup: dropped as it is, its remote images would load in the app page.
-            const html = event.dataTransfer.getData("text/html");
-            if (!html || draggingInside.current || event.dataTransfer.files.length > 0) return;
-            event.preventDefault();
-            const at = document.caretRangeFromPoint?.(event.clientX, event.clientY);
-            const selection = document.getSelection();
-            if (at && selection) {
-              selection.removeAllRanges();
-              selection.addRange(at);
-            }
-            document.execCommand("insertHTML", false, quotableHtml(html));
+            // Moving text inside the draft stays the browser's job; markup from elsewhere is cleaned.
+            if (draggingInside.current || !insertDroppedHtml(event, quotableHtml)) return;
             setError(null);
             changed();
             body.current = event.currentTarget.innerHTML;

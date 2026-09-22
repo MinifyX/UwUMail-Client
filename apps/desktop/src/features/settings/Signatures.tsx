@@ -12,6 +12,7 @@ import { isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { toast } from "@/state/toasts";
 import { signaturesChangedHere, useAccountSync } from "@/state/accountSync";
 import { useUi } from "@/state/ui";
+import { insertDroppedHtml } from "@/features/compose/droppedHtml";
 import { Row } from "./Row";
 
 export function Signatures() {
@@ -149,6 +150,8 @@ function SignatureEditor({
   const [forReplies, setForReplies] = useState(signature.forReplies);
   const [saving, setSaving] = useState(false);
   const editor = useRef<HTMLDivElement | null>(null);
+  /** A drag that started in the editor itself: moving text, not markup from elsewhere. */
+  const draggingInside = useRef(false);
   const picture = useRef<HTMLInputElement>(null);
 
   const format = (command: "bold" | "italic" | "createLink") => {
@@ -229,6 +232,23 @@ function SignatureEditor({
           aria-multiline
           aria-label={t("settings.signatures")}
           data-placeholder={t("settings.signaturePlaceholder")}
+          onPaste={(event) => {
+            // Pasted markup (e.g. copied out of a mail) is cleaned before it lands in the app page,
+            // so nothing remote in it loads while editing.
+            const html = event.clipboardData.getData("text/html");
+            if (!html) return;
+            event.preventDefault();
+            document.execCommand("insertHTML", false, quotableHtml(html));
+          }}
+          onDragStart={() => {
+            draggingInside.current = true;
+          }}
+          onDragEnd={() => {
+            draggingInside.current = false;
+          }}
+          onDrop={(event) => {
+            if (!draggingInside.current) insertDroppedHtml(event, quotableHtml);
+          }}
           className="min-h-28 px-3 py-2 text-[14px] leading-relaxed outline-none empty:before:pointer-events-none empty:before:text-faint empty:before:content-[attr(data-placeholder)] [&_a]:text-pink-ink [&_a]:underline [&_img]:inline-block [&_img]:max-w-full [&_p]:min-h-[1.4em]"
         />
       </div>
