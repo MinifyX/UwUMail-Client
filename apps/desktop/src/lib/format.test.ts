@@ -1,14 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  colorFor,
-  displayName,
-  formatAddress,
-  formatListDate,
-  formatSize,
-  initials,
-  parseAddress,
-  textToHtml,
-} from "./format";
+import { colorFor, formatListDate, formatSize, initials, parseAddress, textToHtml } from "./format";
 
 describe("formatListDate", () => {
   const now = new Date(2026, 8, 14, 15, 0);
@@ -61,16 +52,5 @@ describe("helpers", () => {
 
   it("escapes text before turning it into HTML", () => {
     expect(textToHtml("a <b>\nc\n\nd")).toBe("<p>a &lt;b&gt;<br>c</p><p>d</p>");
-  });
-});
-
-describe("names from mail", () => {
-  it("drops characters that would turn the address next to them around", () => {
-    const address = { name: "Support ‮moc.", email: "support@shop.example" };
-    expect(displayName(address)).toBe("Support moc.");
-    expect(formatAddress(address)).toBe("Support moc. <support@shop.example>");
-    expect(displayName({ name: "⁧‮", email: "mini@uwumail.test" })).toBe("mini");
-    // Right-to-left names themselves stay as they are.
-    expect(displayName({ name: "שלום", email: "a@example.org" })).toBe("שלום");
   });
 });

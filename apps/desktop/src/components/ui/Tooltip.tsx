@@ -46,7 +46,13 @@ export function Tooltip({ content, children, className, onActivate }: TooltipPro
             onActivate();
           }
         }}
-        className={clsx("rounded outline-none focus-visible:shadow-focus", onActivate && "cursor-pointer", className)}
+        // A name is picked by whoever sent the mail: its direction marks stay inside it and
+        // can't turn the names around it (security-audit W-21).
+        className={clsx(
+          "rounded outline-none [unicode-bidi:isolate] focus-visible:shadow-focus",
+          onActivate && "cursor-pointer",
+          className,
+        )}
       >
         {children}
       </span>
