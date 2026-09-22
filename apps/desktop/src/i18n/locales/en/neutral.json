@@ -666,5 +666,10 @@
     "enabled": "{{private}} and {{business}} are apart now",
     "assign": "Assign mailboxes",
     "unread": "{{count}} unread"
+  },
+  "crash": {
+    "title": "Something went wrong",
+    "body": "Part of UwUMail crashed while drawing. Reloading brings you back.",
+    "reload": "Reload"
   }
 }

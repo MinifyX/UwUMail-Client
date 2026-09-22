@@ -220,5 +220,10 @@
     "extendUp": "Stretch the selection up",
     "extendDown": "Stretch the selection down",
     "selectAll": "Grab all loaded mail"
+  },
+  "crash": {
+    "title": "Oops, Nyu knocked something over",
+    "body": "A bit of UwUMail tripped while drawing. Reload once and you're back ✧",
+    "reload": "Reload"
   }
 }

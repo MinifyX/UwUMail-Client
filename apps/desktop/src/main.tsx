@@ -6,6 +6,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { loadBackend } from "./backend/backend";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { startAccountSync, watchSyncAccountChoice } from "./state/accountSync";
 
 const queryClient = new QueryClient({
@@ -21,8 +22,10 @@ watchSyncAccountChoice();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );

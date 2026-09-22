@@ -666,5 +666,10 @@
     "enabled": "{{private}} und {{business}} sind jetzt getrennt",
     "assign": "Postfächer zuordnen",
     "unread": "{{count}} ungelesen"
+  },
+  "crash": {
+    "title": "Da ist etwas schiefgegangen",
+    "body": "Ein Teil von UwUMail ist beim Anzeigen abgestürzt. Neu laden bringt dich zurück.",
+    "reload": "Neu laden"
   }
 }
