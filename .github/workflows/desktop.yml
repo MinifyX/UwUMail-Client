@@ -24,7 +24,9 @@ on:
         required: false
 
 concurrency:
-  group: desktop-${{ github.ref }}-${{ github.event_name }}
+  # github.workflow is the caller's name when the release workflow runs this one, so a release
+  # started by hand and this workflow started by hand on the same branch don't cancel each other.
+  group: desktop-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name != 'workflow_call' && github.ref_type != 'tag' }}
 
 permissions:
