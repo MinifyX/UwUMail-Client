@@ -1,9 +1,11 @@
 // Builds UwUMail's setup for this system: the app, packed into UwUMail's own installer.
 //
-//   pnpm build:setup                                  Windows: UwUMail-Setup-<version>.exe
+//   pnpm build:setup                                  Windows x64: UwUMail-Setup-<version>.exe
+//   pnpm build:setup --target aarch64-pc-windows-msvc Windows on ARM: UwUMail-Setup-<version>-arm64.exe
 //   pnpm build:setup --target aarch64-apple-darwin    macOS (Apple chip), or x86_64-apple-darwin (Intel)
 //   pnpm build:setup                                  Linux: UwUMail-Setup-<version>-x86_64.AppImage
 //
+// Without --target, Windows builds for the PC it runs on (an ARM PC makes the -arm64 setup).
 // Windows writes into target/release, as it always did. macOS and Linux write into target/setup:
 //
 //   UwUMail-Setup-<version>-macos-apple-silicon.dmg   the setup app to download (…-macos-intel.dmg)
@@ -61,18 +63,33 @@ function signForUpdater(file) {
   });
 }
 
+/** Windows targets and what their setup's name ends with; x64 keeps the name it always had. */
+const WINDOWS_SUFFIXES = { "x86_64-pc-windows-msvc": "", "aarch64-pc-windows-msvc": "-arm64" };
+
 function buildWindows() {
-  const release = join(targetDir, "release");
-  console.log(`\n▸ Building UwUMail ${version}`);
-  run("pnpm --filter @uwumail/desktop tauri build --no-bundle");
-  const app = join(release, "uwumail-desktop.exe");
+  const explicit = option("--target");
+  const target = explicit ?? (process.arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc");
+  const suffix = WINDOWS_SUFFIXES[target];
+  if (suffix === undefined) {
+    throw new Error(`Unknown Windows target ${target}; use one of ${Object.keys(WINDOWS_SUFFIXES).join(", ")}`);
+  }
+  // Cargo puts a build for an explicit --target into a folder of its own.
+  const built = explicit ? join(targetDir, target, "release") : join(targetDir, "release");
+  // pnpm is a .cmd on Windows, so these go through the shell; the target is one of the names above.
+  const targetArg = explicit ? ` --target ${target}` : "";
+  console.log(`\n▸ Building UwUMail ${version} for ${target}`);
+  run(`pnpm --filter @uwumail/desktop tauri build --no-bundle${targetArg}`);
+  const app = join(built, "uwumail-desktop.exe");
   if (!existsSync(app)) throw new Error(`Missing ${app}`);
 
   console.log("\n▸ Packing it into the setup");
-  run("pnpm --filter @uwumail/setup tauri build --no-bundle", { UWUMAIL_SETUP_PAYLOAD: app });
+  run(`pnpm --filter @uwumail/setup tauri build --no-bundle${targetArg}`, { UWUMAIL_SETUP_PAYLOAD: app });
 
-  const setup = join(release, `UwUMail-Setup-${version}.exe`);
-  copyFileSync(join(release, "uwumail-setup.exe"), setup);
+  // Every Windows setup lands in target/release, as it always did.
+  const release = join(targetDir, "release");
+  mkdirSync(release, { recursive: true });
+  const setup = join(release, `UwUMail-Setup-${version}${suffix}.exe`);
+  copyFileSync(join(built, "uwumail-setup.exe"), setup);
 
   if (signingKey) {
     console.log("\n▸ Signing for the updater");
