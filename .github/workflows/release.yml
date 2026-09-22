@@ -309,6 +309,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          apks=(files/UwUMail-"$VERSION"-*.apk)
+          files=(
+            "UwUMail-Setup-$VERSION.exe"
+            "UwUMail-Setup-$VERSION-macos-apple-silicon.dmg"
+            "UwUMail-Setup-$VERSION-macos-intel.dmg"
+            "UwUMail-Setup-$VERSION-x86_64.AppImage"
+            "UwUMail-Update-$VERSION-macos-apple-silicon"
+            "UwUMail-Update-$VERSION-macos-intel"
+            "${apks[0]#files/}"
+            "UwUMail-$VERSION-unsigned.ipa"
+          )
+          # Checksums for everyone who downloads a file by hand.
+          (cd files && sha256sum "${files[@]}" > SHA256SUMS.txt)
+          cat files/SHA256SUMS.txt
           jq -r '"## Deutsch\n\n" + .de + "\n\n## English\n\n" + .en' "release-notes/$VERSION.json" > "$RUNNER_TEMP/notes.md"
           cat >> "$RUNNER_TEMP/notes.md" <<'EOF'
 
@@ -334,18 +348,12 @@ jobs:
 
           The `UwUMail-Update-…` files are for the updater inside UwUMail on macOS. / Die `UwUMail-Update-…`-Dateien
           holt sich UwUMail auf dem Mac für seine Updates.
+
+          `SHA256SUMS.txt` lists the checksum of every file. / `SHA256SUMS.txt` enthält die Prüfsumme jeder Datei.
           EOF
           flags=(--latest)
           case "$VERSION" in *-*) flags=(--prerelease) ;; esac
-          gh release create "v$VERSION" \
-            "files/UwUMail-Setup-$VERSION.exe" \
-            "files/UwUMail-Setup-$VERSION-macos-apple-silicon.dmg" \
-            "files/UwUMail-Setup-$VERSION-macos-intel.dmg" \
-            "files/UwUMail-Setup-$VERSION-x86_64.AppImage" \
-            "files/UwUMail-Update-$VERSION-macos-apple-silicon" \
-            "files/UwUMail-Update-$VERSION-macos-intel" \
-            files/UwUMail-"$VERSION"-*.apk \
-            "files/UwUMail-$VERSION-unsigned.ipa" \
+          gh release create "v$VERSION" "${files[@]/#/files/}" files/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "UwUMail $VERSION" \
             --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"
 
@@ -372,8 +380,11 @@ jobs:
           key="$RUNNER_TEMP/releases-key"
           printf '%s\n' "$DEPLOY_KEY" > "$key"
           chmod 600 "$key"
-          trap 'rm -f "$key"' EXIT
-          export GIT_SSH_COMMAND="ssh -i '$key' -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          trap 'rm -f "$key" "$known"' EXIT
+          # GitHub's published host key (api.github.com/meta), not whatever answers first.
+          known="$RUNNER_TEMP/known_hosts"
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$known"
+          export GIT_SSH_COMMAND="ssh -i '$key' -o IdentitiesOnly=yes -o UserKnownHostsFile='$known' -o StrictHostKeyChecking=yes"
           git clone -q --depth 1 git@github.com:MinifyX/UwUMail-Releases.git "$RUNNER_TEMP/old"
           cp "$RUNNER_TEMP"/new-feeds/*.json "$RUNNER_TEMP/old/"
           cd "$RUNNER_TEMP/old"
