@@ -21,7 +21,7 @@ use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
 use crate::{autoconfig, folders, mime, oauth};
-use crate::{jmap_settings, jmap_sync};
+use crate::{jmap_settings, jmap_sieve, jmap_sync};
 
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(5 * 60);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
@@ -926,6 +926,59 @@ impl Engine {
             }
         }
         Ok(found)
+    }
+
+    /// The accounts whose UwUMail server runs mail rules (JMAP with Sieve scripts). Accounts that
+    /// can't be reached right now are left out.
+    pub async fn rule_accounts(&self) -> Result<Vec<String>> {
+        let mut found = Vec::new();
+        for account in self.inner.store.accounts()? {
+            if account.protocol != Protocol::Jmap {
+                continue;
+            }
+            match self.inner.jmap_client(&account.id).await {
+                Ok(client) if client.session.sieve_account_id.is_some() => found.push(account.id),
+                Ok(_) => {}
+                Err(error) => tracing::debug!("Couldn't ask {} about mail rules: {error}", account.id),
+            }
+        }
+        Ok(found)
+    }
+
+    /// The account the rules belong to: the one asked for, or the first that has rules.
+    async fn rules_client(&self, account_id: Option<&str>) -> Result<Arc<JmapClient>> {
+        let account_id = match account_id {
+            Some(id) => id.to_string(),
+            None => self
+                .rule_accounts()
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| Error::not_supported("None of your mailboxes can keep mail rules."))?,
+        };
+        if self.inner.store.account(&account_id)?.protocol != Protocol::Jmap {
+            return Err(Error::not_supported("Mail rules need a mailbox on a UwUMail server."));
+        }
+        let client = self.inner.jmap_client(&account_id).await?;
+        if client.session.sieve_account_id.is_none() {
+            return Err(Error::not_supported("This mail server doesn't keep mail rules."));
+        }
+        Ok(client)
+    }
+
+    /// The script called "UwUMail" and whether the server runs it.
+    pub async fn mail_rules(&self, account_id: Option<&str>) -> Result<MailRules> {
+        jmap_sieve::load(&*self.rules_client(account_id).await?).await
+    }
+
+    /// Uploads the script as "UwUMail" and makes it the one the server runs.
+    pub async fn save_mail_rules(&self, script: &str, account_id: Option<&str>) -> Result<()> {
+        jmap_sieve::save(&*self.rules_client(account_id).await?, script).await
+    }
+
+    /// What the server finds wrong with a script, or `None`.
+    pub async fn validate_mail_rules(&self, script: &str, account_id: Option<&str>) -> Result<Option<String>> {
+        jmap_sieve::validate(&*self.rules_client(account_id).await?, script).await
     }
 
     /// The settings an account's UwUMail server keeps for all devices of the login.

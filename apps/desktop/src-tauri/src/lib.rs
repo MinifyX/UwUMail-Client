@@ -66,6 +66,33 @@ async fn save_user_settings(
     engine.save_user_settings(&account_id, &changes, if_in_state.as_deref()).await
 }
 
+/// Accounts whose UwUMail server runs mail rules; unreachable ones are left out.
+#[tauri::command]
+async fn rule_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<String>> {
+    engine.rule_accounts().await
+}
+
+#[tauri::command]
+async fn mail_rules(engine: State<'_, Engine>, account_id: Option<String>) -> CommandResult<MailRules> {
+    engine.mail_rules(account_id.as_deref()).await
+}
+
+/// Stores the script as "UwUMail" and makes it the active one.
+#[tauri::command]
+async fn save_mail_rules(engine: State<'_, Engine>, script: String, account_id: Option<String>) -> CommandResult<()> {
+    engine.save_mail_rules(&script, account_id.as_deref()).await
+}
+
+/// What the server finds wrong with the script, or null.
+#[tauri::command]
+async fn validate_mail_rules(
+    engine: State<'_, Engine>,
+    script: String,
+    account_id: Option<String>,
+) -> CommandResult<Option<String>> {
+    engine.validate_mail_rules(&script, account_id.as_deref()).await
+}
+
 #[tauri::command]
 fn list_identities(engine: State<'_, Engine>) -> CommandResult<Vec<Identity>> {
     engine.list_identities()
@@ -493,6 +520,10 @@ pub fn run() {
             settings_sync_accounts,
             load_user_settings,
             save_user_settings,
+            rule_accounts,
+            mail_rules,
+            save_mail_rules,
+            validate_mail_rules,
             add_identity,
             rename_identity,
             remove_identity,

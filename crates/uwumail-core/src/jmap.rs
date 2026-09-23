@@ -18,6 +18,10 @@ pub const SUBMISSION: &str = "urn:ietf:params:jmap:submission";
 pub const SENDERS: &str = "urn:uwumail:jmap:senders";
 /// A UwUMail server's settings document shared by the webmail and the apps (UwUMail-Server docs/jmap-settings.md).
 pub const SETTINGS: &str = "urn:uwumail:jmap:settings";
+/// Sieve scripts (RFC 9661): mail rules on a UwUMail server.
+pub const SIEVE: &str = "urn:ietf:params:jmap:sieve";
+/// Calendars and events (draft-ietf-jmap-calendars).
+pub const CALENDARS: &str = "urn:ietf:params:jmap:calendars";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -75,6 +79,10 @@ pub struct Session {
     pub sender_lists: bool,
     /// The server keeps this login's settings for all its devices (a UwUMail server).
     pub user_settings: bool,
+    /// The account whose Sieve scripts (mail rules) this login may manage, if the server has them.
+    pub sieve_account_id: Option<String>,
+    /// The account whose calendars this login sees, if the server has JMAP calendars.
+    pub calendar_account_id: Option<String>,
 }
 
 impl Session {
@@ -92,6 +100,17 @@ impl Session {
             .ok_or_else(|| Error::not_supported("This JMAP login has no mail account."))?
             .to_string();
         let core = capabilities.get(CORE);
+        // An extension's own primary account, or the mail account when the server names none.
+        let extension_account = |capability: &str| {
+            capabilities.contains_key(capability).then(|| {
+                primary
+                    .and_then(|p| p.get(capability))
+                    .and_then(Value::as_str)
+                    .map_or_else(|| account_id.clone(), String::from)
+            })
+        };
+        let sieve_account_id = extension_account(SIEVE);
+        let calendar_account_id = extension_account(CALENDARS);
         let limit = |key: &str, fallback: usize| {
             core.and_then(|c| c.get(key)).and_then(Value::as_u64).map_or(fallback, |n| n.clamp(1, 10_000) as usize)
         };
@@ -110,6 +129,8 @@ impl Session {
             username: text("username").unwrap_or_default().to_string(),
             sender_lists: capabilities.contains_key(SENDERS),
             user_settings: capabilities.contains_key(SETTINGS),
+            sieve_account_id,
+            calendar_account_id,
         })
     }
 
@@ -297,6 +318,12 @@ impl Client {
         if self.session.user_settings {
             using.push(SETTINGS);
         }
+        if self.session.sieve_account_id.is_some() {
+            using.push(SIEVE);
+        }
+        if self.session.calendar_account_id.is_some() {
+            using.push(CALENDARS);
+        }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self
             .http
@@ -336,9 +363,14 @@ impl Client {
 
     /// Downloads a blob, e.g. a whole message.
     pub async fn download(&self, blob_id: &str, name: &str, mime_type: &str) -> Result<Vec<u8>> {
+        self.download_for(&self.session.account_id, blob_id, name, mime_type).await
+    }
+
+    /// Downloads a blob of another account of the login, e.g. the one that keeps its Sieve scripts.
+    pub async fn download_for(&self, account_id: &str, blob_id: &str, name: &str, mime_type: &str) -> Result<Vec<u8>> {
         let url = fill(
             &self.session.download_url,
-            &[("accountId", &self.session.account_id), ("blobId", blob_id), ("name", name), ("type", mime_type)],
+            &[("accountId", account_id), ("blobId", blob_id), ("name", name), ("type", mime_type)],
         );
         let response = self
             .http
@@ -358,7 +390,12 @@ impl Client {
 
     /// Uploads data and returns its blob id.
     pub async fn upload(&self, bytes: Vec<u8>, mime_type: &str) -> Result<String> {
-        let url = fill(&self.session.upload_url, &[("accountId", &self.session.account_id)]);
+        self.upload_for(&self.session.account_id, bytes, mime_type).await
+    }
+
+    /// Uploads data into another account of the login.
+    pub async fn upload_for(&self, account_id: &str, bytes: Vec<u8>, mime_type: &str) -> Result<String> {
+        let url = fill(&self.session.upload_url, &[("accountId", account_id)]);
         let response = self
             .http
             .post(url)
@@ -796,6 +833,24 @@ mod tests {
         assert!(Session::parse(&document, &base).unwrap().user_settings);
         document["capabilities"].as_object_mut().unwrap().remove(SETTINGS);
         assert!(!Session::parse(&document, &base).unwrap().user_settings);
+    }
+
+    #[test]
+    fn notices_rules_and_calendars() {
+        let base = Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let mut document = json!({
+            "capabilities": { CORE: {}, MAIL: {}, SIEVE: { "implementation": "UwUMail Server" }, CALENDARS: {} },
+            "primaryAccounts": { MAIL: "a1", SIEVE: "a1", CALENDARS: "c9" },
+            "apiUrl": "/jmap/api", "downloadUrl": "/jmap/download", "uploadUrl": "/jmap/upload",
+        });
+        let session = Session::parse(&document, &base).unwrap();
+        assert_eq!(session.sieve_account_id.as_deref(), Some("a1"));
+        assert_eq!(session.calendar_account_id.as_deref(), Some("c9"));
+        // Without its own primary account an extension uses the mail account.
+        document["primaryAccounts"].as_object_mut().unwrap().remove(CALENDARS);
+        assert_eq!(Session::parse(&document, &base).unwrap().calendar_account_id.as_deref(), Some("a1"));
+        document["capabilities"].as_object_mut().unwrap().remove(SIEVE);
+        assert_eq!(Session::parse(&document, &base).unwrap().sieve_account_id, None);
     }
 
     #[test]

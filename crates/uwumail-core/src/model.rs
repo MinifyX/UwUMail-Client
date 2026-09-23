@@ -424,6 +424,16 @@ pub struct UserSettingsSaved {
     pub properties: Vec<String>,
 }
 
+/// The mail rules of an account: the Sieve script called "UwUMail" on its UwUMail server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MailRules {
+    /// `None` when there is no such script yet.
+    pub script: Option<String>,
+    /// Whether it's the script the server runs.
+    pub active: bool,
+}
+
 /// A blocked sender: on this device, or on the UwUMail server of one account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

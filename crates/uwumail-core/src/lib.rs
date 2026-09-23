@@ -12,6 +12,7 @@ pub mod folders;
 pub mod imap;
 pub mod jmap;
 pub mod jmap_settings;
+pub mod jmap_sieve;
 pub mod jmap_sync;
 pub mod links;
 pub mod mailto;
