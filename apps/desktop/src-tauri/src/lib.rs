@@ -93,6 +93,70 @@ async fn validate_mail_rules(
     engine.validate_mail_rules(&script, account_id.as_deref()).await
 }
 
+/// Every calendar of every account that has some.
+#[tauri::command]
+async fn list_calendars(engine: State<'_, Engine>) -> CommandResult<Vec<CalendarInfo>> {
+    engine.calendars().await
+}
+
+/// Per account: JMAP calendars, CalDAV, or why there's no calendar.
+#[tauri::command]
+async fn calendar_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<CalendarAccount>> {
+    engine.calendar_accounts().await
+}
+
+#[tauri::command]
+async fn set_caldav_url(engine: State<'_, Engine>, account_id: String, url: Option<String>) -> CommandResult<()> {
+    engine.set_caldav_url(&account_id, url.as_deref()).await
+}
+
+#[tauri::command]
+async fn create_calendar(engine: State<'_, Engine>, input: NewCalendar) -> CommandResult<CalendarInfo> {
+    engine.create_calendar(input).await
+}
+
+#[tauri::command]
+async fn update_calendar(engine: State<'_, Engine>, calendar_id: String, patch: CalendarPatch) -> CommandResult<()> {
+    engine.update_calendar(&calendar_id, patch).await
+}
+
+/// Removes the calendar with its events.
+#[tauri::command]
+async fn delete_calendar(engine: State<'_, Engine>, calendar_id: String) -> CommandResult<()> {
+    engine.delete_calendar(&calendar_id).await
+}
+
+#[tauri::command]
+async fn set_default_calendar(engine: State<'_, Engine>, calendar_id: String) -> CommandResult<()> {
+    engine.set_default_calendar(&calendar_id).await
+}
+
+/// Occurrences in [from, to), wall times in the viewer's zone.
+#[tauri::command]
+async fn calendar_events(
+    engine: State<'_, Engine>,
+    from: String,
+    to: String,
+    time_zone: String,
+) -> CommandResult<Vec<CalendarOccurrence>> {
+    engine.calendar_events(&from, &to, &time_zone).await
+}
+
+#[tauri::command]
+async fn create_event(engine: State<'_, Engine>, input: EventInput) -> CommandResult<String> {
+    engine.create_event(input).await
+}
+
+#[tauri::command]
+async fn update_event(engine: State<'_, Engine>, event_id: String, input: EventInput) -> CommandResult<()> {
+    engine.update_event(&event_id, input).await
+}
+
+#[tauri::command]
+async fn delete_event(engine: State<'_, Engine>, occurrence_id: String, scope: EventDeleteScope) -> CommandResult<()> {
+    engine.delete_event(&occurrence_id, scope).await
+}
+
 #[tauri::command]
 fn list_identities(engine: State<'_, Engine>) -> CommandResult<Vec<Identity>> {
     engine.list_identities()
@@ -524,6 +588,17 @@ pub fn run() {
             mail_rules,
             save_mail_rules,
             validate_mail_rules,
+            list_calendars,
+            calendar_accounts,
+            set_caldav_url,
+            create_calendar,
+            update_calendar,
+            delete_calendar,
+            set_default_calendar,
+            calendar_events,
+            create_event,
+            update_event,
+            delete_event,
             add_identity,
             rename_identity,
             remove_identity,

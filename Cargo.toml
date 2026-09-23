@@ -16,6 +16,10 @@ uwumail-android = { path = "crates/uwumail-android" }
 ammonia = "4"
 async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
 base64 = "0.23"
+# iCalendar and JSCalendar (the `jmap` feature converts between them), like the UwUMail server.
+calcard = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+chrono-tz = "0.10"
 futures = "0.3"
 hickory-resolver = "0.26"
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native-async-persistent", "tokio", "crypto-rust"] }

@@ -434,6 +434,163 @@ pub struct MailRules {
     pub active: bool,
 }
 
+/// A calendar of one account. Its id starts with the account id, so ids are unique across accounts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarInfo {
+    pub id: String,
+    pub account_id: String,
+    pub name: String,
+    /// `#rrggbb`.
+    pub color: Option<String>,
+    pub is_default: bool,
+    pub is_visible: bool,
+    pub sort_order: i64,
+    pub may_write: bool,
+    pub may_delete: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Weekday {
+    Mo,
+    Tu,
+    We,
+    Th,
+    Fr,
+    Sa,
+    Su,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Frequency {
+    Daily,
+    Weekly,
+    Monthly,
+    Yearly,
+}
+
+/// How an event repeats, as far as the editor can say it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Recurrence {
+    pub frequency: Frequency,
+    pub interval: u32,
+    /// Weekly only.
+    pub by_day: Option<Vec<Weekday>>,
+    /// `YYYY-MM-DD`, inclusive, local.
+    pub until: Option<String>,
+    pub count: Option<u32>,
+}
+
+/// One occurrence of an event, in the viewer's wall time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarOccurrence {
+    /// Occurrence id; its own for each instance of a series.
+    pub id: String,
+    /// The stored event (the whole series for repeating ones).
+    pub event_id: String,
+    pub account_id: String,
+    pub calendar_id: String,
+    pub title: String,
+    pub description: String,
+    pub location: String,
+    pub all_day: bool,
+    /// `YYYY-MM-DDTHH:mm:ss` in the viewer's zone.
+    pub start: String,
+    /// Exclusive; all-day events end at the next day's midnight.
+    pub end: String,
+    /// The event's own zone; none for all-day and floating events.
+    pub time_zone: Option<String>,
+    pub recurrence: Option<Recurrence>,
+    /// False when the stored rule says more than [`Recurrence`] can.
+    pub recurrence_editable: bool,
+    pub recurrence_id: Option<String>,
+    pub read_only: bool,
+    pub color: Option<String>,
+}
+
+/// An event as the editor fills it in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventInput {
+    pub calendar_id: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub location: String,
+    pub all_day: bool,
+    /// Wall time in `time_zone`; all-day events give dates at midnight, the end exclusive.
+    pub start: String,
+    pub end: String,
+    /// The device's IANA zone for timed events; none for all-day ones.
+    #[serde(default)]
+    pub time_zone: Option<String>,
+    #[serde(default)]
+    pub recurrence: Option<Recurrence>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EventDeleteScope {
+    Occurrence,
+    Series,
+}
+
+/// `null` given for a field, as opposed to leaving it out.
+fn present<'de, T: Deserialize<'de>, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<T>>, D::Error> {
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarPatch {
+    #[serde(default)]
+    pub name: Option<String>,
+    /// `Some(None)` removes the color.
+    #[serde(default, deserialize_with = "present")]
+    pub color: Option<Option<String>>,
+    #[serde(default)]
+    pub is_visible: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewCalendar {
+    #[serde(default)]
+    pub account_id: Option<String>,
+    pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
+}
+
+/// Where an account's calendars come from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CalendarSource {
+    /// JMAP Calendars on a UwUMail server.
+    Jmap,
+    Caldav,
+}
+
+/// Whether an account has calendars, and from where.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarAccount {
+    pub account_id: String,
+    /// None when the account has no calendar here (e.g. signed in with Microsoft or Google).
+    pub source: Option<CalendarSource>,
+    /// The CalDAV address typed in by hand, if any.
+    pub caldav_url: Option<String>,
+    /// Why there's no calendar, when there isn't.
+    pub problem: Option<String>,
+}
+
 /// A blocked sender: on this device, or on the UwUMail server of one account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -614,6 +771,9 @@ pub enum EngineEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         state: Option<String>,
     },
+    /// Calendars or events may have changed (JMAP push, or a change made here).
+    #[serde(rename = "calendar:changed")]
+    CalendarChanged {},
 }
 
 impl EngineEvent {
@@ -625,6 +785,7 @@ impl EngineEvent {
             Self::SendDone { .. } => "send:done",
             Self::SendFailed { .. } => "send:failed",
             Self::SettingsChanged { .. } => "settings:changed",
+            Self::CalendarChanged {} => "calendar:changed",
         }
     }
 }
@@ -651,6 +812,31 @@ mod tests {
 
         let some: ThreadQuery = serde_json::from_str(&format!(r#"{{{view},"accountIds":["a1"]}}"#)).unwrap();
         assert_eq!(some.account_ids, Some(vec!["a1".to_string()]));
+    }
+
+    #[test]
+    fn calendar_shapes_match_the_ui_json() {
+        let changed = serde_json::to_string(&EngineEvent::CalendarChanged {}).unwrap();
+        assert_eq!(changed, r#"{"type":"calendar:changed"}"#);
+
+        // Leaving the color out keeps it, null removes it.
+        let keep: CalendarPatch = serde_json::from_str(r#"{"name":"Work"}"#).unwrap();
+        assert_eq!(keep.color, None);
+        let remove: CalendarPatch = serde_json::from_str(r#"{"color":null}"#).unwrap();
+        assert_eq!(remove.color, Some(None));
+        let set: CalendarPatch = serde_json::from_str(r##"{"color":"#ff66aa","isVisible":false}"##).unwrap();
+        assert_eq!(set.color, Some(Some("#ff66aa".into())));
+        assert_eq!(set.is_visible, Some(false));
+
+        let input: EventInput = serde_json::from_str(
+            r#"{"calendarId":"a:c","title":"Yoga","description":"","location":"","allDay":false,
+                "start":"2026-09-24T18:00:00","end":"2026-09-24T19:00:00","timeZone":"Europe/Berlin",
+                "recurrence":{"frequency":"weekly","interval":1,"byDay":["th"],"until":null,"count":null}}"#,
+        )
+        .unwrap();
+        assert_eq!(input.recurrence.unwrap().by_day, Some(vec![Weekday::Th]));
+        let scope: EventDeleteScope = serde_json::from_str(r#""series""#).unwrap();
+        assert_eq!(scope, EventDeleteScope::Series);
     }
 
     #[test]

@@ -162,7 +162,25 @@ ALTER TABLE messages ADD COLUMN unsubscribe_json TEXT;
 -- Blind copies: only known for mail this account sent itself.
 ALTER TABLE messages ADD COLUMN bcc_json TEXT NOT NULL DEFAULT '[]';
 "#,
+    r#"
+-- Calendars over CalDAV: an address typed in by hand, and what CalDAV itself can't keep
+-- (hidden calendars, the default one). Events themselves stay on the server.
+ALTER TABLE accounts ADD COLUMN caldav_url TEXT;
+CREATE TABLE calendar_prefs (
+    calendar_id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    is_default INTEGER NOT NULL DEFAULT 0
+);
+"#,
 ];
+
+/// What this device remembers about one calendar.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CalendarPrefs {
+    pub hidden: bool,
+    pub is_default: bool,
+}
 
 /// Prefix of the conversation ids the trash lists: those conversations hold only
 /// their trashed messages, while everywhere else they leave them out.
@@ -421,6 +439,52 @@ impl Store {
                 conn.execute("DELETE FROM sync_state WHERE account_id = ?1 AND kind = ?2", params![account_id, kind])?
             }
         };
+        Ok(())
+    }
+
+    /// The CalDAV address typed in by hand for an account.
+    pub fn caldav_url(&self, account_id: &str) -> Result<Option<String>> {
+        Ok(self.conn().query_row("SELECT caldav_url FROM accounts WHERE id = ?1", [account_id], |row| row.get(0))?)
+    }
+
+    pub fn set_caldav_url(&self, account_id: &str, url: Option<&str>) -> Result<()> {
+        self.conn().execute("UPDATE accounts SET caldav_url = ?1 WHERE id = ?2", params![url, account_id])?;
+        Ok(())
+    }
+
+    pub fn calendar_prefs(&self, account_id: &str) -> Result<std::collections::HashMap<String, CalendarPrefs>> {
+        let conn = self.conn();
+        let mut statement =
+            conn.prepare("SELECT calendar_id, hidden, is_default FROM calendar_prefs WHERE account_id = ?1")?;
+        let rows = statement.query_map([account_id], |row| {
+            Ok((row.get::<_, String>(0)?, CalendarPrefs { hidden: row.get(1)?, is_default: row.get(2)? }))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn set_calendar_hidden(&self, account_id: &str, calendar_id: &str, hidden: bool) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO calendar_prefs (calendar_id, account_id, hidden) VALUES (?1, ?2, ?3)
+             ON CONFLICT (calendar_id) DO UPDATE SET hidden = excluded.hidden",
+            params![calendar_id, account_id, hidden],
+        )?;
+        Ok(())
+    }
+
+    /// Makes one calendar of the account the default; the others stop being it.
+    pub fn set_default_calendar(&self, account_id: &str, calendar_id: &str) -> Result<()> {
+        let conn = self.conn();
+        conn.execute("UPDATE calendar_prefs SET is_default = 0 WHERE account_id = ?1", [account_id])?;
+        conn.execute(
+            "INSERT INTO calendar_prefs (calendar_id, account_id, is_default) VALUES (?1, ?2, 1)
+             ON CONFLICT (calendar_id) DO UPDATE SET is_default = 1",
+            params![calendar_id, account_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn forget_calendar(&self, calendar_id: &str) -> Result<()> {
+        self.conn().execute("DELETE FROM calendar_prefs WHERE calendar_id = ?1", [calendar_id])?;
         Ok(())
     }
 
@@ -1692,6 +1756,25 @@ mod tests {
                 ("Sent".into(), None),
             ]
         );
+    }
+
+    #[test]
+    fn remembers_caldav_addresses_and_calendar_choices() {
+        let (store, account, _, _) = store_with_account();
+        assert_eq!(store.caldav_url(&account).unwrap(), None);
+        store.set_caldav_url(&account, Some("https://dav.example.org/")).unwrap();
+        assert_eq!(store.caldav_url(&account).unwrap().as_deref(), Some("https://dav.example.org/"));
+
+        store.set_calendar_hidden(&account, "acc:/cal/a/", true).unwrap();
+        store.set_default_calendar(&account, "acc:/cal/a/").unwrap();
+        store.set_default_calendar(&account, "acc:/cal/b/").unwrap();
+        let prefs = store.calendar_prefs(&account).unwrap();
+        assert_eq!(prefs["acc:/cal/a/"], CalendarPrefs { hidden: true, is_default: false });
+        assert_eq!(prefs["acc:/cal/b/"], CalendarPrefs { hidden: false, is_default: true });
+        store.forget_calendar("acc:/cal/a/").unwrap();
+        assert!(!store.calendar_prefs(&account).unwrap().contains_key("acc:/cal/a/"));
+        store.delete_account(&account).unwrap();
+        assert!(store.calendar_prefs(&account).unwrap().is_empty());
     }
 
     #[test]

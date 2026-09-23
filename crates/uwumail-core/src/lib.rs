@@ -6,6 +6,7 @@
 
 pub mod attachments;
 pub mod autoconfig;
+pub mod calendar;
 pub mod engine;
 pub mod error;
 pub mod folders;
