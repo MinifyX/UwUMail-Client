@@ -145,7 +145,8 @@ async function decode(src: string, crossOrigin: boolean): Promise<HTMLImageEleme
 /** Something the canvas may read: same-origin sources directly, remote ones via `loadRemote` or CORS. */
 async function readable(image: HTMLImageElement, src: string, loadRemote?: RemoteImageLoader) {
   if (/^(data|blob):/i.test(src)) return { source: image as CanvasImageSource, release: () => {} };
-  if (!/^https?:/i.test(src)) return null;
+  // Remote pictures come from the app (`uwuimg:`, or `http://uwuimg.localhost` on Windows and Android).
+  if (!/^(https?|uwuimg):/i.test(src)) return null;
   const blob = await loadRemote?.(src).catch(() => null);
   if (blob) {
     const url = URL.createObjectURL(blob);
