@@ -5,6 +5,7 @@ import {
   ImageIcon,
   Info,
   Keyboard,
+  ListFilter,
   Lock,
   Mail,
   Palette,
@@ -16,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import pkg from "../../../package.json";
 import { backend } from "@/backend/backend";
@@ -45,6 +46,8 @@ import {
 } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { startAccountSync, useAccountSync } from "@/state/accountSync";
+import { useMailRulesAccounts } from "../rules/useMailRules";
+import { AccountCalendar } from "./AccountCalendar";
 import { BlockedSenders } from "./BlockedSenders";
 import { LinkSettings } from "./LinkSettings";
 import { SettingsSyncRow } from "./SettingsSync";
@@ -59,11 +62,15 @@ const SECTIONS: { id: SettingsSection; icon: LucideIcon; phoneOnly?: boolean }[]
   { id: "appearance", icon: Palette },
   { id: "mail", icon: Mail },
   { id: "compose", icon: PenLine },
+  { id: "rules", icon: ListFilter },
   { id: "security", icon: Lock, phoneOnly: true },
   { id: "accounts", icon: Users },
   { id: "addons", icon: Puzzle },
   { id: "about", icon: Info },
 ];
+
+// The rules editor loads when the section is first opened.
+const MailRules = lazy(() => import("../rules/MailRules").then((module) => ({ default: module.MailRules })));
 
 function Appearance() {
   const { t } = useT();
@@ -463,6 +470,7 @@ function Accounts() {
                   />
                 </div>
               )}
+              <AccountCalendar account={account} />
             </li>
           );
         })}
@@ -580,6 +588,11 @@ export function SettingsDialog() {
   const formDirty = useUi((s) => s.settingsFormDirty);
   // What the question is standing in front of: closing the window, or the section to switch to.
   const [pending, setPending] = useState<"close" | SettingsSection | null>(null);
+  // Rules only where a server runs them.
+  const { data: rulesAccounts = [] } = useMailRulesAccounts();
+  const sections = SECTIONS.filter(
+    (item) => (!item.phoneOnly || nativeMobile) && (item.id !== "rules" || rulesAccounts.length > 0),
+  );
 
   const requestClose = () => {
     if (formDirty) setPending("close");
@@ -608,7 +621,7 @@ export function SettingsDialog() {
       >
         <div className="flex min-h-[460px] flex-col gap-2 px-4 pb-5 sm:flex-row sm:gap-6 sm:px-6">
           <nav className="flex shrink-0 gap-1 overflow-x-auto sm:w-48 sm:flex-col" aria-label={t("settings.title")}>
-            {SECTIONS.filter((item) => !item.phoneOnly || nativeMobile).map(({ id, icon: Icon }) => (
+            {sections.map(({ id, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
@@ -628,6 +641,11 @@ export function SettingsDialog() {
             {section === "appearance" && <Appearance />}
             {section === "mail" && <Reading />}
             {section === "compose" && <Writing />}
+            {section === "rules" && (
+              <Suspense fallback={null}>
+                <MailRules />
+              </Suspense>
+            )}
             {section === "security" && <Security />}
             {section === "accounts" && <Accounts />}
             {section === "addons" && <Addons />}

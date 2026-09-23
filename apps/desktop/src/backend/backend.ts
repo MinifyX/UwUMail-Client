@@ -3,10 +3,15 @@ import type {
   Account,
   AttachmentContent,
   BackendEvent,
+  CalendarAccount,
+  CalendarInfo,
+  CalendarOccurrence,
   Contact,
   DiscoveredSettings,
   DraftContent,
   DraftSaveResult,
+  EventDeleteScope,
+  EventInput,
   FlagChange,
   Folder,
   Identity,
@@ -73,6 +78,16 @@ export interface Backend {
   loadUserSettings(accountId: string): Promise<{ state: string; values: Record<string, unknown> }>;
   /** Sets keys (`null` removes); with `ifInState` only if nothing was written since. */
   saveUserSettings(accountId: string, patch: Record<string, unknown>, ifInState?: string): Promise<SaveOutcome>;
+  /** Accounts whose UwUMail server runs mail rules (JMAP with Sieve scripts); unreachable ones are left out. */
+  ruleAccounts(): Promise<string[]>;
+  /** Whether the mailbox's server runs mail rules (see ruleAccounts); without an id, whether any does. */
+  mailRulesAvailable(accountId?: string): Promise<boolean>;
+  /** The Sieve script "UwUMail" and whether the server runs it; the first rules account when `accountId` is left out. */
+  mailRules(accountId?: string): Promise<{ script: string | null; active: boolean }>;
+  /** Uploads the script as "UwUMail" and makes it the active one. */
+  saveMailRules(script: string, accountId?: string): Promise<void>;
+  /** What the server finds wrong with the script (error text), or null when it can run it. */
+  validateMailRules(script: string, accountId?: string): Promise<string | null>;
   discoverSettings(email: string): Promise<DiscoveredSettings>;
   /** The page an administrator opens to allow UwUMail for a whole company. */
   microsoftAdminConsentUrl(email: string): Promise<string>;
@@ -82,7 +97,40 @@ export interface Backend {
   setAccountProtocol(accountId: string, protocol: Protocol): Promise<Account>;
   syncNow(accountId?: string): Promise<void>;
 
+  /** Whether any account has calendars (see calendarAccounts); without one the calendar stays hidden. */
+  calendarsAvailable(): Promise<boolean>;
+  /** Every calendar of every account that has some; ids start with the account id. */
+  calendars(): Promise<CalendarInfo[]>;
+  /** Per account: JMAP calendars, CalDAV, or why there's no calendar (e.g. Microsoft or Google sign-in). */
+  calendarAccounts(): Promise<CalendarAccount[]>;
+  /** A CalDAV address typed in by hand for an account; null goes back to finding it by itself. */
+  setCalDavUrl(accountId: string, url: string | null): Promise<void>;
+  createCalendar(input: { accountId?: string; name: string; color: string | null }): Promise<CalendarInfo>;
+  updateCalendar(id: string, patch: { name?: string; color?: string | null; isVisible?: boolean }): Promise<void>;
+  /** Removes its events too. */
+  deleteCalendar(id: string): Promise<void>;
+  setDefaultCalendar(id: string): Promise<void>;
+  /** Occurrences in [from, to): wall times ("YYYY-MM-DDTHH:mm:ss") in `timeZone`, the viewer's IANA zone. */
+  calendarEvents(from: string, to: string, timeZone: string): Promise<CalendarOccurrence[]>;
+  /** Returns the event's id. */
+  createEvent(input: EventInput): Promise<string>;
+  /**
+   * The whole series; only changed fields are patched. `occurrenceStart` is the start of the
+   * occurrence the edit began from: a repeating event's start moves by as much as that
+   * occurrence's start was moved, instead of jumping to its date.
+   */
+  updateEvent(eventId: string, input: EventInput, occurrenceStart?: string): Promise<void>;
+  deleteEvent(occurrenceId: string, scope: EventDeleteScope): Promise<void>;
+
   listFolders(accountId?: string): Promise<Folder[]>;
+  /** A new folder below `parentId`, or at the top of the mailbox (the only one when `accountId` is left out). Returns its id. */
+  createFolder(input: { accountId?: string; name: string; parentId: string | null }): Promise<string>;
+  /** System folders keep their names. */
+  renameFolder(folderId: string, name: string): Promise<void>;
+  /** Moves its mail into the trash first; refuses while folders are inside. */
+  deleteFolder(folderId: string): Promise<void>;
+  /** Trash and junk only: deletes everything in it for good. Returns how many messages went. */
+  emptyFolder(folderId: string): Promise<number>;
   listThreads(query: ThreadQuery): Promise<ThreadPage>;
   getThread(threadId: string, conversations: boolean): Promise<ThreadDetail>;
 

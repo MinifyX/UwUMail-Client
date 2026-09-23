@@ -5,6 +5,7 @@ import { useBackLayer } from "@/lib/backStack";
 import { useUi } from "@/state/ui";
 import { loadLocalDraft } from "../compose/localDraft";
 import { MailboxNav } from "../mail/MailboxNav";
+import { LazyCalendar } from "../shell/LazyCalendar";
 import { MobileList } from "./MobileList";
 import { MobileReader } from "./MobileReader";
 import { EDGE_ZONE } from "./SwipeRow";
@@ -65,6 +66,7 @@ function Drawer() {
 
 /** UwUMail on a phone: the list, the conversation on top of it, the drawer beside it. */
 export function MobileShell() {
+  const section = useUi((s) => s.section);
   const selectedThreadId = useUi((s) => s.selectedThreadId);
   const selectThread = useUi((s) => s.selectThread);
   const settingsOpen = useUi((s) => s.settingsOpen);
@@ -110,13 +112,20 @@ export function MobileShell() {
         edge.current = null;
       }}
     >
-      <MobileList />
-      {selectedThreadId && (
-        <div className="absolute inset-0 z-10 animate-[uwu-screen-in_220ms_cubic-bezier(0.2,0.9,0.3,1)]">
-          <MobileReader key={selectedThreadId} threadId={selectedThreadId} />
-        </div>
+      {section === "calendar" ? (
+        // The calendar brings its own drawer, which the edge swipe opens as well.
+        <LazyCalendar />
+      ) : (
+        <>
+          <MobileList />
+          {selectedThreadId && (
+            <div className="absolute inset-0 z-10 animate-[uwu-screen-in_220ms_cubic-bezier(0.2,0.9,0.3,1)]">
+              <MobileReader key={selectedThreadId} threadId={selectedThreadId} />
+            </div>
+          )}
+          <Drawer />
+        </>
       )}
-      <Drawer />
     </div>
   );
 }

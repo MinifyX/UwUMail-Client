@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Archive,
+  CalendarDays,
+  CalendarPlus,
   CheckSquare,
   Columns3,
   FolderInput,
@@ -63,6 +65,7 @@ async function afterChange(client: QueryClient) {
 export function buildCommands(
   client: QueryClient,
   t: (key: string, options?: Record<string, unknown>) => string,
+  { calendar = false }: { calendar?: boolean } = {},
 ): Command[] {
   const ui = useUi.getState();
   const settings = useSettings.getState();
@@ -241,6 +244,28 @@ export function buildCommands(
       keys: ["g f"],
       run: () => ui.setView({ kind: "unified", role: "flagged" }),
     },
+    ...(calendar
+      ? [
+          {
+            id: "goCalendar",
+            title: t("shortcuts.goCalendar"),
+            icon: CalendarDays,
+            keys: ["g c"],
+            run: () => ui.setSection("calendar"),
+          },
+          {
+            id: "newEvent",
+            title: t("calendar.newEvent"),
+            icon: CalendarPlus,
+            run: async () => {
+              ui.setSection("calendar");
+              // The calendar loads on first use.
+              const { startNewEvent } = await import("../calendar/CalendarSidebar");
+              startNewEvent();
+            },
+          },
+        ]
+      : []),
     ...(settings.workspaces
       ? WORKSPACES.map((workspace): Command => ({
           id: `workspace-${workspace}`,

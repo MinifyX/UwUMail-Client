@@ -20,13 +20,15 @@ use crate::pictures::{SenderPicture, SenderPictures};
 use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
-use crate::{autoconfig, mime, oauth};
-use crate::{jmap_settings, jmap_sync};
+use crate::{autoconfig, calendar, folders, mime, oauth};
+use crate::{jmap_settings, jmap_sieve, jmap_sync};
 
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(5 * 60);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 /// The JMAP type of the shared settings.
 const USER_SETTINGS: &str = "UserSettings";
+/// JMAP types whose changes are nothing for the mail.
+const NOT_MAIL: [&str; 5] = [USER_SETTINGS, "Calendar", "CalendarEvent", "ParticipantIdentity", "SieveScript"];
 /// JMAP servers without push are asked for changes this often.
 const JMAP_POLL_EVERY: Duration = Duration::from_secs(60);
 /// Server search over IMAP asks at most this many folders per mailbox.
@@ -100,6 +102,10 @@ struct Inner {
     oauth_redirect: Mutex<Option<String>>,
     /// The sign-in waiting for that link. It gets every such link and picks its own by `state`.
     pending_sign_in: Mutex<Option<tokio::sync::mpsc::Sender<String>>>,
+    /// Where each account's calendars live (JMAP, a CalDAV home, or nowhere).
+    calendar_sources: AsyncMutex<HashMap<String, calendar::SourceState>>,
+    /// Each account's calendars, with when they were read.
+    calendar_lists: Mutex<HashMap<String, (Instant, Vec<calendar::CalendarEntry>)>>,
 }
 
 enum Credential {
@@ -132,6 +138,9 @@ macro_rules! with_session {
     }};
 }
 
+mod calendar_ops;
+mod folder_ops;
+
 impl Engine {
     /// Must be called inside a Tokio runtime.
     pub fn new(options: EngineOptions) -> Result<Self> {
@@ -162,6 +171,8 @@ impl Engine {
                 identities_checked: Mutex::new(HashMap::new()),
                 oauth_redirect: Mutex::new(None),
                 pending_sign_in: Mutex::new(None),
+                calendar_sources: AsyncMutex::new(HashMap::new()),
+                calendar_lists: Mutex::new(HashMap::new()),
             }),
         })
     }
@@ -526,6 +537,8 @@ impl Engine {
         }
         self.inner.tokens.lock().await.remove(account_id);
         self.inner.jmap.lock().await.remove(account_id);
+        self.inner.calendar_sources.lock().await.remove(account_id);
+        self.inner.calendar_lists.lock().unwrap().remove(account_id);
         self.remove_cached_attachments(account_id)?;
         self.inner.store.delete_account(account_id)?;
         self.inner.secrets.delete(account_id)?;
@@ -924,6 +937,59 @@ impl Engine {
             }
         }
         Ok(found)
+    }
+
+    /// The accounts whose UwUMail server runs mail rules (JMAP with Sieve scripts). Accounts that
+    /// can't be reached right now are left out.
+    pub async fn rule_accounts(&self) -> Result<Vec<String>> {
+        let mut found = Vec::new();
+        for account in self.inner.store.accounts()? {
+            if account.protocol != Protocol::Jmap {
+                continue;
+            }
+            match self.inner.jmap_client(&account.id).await {
+                Ok(client) if client.session.sieve_account_id.is_some() => found.push(account.id),
+                Ok(_) => {}
+                Err(error) => tracing::debug!("Couldn't ask {} about mail rules: {error}", account.id),
+            }
+        }
+        Ok(found)
+    }
+
+    /// The account the rules belong to: the one asked for, or the first that has rules.
+    async fn rules_client(&self, account_id: Option<&str>) -> Result<Arc<JmapClient>> {
+        let account_id = match account_id {
+            Some(id) => id.to_string(),
+            None => self
+                .rule_accounts()
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| Error::not_supported("None of your mailboxes can keep mail rules."))?,
+        };
+        if self.inner.store.account(&account_id)?.protocol != Protocol::Jmap {
+            return Err(Error::not_supported("Mail rules need a mailbox on a UwUMail server."));
+        }
+        let client = self.inner.jmap_client(&account_id).await?;
+        if client.session.sieve_account_id.is_none() {
+            return Err(Error::not_supported("This mail server doesn't keep mail rules."));
+        }
+        Ok(client)
+    }
+
+    /// The script called "UwUMail" and whether the server runs it.
+    pub async fn mail_rules(&self, account_id: Option<&str>) -> Result<MailRules> {
+        jmap_sieve::load(&*self.rules_client(account_id).await?).await
+    }
+
+    /// Uploads the script as "UwUMail" and makes it the one the server runs.
+    pub async fn save_mail_rules(&self, script: &str, account_id: Option<&str>) -> Result<()> {
+        jmap_sieve::save(&*self.rules_client(account_id).await?, script).await
+    }
+
+    /// What the server finds wrong with a script, or `None`.
+    pub async fn validate_mail_rules(&self, script: &str, account_id: Option<&str>) -> Result<Option<String>> {
+        jmap_sieve::validate(&*self.rules_client(account_id).await?, script).await
     }
 
     /// The settings an account's UwUMail server keeps for all devices of the login.
@@ -1690,10 +1756,7 @@ impl Inner {
         };
         // Servers that keep every folder below INBOX need the new one there too.
         let existing = self.store.folder_records(account_id)?;
-        let namespace = existing.iter().find_map(|f| f.delimiter.clone()).filter(|delimiter| {
-            let others: Vec<_> = existing.iter().filter(|f| !f.path.eq_ignore_ascii_case("INBOX")).collect();
-            !others.is_empty() && others.iter().all(|f| f.path.starts_with(&format!("INBOX{delimiter}")))
-        });
+        let namespace = folders::inbox_namespace(existing.iter().map(|f| (f.path.as_str(), f.delimiter.as_deref())));
         let path = match &namespace {
             Some(delimiter) => format!("INBOX{delimiter}{name}"),
             None => name.to_string(),
@@ -1893,8 +1956,15 @@ async fn run_jmap_account(inner: &Inner, account_id: &str, wake: &Notify) -> Res
                     let state = change.state_of(USER_SETTINGS).map(String::from);
                     inner.emit(EngineEvent::SettingsChanged { account_id: account_id.to_string(), state });
                 }
-                // A settings change alone is nothing for the mail.
-                if change.only(&[USER_SETTINGS]) {
+                // Only what a push names: a quiet minute or a wake-up isn't a calendar change.
+                if change.state_of("Calendar").is_some() || change.state_of("CalendarEvent").is_some() {
+                    if change.state_of("Calendar").is_some() {
+                        inner.calendar_lists.lock().unwrap().remove(account_id);
+                    }
+                    inner.emit(EngineEvent::CalendarChanged {});
+                }
+                // Settings, calendars and rules alone are nothing for the mail.
+                if change.only(&NOT_MAIL) {
                     continue;
                 }
             }

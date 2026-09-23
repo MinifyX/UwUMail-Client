@@ -4,6 +4,7 @@ import { modKey } from "@/lib/platform";
 import { WORKSPACES } from "@/lib/workspaces";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
+import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { useWorkspaceName, WORKSPACE_KEYS } from "../workspaces/workspaces";
 
 const KEY_LABELS: Record<string, string> = { Delete: "Del", shift: "⇧", ArrowUp: "↑", ArrowDown: "↓" };
@@ -54,12 +55,25 @@ const SHORTCUTS: [string, string, string?][] = [
   ["Escape", "close"],
 ];
 
+/** The calendar's own keys, while it is on screen. */
+const CALENDAR_SHORTCUTS: [string, string, string?][] = [
+  ["g c", "goCalendar"],
+  ["t", "calendarToday"],
+  ["d", "calendarDay"],
+  ["w", "calendarWeek"],
+  ["m", "calendarMonth"],
+  ["c", "calendarNew"],
+  ["n", "calendarNext", "j"],
+  ["p", "calendarPrevious", "k"],
+];
+
 export function ShortcutsDialog() {
   const { t } = useT();
   const open = useUi((s) => s.shortcutsOpen);
   const setOpen = useUi((s) => s.setShortcutsOpen);
   const workspaces = useSettings((s) => s.workspaces);
   const nameOf = useWorkspaceName();
+  const { data: calendar = false } = useCalendarsAvailable();
   const shortcuts = SHORTCUTS.flatMap(([combo, key, alt]): [string, string, string?][] => {
     const row: [string, string, string?] = [combo, t(`shortcuts.${key}`), alt];
     // Switching workspaces joins the other "g" shortcuts.
@@ -74,25 +88,41 @@ export function ShortcutsDialog() {
   });
   return (
     <Dialog open={open} onClose={() => setOpen(false)} title={t("settings.shortcuts")} width="sm">
-      <ul className="flex flex-col px-6 pb-6">
-        {shortcuts.map(([combo, label, alt]) => (
-          <li
-            key={combo}
-            className="flex h-10 items-center justify-between border-b border-hairline text-[13.5px] last:border-0"
-          >
-            <span>{label}</span>
-            <span className="flex items-center gap-1.5">
-              <KeyHint combo={combo === "Escape" ? "Esc" : combo} />
-              {alt && (
-                <>
-                  <span className="text-[12px] text-muted">/</span>
-                  <KeyHint combo={alt} />
-                </>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <ShortcutList shortcuts={shortcuts} />
+      {calendar && (
+        <>
+          <h3 className="px-6 pt-1 pb-1 text-[12px] font-bold tracking-wide text-muted uppercase">
+            {t("nav.section.calendar")}
+          </h3>
+          <ShortcutList
+            shortcuts={CALENDAR_SHORTCUTS.map(([combo, key, alt]) => [combo, t(`shortcuts.${key}`), alt])}
+          />
+        </>
+      )}
     </Dialog>
+  );
+}
+
+function ShortcutList({ shortcuts }: { shortcuts: [string, string, string?][] }) {
+  return (
+    <ul className="flex flex-col px-6 pb-6">
+      {shortcuts.map(([combo, label, alt]) => (
+        <li
+          key={combo}
+          className="flex h-10 items-center justify-between border-b border-hairline text-[13.5px] last:border-0"
+        >
+          <span>{label}</span>
+          <span className="flex items-center gap-1.5">
+            <KeyHint combo={combo === "Escape" ? "Esc" : combo} />
+            {alt && (
+              <>
+                <span className="text-[12px] text-muted">/</span>
+                <KeyHint combo={alt} />
+              </>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

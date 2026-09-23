@@ -611,6 +611,99 @@ pub async fn delete_permanently(session: &mut ImapSession, folder_path: &str, ui
     Ok(())
 }
 
+/// A refusal from the server about a folder, in words that fit the folder dialogs.
+fn folder_refusal(error: async_imap::error::Error) -> Error {
+    match error {
+        async_imap::error::Error::No(message) | async_imap::error::Error::Bad(message) => {
+            if message.to_ascii_lowercase().contains("exist") {
+                Error::invalid(format!("The mail server refused: {message}. Maybe that folder already exists?"))
+            } else {
+                Error::invalid(format!("The mail server refused: {message}"))
+            }
+        }
+        other => other.into(),
+    }
+}
+
+/// Some servers refuse to rename or delete the selected folder. EXAMINE (read-only) moves
+/// away without CLOSE, which would also expunge whatever carries `\Deleted` there.
+async fn leave_selected(session: &mut ImapSession) {
+    if let Err(error) = session.examine("INBOX").await {
+        tracing::debug!("Couldn't step out of the selected folder: {error}");
+    }
+}
+
+/// Creates a folder (path already encoded) and subscribes to it, so other apps show it too.
+pub async fn create_folder(session: &mut ImapSession, path: &str) -> Result<()> {
+    session.create(path).await.map_err(folder_refusal)?;
+    if let Err(error) = session.subscribe(path).await {
+        tracing::debug!("Couldn't subscribe to {path}: {error}");
+    }
+    Ok(())
+}
+
+/// Renames a folder; the server moves the folders inside it along.
+pub async fn rename_folder(session: &mut ImapSession, from: &str, to: &str) -> Result<()> {
+    leave_selected(session).await;
+    session.rename(from, to).await.map_err(folder_refusal)?;
+    let _ = session.unsubscribe(from).await;
+    if let Err(error) = session.subscribe(to).await {
+        tracing::debug!("Couldn't subscribe to {to}: {error}");
+    }
+    Ok(())
+}
+
+/// Deletes an empty folder.
+pub async fn delete_folder(session: &mut ImapSession, path: &str) -> Result<()> {
+    leave_selected(session).await;
+    session.delete(path).await.map_err(folder_refusal)?;
+    let _ = session.unsubscribe(path).await;
+    Ok(())
+}
+
+/// Whether the server lists folders inside `path`.
+pub async fn has_children(session: &mut ImapSession, path: &str, delimiter: &str) -> Result<bool> {
+    if delimiter.is_empty() {
+        return Ok(false);
+    }
+    let pattern = format!("{path}{delimiter}%");
+    let names: Vec<_> = session.list(Some(""), Some(&pattern)).await?.try_collect().await?;
+    Ok(!names.is_empty())
+}
+
+/// Moves every message of a folder into another one. Returns how many there were.
+pub async fn move_all(session: &mut ImapSession, from: &str, to: &str) -> Result<u32> {
+    let capabilities = session.capabilities().await?;
+    let mailbox = session.select(from).await?;
+    if mailbox.exists == 0 {
+        return Ok(0);
+    }
+    if capabilities.has_str("MOVE") {
+        session.uid_mv("1:*", to).await?;
+    } else {
+        session.uid_copy("1:*", to).await?;
+        let _: Vec<Fetch> = session.uid_store("1:*", "+FLAGS.SILENT (\\Deleted)").await?.try_collect().await?;
+        let _: Vec<u32> = session.expunge().await?.try_collect().await?;
+    }
+    Ok(mailbox.exists)
+}
+
+/// Deletes every message in a folder for good. Returns how many there were.
+pub async fn expunge_all(session: &mut ImapSession, path: &str) -> Result<u32> {
+    let capabilities = session.capabilities().await?;
+    let mailbox = session.select(path).await?;
+    if mailbox.exists == 0 {
+        return Ok(0);
+    }
+    let _: Vec<Fetch> = session.uid_store("1:*", "+FLAGS.SILENT (\\Deleted)").await?.try_collect().await?;
+    if capabilities.has_str("UIDPLUS") {
+        let _: Vec<u32> = session.uid_expunge("1:*").await?.try_collect().await?;
+    } else {
+        let _: Vec<u32> = session.expunge().await?.try_collect().await?;
+    }
+    Ok(mailbox.exists)
+}
+
 /// Stores a message in a folder; `flags` like `(\Seen)`.
 pub async fn append(session: &mut ImapSession, folder_path: &str, raw: &[u8], flags: Option<&str>) -> Result<()> {
     session.append(folder_path, flags, None, raw).await?;

@@ -6,10 +6,15 @@ import type {
   Account,
   AttachmentContent,
   BackendEvent,
+  CalendarAccount,
+  CalendarInfo,
+  CalendarOccurrence,
   Contact,
   DiscoveredSettings,
   DraftContent,
   DraftSaveResult,
+  EventDeleteScope,
+  EventInput,
   FlagChange,
   Folder,
   Identity,
@@ -55,11 +60,14 @@ const EVENT_NAMES = [
   "send:failed",
   "compose:mailto",
   "settings:changed",
+  "calendar:changed",
   "update:ready",
 ] as const;
 
 export class TauriBackend implements Backend {
   readonly kind = "tauri";
+  /** One question to the servers at a time, however many parts of the page ask. */
+  private askingRuleAccounts: Promise<string[]> | null = null;
 
   listAccounts() {
     return call<Account[]>("list_accounts");
@@ -116,6 +124,30 @@ export class TauriBackend implements Backend {
     return outcome;
   }
 
+  ruleAccounts() {
+    this.askingRuleAccounts ??= call<string[]>("rule_accounts").finally(() => {
+      this.askingRuleAccounts = null;
+    });
+    return this.askingRuleAccounts;
+  }
+
+  async mailRulesAvailable(accountId?: string) {
+    const accounts = await this.ruleAccounts();
+    return accountId ? accounts.includes(accountId) : accounts.length > 0;
+  }
+
+  mailRules(accountId?: string) {
+    return call<{ script: string | null; active: boolean }>("mail_rules", { accountId: accountId ?? null });
+  }
+
+  saveMailRules(script: string, accountId?: string) {
+    return call<void>("save_mail_rules", { script, accountId: accountId ?? null });
+  }
+
+  validateMailRules(script: string, accountId?: string) {
+    return call<string | null>("validate_mail_rules", { script, accountId: accountId ?? null });
+  }
+
   discoverSettings(email: string) {
     return call<DiscoveredSettings>("discover_settings", { email });
   }
@@ -142,6 +174,76 @@ export class TauriBackend implements Backend {
 
   listFolders(accountId?: string) {
     return call<Folder[]>("list_folders", { accountId: accountId ?? null });
+  }
+
+  async calendarsAvailable() {
+    return (await this.calendarAccounts()).some((account) => account.source !== null);
+  }
+
+  calendars() {
+    return call<CalendarInfo[]>("list_calendars");
+  }
+
+  calendarAccounts() {
+    return call<CalendarAccount[]>("calendar_accounts");
+  }
+
+  setCalDavUrl(accountId: string, url: string | null) {
+    return call<void>("set_caldav_url", { accountId, url });
+  }
+
+  createCalendar(input: { accountId?: string; name: string; color: string | null }) {
+    return call<CalendarInfo>("create_calendar", {
+      input: { accountId: input.accountId ?? null, name: input.name, color: input.color },
+    });
+  }
+
+  updateCalendar(id: string, patch: { name?: string; color?: string | null; isVisible?: boolean }) {
+    return call<void>("update_calendar", { calendarId: id, patch });
+  }
+
+  deleteCalendar(id: string) {
+    return call<void>("delete_calendar", { calendarId: id });
+  }
+
+  setDefaultCalendar(id: string) {
+    return call<void>("set_default_calendar", { calendarId: id });
+  }
+
+  calendarEvents(from: string, to: string, timeZone: string) {
+    return call<CalendarOccurrence[]>("calendar_events", { from, to, timeZone });
+  }
+
+  createEvent(input: EventInput) {
+    return call<string>("create_event", { input });
+  }
+
+  updateEvent(eventId: string, input: EventInput, occurrenceStart?: string) {
+    return call<void>("update_event", { eventId, input, occurrenceStart: occurrenceStart ?? null });
+  }
+
+  deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
+    return call<void>("delete_event", { occurrenceId, scope });
+  }
+
+  createFolder(input: { accountId?: string; name: string; parentId: string | null }) {
+    return call<string>("create_folder", {
+      accountId: input.accountId ?? null,
+      name: input.name,
+      parentId: input.parentId,
+    });
+  }
+
+  renameFolder(folderId: string, name: string) {
+    return call<void>("rename_folder", { folderId, name });
+  }
+
+  deleteFolder(folderId: string) {
+    return call<void>("delete_folder", { folderId });
+  }
+
+  emptyFolder(folderId: string) {
+    return call<number>("empty_folder", { folderId });
   }
 
   listThreads(query: ThreadQuery) {

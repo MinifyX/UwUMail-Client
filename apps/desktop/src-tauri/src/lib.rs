@@ -66,6 +66,102 @@ async fn save_user_settings(
     engine.save_user_settings(&account_id, &changes, if_in_state.as_deref()).await
 }
 
+/// Accounts whose UwUMail server runs mail rules; unreachable ones are left out.
+#[tauri::command]
+async fn rule_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<String>> {
+    engine.rule_accounts().await
+}
+
+#[tauri::command]
+async fn mail_rules(engine: State<'_, Engine>, account_id: Option<String>) -> CommandResult<MailRules> {
+    engine.mail_rules(account_id.as_deref()).await
+}
+
+/// Stores the script as "UwUMail" and makes it the active one.
+#[tauri::command]
+async fn save_mail_rules(engine: State<'_, Engine>, script: String, account_id: Option<String>) -> CommandResult<()> {
+    engine.save_mail_rules(&script, account_id.as_deref()).await
+}
+
+/// What the server finds wrong with the script, or null.
+#[tauri::command]
+async fn validate_mail_rules(
+    engine: State<'_, Engine>,
+    script: String,
+    account_id: Option<String>,
+) -> CommandResult<Option<String>> {
+    engine.validate_mail_rules(&script, account_id.as_deref()).await
+}
+
+/// Every calendar of every account that has some.
+#[tauri::command]
+async fn list_calendars(engine: State<'_, Engine>) -> CommandResult<Vec<CalendarInfo>> {
+    engine.calendars().await
+}
+
+/// Per account: JMAP calendars, CalDAV, or why there's no calendar.
+#[tauri::command]
+async fn calendar_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<CalendarAccount>> {
+    engine.calendar_accounts().await
+}
+
+#[tauri::command]
+async fn set_caldav_url(engine: State<'_, Engine>, account_id: String, url: Option<String>) -> CommandResult<()> {
+    engine.set_caldav_url(&account_id, url.as_deref()).await
+}
+
+#[tauri::command]
+async fn create_calendar(engine: State<'_, Engine>, input: NewCalendar) -> CommandResult<CalendarInfo> {
+    engine.create_calendar(input).await
+}
+
+#[tauri::command]
+async fn update_calendar(engine: State<'_, Engine>, calendar_id: String, patch: CalendarPatch) -> CommandResult<()> {
+    engine.update_calendar(&calendar_id, patch).await
+}
+
+/// Removes the calendar with its events.
+#[tauri::command]
+async fn delete_calendar(engine: State<'_, Engine>, calendar_id: String) -> CommandResult<()> {
+    engine.delete_calendar(&calendar_id).await
+}
+
+#[tauri::command]
+async fn set_default_calendar(engine: State<'_, Engine>, calendar_id: String) -> CommandResult<()> {
+    engine.set_default_calendar(&calendar_id).await
+}
+
+/// Occurrences in [from, to), wall times in the viewer's zone.
+#[tauri::command]
+async fn calendar_events(
+    engine: State<'_, Engine>,
+    from: String,
+    to: String,
+    time_zone: String,
+) -> CommandResult<Vec<CalendarOccurrence>> {
+    engine.calendar_events(&from, &to, &time_zone).await
+}
+
+#[tauri::command]
+async fn create_event(engine: State<'_, Engine>, input: EventInput) -> CommandResult<String> {
+    engine.create_event(input).await
+}
+
+#[tauri::command]
+async fn update_event(
+    engine: State<'_, Engine>,
+    event_id: String,
+    input: EventInput,
+    occurrence_start: Option<String>,
+) -> CommandResult<()> {
+    engine.update_event(&event_id, input, occurrence_start.as_deref()).await
+}
+
+#[tauri::command]
+async fn delete_event(engine: State<'_, Engine>, occurrence_id: String, scope: EventDeleteScope) -> CommandResult<()> {
+    engine.delete_event(&occurrence_id, scope).await
+}
+
 #[tauri::command]
 fn list_identities(engine: State<'_, Engine>) -> CommandResult<Vec<Identity>> {
     engine.list_identities()
@@ -124,6 +220,33 @@ fn sync_now(engine: State<'_, Engine>, account_id: Option<String>) -> CommandRes
 #[tauri::command]
 fn list_folders(engine: State<'_, Engine>, account_id: Option<String>) -> CommandResult<Vec<Folder>> {
     engine.list_folders(account_id.as_deref())
+}
+
+#[tauri::command]
+async fn create_folder(
+    engine: State<'_, Engine>,
+    account_id: Option<String>,
+    name: String,
+    parent_id: Option<String>,
+) -> CommandResult<String> {
+    engine.create_folder(account_id.as_deref(), &name, parent_id.as_deref()).await
+}
+
+#[tauri::command]
+async fn rename_folder(engine: State<'_, Engine>, folder_id: String, name: String) -> CommandResult<()> {
+    engine.rename_folder(&folder_id, &name).await
+}
+
+/// Moves the folder's mail into the trash first; folders with folders inside stay.
+#[tauri::command]
+async fn delete_folder(engine: State<'_, Engine>, folder_id: String) -> CommandResult<()> {
+    engine.delete_folder(&folder_id).await
+}
+
+/// Trash and junk only. Returns how many messages went for good.
+#[tauri::command]
+async fn empty_folder(engine: State<'_, Engine>, folder_id: String) -> CommandResult<usize> {
+    engine.empty_folder(&folder_id).await
 }
 
 #[tauri::command]
@@ -466,6 +589,21 @@ pub fn run() {
             settings_sync_accounts,
             load_user_settings,
             save_user_settings,
+            rule_accounts,
+            mail_rules,
+            save_mail_rules,
+            validate_mail_rules,
+            list_calendars,
+            calendar_accounts,
+            set_caldav_url,
+            create_calendar,
+            update_calendar,
+            delete_calendar,
+            set_default_calendar,
+            calendar_events,
+            create_event,
+            update_event,
+            delete_event,
             add_identity,
             rename_identity,
             remove_identity,
@@ -476,6 +614,10 @@ pub fn run() {
             set_account_protocol,
             sync_now,
             list_folders,
+            create_folder,
+            rename_folder,
+            delete_folder,
+            empty_folder,
             list_threads,
             search_server,
             set_offline_days,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToPlainText, isSafeLinkTarget, quotableHtml } from "./safeHtml";
+import { htmlToPlainText, isEmbeddedSource, isSafeLinkTarget, quotableHtml } from "./safeHtml";
 
 describe("quotableHtml", () => {
   it("drops styles (inline too), remote images and scripts but keeps the text", () => {
@@ -20,6 +20,43 @@ describe("quotableHtml", () => {
     expect(cleaned).toContain('href="https://uwumail.dev"');
     expect(cleaned).toContain("Hintergrund");
     expect(cleaned).toContain("Overlay");
+  });
+
+  // security-audit C-5 (the webmail's W-22): addresses the WebView resolves to another server
+  // although they don't start with "http" or "//". The app page allows http: and https: pictures.
+  it.each([
+    ["backslashes", '<img src="https:\\\\tracker.example/a.gif">'],
+    ["a scheme-relative backslash", '<img src="\\\\tracker.example/b.gif">'],
+    ["a slash and a backslash", '<img src="/\\tracker.example/c.gif">'],
+    ["http without slashes", '<img src="http:tracker.example/d.gif">'],
+    ["a leading control character", '<img src="&#1;https://tracker.example/e.gif">'],
+    ["a tab inside the scheme", '<img src="h&#9;ttps://tracker.example/f.gif">'],
+    ["a line break inside the scheme", '<img src="ht&#10;tps://tracker.example/g.gif">'],
+    ["a relative address", '<img src="/assets/something.png">'],
+    ["a table background", '<table background="https:\\\\tracker.example/h.gif"><tr><td>x</td></tr></table>'],
+    ["a cell background", '<table><tr><td background="//tracker.example/i.gif">x</td></tr></table>'],
+  ])("loads nothing from %s", (_, html) => {
+    const cleaned = quotableHtml(html);
+    expect(cleaned).not.toMatch(/tracker\.example|\/assets\//);
+    expect(cleaned).not.toMatch(/<img|background=/i);
+  });
+
+  it("keeps pictures that carry their content or point into the mail", () => {
+    const cleaned = quotableHtml('<img src="data:image/png;base64,AAAA" alt="a"><img src="cid:logo@mail" alt="b">');
+    expect(cleaned).toContain('src="data:image/png;base64,AAAA"');
+    expect(cleaned).toContain('src="cid:logo@mail"');
+  });
+});
+
+describe("isEmbeddedSource", () => {
+  it("reads the scheme the way a browser does", () => {
+    expect(isEmbeddedSource(" data:image/gif;base64,AA")).toBe(true);
+    expect(isEmbeddedSource("\u0001cid:x")).toBe(true);
+    expect(isEmbeddedSource("d\ta\nta:image/png;base64,AA")).toBe(true);
+    expect(isEmbeddedSource("https://tracker.example/p.gif")).toBe(false);
+    expect(isEmbeddedSource("\\\\tracker.example/p.gif")).toBe(false);
+    expect(isEmbeddedSource("pixel.gif")).toBe(false);
+    expect(isEmbeddedSource("")).toBe(false);
   });
 });
 

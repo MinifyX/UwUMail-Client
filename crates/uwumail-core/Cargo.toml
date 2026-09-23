@@ -11,6 +11,9 @@ rust-version.workspace = true
 ammonia.workspace = true
 async-imap.workspace = true
 base64.workspace = true
+calcard.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
 futures.workspace = true
 hickory-resolver.workspace = true
 keyring.workspace = true
@@ -45,4 +48,5 @@ lettre = { workspace = true, features = ["webpki-roots"] }
 webpki-roots.workspace = true
 
 [dev-dependencies]
+rcgen.workspace = true
 tempfile.workspace = true

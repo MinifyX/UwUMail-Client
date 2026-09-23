@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/Toaster";
 import { MailShell } from "@/features/shell/MailShell";
 import { Onboarding } from "@/features/onboarding/Onboarding";
 import { DeleteForeverQuestion } from "@/features/mail/DeleteForeverQuestion";
+import { FolderDialogs } from "@/features/mail/FolderDialogs";
 import { LinkSheet, LinkStatus } from "@/features/mail/LinkPreview";
 import { LinkWarning } from "@/features/mail/LinkWarning";
 import { AppLock } from "@/features/mobile/AppLock";
@@ -32,6 +33,7 @@ export function App() {
       <LinkSheet />
       <LinkStatus />
       <DeleteForeverQuestion />
+      <FolderDialogs />
       <Toaster />
       <AppLock />
     </>
