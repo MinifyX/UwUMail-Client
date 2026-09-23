@@ -144,6 +144,26 @@ export class TauriBackend implements Backend {
     return call<Folder[]>("list_folders", { accountId: accountId ?? null });
   }
 
+  createFolder(input: { accountId?: string; name: string; parentId: string | null }) {
+    return call<string>("create_folder", {
+      accountId: input.accountId ?? null,
+      name: input.name,
+      parentId: input.parentId,
+    });
+  }
+
+  renameFolder(folderId: string, name: string) {
+    return call<void>("rename_folder", { folderId, name });
+  }
+
+  deleteFolder(folderId: string) {
+    return call<void>("delete_folder", { folderId });
+  }
+
+  emptyFolder(folderId: string) {
+    return call<number>("empty_folder", { folderId });
+  }
+
   listThreads(query: ThreadQuery) {
     return call<ThreadPage>("list_threads", { query });
   }

@@ -225,5 +225,20 @@
     "title": "Uff, da ist Nyu was runtergefallen",
     "body": "Ein Stück von UwUMail ist beim Anzeigen gestolpert. Einmal neu laden, dann geht's weiter ✧",
     "reload": "Neu laden"
+  },
+  "folders": {
+    "created": "Neuer Ordner „{{name}}“ ist bereit (ﾉ◕ヮ◕)ﾉ",
+    "renamed": "Heißt jetzt „{{name}}“ ✿",
+    "deleted": "Ordner „{{name}}“ ist weg (｡•́︿•̀｡)",
+    "deleteTitle": "„{{name}}“ wegräumen?",
+    "deleteBody_one": "Die {{count}} Mail darin trage ich vorher in den Papierkorb.",
+    "deleteBody_other": "Die {{count}} Mails darin trage ich vorher in den Papierkorb.",
+    "emptyTrashTitle": "Müll rausbringen? (・_・;)",
+    "emptyJunkTitle": "Spam rausfegen? (・_・;)",
+    "emptyBody_one": "{{count}} Mail ist dann für immer weg, auch auf dem Server. Zurückholen kann ich sie nicht.",
+    "emptyBody_other": "{{count}} Mails sind dann für immer weg, auch auf dem Server. Zurückholen kann ich sie nicht.",
+    "emptied_one": "Puff, {{count}} Mail ist für immer weg ✧",
+    "emptied_other": "Puff, {{count}} Mails sind für immer weg ✧",
+    "alreadyEmpty": "Hier ist schon alles blitzblank (˘ᵕ˘)"
   }
 }

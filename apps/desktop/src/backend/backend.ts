@@ -83,6 +83,14 @@ export interface Backend {
   syncNow(accountId?: string): Promise<void>;
 
   listFolders(accountId?: string): Promise<Folder[]>;
+  /** A new folder below `parentId`, or at the top of the mailbox (the only one when `accountId` is left out). Returns its id. */
+  createFolder(input: { accountId?: string; name: string; parentId: string | null }): Promise<string>;
+  /** System folders keep their names. */
+  renameFolder(folderId: string, name: string): Promise<void>;
+  /** Moves its mail into the trash first; refuses while folders are inside. */
+  deleteFolder(folderId: string): Promise<void>;
+  /** Trash and junk only: deletes everything in it for good. Returns how many messages went. */
+  emptyFolder(folderId: string): Promise<number>;
   listThreads(query: ThreadQuery): Promise<ThreadPage>;
   getThread(threadId: string, conversations: boolean): Promise<ThreadDetail>;
 

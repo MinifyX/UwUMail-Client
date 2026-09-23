@@ -4,7 +4,9 @@ import {
   ChevronRight,
   CircleAlert,
   FolderOpen,
+  FolderPlus,
   LoaderCircle,
+  MoreHorizontal,
   PenLine,
   Plus,
   Settings,
@@ -15,11 +17,13 @@ import { useEffect, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { Account, Folder, MailboxView } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
+import { Menu, type MenuItem } from "@/components/ui/Menu";
 import { Wordmark } from "@/components/ui/Logo";
 import { Badge } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
 import { useFolders, useMessageActions, useVisibleAccounts } from "@/lib/queries";
+import { canEmpty, useFolderEdit } from "@/state/folderEdit";
 import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
@@ -59,6 +63,34 @@ function NavItem({ icon: Icon, label, count, active, onClick }: NavItemProps) {
 
 const INDENT = 16;
 
+/** Shows on hover and keyboard focus; always on touch screens, which have no hover. */
+const HOVER_ONLY =
+  "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 [@media(hover:none)]:opacity-100";
+
+/** What can be done with a folder: new folder inside; rename and delete for folders people made; emptying trash and junk. */
+function folderMenuItems(folder: Folder, t: (key: string) => string): MenuItem[] {
+  const edit = useFolderEdit.getState();
+  const items: MenuItem[] = [
+    {
+      label: t("folders.newInside"),
+      onSelect: () => edit.open({ kind: "create", accountId: folder.accountId, parent: folder }),
+    },
+  ];
+  if (!folder.role) {
+    items.push(
+      { label: t("folders.rename"), onSelect: () => edit.open({ kind: "rename", folder }) },
+      { label: t("folders.delete"), onSelect: () => edit.open({ kind: "delete", folder }) },
+    );
+  }
+  if (canEmpty(folder)) {
+    items.push({
+      label: folder.role === "junk" ? t("folders.emptyJunk") : t("folders.emptyTrash"),
+      onSelect: () => edit.open({ kind: "empty", folder }),
+    });
+  }
+  return items;
+}
+
 function Glyph({ icon: Icon, active }: { icon: LucideIcon; active: boolean }) {
   return (
     <Icon className={clsx("size-[17px] shrink-0", active ? "text-pink" : "text-muted")} strokeWidth={2} aria-hidden />
@@ -82,6 +114,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   const selection = useSelectionActions();
   const actions = useMessageActions();
   const [dropping, setDropping] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const accepts = (event: React.DragEvent) => folder.selectable && event.dataTransfer.types.includes(THREAD_DRAG_TYPE);
 
   return (
@@ -94,6 +127,10 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
           setDropping(true);
         }}
         onDragLeave={() => setDropping(false)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenuOpen(true);
+        }}
         onDrop={(event) => {
           setDropping(false);
           if (!accepts(event)) return;
@@ -146,6 +183,23 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {count > 0 && <Badge count={count} />}
         </button>
+        <Menu
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          align="end"
+          className="mr-1"
+          items={folderMenuItems(folder, t)}
+          trigger={({ toggle, ...aria }) => (
+            <IconButton
+              icon={MoreHorizontal}
+              size="sm"
+              label={t("folders.more", { name: label })}
+              onClick={toggle}
+              className={clsx("size-7!", HOVER_ONLY)}
+              {...aria}
+            />
+          )}
+        />
       </div>
       {hasChildren && !collapsed && (
         <ul role="group" className="flex flex-col gap-0.5 pt-0.5">
@@ -174,22 +228,31 @@ function AccountSection({ account, folders }: { account: Account; folders: Folde
 
   return (
     <section className="flex flex-col gap-0.5">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        title={statusLabel}
-        className="flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-bold tracking-wide text-muted uppercase hover:text-ink"
-      >
-        <AccountDot color={account.color} />
-        <span className="min-w-0 flex-1 truncate text-left tracking-normal normal-case">{account.email}</span>
-        {status.state === "syncing" && (
-          <LoaderCircle className="size-3.5 animate-spin text-pink" aria-label={statusLabel} />
-        )}
-        {status.state === "offline" && <WifiOff className="size-3.5 text-warning" aria-label={statusLabel} />}
-        {status.state === "error" && <CircleAlert className="size-3.5 text-danger" aria-label={statusLabel} />}
-        <ChevronDown className={clsx("size-3.5 transition-transform", !open && "-rotate-90")} aria-hidden />
-      </button>
+      <div className="group flex items-center">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          title={statusLabel}
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-[12px] font-bold tracking-wide text-muted uppercase hover:text-ink"
+        >
+          <AccountDot color={account.color} />
+          <span className="min-w-0 flex-1 truncate text-left tracking-normal normal-case">{account.email}</span>
+          {status.state === "syncing" && (
+            <LoaderCircle className="size-3.5 animate-spin text-pink" aria-label={statusLabel} />
+          )}
+          {status.state === "offline" && <WifiOff className="size-3.5 text-warning" aria-label={statusLabel} />}
+          {status.state === "error" && <CircleAlert className="size-3.5 text-danger" aria-label={statusLabel} />}
+          <ChevronDown className={clsx("size-3.5 transition-transform", !open && "-rotate-90")} aria-hidden />
+        </button>
+        <IconButton
+          icon={FolderPlus}
+          size="sm"
+          label={t("folders.new")}
+          onClick={() => useFolderEdit.getState().open({ kind: "create", accountId: account.id, parent: null })}
+          className={clsx("mr-1 size-7!", HOVER_ONLY)}
+        />
+      </div>
       {open && (
         <ul role="tree" aria-label={account.email} className="flex flex-col gap-0.5">
           {tree.map((node) => (

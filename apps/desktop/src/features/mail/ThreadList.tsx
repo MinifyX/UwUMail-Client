@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Star,
   Trash,
+  Trash2,
   Users,
   X,
 } from "lucide-react";
@@ -24,11 +25,13 @@ import { useT } from "@/i18n";
 import {
   flattenThreads,
   useAccounts,
+  useFolders,
   useMessageActions,
   useThreadActions,
   useThreads,
   useVisibleAccounts,
 } from "@/lib/queries";
+import { canEmpty, useFolderEdit } from "@/state/folderEdit";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { openDraftThread } from "../compose/openDraft";
@@ -73,6 +76,8 @@ export function ThreadList({ variant, className }: ThreadListProps) {
   } = useUi.getState();
   const info = useViewInfo(view);
   const { data: accounts = [] } = useAccounts();
+  const { data: folders = [] } = useFolders();
+  const emptiable = view.kind === "folder" ? folders.find((f) => f.id === view.folderId && canEmpty(f)) : undefined;
   const { accounts: shown, loaded: accountsLoaded } = useVisibleAccounts();
   const workspaceName = useWorkspaceName();
   const activeWorkspace = useSettings((s) => s.activeWorkspace);
@@ -141,6 +146,17 @@ export function ThreadList({ variant, className }: ThreadListProps) {
             <h1 className="truncate text-[20px] leading-tight font-extrabold tracking-[-0.01em]">{info.title}</h1>
             {info.subtitle && <p className="truncate text-[12px] text-muted">{info.subtitle}</p>}
           </div>
+          {emptiable && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={Trash2}
+              disabled={emptiable.total === 0}
+              onClick={() => useFolderEdit.getState().open({ kind: "empty", folder: emptiable })}
+            >
+              {emptiable.role === "junk" ? t("folders.emptyJunk") : t("folders.emptyTrash")}
+            </Button>
+          )}
           <IconButton
             icon={RefreshCw}
             label={t("list.refresh")}

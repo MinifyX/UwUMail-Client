@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode } from "react";
 
 export interface MenuItem {
   label: ReactNode;
@@ -20,11 +20,28 @@ interface MenuProps {
   /** Opens upwards, e.g. from a toolbar at the bottom. */
   side?: "below" | "above";
   className?: string;
+  /** Opens and closes it from outside too, e.g. from a right-click on the row the menu belongs to. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /** A small popup list of actions. Closes on selection, Escape and clicks outside. */
-export function Menu({ trigger, items, align = "start", side = "below", className }: MenuProps) {
-  const [open, setOpen] = useState(false);
+export function Menu({
+  trigger,
+  items,
+  align = "start",
+  side = "below",
+  className,
+  open: controlled,
+  onOpenChange,
+}: MenuProps) {
+  const [uncontrolled, setUncontrolled] = useState(false);
+  const open = controlled ?? uncontrolled;
+  const setOpen = (value: boolean) => {
+    setUncontrolled(value);
+    onOpenChange?.(value);
+  };
+  const close = useEffectEvent(() => setOpen(false));
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -33,13 +50,13 @@ export function Menu({ trigger, items, align = "start", side = "below", classNam
     if (!open) return;
     list.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
     const onPointer = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
+      if (!root.current?.contains(event.target as Node)) close();
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       // Only the menu closes, not the mail or dialog behind it.
       event.stopPropagation();
-      setOpen(false);
+      close();
       root.current?.querySelector<HTMLButtonElement>("[aria-haspopup]")?.focus();
     };
     document.addEventListener("pointerdown", onPointer);
@@ -60,7 +77,7 @@ export function Menu({ trigger, items, align = "start", side = "below", classNam
     <div ref={root} className={clsx("relative inline-flex", className)}>
       {trigger({
         open,
-        toggle: () => setOpen((value) => !value),
+        toggle: () => setOpen(!open),
         "aria-haspopup": "menu",
         "aria-expanded": open,
         "aria-controls": id,

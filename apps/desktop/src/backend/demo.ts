@@ -367,6 +367,105 @@ export class DemoBackend implements Backend {
       });
   }
 
+  async createFolder(input: { accountId?: string; name: string; parentId: string | null }) {
+    await wait(150);
+    const parent = input.parentId ? this.folders.find((f) => f.id === input.parentId) : undefined;
+    if (input.parentId && !parent) throw new BackendError("not_found", "The parent folder no longer exists.");
+    const accountId =
+      parent?.accountId ?? input.accountId ?? (this.accounts.length === 1 ? this.accounts[0]!.id : null);
+    if (!accountId || !this.accounts.some((a) => a.id === accountId)) {
+      throw new BackendError("invalid_input", "Pick the mailbox for the new folder.");
+    }
+    if (parent && input.accountId && parent.accountId !== input.accountId) {
+      throw new BackendError("invalid_input", "The parent folder belongs to another mailbox.");
+    }
+    const name = this.cleanFolderName(input.name, accountId, parent?.id ?? null);
+    const id = `${accountId}:f${this.nextId++}`;
+    this.folders.push({
+      id,
+      accountId,
+      name,
+      path: parent ? `${parent.path}/${name}` : name,
+      role: null,
+      parentId: parent?.id ?? null,
+      selectable: true,
+      unread: 0,
+      total: 0,
+    });
+    this.emit({ type: "mail:changed", accountId });
+    return id;
+  }
+
+  async renameFolder(folderId: string, name: string) {
+    await wait(120);
+    const folder = this.ownFolder(folderId, "System folders like the inbox or the trash keep their names.");
+    const clean = this.cleanFolderName(name, folder.accountId, folder.parentId, folder.id);
+    const oldPath = folder.path;
+    folder.name = clean;
+    folder.path = [...oldPath.split("/").slice(0, -1), clean].join("/");
+    for (const inside of this.folders) {
+      if (inside.accountId === folder.accountId && inside.path.startsWith(`${oldPath}/`)) {
+        inside.path = folder.path + inside.path.slice(oldPath.length);
+      }
+    }
+    this.emit({ type: "mail:changed", accountId: folder.accountId });
+  }
+
+  async deleteFolder(folderId: string) {
+    await wait(150);
+    const folder = this.ownFolder(folderId, "System folders like the inbox or the trash can't be deleted.");
+    if (this.folders.some((f) => f.parentId === folderId)) {
+      throw new BackendError("invalid_input", "This folder still has folders inside. Move or delete those first.");
+    }
+    const trash = `${folder.accountId}:trash`;
+    for (const message of this.messages) if (message.folderId === folderId) message.folderId = trash;
+    this.folders = this.folders.filter((f) => f.id !== folderId);
+    this.emit({ type: "mail:changed", accountId: folder.accountId });
+  }
+
+  async emptyFolder(folderId: string) {
+    await wait(200);
+    const folder = this.folders.find((f) => f.id === folderId);
+    if (!folder) throw new BackendError("not_found", "This folder no longer exists.");
+    if (folder.role !== "trash" && folder.role !== "junk") {
+      throw new BackendError("invalid_input", "Only the trash and the junk folder can be emptied.");
+    }
+    const before = this.messages.length;
+    this.messages = this.messages.filter((m) => m.folderId !== folderId);
+    this.emit({ type: "mail:changed", accountId: folder.accountId });
+    return before - this.messages.length;
+  }
+
+  /** A folder people made themselves; system folders stay as they are. */
+  private ownFolder(folderId: string, systemFolder: string) {
+    const folder = this.folders.find((f) => f.id === folderId);
+    if (!folder) throw new BackendError("not_found", "This folder no longer exists.");
+    if (folder.role) throw new BackendError("invalid_input", systemFolder);
+    return folder;
+  }
+
+  /** Like the engine: trimmed, not empty, not too long, no "/" or control characters, not taken next to it. */
+  private cleanFolderName(name: string, accountId: string, parentId: string | null, except?: string) {
+    const clean = name.trim();
+    if (!clean) throw new BackendError("invalid_input", "Enter a name for the folder.");
+    if ([...clean].length > 200)
+      throw new BackendError("invalid_input", "Folder names can have at most 200 characters.");
+    // eslint-disable-next-line no-control-regex
+    if (/[\u0000-\u001f\u007f]/.test(clean)) {
+      throw new BackendError("invalid_input", "Folder names can't contain line breaks or control characters.");
+    }
+    if (clean.includes("/")) throw new BackendError("invalid_input", 'Folder names can\'t contain "/".');
+    const taken = this.folders.some(
+      (f) =>
+        f.accountId === accountId &&
+        f.parentId === parentId &&
+        f.id !== except &&
+        f.name.toLowerCase() === clean.toLowerCase(),
+    );
+    if (taken) throw new BackendError("invalid_input", `There's already a folder called "${clean}" here.`);
+    return clean;
+  }
+
   async listThreads(query: ThreadQuery): Promise<ThreadPage> {
     await wait(120);
     const matching = this.messages.filter((m) => this.inView(m, query) && this.matchesFilter(m, query));

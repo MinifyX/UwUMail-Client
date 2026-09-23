@@ -225,5 +225,20 @@
     "title": "Oops, Nyu knocked something over",
     "body": "A bit of UwUMail tripped while drawing. Reload once and you're back ✧",
     "reload": "Reload"
+  },
+  "folders": {
+    "created": "New folder “{{name}}” is ready (ﾉ◕ヮ◕)ﾉ",
+    "renamed": "Now it's called “{{name}}” ✿",
+    "deleted": "Folder “{{name}}” is gone (｡•́︿•̀｡)",
+    "deleteTitle": "Tidy away “{{name}}”?",
+    "deleteBody_one": "I'll carry its {{count}} message to the trash first.",
+    "deleteBody_other": "I'll carry its {{count}} messages to the trash first.",
+    "emptyTrashTitle": "Take out the trash? (・_・;)",
+    "emptyJunkTitle": "Sweep out the junk? (・_・;)",
+    "emptyBody_one": "{{count}} message will be gone for good, from the server too. I can't fetch it back.",
+    "emptyBody_other": "{{count}} messages will be gone for good, from the server too. I can't fetch them back.",
+    "emptied_one": "Poof, {{count}} message is gone for good ✧",
+    "emptied_other": "Poof, {{count}} messages are gone for good ✧",
+    "alreadyEmpty": "Already spotless in here (˘ᵕ˘)"
   }
 }

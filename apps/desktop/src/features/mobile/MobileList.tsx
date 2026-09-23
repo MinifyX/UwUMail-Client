@@ -12,6 +12,7 @@ import {
   Search,
   Star,
   Trash,
+  Trash2,
   Users,
   X,
 } from "lucide-react";
@@ -28,11 +29,13 @@ import { useBackLayer } from "@/lib/backStack";
 import {
   flattenThreads,
   useAccounts,
+  useFolders,
   useMessageActions,
   useThreadActions as useCardActions,
   useThreads,
   useVisibleAccounts,
 } from "@/lib/queries";
+import { canEmpty, useFolderEdit } from "@/state/folderEdit";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
@@ -82,6 +85,8 @@ export function MobileList() {
   const workspaceName = useWorkspaceName();
   const info = useViewInfo(view);
   const { data: accounts = [] } = useAccounts();
+  const { data: folders = [] } = useFolders();
+  const emptiable = view.kind === "folder" ? folders.find((f) => f.id === view.folderId && canEmpty(f)) : undefined;
   const { accounts: shown, loaded: accountsLoaded, accountIds } = useVisibleAccounts();
   const { refresh } = useMessageActions();
   const threadActions = useThreadActions();
@@ -213,6 +218,14 @@ export function MobileList() {
               <h1 className="truncate text-[20px] leading-tight font-extrabold tracking-[-0.01em]">{info.title}</h1>
               {info.subtitle && <p className="truncate text-[12px] text-muted">{info.subtitle}</p>}
             </div>
+            {emptiable && (
+              <IconButton
+                icon={Trash2}
+                label={emptiable.role === "junk" ? t("folders.emptyJunk") : t("folders.emptyTrash")}
+                disabled={emptiable.total === 0}
+                onClick={() => useFolderEdit.getState().open({ kind: "empty", folder: emptiable })}
+              />
+            )}
             <IconButton
               icon={RefreshCw}
               label={t("list.refresh")}
