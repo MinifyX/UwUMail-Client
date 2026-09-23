@@ -1,6 +1,7 @@
 // Fictional sample mail for `pnpm dev` and screenshots. No real people.
 
 import type { Account, Address, Attachment, Folder, FolderRole, Message } from "./types";
+import { demoBanner } from "./demo-pictures";
 
 type Lang = "de" | "en";
 type Localized = Record<Lang, string>;
@@ -211,8 +212,12 @@ export const SAMPLE_THREADS: SampleThread[] = [
         html: true,
         remote: true,
         body: p(
-          '<div style="font-family:sans-serif;max-width:520px"><img src="https://tracking.pixelparts.example/open.gif" width="1" height="1" alt=""><h2 style="color:#333">Gute Nachrichten!</h2><p>Deine Tastatur-Keycaps <b>„Bubblegum“</b> wurden verschickt und kommen voraussichtlich <b>Donnerstag</b> an.</p><p><a href="https://pixelparts.example/track/UWU-2048" style="background:#222;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Sendung verfolgen</a></p><img src="https://cdn.pixelparts.example/keycaps.jpg" width="480" alt="Keycaps"></div>',
-          '<div style="font-family:sans-serif;max-width:520px"><img src="https://tracking.pixelparts.example/open.gif" width="1" height="1" alt=""><h2 style="color:#333">Good news!</h2><p>Your <b>"Bubblegum"</b> keycaps have shipped and should arrive on <b>Thursday</b>.</p><p><a href="https://pixelparts.example/track/UWU-2048" style="background:#222;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Track package</a></p><img src="https://cdn.pixelparts.example/keycaps.jpg" width="480" alt="Keycaps"></div>',
+          '<div style="font-family:sans-serif;max-width:520px"><img src="https://tracking.pixelparts.example/open.gif" width="1" height="1" alt=""><h2 style="color:#333">Gute Nachrichten!</h2><p>Deine Tastatur-Keycaps <b>„Bubblegum“</b> wurden verschickt und kommen voraussichtlich <b>Donnerstag</b> an.</p><img src="' +
+            demoBanner("Bubblegum ist unterwegs", "Danke für deine Bestellung bei Pixel Parts!") +
+            '" width="480" alt="Pixel Parts"><p><a href="https://pixelparts.example/track/UWU-2048" style="background:#222;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Sendung verfolgen</a></p><img src="https://cdn.pixelparts.example/keycaps.jpg" width="480" alt="Keycaps"></div>',
+          '<div style="font-family:sans-serif;max-width:520px"><img src="https://tracking.pixelparts.example/open.gif" width="1" height="1" alt=""><h2 style="color:#333">Good news!</h2><p>Your <b>"Bubblegum"</b> keycaps have shipped and should arrive on <b>Thursday</b>.</p><img src="' +
+            demoBanner("Bubblegum is on its way", "Thanks for ordering from Pixel Parts!") +
+            '" width="480" alt="Pixel Parts"><p><a href="https://pixelparts.example/track/UWU-2048" style="background:#222;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Track package</a></p><img src="https://cdn.pixelparts.example/keycaps.jpg" width="480" alt="Keycaps"></div>',
         ),
       },
     ],

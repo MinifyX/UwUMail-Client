@@ -62,3 +62,26 @@ export function demoSenderPicture(email: string): SenderPicture | null {
   const domain = email.split("@").pop()?.toLowerCase() ?? "";
   return PICTURES[domain] ?? null;
 }
+
+/**
+ * A newsletter banner drawn for white paper, like many shops send them: dark type on white,
+ * some colored keycaps. Shows off how images are recolored in dark mode.
+ */
+export function demoBanner(title: string, line: string): string {
+  const escape = (text: string) => text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  const key = (x: number, fill: string, label: string) =>
+    `<rect x="${x}" y="112" width="56" height="56" rx="10" fill="${fill}"/>` +
+    `<text x="${x + 28}" y="148" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${label}</text>`;
+  const body =
+    `<rect width="480" height="200" fill="#fff"/><rect x="0.5" y="0.5" width="479" height="199" fill="none" stroke="#d8d4dc"/>` +
+    `<g font-family="Segoe UI, Helvetica, Arial, sans-serif">` +
+    `<text x="24" y="52" font-size="28" font-weight="700" fill="#1c1420">${escape(title)}</text>` +
+    `<text x="24" y="82" font-size="15" fill="#4a4250">${escape(line)}</text>` +
+    key(24, "#ff4d8d", "U") +
+    key(88, "#7c5cff", "w") +
+    key(152, "#ff4d8d", "U") +
+    `<text x="232" y="148" font-size="15" fill="#1c1420">pixelparts.example</text></g>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200" width="480" height="200">${body}</svg>`,
+  )}`;
+}
