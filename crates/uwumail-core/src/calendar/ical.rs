@@ -1,6 +1,8 @@
 //! iCalendar objects from CalDAV servers, through the `calcard` crate: into the same JSCalendar
 //! shape a UwUMail server sends over JMAP, expanded into occurrences, and written back.
 
+use std::sync::Arc;
+
 use calcard::icalendar::{ICalendar, ICalendarComponentType, ICalendarProperty, ICalendarValue};
 use calcard::jscalendar::JSCalendar;
 use chrono::{DateTime, Utc};
@@ -90,21 +92,97 @@ pub fn from_jscalendar(group: &Value) -> Result<String> {
 /// One occurrence of an object between two instants.
 #[derive(Debug, Clone)]
 pub struct Instance {
-    /// The event with this occurrence's own values: start, overrides, `recurrenceId`.
+    /// The event with this occurrence's own values: start, overrides, `recurrenceId`. Only the
+    /// parts an occurrence shows ([`SHOWN`]).
     pub event: Value,
-    /// The event it belongs to, with its rule.
-    pub series: Value,
+    /// The event it belongs to, with its rule; shared by all its occurrences.
+    pub series: Arc<Value>,
     pub time: OccurrenceTime,
     /// For occurrences of a series: its recurrence id (the original start, local).
     pub recurrence_id: Option<String>,
 }
 
-/// Every occurrence of the object's events that overlaps `[from, to)`. Floating and all-day
-/// times count in `viewer`'s zone.
-pub fn instances(ical: &ICalendar, group: &Value, from: DateTime<Utc>, to: DateTime<Utc>, viewer: Tz) -> Vec<Instance> {
-    let expanded = ical.expand_dates(viewer, MAX_INSTANCES);
-    let series: Vec<&Value> = events(group).collect();
+/// What an occurrence needs of its event. Everything else (attendees, attachments, unknown
+/// properties) stays behind, so an occurrence never copies more than it shows.
+const SHOWN: [&str; 12] = [
+    "@type",
+    "uid",
+    "title",
+    "description",
+    "locations",
+    "start",
+    "duration",
+    "timeZone",
+    "showWithoutTime",
+    "color",
+    "recurrenceRule",
+    "recurrenceRules",
+];
+
+/// Occurrences one read of an account's CalDAV calendars shows at most, as many as the JMAP
+/// path asks a UwUMail server for.
+pub const MAX_OCCURRENCES: usize = 5000;
+/// Bytes of occurrences (their event text above all) one read shows at most.
+pub const MAX_SHOWN_BYTES: usize = 32 * 1024 * 1024;
+/// Instances expanded in one read at most, shown or not.
+pub const MAX_EXPANDED: usize = 1_000_000;
+
+/// What one read of an account's calendars may still show. A small object that repeats every
+/// minute with a long description would otherwise become gigabytes of copies (security-audit
+/// C-4); what doesn't fit is left out.
+#[derive(Debug, Clone)]
+pub struct Budget {
+    occurrences: usize,
+    bytes: usize,
+    expanded: usize,
+}
+
+impl Default for Budget {
+    fn default() -> Self {
+        Self { occurrences: MAX_OCCURRENCES, bytes: MAX_SHOWN_BYTES, expanded: MAX_EXPANDED }
+    }
+}
+
+impl Budget {
+    pub fn exhausted(&self) -> bool {
+        self.occurrences == 0 || self.bytes == 0 || self.expanded == 0
+    }
+
+    /// Takes one occurrence of `size` bytes; false (and nothing left) when it doesn't fit.
+    fn take(&mut self, size: usize) -> bool {
+        if self.occurrences == 0 || size > self.bytes {
+            self.occurrences = 0;
+            return false;
+        }
+        self.occurrences -= 1;
+        self.bytes -= size;
+        true
+    }
+}
+
+fn shown_part(event: &Value) -> Value {
+    let Some(object) = event.as_object() else { return Value::Null };
+    Value::Object(SHOWN.iter().filter_map(|key| Some(((*key).to_string(), object.get(*key)?.clone()))).collect())
+}
+
+/// Every occurrence of the object's events that overlaps `[from, to)`, as far as `budget`
+/// allows. Floating and all-day times count in `viewer`'s zone.
+pub fn instances(
+    ical: &ICalendar,
+    group: &Value,
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+    viewer: Tz,
+    budget: &mut Budget,
+) -> Vec<Instance> {
     let mut found = Vec::new();
+    if budget.exhausted() {
+        return found;
+    }
+    let expanded = ical.expand_dates(viewer, MAX_INSTANCES.min(budget.expanded));
+    budget.expanded = budget.expanded.saturating_sub(expanded.events.len().max(1));
+    let series: Vec<&Value> = events(group).collect();
+    let shown: Vec<Arc<Value>> = series.iter().map(|event| Arc::new(shown_part(event))).collect();
     for occurrence in expanded.events {
         let Some(component) = ical.components.get(occurrence.comp_id as usize) else { continue };
         if component.component_type != ICalendarComponentType::VEvent {
@@ -120,13 +198,14 @@ pub fn instances(ical: &ICalendar, group: &Value, from: DateTime<Utc>, to: DateT
             continue;
         }
         let uid = component.uid();
-        let Some(base) = series
+        let Some(index) = series
             .iter()
-            .find(|event| event.get("uid").and_then(Value::as_str) == uid)
-            .or_else(|| (series.len() == 1).then(|| &series[0]))
+            .position(|event| event.get("uid").and_then(Value::as_str) == uid)
+            .or_else(|| (series.len() == 1).then_some(0))
         else {
             continue;
         };
+        let base = series[index];
         let recurring = base.get("recurrenceRule").is_some_and(|rule| !rule.is_null())
             || base.get("recurrenceRules").is_some_and(|rules| !rules.is_null())
             || base.get("recurrenceOverrides").is_some_and(|overrides| !overrides.is_null());
@@ -136,18 +215,22 @@ pub fn instances(ical: &ICalendar, group: &Value, from: DateTime<Utc>, to: DateT
         } else {
             None
         };
-        let mut event = (*base).clone();
+        let mut event = (*shown[index]).clone();
         if let (Some(rid), Some(object)) = (&recurrence_id, event.as_object_mut()) {
-            let patch = object
+            let patch = base
                 .get("recurrenceOverrides")
                 .and_then(|overrides| overrides.get(rid))
                 .and_then(Value::as_object)
-                .cloned()
+                .map(|patch| {
+                    patch
+                        .iter()
+                        .filter(|(path, _)| SHOWN.contains(&path.split('/').next().unwrap_or_default()))
+                        .map(|(path, value)| (path.clone(), value.clone()))
+                        .collect()
+                })
                 .unwrap_or_default();
             object.remove("recurrenceRule");
             object.remove("recurrenceRules");
-            object.remove("recurrenceOverrides");
-            object.remove("excludedRecurrenceRules");
             object.insert("start".into(), json!(rid));
             // Override patches are relative to the event: plain keys or `path/to/key`.
             if let Err(error) = jscal::apply_patch(&mut event, &patch) {
@@ -157,6 +240,10 @@ pub fn instances(ical: &ICalendar, group: &Value, from: DateTime<Utc>, to: DateT
                 object.insert("recurrenceId".into(), json!(rid));
             }
         }
+        if !budget.take(serde_json::to_string(&event).map_or(usize::MAX, |text| text.len())) {
+            tracing::warn!("A calendar has more to show than UwUMail reads at once; the rest is left out.");
+            break;
+        }
         let all_day = jscal::is_all_day(&event);
         let start_local = if all_day {
             event.get("start").and_then(Value::as_str).and_then(jscal::parse_local).unwrap_or(local_start)
@@ -164,7 +251,7 @@ pub fn instances(ical: &ICalendar, group: &Value, from: DateTime<Utc>, to: DateT
             local_start
         };
         found.push(Instance {
-            series: (*base).clone(),
+            series: Arc::clone(&shown[index]),
             time: OccurrenceTime { start: start_local, utc: (!all_day).then_some((start, end)) },
             recurrence_id,
             event,
@@ -203,7 +290,14 @@ END:VCALENDAR\r\n";
         let ical = parse(WEEKLY).unwrap();
         let group = to_jscalendar(&ical).unwrap();
         let berlin: Tz = "Europe/Berlin".parse().unwrap();
-        let found = instances(&ical, &group, utc("2026-09-01T00:00:00Z"), utc("2026-10-01T00:00:00Z"), berlin);
+        let found = instances(
+            &ical,
+            &group,
+            utc("2026-09-01T00:00:00Z"),
+            utc("2026-10-01T00:00:00Z"),
+            berlin,
+            &mut Budget::default(),
+        );
         let starts: Vec<(String, String)> = found
             .iter()
             .map(|instance| {
@@ -236,7 +330,14 @@ DURATION:PT1M\r\nRRULE:FREQ=MINUTELY\r\nSUMMARY:Tick\r\nEND:VEVENT\r\nEND:VCALEN
         let group = to_jscalendar(&ical).unwrap();
         let start = std::time::Instant::now();
         // The range lies decades after the last instance the limit allows: nothing, and fast.
-        let found = instances(&ical, &group, utc("2026-01-01T00:00:00Z"), utc("2026-02-01T00:00:00Z"), chrono_tz::UTC);
+        let found = instances(
+            &ical,
+            &group,
+            utc("2026-01-01T00:00:00Z"),
+            utc("2026-02-01T00:00:00Z"),
+            chrono_tz::UTC,
+            &mut Budget::default(),
+        );
         assert!(found.is_empty());
         assert!(start.elapsed() < std::time::Duration::from_secs(5));
     }
@@ -256,6 +357,42 @@ DURATION:PT1M\r\nRRULE:FREQ=MINUTELY\r\nSUMMARY:Tick\r\nEND:VEVENT\r\nEND:VCALEN
         assert!(text.contains("20261001T180000"), "the new exception: {text}");
         assert!(text.contains("RECURRENCE-ID"), "the override stays: {text}");
         assert!(text.contains("UID:yoga-1"), "{text}");
+    }
+
+    /// security-audit C-4: one object of a few hundred kilobytes that repeats every minute used
+    /// to become 20,000 full copies of itself (gigabytes) in one month's view.
+    #[test]
+    fn a_read_shows_only_what_fits() {
+        let description = "x".repeat(200_000);
+        let noise = "y".repeat(300_000);
+        let text = format!(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:tick\r\nDTSTART:20260901T000000Z\r\nDURATION:PT1M\r\n\
+RRULE:FREQ=MINUTELY\r\nSUMMARY:Tick\r\nDESCRIPTION:{description}\r\nX-NOISE:{noise}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        let ical = parse(&text).unwrap();
+        let group = to_jscalendar(&ical).unwrap();
+        let mut budget = Budget::default();
+        let (from, to) = (utc("2026-09-01T00:00:00Z"), utc("2026-10-12T00:00:00Z"));
+        let found = instances(&ical, &group, from, to, chrono_tz::UTC, &mut budget);
+        let bytes: usize = found.iter().map(|instance| instance.event.to_string().len()).sum();
+        assert!(!found.is_empty() && found.len() < 200, "{} occurrences", found.len());
+        assert!(bytes <= MAX_SHOWN_BYTES, "{bytes} bytes");
+        assert!(found[0].event.to_string().len() < 210_000, "only what an occurrence shows is copied");
+        assert!(found[0].event["description"].as_str().is_some_and(|text| text.len() == 200_000));
+        assert!(budget.exhausted());
+        // The budget is the account's: the next object gets nothing.
+        let small = parse(WEEKLY).unwrap();
+        let small_group = to_jscalendar(&small).unwrap();
+        assert!(instances(&small, &small_group, from, to, chrono_tz::UTC, &mut budget).is_empty());
+
+        // Short events still show one per minute, up to the count.
+        let text = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:m\r\nDTSTART:20260901T000000Z\r\nDURATION:PT1M\r\n\
+RRULE:FREQ=MINUTELY\r\nSUMMARY:Tick\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        let ical = parse(text).unwrap();
+        let group = to_jscalendar(&ical).unwrap();
+        let found = instances(&ical, &group, from, to, chrono_tz::UTC, &mut Budget::default());
+        assert_eq!(found.len(), MAX_OCCURRENCES);
+        assert!(std::sync::Arc::ptr_eq(&found[0].series, &found[1].series), "the series isn't copied per occurrence");
     }
 
     /// security-audit C-6: an object nested thousands deep (a few hundred kilobytes) used to
@@ -291,7 +428,14 @@ DTEND;VALUE=DATE:20261004\r\nSUMMARY:Holiday\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
         let ical = parse(holiday).unwrap();
         let group = to_jscalendar(&ical).unwrap();
         let tokyo: Tz = "Asia/Tokyo".parse().unwrap();
-        let found = instances(&ical, &group, utc("2026-10-01T00:00:00Z"), utc("2026-10-10T00:00:00Z"), tokyo);
+        let found = instances(
+            &ical,
+            &group,
+            utc("2026-10-01T00:00:00Z"),
+            utc("2026-10-10T00:00:00Z"),
+            tokyo,
+            &mut Budget::default(),
+        );
         assert_eq!(found.len(), 1);
         assert!(found[0].recurrence_id.is_none());
         assert_eq!(jscal::format_local(found[0].time.start), "2026-10-03T00:00:00");

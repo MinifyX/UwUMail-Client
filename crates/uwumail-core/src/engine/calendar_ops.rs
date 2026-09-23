@@ -252,6 +252,8 @@ impl Inner {
                     }
                 });
                 let mut found = Vec::new();
+                // One budget for the whole account, so its objects together can't fill the memory.
+                let mut budget = ical::Budget::default();
                 for read in futures::future::join_all(reads).await {
                     let (entry, objects) = match read {
                         Ok(read) => read,
@@ -261,10 +263,13 @@ impl Inner {
                         }
                     };
                     for object in objects {
+                        if budget.exhausted() {
+                            break;
+                        }
                         let Ok(parsed) = ical::parse(&object.data) else { continue };
                         let Ok(group) = ical::to_jscalendar(&parsed) else { continue };
                         let event_id = calendar::app_id(account_id, object.url.path());
-                        for instance in ical::instances(&parsed, &group, utc_from, utc_to, viewer) {
+                        for instance in ical::instances(&parsed, &group, utc_from, utc_to, viewer, &mut budget) {
                             let id = match &instance.recurrence_id {
                                 Some(rid) => format!("{event_id}#{rid}"),
                                 None => event_id.clone(),
@@ -278,7 +283,7 @@ impl Inner {
                                     read_only: !entry.info.may_write,
                                 },
                                 &instance.event,
-                                Some(&instance.series),
+                                Some(instance.series.as_ref()),
                                 &instance.time,
                                 viewer,
                             ));
