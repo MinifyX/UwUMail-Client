@@ -176,6 +176,8 @@ export function decide({ area, imageArea, backgroundImageArea, blocks }: Measure
 // ------------------------------------------------------------------ DOM
 
 const SKIP_TAGS = new Set(["STYLE", "SCRIPT", "BR", "WBR", "META", "LINK", "TITLE", "HEAD"]);
+/** The light backing images that look see-through get, as the computed style spells it. */
+export const IMAGE_BACKING = "rgba(255, 255, 255, 0.92)";
 const TRANSPARENT_IMAGE = /(\.(png|gif|svg|webp)(\?|#|$))|^data:image\/(png|gif|svg\+xml|webp)/i;
 
 function htmlElements(root: HTMLElement): HTMLElement[] {
@@ -300,7 +302,7 @@ export function darkenDocument(root: HTMLElement): void {
     // Transparent logos with dark ink would vanish on a dark background.
     if (element.tagName === "IMG" && TRANSPARENT_IMAGE.test(element.getAttribute("src") ?? "")) {
       writes.push(() => {
-        element.style.setProperty("background-color", "rgba(255, 255, 255, 0.92)", "important");
+        element.style.setProperty("background-color", IMAGE_BACKING, "important");
         element.style.setProperty("border-radius", "3px");
       });
     }

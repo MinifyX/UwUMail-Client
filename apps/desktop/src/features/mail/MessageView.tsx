@@ -168,6 +168,8 @@ interface MessageViewProps {
   onExpand: () => void;
 }
 
+const loadMailImage = (url: string) => backend().fetchMailImage(url);
+
 export function MessageView({ message, accounts, collapsed, onExpand }: MessageViewProps) {
   const { t, i18n } = useT();
   const theme = useResolvedTheme();
@@ -175,6 +177,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const trustedSenders = useSettings((s) => s.trustedSenders);
   const mailAppearance = useSettings((s) => s.mailAppearance);
   const senderChoice = useSettings((s) => s.senderAppearance[message.from.email.toLowerCase()]);
+  const darkImages = useSettings((s) => s.darkImages);
   const [loadRemote, setLoadRemote] = useState(false);
   const inlineImages = useInlineImages(message);
   const [autoDecision, setAutoDecision] = useState<{ key: string; dark: boolean } | null>(null);
@@ -304,6 +307,8 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           appearance={appearance}
           onAutoDecision={(dark) => setAutoDecision({ key: decisionKey, dark })}
           inlineImages={inlineImages.urls}
+          darkImages={darkImages}
+          loadRemoteImage={loadMailImage}
         />
       </div>
 

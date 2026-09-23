@@ -347,6 +347,8 @@
     "mailAppearanceAuto": "Automatisch",
     "mailAppearanceLight": "Immer hell",
     "mailAppearanceDark": "Immer dunkel",
+    "darkImages": "Bilder mit abdunkeln",
+    "darkImagesDesc": "Helle Bilder in dunklen Mails werden mit umgefärbt: Weißer Hintergrund wird dunkel, dunkle Schrift hell. Fotos bleiben, wie sie sind.",
     "forgetAppearances": "Gemerkte Absender zurücksetzen ({{count}})",
     "appearancesForgotten": "Gemerkte Absender zurückgesetzt",
     "senderPictures": "Bilder für Firmenabsender",

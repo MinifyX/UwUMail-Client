@@ -347,6 +347,8 @@
     "mailAppearanceAuto": "Automatic",
     "mailAppearanceLight": "Always light",
     "mailAppearanceDark": "Always dark",
+    "darkImages": "Darken images too",
+    "darkImagesDesc": "Light images in dark mails are recolored as well: white backgrounds turn dark, dark lettering turns light. Photos stay as they are.",
     "forgetAppearances": "Reset remembered senders ({{count}})",
     "appearancesForgotten": "Remembered senders reset",
     "senderPictures": "Pictures for company senders",

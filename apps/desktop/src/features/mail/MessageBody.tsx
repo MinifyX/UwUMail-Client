@@ -5,6 +5,7 @@ import { textToHtml } from "@/lib/format";
 import { replaceContentIds } from "@/lib/inlineImages";
 import type { MailAppearance } from "@/state/settings";
 import { hideLinkStatus, watchLinks } from "./linkEvents";
+import { darkenImages, type RemoteImageLoader } from "./darkImages";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
 import { forwardFrameKeys } from "./readerKeys";
 
@@ -197,9 +198,21 @@ interface MessageBodyProps {
   onAutoDecision?: (dark: boolean) => void;
   /** Blob URLs of embedded images by Content-ID. */
   inlineImages?: ReadonlyMap<string, string>;
+  /** Recolor light images while the mail is shown dark. */
+  darkImages?: boolean;
+  /** Reads remote images for that, where the page itself may not. */
+  loadRemoteImage?: RemoteImageLoader;
 }
 
-export function MessageBody({ message, allowRemote, appearance, onAutoDecision, inlineImages }: MessageBodyProps) {
+export function MessageBody({
+  message,
+  allowRemote,
+  appearance,
+  onAutoDecision,
+  inlineImages,
+  darkImages = false,
+  loadRemoteImage,
+}: MessageBodyProps) {
   const [height, setHeight] = useState(120);
   const variant = appearance.kind === "dark" ? "dark" : "light";
   const html = useMemo(
@@ -209,7 +222,7 @@ export function MessageBody({ message, allowRemote, appearance, onAutoDecision, 
   // Remount the frame whenever the look changes: recoloring happens in the
   // loaded document, so an unchanged srcdoc alone wouldn't undo it. Embedded
   // images arriving count as a change too.
-  const signature = `${message.id}|${appearance.kind}|${allowRemote}|${inlineImages?.size ?? 0}`;
+  const signature = `${message.id}|${appearance.kind}|${allowRemote}|${inlineImages?.size ?? 0}|${darkImages}`;
   const needsPass = appearance.kind === "auto" || appearance.kind === "darken";
   const [finished, setFinished] = useState<{ signature: string; dark: boolean } | null>(null);
   const done = finished?.signature === signature ? finished : null;
@@ -219,17 +232,32 @@ export function MessageBody({ message, allowRemote, appearance, onAutoDecision, 
   });
   // A mail that goes away under the pointer never reports the pointer leaving its link.
   useEffect(() => hideLinkStatus, [signature]);
+  const stopImages = useRef<(() => void) | null>(null);
+  useEffect(
+    () => () => {
+      stopImages.current?.();
+      stopImages.current = null;
+    },
+    [signature],
+  );
 
   const handleLoad = (frame: HTMLIFrameElement) => {
     const doc = frame.contentDocument;
     const root = doc?.getElementById(ROOT_ID);
     if (!doc || !root) return;
 
+    let shownDark = variant === "dark";
     if (needsPass) {
       const dark = appearance.kind === "darken" || decide(measure(root)) === "darken";
       if (dark) darkenDocument(root);
       if (appearance.kind === "auto") onAutoDecisionRef.current?.(dark);
       setFinished({ signature, dark });
+      shownDark = dark;
+    }
+    // Also for mails with their own dark mode: their images are usually still made for white paper.
+    if (darkImages && shownDark && message.bodyHtml !== null) {
+      stopImages.current?.();
+      stopImages.current = darkenImages(root, allowRemote ? loadRemoteImage : undefined);
     }
 
     let pending = 0;

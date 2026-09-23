@@ -18,6 +18,7 @@ const base: SyncedSettings = {
   conversations: true,
   remoteImages: "ask",
   mailAppearance: "auto",
+  darkImages: true,
   senderPictures: true,
   undoSendSeconds: 10,
   linkConfirm: true,
@@ -36,6 +37,7 @@ describe("keys the server takes", () => {
     expect(isSyncable("undoSendSeconds", 20)).toBe(true);
     expect(isSyncable("undoSendSeconds", 15)).toBe(false);
     expect(isSyncable("linkConfirm", false)).toBe(true);
+    expect(isSyncable("darkImages", "yes")).toBe(false);
     expect(isSyncable("listDensity", "compact")).toBe(false);
   });
 
@@ -110,6 +112,7 @@ describe("settings as keys", () => {
     expect(Object.keys(settingsToValues(DEFAULT_SETTINGS)).sort()).toEqual(
       [
         "conversations",
+        "darkImages",
         "language",
         "linkConfirm",
         "mailAppearance",

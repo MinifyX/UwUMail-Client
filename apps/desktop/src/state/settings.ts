@@ -51,6 +51,8 @@ export interface Settings {
    */
   settingsSyncAccount: string;
   mailAppearance: MailAppearance;
+  /** Light images in mails shown dark are recolored too, see features/mail/darkImages. */
+  darkImages: boolean;
   /** Light/dark choices remembered per sender address (lowercase). */
   senderAppearance: Record<string, "light" | "dark">;
   /** Folder ids whose subfolders are hidden in the sidebar. */
@@ -106,6 +108,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showAddressDetails: false,
   settingsSyncAccount: "",
   mailAppearance: "auto",
+  darkImages: true,
   senderAppearance: {},
   collapsedFolders: [],
   senderPictures: true,

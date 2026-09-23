@@ -320,6 +320,14 @@ function Reading() {
           </Button>
         )}
       </Row>
+      <div className="border-b border-hairline py-4">
+        <Toggle
+          checked={settings.darkImages}
+          onChange={(darkImages) => settings.update({ darkImages })}
+          label={t("settings.darkImages")}
+          description={t("settings.darkImagesDesc")}
+        />
+      </div>
       <div className="flex flex-col gap-2 border-b border-hairline py-4">
         <Toggle
           checked={settings.senderPictures}
