@@ -1,9 +1,11 @@
 //! CalDAV (RFC 4791) for mailboxes whose server has no JMAP calendars: finding the calendar
 //! home (RFC 6764), listing calendars, reading events in a time range and writing them back.
 //!
-//! Only HTTPS. The password goes only to the sites the mailbox already trusts (its address,
-//! its mail servers, an address typed in by hand); redirects are followed by hand under the
-//! same rule. Answers are size-limited and read with the careful XML reader in `xml`.
+//! Only HTTPS. The password goes only to the sites the mailbox already trusts with it (its mail
+//! servers, an address typed in by hand); redirects are followed by hand under the same rule.
+//! Other places discovery looks (the mail domain's own website, its SRV record) are asked
+//! without the password, and only a redirect from there to a trusted site is followed. Answers
+//! are size-limited and read with the careful XML reader in `xml`.
 
 use std::time::Duration;
 
@@ -51,7 +53,20 @@ fn method(name: &str) -> Method {
 impl DavClient {
     /// A client that sends the password only to `trusted_hosts`' sites.
     pub fn new(username: &str, password: &str, trusted_hosts: &[&str]) -> Result<Self> {
-        let http = crate::tls::http_client()?
+        Self::with_http(crate::tls::http_client()?, username, password, trusted_hosts)
+    }
+
+    /// Like [`DavClient::new`], with the certificate checks of `http` instead of the system's.
+    /// Only for tests against a local server with a certificate of its own; the app always
+    /// uses `new`. Redirects, the timeout and the rules for the password stay the same.
+    #[doc(hidden)]
+    pub fn with_http(
+        http: reqwest::ClientBuilder,
+        username: &str,
+        password: &str,
+        trusted_hosts: &[&str],
+    ) -> Result<Self> {
+        let http = http
             .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION")))
             .redirect(reqwest::redirect::Policy::none())
             .timeout(TIMEOUT)
@@ -66,6 +81,43 @@ impl DavClient {
 
     pub fn may_send_password(&self, url: &Url) -> bool {
         url.scheme() == "https" && url.host_str().is_some_and(|host| self.trusted_sites.contains(&site(host)))
+    }
+
+    /// Where a discovery address leads before any password is sent: an address on a trusted
+    /// site is used as it is; any other is asked without the password, and its redirects are
+    /// followed (without it) until one reaches a trusted site. `None` when none does.
+    pub async fn locate(&self, url: &Url) -> Result<Option<Url>> {
+        let mut target = url.clone();
+        for _ in 0..=MAX_REDIRECTS {
+            if target.scheme() != "https" {
+                return Ok(None);
+            }
+            if self.may_send_password(&target) {
+                return Ok(Some(target));
+            }
+            let response = self
+                .http
+                .request(method("PROPFIND"), target.clone())
+                .header("Depth", "0")
+                .header(reqwest::header::CONTENT_TYPE, "application/xml; charset=utf-8")
+                .body(PRINCIPAL_BODY)
+                .send()
+                .await?;
+            let Some(location) = response
+                .status()
+                .is_redirection()
+                .then(|| response.headers().get(reqwest::header::LOCATION))
+                .flatten()
+                .and_then(|location| location.to_str().ok())
+            else {
+                return Ok(None);
+            };
+            match target.join(location) {
+                Ok(next) => target = next,
+                Err(_) => return Ok(None),
+            }
+        }
+        Ok(None)
     }
 
     /// One request, redirects followed within the trusted sites; the body is read up to `limit`.
@@ -254,12 +306,24 @@ pub async fn discover(client: &DavClient, manual: Option<&Url>, domain: &str, ho
             Err(error) => Err(error),
         };
     }
+    discover_among(client, &candidates(domain, hosts).await).await
+}
+
+/// The calendar home at the first of `candidates` that has one. The password only goes where
+/// [`DavClient::locate`] leads.
+pub async fn discover_among(client: &DavClient, candidates: &[Url]) -> Result<Url> {
     let mut last_error = None;
-    for candidate in candidates(domain, hosts).await {
-        if !client.may_send_password(&candidate) {
-            continue;
-        }
-        match home_at(client, &candidate).await {
+    for candidate in candidates {
+        let start = match client.locate(candidate).await {
+            Ok(Some(start)) => start,
+            Ok(None) => continue,
+            Err(error) => {
+                tracing::debug!("No calendars at {candidate}: {error}");
+                last_error.get_or_insert(error);
+                continue;
+            }
+        };
+        match home_at(client, &start).await {
             Ok(Some(home)) => return Ok(home),
             Ok(None) => {}
             Err(error) => {

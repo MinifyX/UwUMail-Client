@@ -86,15 +86,8 @@ impl Inner {
             Some(url) => Some(Url::parse(&url).map_err(|_| Error::invalid("The CalDAV address isn't a web address."))?),
             None => None,
         };
-        let jmap_host = account
-            .jmap_url
-            .as_deref()
-            .and_then(|url| Url::parse(url).ok())
-            .and_then(|url| url.host_str().map(String::from));
-        let manual_host = manual.as_ref().and_then(|url| url.host_str().map(String::from));
-        let mut trusted: Vec<&str> = vec![&domain, &account.imap.host, &account.smtp.host];
-        trusted.extend(jmap_host.as_deref());
-        trusted.extend(manual_host.as_deref());
+        let trusted = password_hosts(account, manual.as_ref());
+        let trusted: Vec<&str> = trusted.iter().map(String::as_str).collect();
         let client = dav::DavClient::new(&account.username, &password, &trusted)?;
         let hosts: Vec<String> =
             [&account.imap.host].into_iter().filter(|host| !host.trim().is_empty()).cloned().collect();
@@ -294,6 +287,20 @@ impl Inner {
             }
         }
     }
+}
+
+/// The hosts whose sites may get the mailbox password during CalDAV discovery: the ones that
+/// already get it (the mail servers) and an address typed in by hand. Not the mail domain: its
+/// own website is often someone else's (security-audit C-3), so discovery asks it without the
+/// password and follows it only to one of these.
+fn password_hosts(account: &AccountRecord, manual: Option<&Url>) -> Vec<String> {
+    let host_of = |url: &Url| url.host_str().map(String::from);
+    let jmap = account.jmap_url.as_deref().and_then(|url| Url::parse(url).ok()).as_ref().and_then(host_of);
+    [Some(account.imap.host.clone()), Some(account.smtp.host.clone()), jmap, manual.and_then(host_of)]
+        .into_iter()
+        .flatten()
+        .filter(|host| !host.trim().is_empty())
+        .collect()
 }
 
 /// One CalDAV object with the event in it, ready to change and write back.
@@ -728,6 +735,34 @@ END:VCALENDAR
         assert!(text.contains("DTSTART;TZID=Europe/Berlin:20260903T191500"), "{text}");
         assert!(text.contains("RRULE:FREQ=WEEKLY"), "{text}");
         assert!(text.contains("SEQUENCE:1"), "{text}");
+    }
+
+    /// security-audit C-3: the mail domain's website isn't trusted with the password.
+    #[test]
+    fn only_the_mail_servers_get_the_password() {
+        let account = AccountRecord {
+            id: "a".into(),
+            name: "Home".into(),
+            email: "mini@shop.example".into(),
+            display_name: "Mini".into(),
+            color: AccountColor::Pink,
+            auth: AuthKind::Password,
+            username: "mini@shop.example".into(),
+            imap: ServerSettings { host: "imap.mailhost.example".into(), port: 993, security: Security::Tls },
+            smtp: ServerSettings { host: "smtp.mailhost.example".into(), port: 465, security: Security::Tls },
+            protocol: Protocol::Imap,
+            jmap_url: Some("https://jmap.mailhost.example/.well-known/jmap".into()),
+        };
+        let manual = Url::parse("https://dav.calendars.example/dav/").unwrap();
+        let hosts = password_hosts(&account, Some(&manual));
+        assert_eq!(
+            hosts,
+            ["imap.mailhost.example", "smtp.mailhost.example", "jmap.mailhost.example", "dav.calendars.example"]
+        );
+        let client =
+            dav::DavClient::new("mini", "dummy", &hosts.iter().map(String::as_str).collect::<Vec<_>>()).unwrap();
+        assert!(!client.may_send_password(&Url::parse("https://shop.example/.well-known/caldav").unwrap()));
+        assert!(client.may_send_password(&Url::parse("https://caldav.mailhost.example/").unwrap()));
     }
 
     #[tokio::test]
