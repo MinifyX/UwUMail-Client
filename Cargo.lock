@@ -6085,7 +6085,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-android"
-version = "0.3.0-beta.2"
+version = "0.4.0-beta.1"
 dependencies = [
  "base64 0.23.1",
  "jni 0.21.1",
@@ -6102,7 +6102,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-core"
-version = "0.3.0-beta.2"
+version = "0.4.0-beta.1"
 dependencies = [
  "ammonia",
  "async-imap",
@@ -6139,7 +6139,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-desktop"
-version = "0.3.0-beta.2"
+version = "0.4.0-beta.1"
 dependencies = [
  "base64 0.23.1",
  "libc",
@@ -6165,7 +6165,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-setup"
-version = "0.3.0-beta.2"
+version = "0.4.0-beta.1"
 dependencies = [
  "libc",
  "semver",
