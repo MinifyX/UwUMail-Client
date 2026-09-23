@@ -1,6 +1,20 @@
 import DOMPurify from "dompurify";
 
-const REMOTE = /^\s*(https?:)?\/\//i;
+/** Sources that carry their content along or point into the mail itself, so nothing is fetched. */
+const EMBEDDED = /^(data|cid):/i;
+
+/**
+ * Whether a picture's address loads nothing from a server, read the way the WebView reads it: it
+ * drops leading control characters and spaces and every tab and line break, and takes a
+ * backslash for a slash. So `https:\\host`, `\\host`, `h&#9;ttps://host` and `&#1;https://host`
+ * all load from `host`, and `http:host` does too where the app page isn't served over http
+ * (macOS, Linux). Only what is known to stay local may stay (security-audit C-5).
+ */
+export function isEmbeddedSource(value: string): boolean {
+  // eslint-disable-next-line no-control-regex
+  const address = value.replace(/[\t\n\r]/g, "").replace(/^[\u0000- ]+/, "");
+  return EMBEDDED.test(address);
+}
 
 /**
  * Mail HTML for places inside the app's own page, such as a quoted reply in
@@ -14,7 +28,7 @@ export function quotableHtml(html: string): string {
     if (node instanceof Element) {
       for (const name of ["src", "srcset", "background", "poster"]) {
         const value = node.getAttribute(name);
-        if (value !== null && (REMOTE.test(value) || name === "srcset")) node.removeAttribute(name);
+        if (value !== null && (name === "srcset" || !isEmbeddedSource(value))) node.removeAttribute(name);
       }
       // Quoted mail renders in the app page, not the sandboxed reader frame, so inline styles could
       // leak into or overlay the composer. Drop them entirely; the quote keeps its text and structure.
