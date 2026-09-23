@@ -20,7 +20,7 @@ use crate::pictures::{SenderPicture, SenderPictures};
 use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
-use crate::{autoconfig, mime, oauth};
+use crate::{autoconfig, folders, mime, oauth};
 use crate::{jmap_settings, jmap_sync};
 
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(5 * 60);
@@ -131,6 +131,8 @@ macro_rules! with_session {
         }
     }};
 }
+
+mod folder_ops;
 
 impl Engine {
     /// Must be called inside a Tokio runtime.
@@ -1690,10 +1692,7 @@ impl Inner {
         };
         // Servers that keep every folder below INBOX need the new one there too.
         let existing = self.store.folder_records(account_id)?;
-        let namespace = existing.iter().find_map(|f| f.delimiter.clone()).filter(|delimiter| {
-            let others: Vec<_> = existing.iter().filter(|f| !f.path.eq_ignore_ascii_case("INBOX")).collect();
-            !others.is_empty() && others.iter().all(|f| f.path.starts_with(&format!("INBOX{delimiter}")))
-        });
+        let namespace = folders::inbox_namespace(existing.iter().map(|f| (f.path.as_str(), f.delimiter.as_deref())));
         let path = match &namespace {
             Some(delimiter) => format!("INBOX{delimiter}{name}"),
             None => name.to_string(),

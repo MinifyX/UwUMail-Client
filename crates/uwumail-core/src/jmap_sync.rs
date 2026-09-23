@@ -611,6 +611,151 @@ pub async fn ensure_mailbox(
     store.folder(&folder_id)
 }
 
+/// A refused `Mailbox/set`, in words that fit the folder dialogs.
+fn mailbox_refusal(arguments: &Value, fallback: &str) -> Error {
+    match jmap::set_errors(arguments) {
+        Some(error) if error.kind == "mailboxHasChild" => {
+            Error::invalid("This folder still has folders inside. Move or delete those first.")
+        }
+        Some(error) if error.kind == "mailboxHasEmail" => Error::invalid("This folder still has mail in it."),
+        Some(error) => error.into(),
+        None => Error::internal(fallback.to_string()),
+    }
+}
+
+/// Creates a mailbox and returns its id.
+pub async fn create_mailbox(client: &Client, name: &str, parent_id: Option<&str>) -> Result<String> {
+    let responses = client
+        .call(vec![(
+            "Mailbox/set",
+            json!({
+                "accountId": client.account_id(),
+                "create": { "new": { "name": name, "parentId": parent_id, "isSubscribed": true } },
+            }),
+        )])
+        .await?;
+    let answer = responses.get(0, "Mailbox/set")?;
+    answer
+        .pointer("/created/new/id")
+        .and_then(Value::as_str)
+        .map(String::from)
+        .ok_or_else(|| mailbox_refusal(answer, "The mail server didn't create the folder."))
+}
+
+pub async fn rename_mailbox(client: &Client, mailbox_id: &str, name: &str) -> Result<()> {
+    let responses = client
+        .call(vec![(
+            "Mailbox/set",
+            json!({ "accountId": client.account_id(), "update": { mailbox_id: { "name": name } } }),
+        )])
+        .await?;
+    let answer = responses.get(0, "Mailbox/set")?;
+    match jmap::set_errors(answer) {
+        Some(_) => Err(mailbox_refusal(answer, "The mail server didn't rename the folder.")),
+        None => Ok(()),
+    }
+}
+
+/// Batches of emails taken out of a mailbox at once, and how many batches at most, so a
+/// server that never runs empty can't keep UwUMail busy forever.
+const MAILBOX_BATCH: usize = 250;
+const MAILBOX_ROUNDS: usize = 400;
+
+/// The next emails in a mailbox, with the mailboxes each one is in.
+async fn mailbox_page(client: &Client, mailbox_id: &str) -> Result<Vec<(String, Vec<String>)>> {
+    let account = client.account_id();
+    let responses = client
+        .call(vec![
+            (
+                "Email/query",
+                json!({
+                    "accountId": account,
+                    "filter": { "inMailbox": mailbox_id },
+                    "limit": MAILBOX_BATCH.min(client.session.max_objects_in_get),
+                }),
+            ),
+            (
+                "Email/get",
+                json!({
+                    "accountId": account,
+                    "#ids": { "resultOf": "0", "name": "Email/query", "path": "/ids" },
+                    "properties": ["id", "mailboxIds"],
+                }),
+            ),
+        ])
+        .await?;
+    Ok(list(responses.get(1, "Email/get")?)
+        .iter()
+        .filter_map(|email| {
+            let id = text(email, "id")?.to_string();
+            let mailboxes = email
+                .get("mailboxIds")
+                .and_then(Value::as_object)
+                .map(|ids| ids.iter().filter(|(_, on)| on.as_bool() == Some(true)).map(|(id, _)| id.clone()).collect())
+                .unwrap_or_default();
+            Some((id, mailboxes))
+        })
+        .collect())
+}
+
+/// Takes every email out of a mailbox: those only in it are destroyed (`trash_id` None) or
+/// moved there, those also elsewhere just leave this mailbox. Returns how many were in it.
+async fn drain_mailbox(client: &Client, mailbox_id: &str, trash_id: Option<&str>) -> Result<usize> {
+    let account = client.account_id();
+    let mut count = 0;
+    for _ in 0..MAILBOX_ROUNDS {
+        let page = mailbox_page(client, mailbox_id).await?;
+        if page.is_empty() {
+            return Ok(count);
+        }
+        count += page.len();
+        let mut update = Map::new();
+        let mut destroy = Vec::new();
+        for (id, mailboxes) in page {
+            if mailboxes.iter().any(|other| other != mailbox_id) {
+                let mut leave = Map::new();
+                let segment = mailbox_id.replace('~', "~0").replace('/', "~1");
+                leave.insert(format!("mailboxIds/{segment}"), Value::Null);
+                update.insert(id, Value::Object(leave));
+            } else if let Some(trash) = trash_id {
+                update.insert(id, json!({ "mailboxIds": { trash: true } }));
+            } else {
+                destroy.push(id);
+            }
+        }
+        let responses = client
+            .call(vec![("Email/set", json!({ "accountId": account, "update": update, "destroy": destroy }))])
+            .await?;
+        if let Some(error) = jmap::set_errors(responses.get(0, "Email/set")?).filter(|e| e.kind != "notFound") {
+            return Err(error.into());
+        }
+    }
+    Err(Error::internal("The folder didn't run empty. Try again in a moment."))
+}
+
+/// Moves a mailbox's mail into the trash, then destroys the mailbox.
+pub async fn destroy_mailbox(client: &Client, mailbox_id: &str, trash_id: &str) -> Result<()> {
+    drain_mailbox(client, mailbox_id, Some(trash_id)).await?;
+    let responses = client
+        .call(vec![(
+            "Mailbox/set",
+            json!({ "accountId": client.account_id(), "destroy": [mailbox_id], "onDestroyRemoveEmails": false }),
+        )])
+        .await?;
+    let answer = responses.get(0, "Mailbox/set")?;
+    match jmap::set_errors(answer) {
+        Some(error) if error.kind == "notFound" => Ok(()),
+        Some(_) => Err(mailbox_refusal(answer, "The mail server didn't delete the folder.")),
+        None => Ok(()),
+    }
+}
+
+/// Deletes every email in a mailbox for good (mail also filed elsewhere only leaves it).
+/// Returns how many emails were in it.
+pub async fn empty_mailbox(client: &Client, mailbox_id: &str) -> Result<usize> {
+    drain_mailbox(client, mailbox_id, None).await
+}
+
 /// The sending identities of the account: (server id, email, name).
 pub async fn identities(client: &Client) -> Result<Vec<(String, String, String)>> {
     let Some(account) = client.session.submission_account_id.clone() else { return Ok(Vec::new()) };

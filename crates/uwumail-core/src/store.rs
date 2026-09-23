@@ -606,6 +606,36 @@ impl Store {
         Ok(())
     }
 
+    /// Gives a folder a new name and path; folders inside it (paths below `old_path` plus the
+    /// delimiter) move along, like the server moves them.
+    pub fn rename_folder(&self, folder_id: &str, new_path: &str, name: &str) -> Result<()> {
+        let folder = self.folder(folder_id)?;
+        let conn = self.conn();
+        conn.execute("UPDATE folders SET path = ?1, name = ?2 WHERE id = ?3", params![new_path, name, folder_id])?;
+        if let Some(delimiter) = folder.delimiter.filter(|d| !d.is_empty()) {
+            let old_prefix = format!("{}{delimiter}", folder.path);
+            let new_prefix = format!("{new_path}{delimiter}");
+            conn.execute(
+                "UPDATE folders SET path = ?1 || substr(path, length(?2) + 1)
+                 WHERE account_id = ?3 AND substr(path, 1, length(?2)) = ?2",
+                params![new_prefix, old_prefix, folder.account_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn set_folder_name(&self, folder_id: &str, name: &str) -> Result<()> {
+        self.conn().execute("UPDATE folders SET name = ?1 WHERE id = ?2", params![name, folder_id])?;
+        Ok(())
+    }
+
+    /// Forgets a folder and its cached mail.
+    pub fn delete_folder(&self, folder_id: &str) -> Result<()> {
+        self.clear_folder(folder_id)?;
+        self.conn().execute("DELETE FROM folders WHERE id = ?1", [folder_id])?;
+        Ok(())
+    }
+
     // ---------------------------------------------------------------- messages
 
     pub fn max_uid(&self, folder_id: &str) -> Result<u32> {
@@ -1662,6 +1692,30 @@ mod tests {
                 ("Sent".into(), None),
             ]
         );
+    }
+
+    #[test]
+    fn renaming_a_folder_moves_the_folders_inside_along() {
+        let (store, _, _, _) = store_with_account();
+        let projects = folder(&store, "Projekte", None, ".");
+        folder(&store, "Projekte.UwUMail", None, ".");
+        folder(&store, "Projekte.UwUMail.Bugs", None, ".");
+        // Only real children move, not a folder that merely starts with the same letters.
+        folder(&store, "Projektewoche", None, ".");
+        store.rename_folder(&projects, "Arbeit", "Arbeit").unwrap();
+        assert_eq!(
+            parent_names(&store),
+            vec![
+                ("Arbeit".into(), None),
+                ("Arbeit.UwUMail".into(), Some("Arbeit".into())),
+                ("Arbeit.UwUMail.Bugs".into(), Some("Arbeit.UwUMail".into())),
+                ("INBOX".into(), None),
+                ("Projektewoche".into(), None),
+                ("Sent".into(), None),
+            ]
+        );
+        store.delete_folder(&projects).unwrap();
+        assert!(store.folder(&projects).is_err());
     }
 
     #[test]

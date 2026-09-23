@@ -127,6 +127,33 @@ fn list_folders(engine: State<'_, Engine>, account_id: Option<String>) -> Comman
 }
 
 #[tauri::command]
+async fn create_folder(
+    engine: State<'_, Engine>,
+    account_id: Option<String>,
+    name: String,
+    parent_id: Option<String>,
+) -> CommandResult<String> {
+    engine.create_folder(account_id.as_deref(), &name, parent_id.as_deref()).await
+}
+
+#[tauri::command]
+async fn rename_folder(engine: State<'_, Engine>, folder_id: String, name: String) -> CommandResult<()> {
+    engine.rename_folder(&folder_id, &name).await
+}
+
+/// Moves the folder's mail into the trash first; folders with folders inside stay.
+#[tauri::command]
+async fn delete_folder(engine: State<'_, Engine>, folder_id: String) -> CommandResult<()> {
+    engine.delete_folder(&folder_id).await
+}
+
+/// Trash and junk only. Returns how many messages went for good.
+#[tauri::command]
+async fn empty_folder(engine: State<'_, Engine>, folder_id: String) -> CommandResult<usize> {
+    engine.empty_folder(&folder_id).await
+}
+
+#[tauri::command]
 fn list_threads(engine: State<'_, Engine>, query: ThreadQuery) -> CommandResult<ThreadPage> {
     engine.list_threads(&query)
 }
@@ -476,6 +503,10 @@ pub fn run() {
             set_account_protocol,
             sync_now,
             list_folders,
+            create_folder,
+            rename_folder,
+            delete_folder,
+            empty_folder,
             list_threads,
             search_server,
             set_offline_days,
