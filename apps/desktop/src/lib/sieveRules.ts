@@ -75,7 +75,11 @@ const HEADER_NAMES: Record<RuleField, string> = {
   listId: '"list-id"',
 };
 
-/** Fields holding addresses, compared with `address :is :all` for "is". */
+/**
+ * Fields holding addresses: "is", "starts with" and "ends with" look at the bare address
+ * (`address :all`), since the header's display name and angle brackets would stand in the way
+ * of `"*@shop.example"`. "contains" searches the whole header, names included.
+ */
 const ADDRESS_FIELDS = new Set<RuleField>(["from", "to", "cc", "toOrCc"]);
 
 export function emptyRuleSet(): RuleSet {
@@ -163,11 +167,13 @@ function test(condition: RuleCondition): string {
         : `header :is ${header} ${quote(value)}`;
       break;
     case "startsWith":
-      positive = `header :matches ${header} ${quote(`${literalPattern(value)}*`)}`;
+    case "endsWith": {
+      const pattern = condition.op === "startsWith" ? `${literalPattern(value)}*` : `*${literalPattern(value)}`;
+      positive = ADDRESS_FIELDS.has(condition.field)
+        ? `address :matches :all ${header} ${quote(pattern)}`
+        : `header :matches ${header} ${quote(pattern)}`;
       break;
-    case "endsWith":
-      positive = `header :matches ${header} ${quote(`*${literalPattern(value)}`)}`;
-      break;
+    }
   }
   return condition.op === "notContains" || condition.op === "isNot" ? `not ${positive}` : positive;
 }

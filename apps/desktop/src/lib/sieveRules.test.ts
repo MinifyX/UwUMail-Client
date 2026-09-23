@@ -155,6 +155,37 @@ describe("rulesToSieve", () => {
     expect(script).toContain('header :matches "subject" "*a\\\\\\\\b"');
   });
 
+  /**
+   * The bug this is here for: "Sender ends with @shop.example" became
+   * `header :matches "from" "*@shop.example"`, which never matches `Shop <news@shop.example>`
+   * because of the closing bracket. It only showed when a real server filtered delivered mail.
+   */
+  it("compares the bare address for starts and ends with on address fields", () => {
+    const script = rulesToSieve(
+      set(
+        rule({
+          conditions: [
+            { field: "from", op: "endsWith", value: "@shop.example" },
+            { field: "to", op: "startsWith", value: "team-" },
+            { field: "cc", op: "endsWith", value: "*.example" },
+            { field: "toOrCc", op: "startsWith", value: "me@" },
+          ],
+        }),
+      ),
+    );
+    expect(script).toContain(
+      "if allof (" +
+        [
+          'address :matches :all "from" "*@shop.example"',
+          'address :matches :all "to" "team-*"',
+          'address :matches :all "cc" "*\\\\*.example"',
+          'address :matches :all ["to", "cc"] "me@*"',
+        ].join(", ") +
+        ") {",
+    );
+    expect(script).not.toContain('header :matches "from"');
+  });
+
   it("leaves disabled rules out of the Sieve but keeps them in the data line", () => {
     const script = rulesToSieve(set(rule({ name: "Off", enabled: false, actions: [{ type: "flag" }] })));
     expect(body(script)).toBe("");
