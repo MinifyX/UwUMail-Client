@@ -166,6 +166,10 @@ export class TauriBackend implements Backend {
     return call<Folder[]>("list_folders", { accountId: accountId ?? null });
   }
 
+  async calendarsAvailable() {
+    return (await this.calendarAccounts()).some((account) => account.source !== null);
+  }
+
   calendars() {
     return call<CalendarInfo[]>("list_calendars");
   }

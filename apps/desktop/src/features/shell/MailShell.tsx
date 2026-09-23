@@ -12,6 +12,7 @@ import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { AccountSetup } from "../accounts/AccountSetup";
+import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { Composer } from "../compose/Composer";
 import { loadLocalDraft } from "../compose/localDraft";
 import { MailboxNav } from "../mail/MailboxNav";
@@ -24,6 +25,7 @@ import { SettingsDialog } from "../settings/SettingsDialog";
 import { useWorkspaceGuard } from "../workspaces/workspaces";
 import { buildCommands } from "./commands";
 import { CommandPalette } from "./CommandPalette";
+import { LazyCalendar } from "./LazyCalendar";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 
 /** Keys that scroll the open mail from the list as well. */
@@ -99,11 +101,17 @@ export function MailShell() {
     ui.setComposeMinimized(true);
   }, [phone]);
 
+  const section = useUi((s) => s.section);
+  const { data: calendarAvailable = false, isSuccess: calendarKnown } = useCalendarsAvailable();
+  // Once no mailbox has calendars any more (the last one was removed), back to the mail.
+  useEffect(() => {
+    if (calendarKnown && !calendarAvailable && section === "calendar") useUi.getState().setSection("mail");
+  }, [calendarKnown, calendarAvailable, section]);
   // Titles depend on tone, theme, layout and the workspaces, so rebuild when they change.
   const commands = useMemo(
-    () => buildCommands(client, t),
+    () => buildCommands(client, t, { calendar: calendarAvailable }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, t, layout, tone, theme, selectedThreadId, workspaces, workspaceNames],
+    [client, t, layout, tone, theme, selectedThreadId, workspaces, workspaceNames, calendarAvailable],
   );
 
   const hotkeys = useMemo(() => {
@@ -147,7 +155,8 @@ export function MailShell() {
     }
     return map;
   }, [commands, phone]);
-  useHotkeys(hotkeys, { repeat: ["j", "k", "ArrowDown", "ArrowUp", ...SCROLL_KEYS] });
+  // The calendar brings its own keys.
+  useHotkeys(hotkeys, { enabled: section === "mail", repeat: ["j", "k", "ArrowDown", "ArrowUp", ...SCROLL_KEYS] });
 
   return (
     <div className="flex h-full flex-col">
@@ -159,6 +168,8 @@ export function MailShell() {
 
       {phone ? (
         <MobileShell />
+      ) : section === "calendar" ? (
+        <LazyCalendar />
       ) : pro ? (
         // A minmax(0,1fr) row keeps the columns at window height so each one scrolls on its own.
         <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,420px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">

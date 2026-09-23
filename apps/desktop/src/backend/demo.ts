@@ -418,6 +418,10 @@ export class DemoBackend implements Backend {
     return this.calendar.calendars().filter((c) => this.accounts.some((a) => a.id === c.accountId));
   }
 
+  async calendarsAvailable() {
+    return (await this.calendarAccounts()).some((account) => account.source !== null);
+  }
+
   async calendarAccounts() {
     await wait(80);
     return this.calendar.accounts(this.accounts.map((a) => a.id));

@@ -46,9 +46,14 @@ export interface MoveRequest {
   onMoved?: () => void;
 }
 
-export type SettingsSection = "appearance" | "mail" | "compose" | "security" | "accounts" | "addons" | "about";
+export type SettingsSection =
+  "appearance" | "mail" | "compose" | "rules" | "security" | "accounts" | "addons" | "about";
+
+/** The two halves of the app. */
+export type AppSection = "mail" | "calendar";
 
 interface UiState {
+  section: AppSection;
   view: MailboxView;
   filter: ListFilter;
   search: string;
@@ -72,6 +77,8 @@ interface UiState {
   selectionCursor: string | null;
   moving: MoveRequest | null;
 
+  setSection: (section: AppSection) => void;
+  /** Also switches back to the mail. */
   setView: (view: MailboxView) => void;
   setFilter: (filter: ListFilter) => void;
   setSearch: (search: string) => void;
@@ -99,6 +106,7 @@ interface UiState {
 }
 
 export const useUi = create<UiState>()((set, get) => ({
+  section: "mail",
   view: { kind: "unified", role: "inbox" },
   filter: "all",
   search: "",
@@ -117,8 +125,10 @@ export const useUi = create<UiState>()((set, get) => ({
   selectionCursor: null,
   moving: null,
 
+  setSection: (section) => set({ section, folderDrawerOpen: false, paletteOpen: false }),
   setView: (view) =>
     set({
+      section: "mail",
       view,
       selectedThreadId: null,
       folderDrawerOpen: false,

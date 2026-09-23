@@ -95,6 +95,8 @@ export interface Backend {
   setAccountProtocol(accountId: string, protocol: Protocol): Promise<Account>;
   syncNow(accountId?: string): Promise<void>;
 
+  /** Whether any account has calendars (see calendarAccounts); without one the calendar stays hidden. */
+  calendarsAvailable(): Promise<boolean>;
   /** Every calendar of every account that has some; ids start with the account id. */
   calendars(): Promise<CalendarInfo[]>;
   /** Per account: JMAP calendars, CalDAV, or why there's no calendar (e.g. Microsoft or Google sign-in). */

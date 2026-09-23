@@ -240,5 +240,16 @@
     "emptied_one": "Poof, {{count}} message is gone for good ✧",
     "emptied_other": "Poof, {{count}} messages are gone for good ✧",
     "alreadyEmpty": "Already spotless in here (˘ᵕ˘)"
+  },
+  "calendar": {
+    "nothingToday": "Nothing planned today. Nap time? (˘ω˘)",
+    "agendaEmpty": {
+      "title": "All free! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+      "body": "Nothing in the next 30 days. Time for adventures."
+    },
+    "toast": {
+      "created": "Written into the calendar ✿",
+      "deleted": "Poof, gone from the calendar (・ω・)"
+    }
   }
 }

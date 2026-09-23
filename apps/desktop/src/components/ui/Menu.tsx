@@ -4,6 +4,8 @@ import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode } fr
 export interface MenuItem {
   label: ReactNode;
   onSelect: () => void;
+  /** Deletes or throws away something. */
+  danger?: boolean;
 }
 
 interface MenuProps {
@@ -108,7 +110,10 @@ export function Menu({
                 setOpen(false);
                 item.onSelect();
               }}
-              className="rounded-xl px-3 py-2 text-left text-[13px] font-medium break-words hover:bg-pink-tint/60 focus:bg-pink-tint/60 focus:outline-none"
+              className={clsx(
+                "rounded-xl px-3 py-2 text-left text-[13px] font-medium break-words hover:bg-pink-tint/60 focus:bg-pink-tint/60 focus:outline-none",
+                item.danger && "text-danger",
+              )}
             >
               {item.label}
             </button>

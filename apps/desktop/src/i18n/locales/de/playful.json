@@ -240,5 +240,16 @@
     "emptied_one": "Puff, {{count}} Mail ist für immer weg ✧",
     "emptied_other": "Puff, {{count}} Mails sind für immer weg ✧",
     "alreadyEmpty": "Hier ist schon alles blitzblank (˘ᵕ˘)"
+  },
+  "calendar": {
+    "nothingToday": "Heute steht nichts an. Nickerchen? (˘ω˘)",
+    "agendaEmpty": {
+      "title": "Alles frei! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+      "body": "In den nächsten 30 Tagen steht nichts an. Zeit für Abenteuer."
+    },
+    "toast": {
+      "created": "Steht im Kalender ✿",
+      "deleted": "Puff, aus dem Kalender verschwunden (・ω・)"
+    }
   }
 }

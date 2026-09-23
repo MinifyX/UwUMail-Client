@@ -11,7 +11,12 @@
     "settings": "Settings",
     "compose": "Write",
     "menu": "Folders",
-    "toggleFolder": "Show or hide folders in {{name}}"
+    "toggleFolder": "Show or hide folders in {{name}}",
+    "apps": "Mail or calendar",
+    "section": {
+      "mail": "Mail",
+      "calendar": "Calendar"
+    }
   },
   "filter": {
     "all": "All",
@@ -484,7 +489,15 @@
     "discardDraft": "Discard draft (while writing)",
     "extendUp": "Extend selection up",
     "extendDown": "Extend selection down",
-    "selectAll": "Select all loaded mail"
+    "selectAll": "Select all loaded mail",
+    "goCalendar": "Go to calendar",
+    "calendarToday": "Today",
+    "calendarDay": "Day view",
+    "calendarWeek": "Week view",
+    "calendarMonth": "Month view",
+    "calendarNew": "New event",
+    "calendarNext": "Next day, week or month",
+    "calendarPrevious": "Previous day, week or month"
   },
   "palette": {
     "placeholder": "Type a command",
@@ -701,5 +714,137 @@
     "emptied_one": "{{count}} message deleted for good",
     "emptied_other": "{{count}} messages deleted for good",
     "alreadyEmpty": "Nothing to delete, the folder is already empty"
+  },
+  "calendar": {
+    "title": "Calendar",
+    "menu": "Calendars",
+    "today": "Today",
+    "view": "View",
+    "views": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month",
+      "agenda": "List"
+    },
+    "previous": {
+      "day": "Previous day",
+      "week": "Previous week",
+      "month": "Previous month"
+    },
+    "next": {
+      "day": "Next day",
+      "week": "Next week",
+      "month": "Next month"
+    },
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "loading": "Loading events",
+    "loadFailed": "The events couldn't be loaded.",
+    "newEvent": "New event",
+    "editEvent": "Edit event",
+    "edit": "Edit",
+    "delete": "Delete",
+    "untitled": "(No title)",
+    "eventTitle": "Title",
+    "titlePlaceholder": "Add a title",
+    "allDay": "All day",
+    "allDayShort": "all-day",
+    "starts": "Starts",
+    "ends": "Ends",
+    "startTime": "Start time",
+    "endTime": "End time",
+    "calendar": "Calendar",
+    "location": "Location",
+    "description": "Description",
+    "moreOptions": "More options",
+    "noWritableCalendar": "There's no calendar you can add events to.",
+    "readOnly": "read only",
+    "timeZone": "Time zone of the event: {{zone}}",
+    "more_one": "{{count}} more",
+    "more_other": "{{count}} more",
+    "openDay": "Show {{date}}",
+    "nothingToday": "Nothing planned today",
+    "agendaEmpty": {
+      "title": "Nothing planned",
+      "body": "The next 30 days are free."
+    },
+    "repeat": {
+      "label": "Repeat",
+      "none": "Doesn't repeat",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "everyLabel": "Every",
+      "interval": "Interval",
+      "unit": {
+        "daily_one": "day",
+        "daily_other": "days",
+        "weekly_one": "week",
+        "weekly_other": "weeks",
+        "monthly_one": "month",
+        "monthly_other": "months",
+        "yearly_one": "year",
+        "yearly_other": "years"
+      },
+      "days": "On these days",
+      "ends": "Ends",
+      "never": "Never",
+      "onDate": "On",
+      "after": "After",
+      "untilDate": "Last day",
+      "count": "Number of times",
+      "occurrences_one": "time",
+      "occurrences_other": "times",
+      "wholeSeries": "Changes apply to every event of the series.",
+      "complex": "This repetition was set up elsewhere and can't be changed here. It stays as it is.",
+      "every": {
+        "daily_one": "Every day",
+        "daily_other": "Every {{count}} days",
+        "weekly_one": "Every week",
+        "weekly_other": "Every {{count}} weeks",
+        "monthly_one": "Every month",
+        "monthly_other": "Every {{count}} months",
+        "yearly_one": "Every year",
+        "yearly_other": "Every {{count}} years"
+      },
+      "onDays": "on {{days}}",
+      "until": "until {{date}}",
+      "times_one": "once",
+      "times_other": "{{count}} times"
+    },
+    "problem": {
+      "end": "The end has to come after the start.",
+      "repeat": "Check the repetition: interval, days and end.",
+      "name": "Give the calendar a name."
+    },
+    "calendars": "Calendars",
+    "newCalendar": "New calendar",
+    "editCalendar": "Edit calendar",
+    "calendarActions": "Actions for {{name}}",
+    "makeDefault": "Use for new events",
+    "deleteCalendar": "Delete calendar",
+    "deleteCalendarTitle": "Delete “{{name}}”?",
+    "deleteCalendarBody": "All events in this calendar will be deleted too, on every device.",
+    "default": "Default",
+    "create": "Create",
+    "calendarName": "Name",
+    "account": "Mailbox",
+    "color": "Colour",
+    "colorNumber": "Colour {{number}}",
+    "deleteScope": {
+      "title": "Delete repeating event",
+      "occurrence": "Only this event",
+      "series": "All events of the series"
+    },
+    "toast": {
+      "created": "Event saved",
+      "saved": "Event updated",
+      "deleted": "Event deleted",
+      "failed": "That didn't work. {{reason}}",
+      "defaultSet": "New events now go into “{{name}}”",
+      "calendarCreated": "Calendar “{{name}}” created",
+      "calendarDeleted": "Calendar “{{name}}” deleted"
+    }
   }
 }

@@ -28,6 +28,7 @@ import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
+import { AppSwitch } from "../shell/AppSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
 import { THREAD_DRAG_TYPE, useSelectionActions } from "./selection";
@@ -305,6 +306,8 @@ export function MailboxNav({ className, workspaceSwitch = false }: { className?:
       </div>
 
       {workspaceSwitch && <WorkspaceSwitch onCanvas className="-mt-1" />}
+      {/* The workspace switch only sits in the pro layout's column, which is on the canvas. */}
+      <AppSwitch onCanvas={workspaceSwitch} />
 
       <Button
         variant="primary"
