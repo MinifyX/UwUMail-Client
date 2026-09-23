@@ -13,8 +13,45 @@ use crate::error::{Error, Result};
 /// Instances expanded per object at most; an event every minute for years stops here.
 pub const MAX_INSTANCES: usize = 20_000;
 
+/// Components inside components at most. Real objects nest three deep (a calendar, an event, an
+/// alarm); converting one nested thousands deep would run out of stack and end the app.
+pub const MAX_NESTING: usize = 8;
+
 pub fn parse(text: &str) -> Result<ICalendar> {
-    ICalendar::parse(text).map_err(|_| Error::invalid("The calendar server sent an event UwUMail can't read."))
+    let unreadable = || Error::invalid("The calendar server sent an event UwUMail can't read.");
+    let ical = ICalendar::parse(text).map_err(|_| unreadable())?;
+    if nesting_too_deep(&ical) {
+        return Err(unreadable());
+    }
+    Ok(ical)
+}
+
+/// Whether some component sits more than [`MAX_NESTING`] deep, counted without recursion.
+fn nesting_too_deep(ical: &ICalendar) -> bool {
+    let count = ical.components.len();
+    let mut parent: Vec<Option<usize>> = vec![None; count];
+    for (index, component) in ical.components.iter().enumerate() {
+        for &child in &component.component_ids {
+            match parent.get_mut(child as usize) {
+                // A component listed twice (or as its own child) isn't a tree.
+                Some(Some(_)) => return true,
+                Some(slot) if child as usize != index => *slot = Some(index),
+                _ => return true,
+            }
+        }
+    }
+    (0..count).any(|start| {
+        let mut depth = 1;
+        let mut at = start;
+        while let Some(up) = parent[at] {
+            depth += 1;
+            if depth > MAX_NESTING {
+                return true;
+            }
+            at = up;
+        }
+        false
+    })
 }
 
 /// The object as a JSCalendar group (`{"@type": "Group", "entries": [...]}`).
@@ -219,6 +256,32 @@ DURATION:PT1M\r\nRRULE:FREQ=MINUTELY\r\nSUMMARY:Tick\r\nEND:VEVENT\r\nEND:VCALEN
         assert!(text.contains("20261001T180000"), "the new exception: {text}");
         assert!(text.contains("RECURRENCE-ID"), "the override stays: {text}");
         assert!(text.contains("UID:yoga-1"), "{text}");
+    }
+
+    /// security-audit C-6: an object nested thousands deep (a few hundred kilobytes) used to
+    /// overflow the stack while being converted, which ends the whole app.
+    #[test]
+    fn refuses_objects_nested_too_deep() {
+        let depth = 50_000;
+        let mut text = String::from("BEGIN:VCALENDAR\r\n");
+        text.push_str(&"BEGIN:VEVENT\r\n".repeat(depth));
+        text.push_str(&"END:VEVENT\r\n".repeat(depth));
+        text.push_str("END:VCALENDAR\r\n");
+        assert!(parse(&text).is_err());
+
+        // What real calendars send stays readable: an event with an alarm, a zone with its rules.
+        let normal = "BEGIN:VCALENDAR\r\nBEGIN:VTIMEZONE\r\nTZID:Europe/Berlin\r\nBEGIN:STANDARD\r\n\
+DTSTART:19701025T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0100\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n\
+BEGIN:VEVENT\r\nUID:a\r\nDTSTART;TZID=Europe/Berlin:20261003T100000\r\nSUMMARY:A\r\nBEGIN:VALARM\r\n\
+ACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        let ical = parse(normal).unwrap();
+        assert!(to_jscalendar(&ical).is_ok());
+        let nine_deep = format!(
+            "BEGIN:VCALENDAR\r\n{}{}END:VCALENDAR\r\n",
+            "BEGIN:VEVENT\r\n".repeat(MAX_NESTING),
+            "END:VEVENT\r\n".repeat(MAX_NESTING)
+        );
+        assert!(parse(&nine_deep).is_err());
     }
 
     #[test]
