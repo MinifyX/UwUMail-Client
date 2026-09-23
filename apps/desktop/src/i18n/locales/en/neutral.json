@@ -944,6 +944,7 @@
       "caldav": "CalDAV"
     },
     "unavailable": "Not available",
+    "signIn": "Calendars of mailboxes signed in with Microsoft or Google aren't supported yet.",
     "url": "CalDAV address",
     "urlHint": "Only needed when UwUMail doesn't find the calendars by itself.",
     "check": "Check again",

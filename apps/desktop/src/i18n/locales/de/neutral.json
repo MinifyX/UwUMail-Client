@@ -944,6 +944,7 @@
       "caldav": "CalDAV"
     },
     "unavailable": "Nicht verfügbar",
+    "signIn": "Kalender von Postfächern mit Microsoft- oder Google-Anmeldung gehen noch nicht.",
     "url": "CalDAV-Adresse",
     "urlHint": "Nur nötig, wenn UwUMail die Kalender nicht von selbst findet.",
     "check": "Erneut prüfen",

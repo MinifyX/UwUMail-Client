@@ -45,8 +45,11 @@ export function AccountCalendar({ account }: { account: Account }) {
           )}
         </span>
       </div>
-      {source?.problem && source.source === null && (
-        <p className="text-[12.5px] break-words text-muted">{source.problem}</p>
+      {source && source.source === null && (source.problem || account.auth !== "password") && (
+        <p className="text-[12.5px] break-words text-muted">
+          {/* Sign-ins get the known reason in the app's language; for the rest, what the discovery ran into. */}
+          {account.auth === "password" ? source.problem : t("accountCalendar.signIn")}
+        </p>
       )}
       {/* Microsoft and Google sign-ins can't log in to CalDAV; the UwUMail server has its own calendars. */}
       {account.auth === "password" && source && source.source !== "jmap" && (

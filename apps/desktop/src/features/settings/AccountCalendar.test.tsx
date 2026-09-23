@@ -108,7 +108,9 @@ describe("a mailbox's calendar settings", () => {
     unmount();
 
     renderBlock(account("work", "microsoft", "imap"));
-    expect(await screen.findByText("No calendars for Microsoft sign-ins.")).toBeTruthy();
+    expect(
+      await screen.findByText("Calendars of mailboxes signed in with Microsoft or Google aren't supported yet."),
+    ).toBeTruthy();
     expect(screen.queryByLabelText("CalDAV address")).toBeNull();
   });
 });
