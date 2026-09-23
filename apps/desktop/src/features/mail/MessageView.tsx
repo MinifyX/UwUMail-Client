@@ -12,7 +12,7 @@ import {
   Printer,
   Sun,
 } from "lucide-react";
-import { Fragment, useId, useState } from "react";
+import { Fragment, useId, useMemo, useState } from "react";
 import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -22,6 +22,7 @@ import { translate, useT } from "@/i18n";
 import { addressRows, fullAddress, type AddressRole } from "@/lib/addresses";
 import { visibleText } from "@/lib/links";
 import { displayName, formatFullDate, formatListDate, formatLongDate } from "@/lib/format";
+import type { ImageProxy } from "@/lib/remoteImages";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCompanyDomain, useFolders } from "@/lib/queries";
 import { useUi } from "@/state/ui";
@@ -175,6 +176,8 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const theme = useResolvedTheme();
   const remoteSetting = useSettings((s) => s.remoteImages);
   const trustedSenders = useSettings((s) => s.trustedSenders);
+  // The same function for the whole life of the view, so the body isn't rebuilt on every render.
+  const imageProxy = useMemo(() => backend().imageProxy(message.accountId), [message.accountId]);
   const mailAppearance = useSettings((s) => s.mailAppearance);
   const senderChoice = useSettings((s) => s.senderAppearance[message.from.email.toLowerCase()]);
   const darkImages = useSettings((s) => s.darkImages);
@@ -281,7 +284,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
               <MessageMenu
                 message={message}
                 accounts={accounts}
-                onPrint={() => printMessage(message, allowRemote, inlineImages.urls)}
+                onPrint={() => printMessage(message, allowRemote, inlineImages.urls, imageProxy)}
               />
             )}
             <time dateTime={message.date} className="text-[12.5px] text-muted">
@@ -309,6 +312,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           inlineImages={inlineImages.urls}
           darkImages={darkImages}
           loadRemoteImage={loadMailImage}
+          imageProxy={imageProxy}
         />
       </div>
 
@@ -462,7 +466,12 @@ function MenuLabel({ icon: Icon, text }: { icon: typeof Ban; text: string }) {
 }
 
 /** Prints one mail from a hidden frame that can't run scripts. */
-function printMessage(message: Message, allowRemote: boolean, inlineImages: ReadonlyMap<string, string>) {
+function printMessage(
+  message: Message,
+  allowRemote: boolean,
+  inlineImages: ReadonlyMap<string, string>,
+  imageProxy: ImageProxy | null,
+) {
   const labels = {
     from: translate("compose.from"),
     to: translate("compose.to"),
@@ -480,6 +489,7 @@ function printMessage(message: Message, allowRemote: boolean, inlineImages: Read
     inlineImages,
     labels,
     formatFullDate(message.date, document.documentElement.lang || "de"),
+    imageProxy,
   );
   frame.onload = () => {
     const view = frame.contentWindow;

@@ -55,10 +55,16 @@ describe("a mailbox's calendar settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sources = [
-      { accountId: "club", source: null, caldavUrl: null, problem: "No calendar server found." },
-      { accountId: "uwu", source: "jmap", caldavUrl: null, problem: null },
-      { accountId: "work", source: null, caldavUrl: null, problem: "No calendars for Microsoft sign-ins." },
-      { accountId: "dav", source: "caldav", caldavUrl: "https://dav.example.net/cal/", problem: null },
+      { accountId: "club", source: null, caldavUrl: null, problem: "No calendar server found.", checked: true },
+      { accountId: "uwu", source: "jmap", caldavUrl: null, problem: null, checked: true },
+      {
+        accountId: "work",
+        source: null,
+        caldavUrl: null,
+        problem: "No calendars for Microsoft sign-ins.",
+        checked: true,
+      },
+      { accountId: "dav", source: "caldav", caldavUrl: "https://dav.example.net/cal/", problem: null, checked: true },
     ];
   });
   afterEach(cleanup);

@@ -101,8 +101,9 @@ async fn list_calendars(engine: State<'_, Engine>) -> CommandResult<Vec<Calendar
 
 /// Per account: JMAP calendars, CalDAV, or why there's no calendar.
 #[tauri::command]
-async fn calendar_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<CalendarAccount>> {
-    engine.calendar_accounts().await
+async fn calendar_accounts(engine: State<'_, Engine>, look: Option<bool>) -> CommandResult<Vec<CalendarAccount>> {
+    let look = look.unwrap_or(true);
+    engine.calendar_accounts(look).await
 }
 
 #[tauri::command]
@@ -474,8 +475,36 @@ async fn get_sender_picture(engine: State<'_, Engine>, email: String) -> Command
 /// A remote image of a mail as raw bytes, so the reader can recolor it for dark mode.
 /// Empty when it can't be had.
 #[tauri::command]
-async fn fetch_mail_image(engine: State<'_, Engine>, url: String) -> CommandResult<tauri::ipc::Response> {
-    Ok(tauri::ipc::Response::new(engine.mail_image(&url).await.unwrap_or_default()))
+async fn fetch_mail_image(
+    engine: State<'_, Engine>,
+    account_id: Option<String>,
+    url: String,
+) -> CommandResult<tauri::ipc::Response> {
+    let bytes = engine.mail_image(account_id.as_deref(), &url).await.map(|(_, bytes)| bytes);
+    Ok(tauri::ipc::Response::new(bytes.unwrap_or_default()))
+}
+
+/// The proxy remote pictures, sender pictures and one-click unsubscribes take; empty for none.
+#[tauri::command]
+fn set_privacy_proxy(engine: State<'_, Engine>, proxy: String) -> CommandResult<()> {
+    engine.set_privacy_proxy(&proxy)
+}
+
+/// `uwuimg:` — a mail's remote picture, which the web view never loads from its sender itself:
+/// `?account=…&url=…` goes through the account's UwUMail server, or from here through the privacy proxy.
+async fn remote_picture(app: AppHandle, query: String) -> tauri::http::Response<Vec<u8>> {
+    let not_found = || tauri::http::Response::builder().status(404).body(Vec::new()).unwrap_or_default();
+    let Some((account, url)) = uwumail_core::mail_images::picture_request(&query) else { return not_found() };
+    let Some(engine) = app.try_state::<Engine>() else { return not_found() };
+    let Some((media_type, bytes)) = engine.mail_image(account.as_deref(), &url).await else { return not_found() };
+    tauri::http::Response::builder()
+        .header("Content-Type", media_type)
+        .header("Cache-Control", "private, max-age=86400")
+        .header("X-Content-Type-Options", "nosniff")
+        // Dark mode reads the pixels to recolor light pictures.
+        .header("Access-Control-Allow-Origin", "*")
+        .body(bytes)
+        .unwrap_or_else(|_| not_found())
 }
 
 #[tauri::command]
@@ -540,6 +569,12 @@ fn set_update_channel(app: AppHandle, channel: Channel) {
     platform::set_update_channel(&app, channel);
 }
 
+/// Whether UwUMail looks for new versions by itself; the button in the settings asks either way.
+#[tauri::command]
+fn set_update_checks(app: AppHandle, enabled: bool) {
+    platform::set_update_checks(&app, enabled);
+}
+
 /// A downloaded update waiting for a restart, if any.
 #[tauri::command]
 fn update_status(app: AppHandle) -> Option<ReadyUpdate> {
@@ -563,6 +598,11 @@ pub fn run() {
 
     let app = platform::plugins(tauri::Builder::default())
         .plugin(tauri_plugin_opener::init())
+        .register_asynchronous_uri_scheme_protocol("uwuimg", |context, request, responder| {
+            let app = context.app_handle().clone();
+            let query = request.uri().query().unwrap_or_default().to_owned();
+            tauri::async_runtime::spawn(async move { responder.respond(remote_picture(app, query).await) });
+        })
         .setup(|app| {
             let engine = platform::start_engine(app)?;
 
@@ -654,6 +694,7 @@ pub fn run() {
             get_sender_picture,
             fetch_mail_image,
             clear_sender_pictures,
+            set_privacy_proxy,
             get_company_domain,
             open_link,
             set_run_in_background,
@@ -663,6 +704,7 @@ pub fn run() {
             set_system_bars,
             mobile_action,
             set_update_channel,
+            set_update_checks,
             update_status,
             check_for_updates,
             install_update,

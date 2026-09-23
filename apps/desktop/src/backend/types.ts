@@ -377,6 +377,8 @@ export interface CalendarAccount {
   caldavUrl: string | null;
   /** Why there's no calendar, when there isn't (e.g. a Microsoft or Google sign-in). */
   problem: string | null;
+  /** False while only a search for a CalDAV server could tell; that waits until the calendar opens. */
+  checked: boolean;
 }
 
 export type BackendEvent =

@@ -103,10 +103,13 @@ export function MailShell() {
 
   const section = useUi((s) => s.section);
   const { data: calendarAvailable = false, isSuccess: calendarKnown } = useCalendarsAvailable();
-  // Once no mailbox has calendars any more (the last one was removed), back to the mail.
+  // No mailbox has calendars: the search that ran when the calendar opened found none, or the last
+  // one was removed. Back to the mail.
   useEffect(() => {
-    if (calendarKnown && !calendarAvailable && section === "calendar") useUi.getState().setSection("mail");
-  }, [calendarKnown, calendarAvailable, section]);
+    if (!calendarKnown || calendarAvailable || section !== "calendar") return;
+    useUi.getState().setSection("mail");
+    toast(t("calendar.noneFound"), "info");
+  }, [calendarKnown, calendarAvailable, section, t]);
   // Titles depend on tone, theme, layout and the workspaces, so rebuild when they change.
   const commands = useMemo(
     () => buildCommands(client, t, { calendar: calendarAvailable }),

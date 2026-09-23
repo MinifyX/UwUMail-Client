@@ -24,7 +24,18 @@ export function useCalendarsAvailable() {
 }
 
 export function useCalendars() {
-  return useQuery({ queryKey: queryKeys.calendars, queryFn: () => backend().calendars() });
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: queryKeys.calendars,
+    queryFn: async () => {
+      try {
+        return await backend().calendars();
+      } finally {
+        // Listing them is what searches for CalDAV servers; now it is known whether there are any.
+        void client.invalidateQueries({ queryKey: ["calendarsAvailable"] });
+      }
+    },
+  });
 }
 
 /** The days a view shows, and the wall-time range to ask the server for. */

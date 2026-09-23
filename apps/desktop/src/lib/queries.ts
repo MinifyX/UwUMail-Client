@@ -290,6 +290,8 @@ export function useBackendEvents() {
   const { t } = useT();
   const runInBackground = useSettings((s) => s.runInBackground);
   const updateChannel = useSettings((s) => s.updateChannel);
+  const updateChecks = useSettings((s) => s.updateChecks);
+  const privacyProxy = useSettings((s) => s.privacyProxy);
 
   useEffect(() => {
     void backend().setRunInBackground(runInBackground);
@@ -298,6 +300,18 @@ export function useBackendEvents() {
   useEffect(() => {
     void backend().setUpdateChannel(updateChannel);
   }, [updateChannel]);
+
+  useEffect(() => {
+    void backend().setUpdateChecks(updateChecks);
+  }, [updateChecks]);
+
+  // Remote pictures wait for this before they go anywhere. A kept address was checked when it was
+  // saved; should the app still turn it down, they stay away rather than leave without it.
+  useEffect(() => {
+    void backend()
+      .setPrivacyProxy(privacyProxy)
+      .catch(() => {});
+  }, [privacyProxy]);
 
   // Signatures that came from another device through the settings sync.
   useEffect(

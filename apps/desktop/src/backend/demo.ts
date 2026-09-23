@@ -960,6 +960,15 @@ export class DemoBackend implements Backend {
 
   async setUpdateChannel() {}
 
+  async setUpdateChecks() {}
+
+  imageProxy() {
+    // No app to fetch through; the demo's remote pictures point at hosts that never answer.
+    return null;
+  }
+
+  async setPrivacyProxy() {}
+
   async updateStatus(): Promise<UpdateInfo | null> {
     return null;
   }

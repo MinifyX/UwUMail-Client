@@ -235,12 +235,13 @@ export class DemoCalendar {
   accounts(accountIds: string[]): CalendarAccount[] {
     return accountIds.map((accountId) =>
       accountId === "acc-private"
-        ? { accountId, source: "jmap", caldavUrl: null, problem: null }
+        ? { accountId, source: "jmap", caldavUrl: null, problem: null, checked: true }
         : {
             accountId,
             source: null,
             caldavUrl: null,
             problem: "Calendars aren't available for mailboxes signed in with Microsoft or Google.",
+            checked: true,
           },
     );
   }

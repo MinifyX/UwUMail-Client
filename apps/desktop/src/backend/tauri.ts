@@ -32,7 +32,15 @@ import type {
   UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
+import type { ImageProxy } from "@/lib/remoteImages";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
+
+/** Where the app hands out a mail's remote pictures (`uwuimg:` in Rust), spelled for this platform. */
+let picturesBase: string | null = null;
+function pictures(): string {
+  picturesBase ??= convertFileSrc("picture", "uwuimg");
+  return picturesBase;
+}
 
 interface EngineError {
   code: BackendErrorCode;
@@ -176,8 +184,13 @@ export class TauriBackend implements Backend {
     return call<Folder[]>("list_folders", { accountId: accountId ?? null });
   }
 
+  /**
+   * Without searching for CalDAV servers, which asks the mail domain's website: an account only that
+   * search could answer for counts until the calendar is opened and it runs.
+   */
   async calendarsAvailable() {
-    return (await this.calendarAccounts()).some((account) => account.source !== null);
+    const accounts = await call<CalendarAccount[]>("calendar_accounts", { look: false });
+    return accounts.some((account) => account.source !== null || !account.checked);
   }
 
   calendars() {
@@ -185,7 +198,7 @@ export class TauriBackend implements Backend {
   }
 
   calendarAccounts() {
-    return call<CalendarAccount[]>("calendar_accounts");
+    return call<CalendarAccount[]>("calendar_accounts", { look: true });
   }
 
   setCalDavUrl(accountId: string, url: string | null) {
@@ -359,7 +372,13 @@ export class TauriBackend implements Backend {
   }
 
   async fetchMailImage(url: string): Promise<Blob | null> {
-    const bytes = await call<ArrayBuffer>("fetch_mail_image", { url });
+    // A picture the reader already has from the app names its account and address.
+    const base = `${pictures()}?`;
+    const request = url.startsWith(base) ? new URLSearchParams(url.slice(base.length)) : null;
+    const args = request
+      ? { accountId: request.get("account"), url: request.get("url") ?? "" }
+      : { accountId: null, url };
+    const bytes = await call<ArrayBuffer>("fetch_mail_image", args);
     if (bytes.byteLength === 0) return null;
     // Raster formats are recognized by their bytes, SVG only by its type.
     const svg = /^\s*</.test(new TextDecoder().decode(bytes.slice(0, 64)));
@@ -384,6 +403,19 @@ export class TauriBackend implements Backend {
 
   setUpdateChannel(channel: "stable" | "beta") {
     return call<void>("set_update_channel", { channel });
+  }
+
+  setUpdateChecks(enabled: boolean) {
+    return call<void>("set_update_checks", { enabled });
+  }
+
+  imageProxy(accountId: string): ImageProxy {
+    const base = pictures();
+    return (url) => `${base}?account=${encodeURIComponent(accountId)}&url=${encodeURIComponent(url)}`;
+  }
+
+  setPrivacyProxy(proxy: string) {
+    return call<void>("set_privacy_proxy", { proxy });
   }
 
   updateStatus() {

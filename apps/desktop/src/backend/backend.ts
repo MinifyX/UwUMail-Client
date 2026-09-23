@@ -29,6 +29,7 @@ import type {
   UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
+import type { ImageProxy } from "@/lib/remoteImages";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 
 export type BackendErrorCode =
@@ -182,6 +183,14 @@ export interface Backend {
   clearSenderPictures(): Promise<void>;
   /** A remote image of a mail, for dark mode to recolor; null where the page has to do without. */
   fetchMailImage(url: string): Promise<Blob | null>;
+  /**
+   * Where a mail's remote pictures load from, so their senders never see this device: the app
+   * fetches them, through the account's UwUMail server or the privacy proxy. Null where there is
+   * no app to do that (the demo); the pictures then load directly.
+   */
+  imageProxy(accountId: string): ImageProxy | null;
+  /** The proxy remote pictures, sender pictures and one-click unsubscribes take; empty for none. */
+  setPrivacyProxy(proxy: string): Promise<void>;
   /** Main domain of a company address (`news.shop.example` → `shop.example`); null for mail providers. */
   companyDomain(email: string): Promise<string | null>;
 
@@ -191,6 +200,8 @@ export interface Backend {
   takeMailto(): Promise<MailtoDraft | null>;
 
   setUpdateChannel(channel: "stable" | "beta"): Promise<void>;
+  /** Whether UwUMail looks for new versions by itself. */
+  setUpdateChecks(enabled: boolean): Promise<void>;
   /** A downloaded update waiting for a restart. */
   updateStatus(): Promise<UpdateInfo | null>;
   /** Looks for a new version and downloads it; null when UwUMail is up to date. */

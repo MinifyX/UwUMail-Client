@@ -36,9 +36,9 @@ const ACCOUNTS = [
   { id: "m", name: "Work", email: "mini@example.com" },
 ];
 const SOURCES: CalendarAccount[] = [
-  { accountId: "a", source: "jmap", caldavUrl: null, problem: null },
-  { accountId: "b", source: "caldav", caldavUrl: null, problem: null },
-  { accountId: "m", source: null, caldavUrl: null, problem: "No calendars for Microsoft sign-ins." },
+  { accountId: "a", source: "jmap", caldavUrl: null, problem: null, checked: true },
+  { accountId: "b", source: "caldav", caldavUrl: null, problem: null, checked: true },
+  { accountId: "m", source: null, caldavUrl: null, problem: "No calendars for Microsoft sign-ins.", checked: true },
 ];
 
 const fake = {

@@ -36,6 +36,7 @@ import { openLinkNow } from "@/state/links";
 import { useAccounts } from "@/lib/queries";
 import { isDomainEntry, sortEntries } from "@/lib/trustedSenders";
 import { workspaceOf } from "@/lib/workspaces";
+import { PrivacyProxy } from "./PrivacyProxy";
 import { confirmIdentity } from "@/state/lock";
 import {
   useSettings,
@@ -351,6 +352,7 @@ function Reading() {
           {t("settings.clearSenderPictures")}
         </Button>
       </div>
+      <PrivacyProxy />
       {phone && (
         <Row label={t("settings.swipeRight")} description={t("settings.swipeDesc")}>
           <SwipeSelect value={settings.swipeRight} onChange={(swipeRight) => settings.update({ swipeRight })} />
@@ -517,12 +519,19 @@ function Addons() {
 function UpdateSettings() {
   const { t } = useT();
   const channel = useSettings((s) => s.updateChannel);
+  const checks = useSettings((s) => s.updateChecks);
   const update = useSettings((s) => s.update);
   const [checking, setChecking] = useState(false);
 
   return (
     <div className="flex w-full max-w-[420px] flex-col items-center gap-2.5 rounded-2xl border border-hairline px-4 py-3">
       <p className="text-[13px] text-muted">{t("settings.updatesDesc")}</p>
+      <Toggle
+        checked={checks}
+        onChange={(updateChecks) => update({ updateChecks })}
+        label={t("settings.updateChecks")}
+        description={t("settings.updateChecksDesc")}
+      />
       <Segmented
         label={t("settings.updates")}
         value={channel}
