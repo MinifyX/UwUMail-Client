@@ -446,7 +446,8 @@
     "syncFailed": "Synchronisieren mit {{email}} hat nicht geklappt: {{detail}}",
     "syncRefused": "{{count}} Einstellungen nimmt der Server nicht an. Sie bleiben auf diesem Gerät.",
     "signatureLocalOnly": "Nur hier",
-    "signatureLocalOnlyDesc": "Diese Signatur bleibt auf diesem Gerät: Sie ist zu groß zum Synchronisieren (höchstens 256 KB) oder hat Bilder, die nur hier gehen."
+    "signatureLocalOnlyDesc": "Diese Signatur bleibt auf diesem Gerät: Sie ist zu groß zum Synchronisieren (höchstens 256 KB) oder hat Bilder, die nur hier gehen.",
+    "rules": "Regeln"
   },
   "theme": {
     "system": "System",
@@ -846,5 +847,93 @@
       "calendarCreated": "Kalender „{{name}}“ angelegt",
       "calendarDeleted": "Kalender „{{name}}“ gelöscht"
     }
+  },
+  "rules": {
+    "title": "Mail-Regeln",
+    "description": "Dein Server sortiert ankommende Mails mit diesen Regeln, von oben nach unten, auch wenn UwUMail zu ist. UwUMail im Browser zeigt dieselben Regeln.",
+    "account": "Postfach",
+    "loading": "Regeln werden geladen …",
+    "loadFailed": "Die Regeln konnten nicht geladen werden. {{reason}}",
+    "empty": "Noch keine Regeln. Mit einer Regel landen Mails von einem Absender zum Beispiel direkt in einem Ordner.",
+    "newRule": "Neue Regel",
+    "editRule": "{{name}} bearbeiten",
+    "deleteRule": "{{name}} löschen",
+    "enabled": "{{name}} ein- oder ausschalten",
+    "moveUp": "{{name}} nach oben",
+    "moveDown": "{{name}} nach unten",
+    "saved": "Regel gespeichert",
+    "deleted": "Regel „{{name}}“ gelöscht",
+    "saveFailed": "Die Regeln konnten nicht gespeichert werden. {{reason}}",
+    "invalid": "Der Server nimmt diese Regeln nicht an: {{reason}}",
+    "valid": "Der Server nimmt diese Regeln an.",
+    "inactive": "Diese Regeln sind auf dem Server gerade ausgeschaltet.",
+    "activate": "Einschalten",
+    "name": "Name",
+    "namePlaceholder": "z. B. „Rechnungen“",
+    "when": "Wenn eine Mail ankommt",
+    "matchAll": "Alle Bedingungen passen",
+    "matchAny": "Eine Bedingung passt",
+    "everyMessage": "jede Mail",
+    "value": "Text",
+    "addCondition": "Bedingung hinzufügen",
+    "removeCondition": "Bedingung entfernen",
+    "then": "Dann",
+    "addAction": "Aktion hinzufügen",
+    "removeAction": "Aktion entfernen",
+    "chooseFolder": "Ordner wählen",
+    "forwardTo": "Weiterleiten an",
+    "forwardPlaceholder": "name@example.org",
+    "keepCopy": "Auch hier eine Kopie behalten",
+    "forwardHint": "Klappt an Adressen auf diesem Server und an Adressen, die du in deinem UwUMail-Portal unter Weiterleitung bestätigt hast. Sonst bleibt die Mail einfach hier.",
+    "stop": "Hier aufhören",
+    "stopDesc": "Weiter unten stehende Regeln laufen für Mails, die diese Regel erwischt hat, nicht mehr.",
+    "and": "und",
+    "or": "oder",
+    "field": {
+      "label": "Feld",
+      "from": "Absender",
+      "to": "An",
+      "cc": "Cc",
+      "toOrCc": "An oder Cc",
+      "subject": "Betreff",
+      "listId": "Mailingliste"
+    },
+    "op": {
+      "label": "Vergleich",
+      "contains": "enthält",
+      "notContains": "enthält nicht",
+      "is": "ist",
+      "isNot": "ist nicht",
+      "startsWith": "beginnt mit",
+      "endsWith": "endet mit"
+    },
+    "action": {
+      "move": "In Ordner verschieben",
+      "trash": "In den Papierkorb",
+      "markRead": "Als gelesen markieren",
+      "flag": "Markieren",
+      "forward": "Weiterleiten"
+    },
+    "summary": {
+      "move": "nach {{folder}}",
+      "forward": "an {{address}} weiterleiten",
+      "stop": "hört auf"
+    },
+    "problem": {
+      "noName": "Gib der Regel einen Namen.",
+      "emptyValue": "Gib den Text ein, nach dem gesucht wird.",
+      "noActions": "Füg mindestens eine Aktion hinzu.",
+      "noFolder": "Wähl einen Ordner.",
+      "badAddress": "Gib eine vollständige Adresse ein, z. B. name@example.org.",
+      "tooMany": "Pro Regel ein Ordner und eine Weiterleitung."
+    },
+    "foreignTitle": "Diese Regeln wurden woanders bearbeitet",
+    "foreignBody": "Ein anderes Programm hat das Regel-Skript geändert, deshalb zeigt UwUMail es als Text. Du kannst es hier bearbeiten oder durch Regeln ersetzen, die du in UwUMail verwaltest.",
+    "scriptLabel": "Sieve-Skript",
+    "saveScript": "Speichern",
+    "check": "Prüfen",
+    "replace": "Durch UwUMail-Regeln ersetzen",
+    "replaceConfirm": "Skript ersetzen",
+    "replaceBody": "Das Skript oben wird gelöscht und du fängst mit einer leeren Regelliste an."
   }
 }

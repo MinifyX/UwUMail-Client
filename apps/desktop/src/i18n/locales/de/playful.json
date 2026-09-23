@@ -251,5 +251,10 @@
       "created": "Steht im Kalender ✿",
       "deleted": "Puff, aus dem Kalender verschwunden (・ω・)"
     }
+  },
+  "rules": {
+    "empty": "Noch keine Regeln. Sag mir, wo Mails hin sollen, dann sortier ich sie für dich, sogar nachts (˘ω˘)",
+    "saved": "Alles klar, ab jetzt sortier ich so ✿",
+    "foreignTitle": "Da hat jemand anders reingekritzelt (・_・;)"
   }
 }

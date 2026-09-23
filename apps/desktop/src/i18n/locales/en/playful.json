@@ -251,5 +251,10 @@
       "created": "Written into the calendar ✿",
       "deleted": "Poof, gone from the calendar (・ω・)"
     }
+  },
+  "rules": {
+    "empty": "No rules yet. Tell me where mail should go and I'll sort it for you, even while you sleep (˘ω˘)",
+    "saved": "Got it, I'll sort by this from now on ✿",
+    "foreignTitle": "Someone else scribbled in here (・_・;)"
   }
 }

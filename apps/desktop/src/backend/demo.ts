@@ -257,6 +257,11 @@ export class DemoBackend implements Backend {
     return this.accounts.filter((account) => account.protocol === "jmap").map((account) => account.id);
   }
 
+  async mailRulesAvailable(accountId?: string) {
+    const accounts = await this.ruleAccounts();
+    return accountId ? accounts.includes(accountId) : accounts.length > 0;
+  }
+
   private rulesAccount(accountId?: string) {
     const account = accountId
       ? this.accounts.find((a) => a.id === accountId)

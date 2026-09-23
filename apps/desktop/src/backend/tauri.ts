@@ -66,6 +66,8 @@ const EVENT_NAMES = [
 
 export class TauriBackend implements Backend {
   readonly kind = "tauri";
+  /** One question to the servers at a time, however many parts of the page ask. */
+  private askingRuleAccounts: Promise<string[]> | null = null;
 
   listAccounts() {
     return call<Account[]>("list_accounts");
@@ -123,7 +125,15 @@ export class TauriBackend implements Backend {
   }
 
   ruleAccounts() {
-    return call<string[]>("rule_accounts");
+    this.askingRuleAccounts ??= call<string[]>("rule_accounts").finally(() => {
+      this.askingRuleAccounts = null;
+    });
+    return this.askingRuleAccounts;
+  }
+
+  async mailRulesAvailable(accountId?: string) {
+    const accounts = await this.ruleAccounts();
+    return accountId ? accounts.includes(accountId) : accounts.length > 0;
   }
 
   mailRules(accountId?: string) {

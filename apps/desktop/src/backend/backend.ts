@@ -80,6 +80,8 @@ export interface Backend {
   saveUserSettings(accountId: string, patch: Record<string, unknown>, ifInState?: string): Promise<SaveOutcome>;
   /** Accounts whose UwUMail server runs mail rules (JMAP with Sieve scripts); unreachable ones are left out. */
   ruleAccounts(): Promise<string[]>;
+  /** Whether the mailbox's server runs mail rules (see ruleAccounts); without an id, whether any does. */
+  mailRulesAvailable(accountId?: string): Promise<boolean>;
   /** The Sieve script "UwUMail" and whether the server runs it; the first rules account when `accountId` is left out. */
   mailRules(accountId?: string): Promise<{ script: string | null; active: boolean }>;
   /** Uploads the script as "UwUMail" and makes it the active one. */
