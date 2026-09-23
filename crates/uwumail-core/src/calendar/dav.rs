@@ -28,6 +28,11 @@ const MAX_OBJECTS: usize = 5000;
 /// The registrable domain of a host, or the host itself (IP addresses, local names).
 pub fn site(host: &str) -> String {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
+    // An address is a site of its own. Read as a name, "192.168.0.1" would be the site "0.1",
+    // shared with every address that ends in ".0.1" (security-audit C-9).
+    if let Ok(address) = host.trim_start_matches('[').trim_end_matches(']').parse::<std::net::IpAddr>() {
+        return address.to_string();
+    }
     psl::domain_str(&host).map_or(host.clone(), String::from)
 }
 
@@ -633,6 +638,21 @@ END:VCALENDAR&#13;
         assert!(!client.may_send_password(&url("http://dav.uwumail.test/caldav/")), "never unencrypted");
         assert!(!client.may_send_password(&url("https://collector.example.net/")));
         assert!(!client.may_send_password(&url("https://uwumail.test.evil.example/")));
+    }
+
+    /// security-audit C-9: a mail server given by its address trusts that address only.
+    #[test]
+    fn an_address_is_a_site_of_its_own() {
+        let client = DavClient::new("mini", "secret", &["192.168.0.1", "::1"]).unwrap();
+        let url = |s: &str| Url::parse(s).unwrap();
+        assert!(client.may_send_password(&url("https://192.168.0.1/dav/")));
+        assert!(client.may_send_password(&url("https://192.168.0.1:8443/dav/")));
+        assert!(client.may_send_password(&url("https://[::1]/dav/")));
+        for other in ["https://10.0.0.1/", "https://203.0.0.1/", "https://172.16.0.1/", "https://[::2]/"] {
+            assert!(!client.may_send_password(&url(other)), "{other}");
+        }
+        assert_eq!(site("192.168.0.1."), "192.168.0.1");
+        assert_eq!(site("mail.shop.example"), "shop.example");
     }
 
     #[test]
