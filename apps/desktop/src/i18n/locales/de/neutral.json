@@ -249,7 +249,7 @@
   },
   "account": {
     "email": "E-Mail-Adresse",
-    "emailPlaceholder": "du@beispiel.de",
+    "emailPlaceholder": "du@example.com",
     "password": "Passwort",
     "name": "Dein Name",
     "namePlaceholder": "Alex Beispiel",
