@@ -935,5 +935,26 @@
     "replace": "Replace with UwUMail rules",
     "replaceConfirm": "Replace the script",
     "replaceBody": "The script above will be deleted and you start with an empty list of rules."
+  },
+  "accountCalendar": {
+    "title": "Calendar",
+    "checking": "Looking for calendars…",
+    "source": {
+      "jmap": "UwUMail server",
+      "caldav": "CalDAV"
+    },
+    "unavailable": "Not available",
+    "url": "CalDAV address",
+    "urlHint": "Only needed when UwUMail doesn't find the calendars by itself.",
+    "check": "Check again",
+    "clear": "Remove address",
+    "problem": {
+      "https": "The address has to start with https://.",
+      "invalid": "That isn't a web address."
+    },
+    "found": "Calendars found",
+    "cleared": "Address removed. UwUMail looks for the calendars by itself again.",
+    "notFound": "No calendars found: {{reason}}",
+    "failed": "That didn't work: {{reason}}"
   }
 }

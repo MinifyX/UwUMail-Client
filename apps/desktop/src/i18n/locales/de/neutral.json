@@ -935,5 +935,26 @@
     "replace": "Durch UwUMail-Regeln ersetzen",
     "replaceConfirm": "Skript ersetzen",
     "replaceBody": "Das Skript oben wird gelöscht und du fängst mit einer leeren Regelliste an."
+  },
+  "accountCalendar": {
+    "title": "Kalender",
+    "checking": "Suche Kalender …",
+    "source": {
+      "jmap": "UwUMail-Server",
+      "caldav": "CalDAV"
+    },
+    "unavailable": "Nicht verfügbar",
+    "url": "CalDAV-Adresse",
+    "urlHint": "Nur nötig, wenn UwUMail die Kalender nicht von selbst findet.",
+    "check": "Erneut prüfen",
+    "clear": "Adresse entfernen",
+    "problem": {
+      "https": "Die Adresse muss mit https:// beginnen.",
+      "invalid": "Das ist keine Webadresse."
+    },
+    "found": "Kalender gefunden",
+    "cleared": "Adresse entfernt. UwUMail sucht die Kalender wieder von selbst.",
+    "notFound": "Keine Kalender gefunden: {{reason}}",
+    "failed": "Das hat nicht geklappt: {{reason}}"
   }
 }

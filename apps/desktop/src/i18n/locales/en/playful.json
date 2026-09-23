@@ -256,5 +256,10 @@
     "empty": "No rules yet. Tell me where mail should go and I'll sort it for you, even while you sleep (˘ω˘)",
     "saved": "Got it, I'll sort by this from now on ✿",
     "foreignTitle": "Someone else scribbled in here (・_・;)"
+  },
+  "accountCalendar": {
+    "checking": "Sniffing around for calendars (｡･ω･｡)",
+    "found": "Found your calendars! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+    "notFound": "No calendars there (・_・;) {{reason}}"
   }
 }
