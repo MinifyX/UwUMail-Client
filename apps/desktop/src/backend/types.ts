@@ -311,6 +311,74 @@ export interface UpdateInfo {
   notes?: string | null;
 }
 
+// ----- Calendar (identical in the webmail's src/backend/types.ts) -----
+
+export interface CalendarInfo {
+  id: string;
+  accountId: string;
+  name: string;
+  color: string | null;
+  isDefault: boolean;
+  isVisible: boolean;
+  sortOrder: number;
+  mayWrite: boolean;
+  mayDelete: boolean;
+}
+
+export type Weekday = "mo" | "tu" | "we" | "th" | "fr" | "sa" | "su";
+
+export interface Recurrence {
+  frequency: "daily" | "weekly" | "monthly" | "yearly";
+  interval: number; // >= 1
+  byDay: Weekday[] | null; // weekly only
+  until: string | null; // "YYYY-MM-DD", inclusive, local
+  count: number | null;
+}
+
+export interface CalendarOccurrence {
+  id: string; // occurrence id (synthetic for instances of a series)
+  eventId: string; // id of the stored event (base event for series)
+  accountId: string;
+  calendarId: string;
+  title: string;
+  description: string;
+  location: string;
+  allDay: boolean;
+  start: string; // local wall time in the viewer's zone "YYYY-MM-DDTHH:mm:ss"
+  end: string; // exclusive, same format (all-day: next day T00:00:00)
+  timeZone: string | null; // the event's own zone; null for all-day/floating
+  recurrence: Recurrence | null; // the series rule, null if not recurring
+  recurrenceEditable: boolean; // false when the stored rule is more than Recurrence can say
+  recurrenceId: string | null;
+  readOnly: boolean; // no write right or not the origin
+  color: string | null;
+}
+
+export interface EventInput {
+  calendarId: string;
+  title: string;
+  description: string;
+  location: string;
+  allDay: boolean;
+  start: string; // wall time in timeZone; all-day: dates at T00:00:00, end exclusive
+  end: string;
+  timeZone: string | null; // IANA of the device when timed; null when all-day
+  recurrence: Recurrence | null; // untouched when recurrenceEditable was false
+}
+
+export type EventDeleteScope = "occurrence" | "series";
+
+/** Where an account's calendars come from (client only). */
+export interface CalendarAccount {
+  accountId: string;
+  /** JMAP calendars on a UwUMail server, CalDAV, or null when the account has no calendar here. */
+  source: "jmap" | "caldav" | null;
+  /** The CalDAV address typed in by hand, if any. */
+  caldavUrl: string | null;
+  /** Why there's no calendar, when there isn't (e.g. a Microsoft or Google sign-in). */
+  problem: string | null;
+}
+
 export type BackendEvent =
   | { type: "mail:changed"; accountId: string }
   | { type: "mail:received"; accountId: string; messageIds: string[] }
@@ -320,4 +388,6 @@ export type BackendEvent =
   | { type: "compose:mailto" }
   /** The shared settings of a UwUMail account may have changed; `state` when the server said which. */
   | { type: "settings:changed"; accountId: string; state?: string }
+  /** Calendars or events may have changed (JMAP push for Calendar/CalendarEvent, or a change made here). */
+  | { type: "calendar:changed" }
   | ({ type: "update:ready" } & UpdateInfo);

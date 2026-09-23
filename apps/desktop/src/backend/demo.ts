@@ -2,6 +2,7 @@ import { BackendError, type Backend } from "./backend";
 import { isDangerous } from "@/lib/attachments";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
+import { DemoCalendar } from "./demo-calendar";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, welcomeMessage } from "./demo-data";
 import { demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
@@ -15,6 +16,8 @@ import type {
   DiscoveredSettings,
   DraftContent,
   DraftSaveResult,
+  EventDeleteScope,
+  EventInput,
   FlagChange,
   Folder,
   Identity,
@@ -406,6 +409,65 @@ export class DemoBackend implements Backend {
         const inFolder = this.messages.filter((m) => m.folderId === folder.id);
         return { ...folder, total: inFolder.length, unread: inFolder.filter((m) => !m.flags.seen).length };
       });
+  }
+
+  private calendar = new DemoCalendar(lang(), () => this.emit({ type: "calendar:changed" }));
+
+  async calendars() {
+    await wait(100);
+    return this.calendar.calendars().filter((c) => this.accounts.some((a) => a.id === c.accountId));
+  }
+
+  async calendarAccounts() {
+    await wait(80);
+    return this.calendar.accounts(this.accounts.map((a) => a.id));
+  }
+
+  async setCalDavUrl(accountId: string) {
+    await wait(80);
+    if (!this.accounts.some((a) => a.id === accountId)) throw new BackendError("not_found", "Account not found");
+    throw new BackendError("not_supported", "The demo has no CalDAV server.");
+  }
+
+  async createCalendar(input: { accountId?: string; name: string; color: string | null }) {
+    await wait(150);
+    return this.calendar.createCalendar(input);
+  }
+
+  async updateCalendar(id: string, patch: { name?: string; color?: string | null; isVisible?: boolean }) {
+    await wait(100);
+    this.calendar.updateCalendar(id, patch);
+  }
+
+  async deleteCalendar(id: string) {
+    await wait(150);
+    this.calendar.deleteCalendar(id);
+  }
+
+  async setDefaultCalendar(id: string) {
+    await wait(80);
+    this.calendar.setDefaultCalendar(id);
+  }
+
+  /** Demo events are floating, so the viewer's zone changes nothing. */
+  async calendarEvents(from: string, to: string, _timeZone?: string) {
+    await wait(150);
+    return this.calendar.occurrences(from, to);
+  }
+
+  async createEvent(input: EventInput) {
+    await wait(150);
+    return this.calendar.createEvent(input);
+  }
+
+  async updateEvent(eventId: string, input: EventInput) {
+    await wait(150);
+    this.calendar.updateEvent(eventId, input);
+  }
+
+  async deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
+    await wait(120);
+    this.calendar.deleteEvent(occurrenceId, scope);
   }
 
   async createFolder(input: { accountId?: string; name: string; parentId: string | null }) {

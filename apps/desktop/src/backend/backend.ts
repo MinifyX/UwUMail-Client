@@ -3,10 +3,15 @@ import type {
   Account,
   AttachmentContent,
   BackendEvent,
+  CalendarAccount,
+  CalendarInfo,
+  CalendarOccurrence,
   Contact,
   DiscoveredSettings,
   DraftContent,
   DraftSaveResult,
+  EventDeleteScope,
+  EventInput,
   FlagChange,
   Folder,
   Identity,
@@ -89,6 +94,25 @@ export interface Backend {
   /** Switches between IMAP/SMTP and JMAP; the mailbox syncs again from scratch. */
   setAccountProtocol(accountId: string, protocol: Protocol): Promise<Account>;
   syncNow(accountId?: string): Promise<void>;
+
+  /** Every calendar of every account that has some; ids start with the account id. */
+  calendars(): Promise<CalendarInfo[]>;
+  /** Per account: JMAP calendars, CalDAV, or why there's no calendar (e.g. Microsoft or Google sign-in). */
+  calendarAccounts(): Promise<CalendarAccount[]>;
+  /** A CalDAV address typed in by hand for an account; null goes back to finding it by itself. */
+  setCalDavUrl(accountId: string, url: string | null): Promise<void>;
+  createCalendar(input: { accountId?: string; name: string; color: string | null }): Promise<CalendarInfo>;
+  updateCalendar(id: string, patch: { name?: string; color?: string | null; isVisible?: boolean }): Promise<void>;
+  /** Removes its events too. */
+  deleteCalendar(id: string): Promise<void>;
+  setDefaultCalendar(id: string): Promise<void>;
+  /** Occurrences in [from, to): wall times ("YYYY-MM-DDTHH:mm:ss") in `timeZone`, the viewer's IANA zone. */
+  calendarEvents(from: string, to: string, timeZone: string): Promise<CalendarOccurrence[]>;
+  /** Returns the event's id. */
+  createEvent(input: EventInput): Promise<string>;
+  /** The whole series; only changed fields are patched. */
+  updateEvent(eventId: string, input: EventInput): Promise<void>;
+  deleteEvent(occurrenceId: string, scope: EventDeleteScope): Promise<void>;
 
   listFolders(accountId?: string): Promise<Folder[]>;
   /** A new folder below `parentId`, or at the top of the mailbox (the only one when `accountId` is left out). Returns its id. */

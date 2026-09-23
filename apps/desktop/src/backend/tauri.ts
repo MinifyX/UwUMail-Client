@@ -6,10 +6,15 @@ import type {
   Account,
   AttachmentContent,
   BackendEvent,
+  CalendarAccount,
+  CalendarInfo,
+  CalendarOccurrence,
   Contact,
   DiscoveredSettings,
   DraftContent,
   DraftSaveResult,
+  EventDeleteScope,
+  EventInput,
   FlagChange,
   Folder,
   Identity,
@@ -55,6 +60,7 @@ const EVENT_NAMES = [
   "send:failed",
   "compose:mailto",
   "settings:changed",
+  "calendar:changed",
   "update:ready",
 ] as const;
 
@@ -158,6 +164,52 @@ export class TauriBackend implements Backend {
 
   listFolders(accountId?: string) {
     return call<Folder[]>("list_folders", { accountId: accountId ?? null });
+  }
+
+  calendars() {
+    return call<CalendarInfo[]>("list_calendars");
+  }
+
+  calendarAccounts() {
+    return call<CalendarAccount[]>("calendar_accounts");
+  }
+
+  setCalDavUrl(accountId: string, url: string | null) {
+    return call<void>("set_caldav_url", { accountId, url });
+  }
+
+  createCalendar(input: { accountId?: string; name: string; color: string | null }) {
+    return call<CalendarInfo>("create_calendar", {
+      input: { accountId: input.accountId ?? null, name: input.name, color: input.color },
+    });
+  }
+
+  updateCalendar(id: string, patch: { name?: string; color?: string | null; isVisible?: boolean }) {
+    return call<void>("update_calendar", { calendarId: id, patch });
+  }
+
+  deleteCalendar(id: string) {
+    return call<void>("delete_calendar", { calendarId: id });
+  }
+
+  setDefaultCalendar(id: string) {
+    return call<void>("set_default_calendar", { calendarId: id });
+  }
+
+  calendarEvents(from: string, to: string, timeZone: string) {
+    return call<CalendarOccurrence[]>("calendar_events", { from, to, timeZone });
+  }
+
+  createEvent(input: EventInput) {
+    return call<string>("create_event", { input });
+  }
+
+  updateEvent(eventId: string, input: EventInput) {
+    return call<void>("update_event", { eventId, input });
+  }
+
+  deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
+    return call<void>("delete_event", { occurrenceId, scope });
   }
 
   createFolder(input: { accountId?: string; name: string; parentId: string | null }) {

@@ -1,6 +1,98 @@
 import { describe, expect, it } from "vitest";
 import { DemoBackend } from "./demo";
 
+/** A wall time `days` from today's midnight, like the calendar page asks for ranges. */
+function day(days: number, time = "00:00:00") {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + days));
+  return `${date.toISOString().slice(0, 10)}T${time}`;
+}
+
+describe("DemoBackend calendar", () => {
+  it("has calendars for the UwUMail server account only", async () => {
+    const demo = new DemoBackend();
+    const calendars = await demo.calendars();
+    expect(calendars.map((c) => c.accountId)).toEqual(["acc-private", "acc-private", "acc-private"]);
+    expect(calendars.filter((c) => c.isDefault)).toHaveLength(1);
+    expect(calendars.some((c) => !c.mayWrite)).toBe(true);
+    const accounts = await demo.calendarAccounts();
+    expect(accounts.find((a) => a.accountId === "acc-private")?.source).toBe("jmap");
+    expect(accounts.find((a) => a.accountId === "acc-studio")).toMatchObject({ source: null });
+    await expect(demo.createCalendar({ accountId: "acc-studio", name: "Nope", color: null })).rejects.toThrow();
+  });
+
+  it("expands the weekly series and shows all-day events up to the next midnight", async () => {
+    const demo = new DemoBackend();
+    const events = await demo.calendarEvents(day(0), day(56), "Europe/Berlin");
+    const yoga = events.filter((e) => e.title === "Yoga");
+    expect(yoga).toHaveLength(8);
+    expect(new Set(yoga.map((e) => e.eventId)).size).toBe(1);
+    expect(yoga[0]!.id).toBe(`${yoga[0]!.eventId}#${yoga[0]!.recurrenceId}`);
+    expect(yoga[0]!.recurrence).toMatchObject({ frequency: "weekly", interval: 1 });
+    expect(yoga[1]!.start.slice(11)).toBe("18:00:00");
+
+    const allDay = events.filter((e) => e.allDay);
+    expect(allDay.length).toBeGreaterThan(0);
+    for (const event of allDay) {
+      expect(event.start.endsWith("T00:00:00") && event.end.endsWith("T00:00:00")).toBe(true);
+      expect(event.timeZone).toBeNull();
+    }
+    expect(events.find((e) => e.calendarId === "acc-private:holidays")?.readOnly).toBe(true);
+    await expect(demo.calendarEvents(day(0), day(500), "Europe/Berlin")).rejects.toThrow(/400/);
+  });
+
+  it("creates, changes and deletes events and single occurrences", async () => {
+    const demo = new DemoBackend();
+    const heard: string[] = [];
+    demo.subscribe((event) => heard.push(event.type));
+    const input = {
+      calendarId: "acc-private:personal",
+      title: "Standup",
+      description: "",
+      location: "",
+      allDay: false,
+      start: day(1, "09:00:00"),
+      end: day(1, "09:15:00"),
+      timeZone: "Europe/Berlin",
+      recurrence: { frequency: "daily" as const, interval: 1, byDay: null, until: null, count: 5 },
+    };
+    const id = await demo.createEvent(input);
+    expect(heard).toContain("calendar:changed");
+    const standups = () =>
+      demo.calendarEvents(day(0), day(30), "Europe/Berlin").then((all) => all.filter((e) => e.eventId === id));
+    expect(await standups()).toHaveLength(5);
+
+    await demo.updateEvent(id, { ...input, title: "Daily", recurrence: { ...input.recurrence, count: 3 } });
+    expect((await standups()).map((e) => e.title)).toEqual(["Daily", "Daily", "Daily"]);
+
+    await demo.deleteEvent((await standups())[1]!.id, "occurrence");
+    expect(await standups()).toHaveLength(2);
+    await demo.deleteEvent((await standups())[0]!.id, "series");
+    expect(await standups()).toHaveLength(0);
+
+    await expect(demo.createEvent({ ...input, calendarId: "acc-private:holidays" })).rejects.toThrow(/read-only/);
+    await expect(demo.createEvent({ ...input, end: day(0, "08:00:00") })).rejects.toThrow(/before/);
+  });
+
+  it("manages calendars", async () => {
+    const demo = new DemoBackend();
+    const created = await demo.createCalendar({ name: " Uni ", color: "#3b82f6" });
+    expect(created).toMatchObject({ name: "Uni", accountId: "acc-private", mayWrite: true, isDefault: false });
+    await demo.updateCalendar(created.id, { isVisible: false, color: null });
+    await demo.setDefaultCalendar(created.id);
+    const calendars = await demo.calendars();
+    expect(calendars.find((c) => c.id === created.id)).toMatchObject({
+      isVisible: false,
+      color: null,
+      isDefault: true,
+    });
+    expect(calendars.filter((c) => c.isDefault)).toHaveLength(1);
+    await demo.deleteCalendar(created.id);
+    expect((await demo.calendars()).some((c) => c.id === created.id)).toBe(false);
+    await expect(demo.deleteCalendar("acc-private:holidays")).rejects.toThrow();
+  });
+});
+
 describe("DemoBackend mail rules", () => {
   it("keeps one script for the UwUMail server account", async () => {
     const demo = new DemoBackend();
