@@ -116,6 +116,22 @@ export class TauriBackend implements Backend {
     return outcome;
   }
 
+  ruleAccounts() {
+    return call<string[]>("rule_accounts");
+  }
+
+  mailRules(accountId?: string) {
+    return call<{ script: string | null; active: boolean }>("mail_rules", { accountId: accountId ?? null });
+  }
+
+  saveMailRules(script: string, accountId?: string) {
+    return call<void>("save_mail_rules", { script, accountId: accountId ?? null });
+  }
+
+  validateMailRules(script: string, accountId?: string) {
+    return call<string | null>("validate_mail_rules", { script, accountId: accountId ?? null });
+  }
+
   discoverSettings(email: string) {
     return call<DiscoveredSettings>("discover_settings", { email });
   }

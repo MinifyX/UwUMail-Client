@@ -1,6 +1,33 @@
 import { describe, expect, it } from "vitest";
 import { DemoBackend } from "./demo";
 
+describe("DemoBackend mail rules", () => {
+  it("keeps one script for the UwUMail server account", async () => {
+    const demo = new DemoBackend();
+    expect(await demo.ruleAccounts()).toEqual(["acc-private"]);
+    const rules = await demo.mailRules();
+    expect(rules.active).toBe(true);
+    expect(rules.script).toContain("# uwumail-rules: ");
+    expect(rules.script).toContain('fileinto :mailboxid "acc-private:receipts"');
+    const json = rules.script!.split("\n").find((line) => line.startsWith("# uwumail-rules: "))!;
+    expect(JSON.parse(json.slice("# uwumail-rules: ".length)).rules).toHaveLength(2);
+
+    await demo.saveMailRules('require ["fileinto"];\nif true {\n    stop;\n}\n', "acc-private");
+    expect((await demo.mailRules("acc-private")).script).toContain("if true");
+    await expect(demo.mailRules("acc-studio")).rejects.toThrow(/UwUMail server/);
+  });
+
+  it("reports what the server can't run", async () => {
+    const demo = new DemoBackend();
+    expect(await demo.validateMailRules("if true {\n    keep;\n}\n")).toBeNull();
+    expect(await demo.validateMailRules('if true {\n    vacation "away";\n}\n')).toMatch(/vacation/);
+    expect(await demo.validateMailRules("if true {\n    keep;\n")).toMatch(/missing/);
+    // Braces inside strings and comments don't count.
+    expect(await demo.validateMailRules('# {\nif header :contains "subject" "}" {\n    keep;\n}\n')).toBeNull();
+    await expect(demo.saveMailRules("}")).rejects.toThrow();
+  });
+});
+
 describe("DemoBackend folders", () => {
   it("creates, nests, renames and deletes folders like the engine", async () => {
     const demo = new DemoBackend();

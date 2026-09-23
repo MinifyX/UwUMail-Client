@@ -4,6 +4,7 @@ import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, welcomeMessage } from "./demo-data";
 import { demoSenderPicture } from "./demo-pictures";
+import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
   BlockedSender,
   Account,
@@ -241,6 +242,46 @@ export class DemoBackend implements Backend {
     this.userSettings.set(accountId, { state, values });
     this.emit({ type: "settings:changed", accountId, state: String(state) });
     return { ok: true, state: String(state) };
+  }
+
+  /** The JMAP demo mailbox plays a UwUMail server with Sieve: one rules script per account, in memory. */
+  private rules = new Map<string, { script: string | null; active: boolean }>([
+    ["acc-private", { script: demoRulesScript(lang()), active: true }],
+  ]);
+
+  async ruleAccounts() {
+    await wait(100);
+    return this.accounts.filter((account) => account.protocol === "jmap").map((account) => account.id);
+  }
+
+  private rulesAccount(accountId?: string) {
+    const account = accountId
+      ? this.accounts.find((a) => a.id === accountId)
+      : this.accounts.find((a) => a.protocol === "jmap");
+    if (!account) throw new BackendError("not_supported", "None of your mailboxes can keep mail rules.");
+    if (account.protocol !== "jmap") {
+      throw new BackendError("not_supported", "Mail rules need a mailbox on a UwUMail server.");
+    }
+    return account.id;
+  }
+
+  async mailRules(accountId?: string) {
+    await wait(150);
+    return structuredClone(this.rules.get(this.rulesAccount(accountId)) ?? { script: null, active: false });
+  }
+
+  async saveMailRules(script: string, accountId?: string) {
+    await wait(250);
+    const id = this.rulesAccount(accountId);
+    const problem = demoValidateSieve(script);
+    if (problem) throw new BackendError("invalid_input", problem);
+    this.rules.set(id, { script, active: true });
+  }
+
+  async validateMailRules(script: string, accountId?: string) {
+    await wait(200);
+    this.rulesAccount(accountId);
+    return demoValidateSieve(script);
   }
 
   async microsoftAdminConsentUrl(email: string): Promise<string> {

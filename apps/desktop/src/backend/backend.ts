@@ -73,6 +73,14 @@ export interface Backend {
   loadUserSettings(accountId: string): Promise<{ state: string; values: Record<string, unknown> }>;
   /** Sets keys (`null` removes); with `ifInState` only if nothing was written since. */
   saveUserSettings(accountId: string, patch: Record<string, unknown>, ifInState?: string): Promise<SaveOutcome>;
+  /** Accounts whose UwUMail server runs mail rules (JMAP with Sieve scripts); unreachable ones are left out. */
+  ruleAccounts(): Promise<string[]>;
+  /** The Sieve script "UwUMail" and whether the server runs it; the first rules account when `accountId` is left out. */
+  mailRules(accountId?: string): Promise<{ script: string | null; active: boolean }>;
+  /** Uploads the script as "UwUMail" and makes it the active one. */
+  saveMailRules(script: string, accountId?: string): Promise<void>;
+  /** What the server finds wrong with the script (error text), or null when it can run it. */
+  validateMailRules(script: string, accountId?: string): Promise<string | null>;
   discoverSettings(email: string): Promise<DiscoveredSettings>;
   /** The page an administrator opens to allow UwUMail for a whole company. */
   microsoftAdminConsentUrl(email: string): Promise<string>;
