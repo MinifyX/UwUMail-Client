@@ -183,6 +183,17 @@ load" remembers the address or the company domain (the registrable domain from
 the public suffix list, never a mail provider), kept in the settings and listed
 under Settings → Reading.
 
+Even allowed, the web view never loads a remote picture from its sender: the
+reader rewrites every picture address to the app's `uwuimg:` scheme (with the
+message's account), and the app's CSP allows no other remote images. Rust then
+fetches it (`Engine::mail_image`): through the account's UwUMail server when it
+offers `urn:uwumail:jmap:remote` (the server may go through a VPN, see the
+server's docs/jmap-remote.md), otherwise from this device through the privacy
+proxy under Settings → Reading (`socks5://…`, `http://…`) when one is set. The
+same proxy carries sender-picture lookups and one-click unsubscribes; mail,
+calendars and updates never take it. Until the interface has said which proxy
+it wants, these requests wait rather than leave without it.
+
 ### Drafts
 
 The composer saves 2.5 seconds after the last change (at least every 15
@@ -297,6 +308,11 @@ result (including "nothing found") for 30 days. Addresses at mail providers
 request, and icon links or redirects to IP addresses, `localhost` or local
 names are ignored. The setting lives under Reading and is on by default.
 
+With an account on a UwUMail server among the mailboxes, that server looks the
+picture up instead (`/jmap/picture`), whichever mailbox the mail came to, and
+the company never sees this device. Otherwise the lookup goes through the
+privacy proxy when one is set; the BIMI record is asked of DNS directly.
+
 ## Installer and updates
 
 `apps/setup` is UwUMail's own installer, the same small Tauri app with Nyu on
@@ -391,7 +407,10 @@ comes from the command line.
 
 The app checks `stable.json` or `beta.json` on the `updates` branch of this
 repo 20 seconds after start and every six hours (`tauri-plugin-updater`,
-signature checked against the public key in `tauri.conf.json`). Each feed has
+signature checked against the public key in `tauri.conf.json`), unless "Look for
+updates automatically" under About is off; then only the button asks. The loop
+waits until the interface has said which, so a stored "off" holds from the
+start. Android does the same with its APK feed. Each feed has
 one entry per system, under Tauri's platform keys. The plugin looks for
 `<os>-<arch>-<bundle>` first and then `<os>-<arch>`, where the bundle type is
 patched into the program when Tauri packs it: a UwUMail from the `.deb` finds

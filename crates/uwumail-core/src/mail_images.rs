@@ -1,22 +1,20 @@
-//! Remote images of a mail, fetched so the reader can look at their pixels.
-//!
-//! The reader recolors light images for its dark mode. The web view may show a
-//! remote image but never lets the page read it, so the engine fetches a copy.
-//! This only runs for images the web view is already loading (the reader asks
-//! only when remote content is allowed for the mail), and only from public
-//! websites: a mail must not make UwUMail read anything from the local network.
+//! Remote pictures of a mail. The web view never loads one from its sender itself: it asks the app
+//! (`uwuimg:`), and only once the reader let the mail's pictures show. A UwUMail server fetches them for
+//! its own accounts; for every other account they come from here, through the privacy proxy when one is
+//! set, so the sender at most sees the proxy. Only from public websites: a mail must not make UwUMail
+//! read anything from the local network. The reader's dark mode reads the same copies to recolor them.
 
 use std::time::Duration;
 
 use tokio::sync::Semaphore;
 use url::Url;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::pictures::sniff_image;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
-/// Larger images are photos; there's nothing to recolor in them anyway.
-const MAX_BYTES: usize = 4 * 1024 * 1024;
+/// Newsletters stay far below this; a UwUMail server draws the same line.
+const MAX_BYTES: usize = 10 * 1024 * 1024;
 const PARALLEL_FETCHES: usize = 4;
 
 /// `http` or `https` on a name under a known public suffix: no IP address, no
@@ -29,29 +27,45 @@ pub fn is_public_image_url(url: &Url) -> bool {
             if psl::suffix(host.trim_end_matches('.').as_bytes()).is_some_and(|suffix| suffix.is_known()))
 }
 
+/// The account and the picture's address from a reader request (`?account=…&url=…`): the web view
+/// never loads a remote picture itself, it asks the app for it this way.
+pub fn picture_request(query: &str) -> Option<(Option<String>, String)> {
+    let mut account = None;
+    let mut url = None;
+    for (key, value) in url::form_urlencoded::parse(query.as_bytes()) {
+        match key.as_ref() {
+            "account" if !value.is_empty() => account = Some(value.into_owned()),
+            "url" => url = Some(value.into_owned()),
+            _ => {}
+        }
+    }
+    Some((account, url.filter(|url| url.starts_with("https://") || url.starts_with("http://"))?))
+}
+
+/// Nothing that tells the sender which program, or which version of it, is looking.
+pub(crate) const AGENT: &str = "Mozilla/5.0";
+
+fn configure(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    builder.user_agent(AGENT).timeout(TIMEOUT).referer(false).redirect(reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= 5 {
+            attempt.error("too many redirects")
+        } else if is_public_image_url(attempt.url()) {
+            attempt.follow()
+        } else {
+            attempt.stop()
+        }
+    }))
+}
+
 pub struct MailImages {
-    http: reqwest::Client,
+    /// Through the privacy proxy when one is set: a picture tells its sender who looked, and when.
+    http: crate::tls::PrivacyClient,
     permits: Semaphore,
 }
 
 impl MailImages {
     pub fn new() -> Result<Self> {
-        let http = crate::tls::http_client()?
-            .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION")))
-            .timeout(TIMEOUT)
-            .referer(false)
-            .redirect(reqwest::redirect::Policy::custom(|attempt| {
-                if attempt.previous().len() >= 5 {
-                    attempt.error("too many redirects")
-                } else if is_public_image_url(attempt.url()) {
-                    attempt.follow()
-                } else {
-                    attempt.stop()
-                }
-            }))
-            .build()
-            .map_err(|e| Error::internal(format!("HTTP client setup failed: {e}")))?;
-        Ok(Self { http, permits: Semaphore::new(PARALLEL_FETCHES) })
+        Ok(Self { http: crate::tls::PrivacyClient::new(configure), permits: Semaphore::new(PARALLEL_FETCHES) })
     }
 
     /// The image's bytes, or `None` when the address isn't public, nothing answered,
@@ -59,7 +73,8 @@ impl MailImages {
     pub async fn get(&self, url: &str) -> Option<Vec<u8>> {
         let url = Url::parse(url).ok().filter(is_public_image_url)?;
         let _permit = self.permits.acquire().await.ok()?;
-        let mut response = self.http.get(url).send().await.ok()?;
+        let http = self.http.get().await.ok()?;
+        let mut response = http.get(url).send().await.ok()?;
         if !response.status().is_success() || response.content_length().is_some_and(|n| n > MAX_BYTES as u64) {
             return None;
         }
@@ -94,5 +109,19 @@ mod tests {
         assert!(!public("https://user:secret@shop.example.com/a.png"));
         assert!(!public("ftp://shop.example.com/a.png"));
         assert!(!public("file:///C:/a.png"));
+    }
+
+    #[test]
+    fn reader_requests_name_the_account_and_a_web_address() {
+        assert_eq!(
+            picture_request("account=a1&url=https%3A%2F%2Fcdn.example%2Fa.png%3Fw%3D1%26h%3D2"),
+            Some((Some("a1".into()), "https://cdn.example/a.png?w=1&h=2".into()))
+        );
+        assert_eq!(
+            picture_request("url=http%3A%2F%2Fx.example%2Fb.gif"),
+            Some((None, "http://x.example/b.gif".into()))
+        );
+        assert_eq!(picture_request("account=a1&url=file%3A%2F%2F%2Fetc%2Fpasswd"), None);
+        assert_eq!(picture_request("account=a1"), None);
     }
 }

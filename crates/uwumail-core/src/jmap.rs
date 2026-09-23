@@ -22,6 +22,9 @@ pub const SETTINGS: &str = "urn:uwumail:jmap:settings";
 pub const SIEVE: &str = "urn:ietf:params:jmap:sieve";
 /// Calendars and events (draft-ietf-jmap-calendars).
 pub const CALENDARS: &str = "urn:ietf:params:jmap:calendars";
+/// A UwUMail server that fetches a mail's remote pictures and sender logos for its readers
+/// (UwUMail-Server docs/jmap-remote.md), so their senders never see who reads.
+pub const REMOTE: &str = "urn:uwumail:jmap:remote";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -83,6 +86,10 @@ pub struct Session {
     pub sieve_account_id: Option<String>,
     /// The account whose calendars this login sees, if the server has JMAP calendars.
     pub calendar_account_id: Option<String>,
+    /// Where the server fetches remote pictures (`{accountId}`, `{url}`) and sender pictures
+    /// (`{accountId}`, `{email}`) for us, if it does.
+    pub image_url: Option<String>,
+    pub picture_url: Option<String>,
 }
 
 impl Session {
@@ -111,6 +118,8 @@ impl Session {
         };
         let sieve_account_id = extension_account(SIEVE);
         let calendar_account_id = extension_account(CALENDARS);
+        let remote = capabilities.get(REMOTE);
+        let remote_url = |key: &str| remote.and_then(|r| r.get(key)).and_then(Value::as_str).map(|u| absolute(base, u));
         let limit = |key: &str, fallback: usize| {
             core.and_then(|c| c.get(key)).and_then(Value::as_u64).map_or(fallback, |n| n.clamp(1, 10_000) as usize)
         };
@@ -131,6 +140,8 @@ impl Session {
             user_settings: capabilities.contains_key(SETTINGS),
             sieve_account_id,
             calendar_account_id,
+            image_url: remote_url("imageUrl"),
+            picture_url: remote_url("pictureUrl"),
         })
     }
 
@@ -145,6 +156,8 @@ impl Session {
             download_url: move_url(&self.download_url),
             upload_url: move_url(&self.upload_url),
             event_source_url: self.event_source_url.as_deref().map(move_url),
+            image_url: self.image_url.as_deref().map(move_url),
+            picture_url: self.picture_url.as_deref().map(move_url),
             ..self.clone()
         }
     }
@@ -386,6 +399,57 @@ impl Client {
             return Err(Error::connection(format!("Download failed with {}.", response.status())));
         }
         Ok(response.bytes().await?.to_vec())
+    }
+
+    /// A mail's remote picture, fetched by the server so its sender never sees the reader: its type
+    /// and bytes, `None` when the server can't do that or the picture isn't there.
+    pub async fn remote_image(&self, url: &str) -> Result<Option<(String, Vec<u8>)>> {
+        let Some(template) = &self.session.image_url else { return Ok(None) };
+        let target = fill(template, &[("accountId", &self.session.account_id), ("url", url)]);
+        let Some((headers, bytes)) = self.get_from_server(&target).await? else { return Ok(None) };
+        let media_type = headers
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        Ok(Some((media_type, bytes)))
+    }
+
+    /// The logo or website icon the server keeps for a company sender: whether it is a `logo` and its
+    /// bytes. `Ok(None)` when the server has none; an error when it could not be asked.
+    pub async fn sender_picture(&self, email: &str) -> Result<Option<(bool, Vec<u8>)>> {
+        let Some(template) = &self.session.picture_url else {
+            return Err(Error::not_supported("No sender pictures here."));
+        };
+        let target = fill(template, &[("accountId", &self.session.account_id), ("email", email)]);
+        let Some((headers, bytes)) = self.get_from_server(&target).await? else { return Ok(None) };
+        let logo = headers.get("x-picture-kind").is_some_and(|kind| kind.as_bytes() == b"logo");
+        Ok(Some((logo, bytes)))
+    }
+
+    /// An authenticated GET on the server's own site, never elsewhere: `None` for a 404.
+    async fn get_from_server(&self, target: &str) -> Result<Option<(reqwest::header::HeaderMap, Vec<u8>)>> {
+        let (Ok(api), Ok(to)) = (Url::parse(&self.session.api_url), Url::parse(target)) else {
+            return Err(Error::invalid("The server announced an address that is not one."));
+        };
+        if !may_send_credentials(&api, &to) {
+            return Err(Error::invalid("The server announced an address on another site."));
+        }
+        let response = self
+            .http
+            .get(to)
+            .header(reqwest::header::AUTHORIZATION, self.auth.header())
+            .timeout(CALL_TIMEOUT)
+            .send()
+            .await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(Error::connection(format!("The server answered {}.", response.status())));
+        }
+        let headers = response.headers().clone();
+        Ok(Some((headers, response.bytes().await?.to_vec())))
     }
 
     /// Uploads data and returns its blob id.
@@ -763,6 +827,28 @@ mod tests {
 
         let no_mail = json!({ "capabilities": { CORE: {} }, "apiUrl": "/", "downloadUrl": "/", "uploadUrl": "/" });
         assert_eq!(Session::parse(&no_mail, &base).unwrap_err().code, ErrorCode::NotSupported);
+        assert_eq!(session.image_url, None, "an ordinary server fetches no pictures for us");
+    }
+
+    #[test]
+    fn a_uwumail_server_fetches_pictures_for_us() {
+        let document = json!({
+            "capabilities": { CORE: {}, MAIL: {}, REMOTE: {
+                "imageUrl": "/jmap/image/{accountId}?url={url}",
+                "pictureUrl": "https://mail.uwumail.test/jmap/picture/{accountId}?email={email}"
+            } },
+            "primaryAccounts": { MAIL: "a1" },
+            "apiUrl": "/jmap/api", "downloadUrl": "/d", "uploadUrl": "/u"
+        });
+        let base = Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let session = Session::parse(&document, &base).unwrap();
+        let image = fill(
+            session.image_url.as_deref().unwrap(),
+            &[("accountId", "a1"), ("url", "https://cdn.example/a.png?w=1")],
+        );
+        assert_eq!(image, "https://mail.uwumail.test/jmap/image/a1?url=https%3A%2F%2Fcdn.example%2Fa.png%3Fw%3D1");
+        let moved = session.rebased("https://mail.uwumail.test", "http://127.0.0.1:18080");
+        assert!(moved.picture_url.unwrap().starts_with("http://127.0.0.1:18080/jmap/picture/"));
     }
 
     #[test]

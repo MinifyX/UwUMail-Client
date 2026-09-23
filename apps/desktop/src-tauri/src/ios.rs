@@ -203,6 +203,8 @@ pub fn mobile_action(app: &AppHandle, action: &str) -> Result<(), Error> {
 
 pub fn set_update_channel(_app: &AppHandle, _channel: Channel) {}
 
+pub fn set_update_checks(_app: &AppHandle, _enabled: bool) {}
+
 pub fn update_status(_app: &AppHandle) -> Option<ReadyUpdate> {
     None
 }

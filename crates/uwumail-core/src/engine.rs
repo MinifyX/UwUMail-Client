@@ -810,12 +810,16 @@ impl Engine {
             && crate::pictures::is_public_web_url(&url)
         {
             // No redirects: a public link must not be able to send the request into the local network.
-            let client = crate::tls::http_client()?
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(20))
-                .build()
-                .map_err(|e| Error::internal(format!("HTTP client setup failed: {e}")))?;
-            let answer = client
+            // Through the privacy proxy when one is set: the list learns about it anyway, just not from where.
+            static ONE_CLICK: crate::tls::PrivacyClient = crate::tls::PrivacyClient::new(|builder| {
+                builder
+                    .user_agent(crate::mail_images::AGENT)
+                    .redirect(reqwest::redirect::Policy::none())
+                    .timeout(Duration::from_secs(20))
+            });
+            let answer = ONE_CLICK
+                .get()
+                .await?
                 .post(url)
                 .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
                 .body("List-Unsubscribe=One-Click")
@@ -1410,14 +1414,42 @@ impl Engine {
         self.inner.attachments.dir().to_path_buf()
     }
 
-    /// The brand logo or website icon for a company address, fetched once per domain.
+    /// The brand logo or website icon for a company address, fetched once per domain. With a UwUMail
+    /// server among the accounts, that server looks it up, whichever account the mail came to: the
+    /// picture is the company's either way, and the company never sees this device.
     pub async fn sender_picture(&self, email: &str) -> Result<Option<SenderPicture>> {
-        self.inner.pictures.get(email).await
+        let server = self.inner.picture_server().await;
+        self.inner.pictures.get(email, server).await
     }
 
-    /// A remote image of a mail, for the reader's dark mode; `None` when it can't be had.
-    pub async fn mail_image(&self, url: &str) -> Option<Vec<u8>> {
-        self.inner.mail_images.get(url).await
+    /// A remote picture of a mail, with its type. A UwUMail server fetches it for its own accounts;
+    /// every other one fetches it from here, through the privacy proxy when one is set. `None` when it
+    /// can't be had.
+    pub async fn mail_image(&self, account_id: Option<&str>, url: &str) -> Option<(String, Vec<u8>)> {
+        if let Some(account_id) = account_id
+            && self.inner.store.account(account_id).is_ok_and(|account| account.protocol == Protocol::Jmap)
+            && let Ok(client) = self.inner.jmap_client(account_id).await
+            && client.session.image_url.is_some()
+        {
+            return client.remote_image(url).await.ok().flatten();
+        }
+        let bytes = self.inner.mail_images.get(url).await?;
+        let media_type =
+            crate::pictures::sniff_image(&bytes).map_or("application/octet-stream", |format| match format {
+                "svg" => "image/svg+xml",
+                "jpg" => "image/jpeg",
+                "png" => "image/png",
+                "gif" => "image/gif",
+                "webp" => "image/webp",
+                _ => "application/octet-stream",
+            });
+        Some((media_type.to_string(), bytes))
+    }
+
+    /// The proxy for requests that tell a sender something about the reader: remote pictures, sender
+    /// pictures and one-click unsubscribes. Empty for none.
+    pub fn set_privacy_proxy(&self, proxy: &str) -> Result<()> {
+        crate::tls::set_privacy_proxy(proxy)
     }
 
     pub fn clear_sender_pictures(&self) -> Result<()> {
@@ -1603,6 +1635,21 @@ impl Inner {
                 imap::login(&account.imap, Login::OAuth { username: mailbox, access_token: &token }).await
             }
         }
+    }
+
+    /// A signed-in UwUMail server that looks up sender pictures, if one of the accounts is on one.
+    async fn picture_server(&self) -> Option<Arc<JmapClient>> {
+        for account in self.store.accounts().ok()? {
+            if account.protocol != Protocol::Jmap {
+                continue;
+            }
+            if let Ok(client) = self.jmap_client(&account.id).await
+                && client.session.picture_url.is_some()
+            {
+                return Some(client);
+            }
+        }
+        None
     }
 
     /// The signed-in JMAP connection of an account, connecting if needed.

@@ -154,6 +154,10 @@ pub fn set_update_channel(_app: &AppHandle, channel: Channel) {
     updates::set_channel(channel);
 }
 
+pub fn set_update_checks(_app: &AppHandle, enabled: bool) {
+    updates::set_automatic(enabled);
+}
+
 pub fn update_status(_app: &AppHandle) -> Option<ReadyUpdate> {
     updates::ready()
 }

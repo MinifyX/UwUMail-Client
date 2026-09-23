@@ -329,9 +329,25 @@ enum Lookup {
     Unreachable,
 }
 
+/// What a UwUMail server keeps for an address.
+async fn from_server(server: &crate::jmap::Client, email: &str) -> Lookup {
+    match server.sender_picture(email).await {
+        Ok(Some((logo, bytes))) => match sniff_image(&bytes) {
+            Some(format) => {
+                let kind = if logo { PictureKind::Logo } else { PictureKind::Icon };
+                Lookup::Found(Found { kind, format, bytes })
+            }
+            None => Lookup::Nothing,
+        },
+        Ok(None) => Lookup::Nothing,
+        Err(_) => Lookup::Unreachable,
+    }
+}
+
 pub struct SenderPictures {
     dir: PathBuf,
-    http: reqwest::Client,
+    /// Through the privacy proxy when one is set, for addresses no UwUMail server looks up for us.
+    http: crate::tls::PrivacyClient,
     resolver: OnceCell<Option<hickory_resolver::TokioResolver>>,
     locks: Mutex<HashMap<String, Arc<AsyncMutex<()>>>>,
     unreachable: Mutex<HashMap<String, Instant>>,
@@ -340,25 +356,22 @@ pub struct SenderPictures {
 
 impl SenderPictures {
     pub fn new(data_dir: &Path) -> Result<Self> {
-        let http = crate::tls::http_client()?
-            .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION")))
-            .timeout(TIMEOUT)
-            .https_only(true)
-            .referer(false)
-            .redirect(reqwest::redirect::Policy::custom(|attempt| {
-                if attempt.previous().len() >= 5 {
-                    attempt.error("too many redirects")
-                } else if is_public_web_url(attempt.url()) {
-                    attempt.follow()
-                } else {
-                    attempt.stop()
-                }
-            }))
-            .build()
-            .map_err(|e| Error::internal(format!("HTTP client setup failed: {e}")))?;
+        fn configure(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+            builder.user_agent(crate::mail_images::AGENT).timeout(TIMEOUT).https_only(true).referer(false).redirect(
+                reqwest::redirect::Policy::custom(|attempt| {
+                    if attempt.previous().len() >= 5 {
+                        attempt.error("too many redirects")
+                    } else if is_public_web_url(attempt.url()) {
+                        attempt.follow()
+                    } else {
+                        attempt.stop()
+                    }
+                }),
+            )
+        }
         Ok(Self {
             dir: data_dir.join("pictures"),
-            http,
+            http: crate::tls::PrivacyClient::new(configure),
             resolver: OnceCell::new(),
             locks: Mutex::new(HashMap::new()),
             unreachable: Mutex::new(HashMap::new()),
@@ -370,7 +383,9 @@ impl SenderPictures {
         &self.dir
     }
 
-    pub async fn get(&self, email: &str) -> Result<Option<SenderPicture>> {
+    /// The picture for an address. With `server`, a UwUMail server looks it up for us, so the
+    /// sender's website never sees this device; otherwise it is looked up from here.
+    pub async fn get(&self, email: &str, server: Option<Arc<crate::jmap::Client>>) -> Result<Option<SenderPicture>> {
         let Some(domain) = picture_domain(email) else { return Ok(None) };
         let lock = self.locks.lock().unwrap().entry(domain.clone()).or_default().clone();
         let _guard = lock.lock().await;
@@ -388,7 +403,10 @@ impl SenderPictures {
 
         let lookup = {
             let _permit = self.permits.acquire().await.map_err(|_| Error::internal("Picture fetching stopped."))?;
-            self.lookup(&domain).await
+            match server {
+                Some(server) => from_server(&server, email).await,
+                None => self.lookup(&domain).await,
+            }
         };
         match lookup {
             Lookup::Unreachable => {
@@ -548,7 +566,8 @@ impl SenderPictures {
         if !is_public_web_url(url) {
             return Ok(None);
         }
-        let mut response = self.http.get(url.clone()).send().await.map_err(|_| ())?;
+        let http = self.http.get().await.map_err(|_| ())?;
+        let mut response = http.get(url.clone()).send().await.map_err(|_| ())?;
         let final_url = response.url().clone();
         if !response.status().is_success() {
             return Ok(None);

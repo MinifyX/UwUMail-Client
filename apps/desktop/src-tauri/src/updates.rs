@@ -66,6 +66,9 @@ pub struct ReadyUpdate {
 #[derive(Default)]
 pub struct Updates {
     channel: Mutex<Channel>,
+    /// Whether UwUMail looks for updates by itself; `None` until the app said so, so a stored "off"
+    /// holds from the very start.
+    automatic: Mutex<Option<bool>>,
     ready: Mutex<Option<ReadyUpdate>>,
     checking: tokio::sync::Mutex<()>,
 }
@@ -397,6 +400,20 @@ pub fn set_channel(app: &AppHandle, channel: Channel) {
     *app.state::<Updates>().channel.lock().unwrap() = channel;
 }
 
+pub fn set_automatic(app: &AppHandle, enabled: bool) {
+    *app.state::<Updates>().automatic.lock().unwrap() = Some(enabled);
+}
+
+/// Waits until the app said whether to look for updates by itself, and says it.
+async fn automatic(app: &AppHandle) -> bool {
+    loop {
+        if let Some(enabled) = *app.state::<Updates>().automatic.lock().unwrap() {
+            return enabled;
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
 pub fn ready(app: &AppHandle) -> Option<ReadyUpdate> {
     app.state::<Updates>().ready.lock().unwrap().clone()
 }
@@ -485,6 +502,10 @@ pub fn start(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_CHECK_AFTER).await;
         loop {
+            if !automatic(&app).await {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                continue;
+            }
             if let Err(error) = check(&app).await {
                 tracing::info!("{error}");
             }

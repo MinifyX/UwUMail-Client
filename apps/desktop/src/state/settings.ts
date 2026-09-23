@@ -59,9 +59,16 @@ export interface Settings {
   collapsedFolders: string[];
   /** Brand logos and website icons for company senders. */
   senderPictures: boolean;
+  /**
+   * The proxy remote pictures, sender pictures and one-click unsubscribes take (`socks5://…`,
+   * `http://…`); empty for none. Stays on this device.
+   */
+  privacyProxy: string;
   /** Closing the window keeps UwUMail running in the tray. */
   runInBackground: boolean;
   updateChannel: UpdateChannel;
+  /** UwUMail looks for new versions by itself. */
+  updateChecks: boolean;
   undoSendSeconds: UndoSendSeconds;
   /** Phone list: swiping right and left. */
   swipeRight: SwipeAction;
@@ -112,9 +119,11 @@ export const DEFAULT_SETTINGS: Settings = {
   senderAppearance: {},
   collapsedFolders: [],
   senderPictures: true,
+  privacyProxy: "",
   runInBackground: true,
   // Someone who installed a beta wants the next beta too.
   updateChannel: pkg.version.includes("-") ? "beta" : "stable",
+  updateChecks: true,
   undoSendSeconds: 10,
   swipeRight: "read",
   swipeLeft: "archive",

@@ -12,10 +12,12 @@ async fn fetches_pictures_from_real_domains() {
     let dir = tempfile::tempdir().unwrap();
     // Set UWUMAIL_TEST_PICTURES_DIR to keep the files for a look.
     let path = std::env::var("UWUMAIL_TEST_PICTURES_DIR").map(Into::into).unwrap_or_else(|_| dir.path().to_path_buf());
+    // Straight from here, as an app without a proxy would.
+    uwumail_core::tls::set_privacy_proxy("").unwrap();
     let pictures = SenderPictures::new(&path).unwrap();
 
     for email in ["news@mozilla.org", "noreply@github.com", "service@paypal.de", "no-reply@accounts.google.com"] {
-        let picture = pictures.get(email).await.unwrap();
+        let picture = pictures.get(email, None).await.unwrap();
         match &picture {
             Some(found) => {
                 let size = std::fs::metadata(&found.path).unwrap().len();
@@ -26,8 +28,8 @@ async fn fetches_pictures_from_real_domains() {
     }
 
     // Personal addresses at mail providers never cause a request.
-    assert!(pictures.get("someone@gmail.com").await.unwrap().is_none());
+    assert!(pictures.get("someone@gmail.com", None).await.unwrap().is_none());
     // The second lookup comes from the cache.
-    let github = pictures.get("support@github.com").await.unwrap();
+    let github = pictures.get("support@github.com", None).await.unwrap();
     assert!(github.is_some_and(|p| matches!(p.kind, PictureKind::Logo | PictureKind::Icon)));
 }

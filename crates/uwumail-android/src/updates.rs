@@ -54,6 +54,9 @@ struct State {
 
 static STATE: OnceLock<State> = OnceLock::new();
 static CHANNEL: Mutex<Channel> = Mutex::new(Channel::Stable);
+/// Whether UwUMail looks for updates by itself; `None` until the app said so, so a stored "off" holds from
+/// the very start.
+static AUTOMATIC: Mutex<Option<bool>> = Mutex::new(None);
 static READY: Mutex<Option<ReadyUpdate>> = Mutex::new(None);
 static CHECKING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -68,6 +71,20 @@ fn is_newer(version: &str) -> bool {
 
 pub fn set_channel(channel: Channel) {
     *CHANNEL.lock().unwrap() = channel;
+}
+
+pub fn set_automatic(enabled: bool) {
+    *AUTOMATIC.lock().unwrap() = Some(enabled);
+}
+
+/// Waits until the app said whether to look for updates by itself, and says it.
+async fn automatic() -> bool {
+    loop {
+        if let Some(enabled) = *AUTOMATIC.lock().unwrap() {
+            return enabled;
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 }
 
 pub fn ready() -> Option<ReadyUpdate> {
@@ -145,6 +162,10 @@ pub fn start(on_ready: impl Fn(&ReadyUpdate) + Send + Sync + 'static) {
         tokio::time::sleep(FIRST_CHECK_AFTER).await;
         let mut retried = false;
         loop {
+            if !automatic().await {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                continue;
+            }
             // In logcat too: the emulator test reads it to know HTTPS works.
             let wait = match check().await {
                 Ok(Some(update)) => {
