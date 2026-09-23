@@ -589,6 +589,8 @@ pub struct CalendarAccount {
     pub caldav_url: Option<String>,
     /// Why there's no calendar, when there isn't.
     pub problem: Option<String>,
+    /// False while only a search for a CalDAV server could tell, which waits until the calendar opens.
+    pub checked: bool,
 }
 
 /// A blocked sender: on this device, or on the UwUMail server of one account.

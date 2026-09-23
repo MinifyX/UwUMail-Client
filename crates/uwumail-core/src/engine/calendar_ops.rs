@@ -69,6 +69,34 @@ impl Inner {
         }
     }
 
+    /// What is known about an account's calendars without looking for a CalDAV server: remembered
+    /// answers, the account's own JMAP server, and sign-ins that can't have one. `None` when only
+    /// that search could tell — it asks the mail domain's website, so it waits until someone opens
+    /// the calendar.
+    async fn calendar_source_known(&self, account_id: &str) -> Option<Result<Source>> {
+        match self.calendar_sources.lock().await.get(account_id) {
+            Some(SourceState::Ready(source)) => return Some(Ok(source.clone())),
+            Some(SourceState::Unavailable { problem, since }) if since.elapsed() < RETRY_UNAVAILABLE => {
+                return Some(Err(problem.clone()));
+            }
+            _ => {}
+        }
+        let account = match self.store.account(account_id) {
+            Ok(account) => account,
+            Err(error) => return Some(Err(error)),
+        };
+        if account.protocol == Protocol::Jmap
+            && let Ok(client) = self.jmap_client(&account.id).await
+            && client.session.calendar_account_id.is_some()
+        {
+            return Some(self.calendar_source(account_id).await);
+        }
+        if !matches!(self.secrets.get(&account.id), Ok(Secret::Password { .. })) {
+            return Some(self.calendar_source(account_id).await);
+        }
+        None
+    }
+
     async fn find_calendar_source(&self, account: &AccountRecord) -> Result<Source> {
         if account.protocol == Protocol::Jmap {
             let client = self.jmap_client(&account.id).await?;
@@ -368,22 +396,32 @@ impl Engine {
         Ok(calendars)
     }
 
-    /// For each account: whether it has calendars, from where, and why not.
-    pub async fn calendar_accounts(&self) -> Result<Vec<CalendarAccount>> {
+    /// For each account: whether it has calendars, from where, and why not. Without `look`, no CalDAV
+    /// server is searched for; accounts only that search could answer for come back unchecked.
+    pub async fn calendar_accounts(&self, look: bool) -> Result<Vec<CalendarAccount>> {
         let accounts = self.inner.store.accounts()?;
-        let sources = accounts.iter().map(|account| self.inner.calendar_source(&account.id));
+        let sources = accounts.iter().map(|account| async move {
+            if look {
+                Some(self.inner.calendar_source(&account.id).await)
+            } else {
+                self.inner.calendar_source_known(&account.id).await
+            }
+        });
         let mut found = Vec::new();
-        for (account, source) in accounts.iter().zip(futures::future::join_all(sources).await) {
-            let (source, problem) = match source {
-                Ok(Source::Jmap) => (Some(CalendarSource::Jmap), None),
-                Ok(Source::Dav { .. }) => (Some(CalendarSource::Caldav), None),
-                Err(error) => (None, Some(error.message)),
+        for (account, known) in accounts.iter().zip(futures::future::join_all(sources).await) {
+            let checked = known.is_some();
+            let (source, problem) = match &known {
+                Some(Ok(Source::Jmap)) => (Some(CalendarSource::Jmap), None),
+                Some(Ok(Source::Dav { .. })) => (Some(CalendarSource::Caldav), None),
+                Some(Err(error)) => (None, Some(error.message.clone())),
+                None => (None, None),
             };
             found.push(CalendarAccount {
                 account_id: account.id.clone(),
                 source,
                 caldav_url: self.inner.store.caldav_url(&account.id)?,
                 problem,
+                checked,
             });
         }
         Ok(found)
@@ -794,10 +832,25 @@ END:VCALENDAR
             .unwrap();
         secrets.set("m", &Secret::OAuth { refresh_token: "r".into() }).unwrap();
 
-        let accounts = engine.calendar_accounts().await.unwrap();
+        // Known without asking anyone: a Microsoft sign-in has no calendar here.
+        let accounts = engine.calendar_accounts(false).await.unwrap();
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].source, None);
+        assert!(accounts[0].checked);
         assert!(accounts[0].problem.as_deref().unwrap().contains("Microsoft"));
+
+        // A password account could have one only a CalDAV search would find; that waits for the calendar.
+        let mut imap = engine.inner.store.account("m").unwrap();
+        imap.id = "p".into();
+        imap.auth = AuthKind::Password;
+        imap.email = "pat@example-company.de".into();
+        imap.username = imap.email.clone();
+        engine.inner.store.insert_account(&imap).unwrap();
+        secrets.set("p", &Secret::Password { password: "katzenpfote".into() }).unwrap();
+        let accounts = engine.calendar_accounts(false).await.unwrap();
+        let unchecked = accounts.iter().find(|account| account.account_id == "p").unwrap();
+        assert_eq!((unchecked.checked, &unchecked.source, &unchecked.problem), (false, &None, &None));
+        engine.inner.store.delete_account("p").unwrap();
         // Leaving it out is not an error for the calendar as a whole.
         assert!(engine.calendars().await.unwrap().is_empty());
         assert!(engine.calendar_events("2026-09-01T00:00:00", "2026-10-01T00:00:00", "UTC").await.unwrap().is_empty());
