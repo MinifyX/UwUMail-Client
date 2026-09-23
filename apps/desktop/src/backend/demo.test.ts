@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { parseRulesScript } from "@/lib/sieveRules";
 import { DemoBackend } from "./demo";
+import { demoRulesScript } from "./demo-rules";
 
 /** A wall time `days` from today's midnight, like the calendar page asks for ranges. */
 function day(days: number, time = "00:00:00") {
@@ -134,6 +136,14 @@ describe("DemoBackend mail rules", () => {
     await demo.saveMailRules('require ["fileinto"];\nif true {\n    stop;\n}\n', "acc-private");
     expect((await demo.mailRules("acc-private")).script).toContain("if true");
     await expect(demo.mailRules("acc-studio")).rejects.toThrow(/UwUMail server/);
+  });
+
+  it("opens as rules in the rules editor, not as a script edited elsewhere", () => {
+    for (const lang of ["de", "en"] as const) {
+      const parsed = parseRulesScript(demoRulesScript(lang));
+      expect(parsed.kind).toBe("rules");
+      if (parsed.kind === "rules") expect(parsed.set.rules.map((rule) => rule.id)).toEqual(["r-receipts", "r-bugs"]);
+    }
   });
 
   it("reports what the server can't run", async () => {
