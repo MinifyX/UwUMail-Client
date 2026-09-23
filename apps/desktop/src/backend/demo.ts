@@ -460,9 +460,9 @@ export class DemoBackend implements Backend {
     return this.calendar.createEvent(input);
   }
 
-  async updateEvent(eventId: string, input: EventInput) {
+  async updateEvent(eventId: string, input: EventInput, occurrenceStart?: string) {
     await wait(150);
-    this.calendar.updateEvent(eventId, input);
+    this.calendar.updateEvent(eventId, input, occurrenceStart);
   }
 
   async deleteEvent(occurrenceId: string, scope: EventDeleteScope) {

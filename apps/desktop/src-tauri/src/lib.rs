@@ -148,8 +148,13 @@ async fn create_event(engine: State<'_, Engine>, input: EventInput) -> CommandRe
 }
 
 #[tauri::command]
-async fn update_event(engine: State<'_, Engine>, event_id: String, input: EventInput) -> CommandResult<()> {
-    engine.update_event(&event_id, input).await
+async fn update_event(
+    engine: State<'_, Engine>,
+    event_id: String,
+    input: EventInput,
+    occurrence_start: Option<String>,
+) -> CommandResult<()> {
+    engine.update_event(&event_id, input, occurrence_start.as_deref()).await
 }
 
 #[tauri::command]

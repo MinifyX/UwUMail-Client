@@ -204,8 +204,8 @@ export class TauriBackend implements Backend {
     return call<string>("create_event", { input });
   }
 
-  updateEvent(eventId: string, input: EventInput) {
-    return call<void>("update_event", { eventId, input });
+  updateEvent(eventId: string, input: EventInput, occurrenceStart?: string) {
+    return call<void>("update_event", { eventId, input, occurrenceStart: occurrenceStart ?? null });
   }
 
   deleteEvent(occurrenceId: string, scope: EventDeleteScope) {

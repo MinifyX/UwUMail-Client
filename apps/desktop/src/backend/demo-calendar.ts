@@ -384,17 +384,30 @@ export class DemoCalendar {
     return event;
   }
 
-  updateEvent(eventId: string, input: EventInput) {
+  updateEvent(eventId: string, input: EventInput, occurrenceStart?: string) {
     const event = this.stored(eventId);
     this.writable(event.calendarId);
     this.writable(input.calendarId);
+    const times = check(input);
+    if (event.recurrence && occurrenceStart) {
+      // The series moves by as much as the edited occurrence did, instead of onto its date.
+      const length = parse(times.end) - parse(times.start);
+      const days = parse(input.start.slice(0, 10)) - parse(occurrenceStart.slice(0, 10));
+      const first = input.allDay
+        ? parse(event.start.slice(0, 10)) + days
+        : event.allDay
+          ? parse(event.start.slice(0, 10)) + days + (parse(times.start) - parse(times.start.slice(0, 10)))
+          : parse(event.start) + (parse(input.start) - parse(occurrenceStart));
+      times.start = format(first);
+      times.end = format(first + length);
+    }
     Object.assign(event, {
       calendarId: input.calendarId,
       title: input.title.trim(),
       description: input.description,
       location: input.location.trim(),
       allDay: input.allDay,
-      ...check(input),
+      ...times,
       recurrence: structuredClone(input.recurrence),
     });
     this.changed();

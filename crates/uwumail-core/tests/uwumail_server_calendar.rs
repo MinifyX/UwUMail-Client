@@ -112,7 +112,7 @@ async fn calendar_events_travel_through_the_server() {
     let current = jmap_cal::event(&client, &id).await.unwrap();
     let mut changed = input(&calendar, "2030-01-03T18:00:00", "2030-01-03T19:30:00");
     changed.title = "UwUMail test, longer".into();
-    let patch = jscal::patch_for(&current, &changed).unwrap();
+    let patch = jscal::patch_for(&current, &changed, None).unwrap();
     assert_eq!(patch.len(), 2, "title and duration only: {patch:?}");
     jmap_cal::update_event(&client, &id, patch).await.unwrap();
 

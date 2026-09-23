@@ -325,6 +325,18 @@ fn touch(event: &mut Value) {
     }
 }
 
+/// Applies the editor's input to the series event of a CalDAV object. False when nothing changed.
+fn edit_dav_group(group: &mut Value, input: &EventInput, occurrence_start: Option<&str>) -> Result<bool> {
+    let event = main_event(group).ok_or_else(|| Error::not_found("This event no longer exists."))?;
+    let patch = jscal::patch_for(event, input, occurrence_start)?;
+    if patch.is_empty() {
+        return Ok(false);
+    }
+    jscal::apply_patch(event, &patch)?;
+    touch(event);
+    Ok(true)
+}
+
 impl Engine {
     /// Every calendar of every account that has some. Accounts that can't be reached are left out.
     pub async fn calendars(&self) -> Result<Vec<CalendarInfo>> {
@@ -557,7 +569,9 @@ impl Engine {
     }
 
     /// Changes a whole event (the series for repeating ones); only what differs is written.
-    pub async fn update_event(&self, event_id: &str, input: EventInput) -> Result<()> {
+    /// `occurrence_start` is where the occurrence the edit began from was shown: a series then
+    /// moves by as much as that occurrence was moved, instead of jumping to its date.
+    pub async fn update_event(&self, event_id: &str, input: EventInput, occurrence_start: Option<&str>) -> Result<()> {
         let (account_id, remote) = calendar::split_id(event_id)?;
         let (target_account, _) = calendar::split_id(&input.calendar_id)?;
         if target_account != account_id {
@@ -571,7 +585,7 @@ impl Engine {
             Source::Jmap => {
                 let client = self.inner.jmap_client(account_id).await?;
                 let current = jmap_cal::event(&client, remote).await?;
-                let mut patch = jscal::patch_for(&current, &input)?;
+                let mut patch = jscal::patch_for(&current, &input, occurrence_start)?;
                 let in_target =
                     current.get("calendarIds").and_then(|ids| ids.get(&target.remote)).and_then(Value::as_bool);
                 if in_target != Some(true) {
@@ -582,16 +596,18 @@ impl Engine {
             Source::Dav { client, home } => {
                 let (path, _) = calendar::split_occurrence(remote);
                 let mut object = read_dav_event(&client, &home, path).await?;
-                let event =
-                    main_event(&mut object.group).ok_or_else(|| Error::not_found("This event no longer exists."))?;
-                let patch = jscal::patch_for(event, &input)?;
+                let changed = edit_dav_group(&mut object.group, &input, occurrence_start)?;
                 let target_url = calendar::dav_url(&home, &target.remote)?;
                 let same_calendar = object.url.path().starts_with(target_url.path());
-                if patch.is_empty() && same_calendar {
-                    return Ok(());
+                if !changed {
+                    if same_calendar {
+                        return Ok(());
+                    }
+                    // Only moving: still a new version of the event.
+                    if let Some(event) = main_event(&mut object.group) {
+                        touch(event);
+                    }
                 }
-                jscal::apply_patch(event, &patch)?;
-                touch(event);
                 let text = ical::from_jscalendar(&object.group)?;
                 if same_calendar {
                     dav::put_object(&client, &object.url, &text, object.etag.as_deref()).await?;
@@ -660,6 +676,53 @@ mod tests {
         assert!(parse_range("2026-01-01T00:00:00", "2027-06-01T00:00:00", "Europe/Berlin").is_err());
         assert!(parse_range("2026-09-01T00:00:00", "2026-10-01T00:00:00", "Nowhere/Land").is_err());
         assert!(parse_range("soon", "2026-10-01T00:00:00", "UTC").is_err());
+    }
+
+    #[test]
+    fn caldav_series_move_by_as_much_as_the_edited_occurrence() {
+        let weekly = "BEGIN:VCALENDAR
+PRODID:-//Example//EN
+VERSION:2.0
+BEGIN:VEVENT
+UID:yoga-1
+DTSTAMP:20260901T100000Z
+DTSTART;TZID=Europe/Berlin:20260903T180000
+DURATION:PT1H
+RRULE:FREQ=WEEKLY
+SUMMARY:Yoga
+END:VEVENT
+END:VCALENDAR
+";
+        let mut group = ical::to_jscalendar(&ical::parse(weekly).unwrap()).unwrap();
+        let input = EventInput {
+            calendar_id: "a:/cal/".into(),
+            title: "Yoga".into(),
+            description: String::new(),
+            location: String::new(),
+            all_day: false,
+            // The occurrence of 24 September, moved from 18:00 to 19:15.
+            start: "2026-09-24T19:15:00".into(),
+            end: "2026-09-24T20:15:00".into(),
+            time_zone: Some("Europe/Berlin".into()),
+            recurrence: Some(Recurrence {
+                frequency: Frequency::Weekly,
+                interval: 1,
+                by_day: None,
+                until: None,
+                count: None,
+            }),
+        };
+        let mut untouched = group.clone();
+        let mut shown = input.clone();
+        shown.start = "2026-09-24T18:00:00".into();
+        shown.end = "2026-09-24T19:00:00".into();
+        assert!(!edit_dav_group(&mut untouched, &shown, Some("2026-09-24T18:00:00")).unwrap());
+
+        assert!(edit_dav_group(&mut group, &input, Some("2026-09-24T18:00:00")).unwrap());
+        let text = ical::from_jscalendar(&group).unwrap();
+        assert!(text.contains("DTSTART;TZID=Europe/Berlin:20260903T191500"), "{text}");
+        assert!(text.contains("RRULE:FREQ=WEEKLY"), "{text}");
+        assert!(text.contains("SEQUENCE:1"), "{text}");
     }
 
     #[tokio::test]

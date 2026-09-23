@@ -74,6 +74,33 @@ describe("DemoBackend calendar", () => {
     await expect(demo.createEvent({ ...input, end: day(0, "08:00:00") })).rejects.toThrow(/before/);
   });
 
+  it("moves a series by as much as the edited occurrence moved", async () => {
+    const demo = new DemoBackend();
+    const input = {
+      calendarId: "acc-private:personal",
+      title: "Standup",
+      description: "",
+      location: "",
+      allDay: false,
+      start: day(1, "09:00:00"),
+      end: day(1, "09:15:00"),
+      timeZone: "Europe/Berlin",
+      recurrence: { frequency: "daily" as const, interval: 1, byDay: null, until: null, count: 5 },
+    };
+    const id = await demo.createEvent(input);
+    const standups = () =>
+      demo.calendarEvents(day(0), day(30), "Europe/Berlin").then((all) => all.filter((e) => e.eventId === id));
+    // The third one moves half an hour later: the whole series does, from its own first day.
+    const third = (await standups())[2]!;
+    await demo.updateEvent(id, { ...input, start: day(3, "09:30:00"), end: day(3, "09:45:00") }, third.start);
+    expect((await standups()).map((e) => e.start)).toEqual([1, 2, 3, 4, 5].map((n) => day(n, "09:30:00")));
+
+    // A whole day later, as an all-day event.
+    const first = (await standups())[0]!;
+    await demo.updateEvent(id, { ...input, allDay: true, start: day(2), end: day(3), timeZone: null }, first.start);
+    expect((await standups()).map((e) => e.start)).toEqual([2, 3, 4, 5, 6].map((n) => day(n)));
+  });
+
   it("manages calendars", async () => {
     const demo = new DemoBackend();
     const created = await demo.createCalendar({ name: " Uni ", color: "#3b82f6" });

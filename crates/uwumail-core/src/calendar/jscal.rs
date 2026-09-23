@@ -427,10 +427,42 @@ pub fn pointer_segment(key: &str) -> String {
     key.replace('~', "~0").replace('/', "~1")
 }
 
+/// Whether an event has a rule at all, even one the editor can't show.
+fn repeats(event: &Value) -> bool {
+    event.get("recurrenceRule").is_some_and(Value::is_object)
+        || event.get("recurrenceRules").and_then(Value::as_array).is_some_and(|rules| !rules.is_empty())
+}
+
+/// Moves a series by as much as the occurrence the edit began from was moved (`shown` is where
+/// that occurrence was, in the viewer's wall time), instead of onto that occurrence's date. A
+/// timed series keeps its own zone.
+fn shift_series(current: &Value, fields: &mut EventFields, shown: &str) -> Result<()> {
+    let shown = parse_local(shown).ok_or_else(|| Error::invalid("The occurrence's start isn't a date and time."))?;
+    let Some(current_start) = text(current, "start").and_then(parse_local) else { return Ok(()) };
+    let days = TimeDelta::days((fields.start.date() - shown.date()).num_days());
+    if fields.all_day {
+        fields.start = (current_start.date() + days).and_hms_opt(0, 0, 0).unwrap_or(fields.start);
+    } else if is_all_day(current) {
+        fields.start = (current_start.date() + days).and_time(fields.start.time());
+    } else {
+        fields.start = current_start + (fields.start - shown);
+        fields.time_zone = text(current, "timeZone").and_then(parse_zone).map(|zone| zone.name().to_string());
+    }
+    Ok(())
+}
+
 /// The patch that turns `current` into what the editor says, touching only what changed. The
 /// rule stays untouched when the editor couldn't show it and it came back as shown.
-pub fn patch_for(current: &Value, input: &EventInput) -> Result<Map<String, Value>> {
-    let fields = fields_of(input)?;
+///
+/// `occurrence_start` is where the occurrence the edit began from was shown: a series then moves
+/// by as much as that occurrence was moved, instead of jumping to its date.
+pub fn patch_for(current: &Value, input: &EventInput, occurrence_start: Option<&str>) -> Result<Map<String, Value>> {
+    let mut fields = fields_of(input)?;
+    if let Some(shown) = occurrence_start
+        && repeats(current)
+    {
+        shift_series(current, &mut fields, shown)?;
+    }
     let mut patch = Map::new();
     if text(current, "title").unwrap_or_default() != fields.title {
         patch.insert("title".into(), json!(fields.title));
@@ -619,12 +651,12 @@ mod tests {
         let mut edit = input("2026-09-24T18:00:00", "2026-09-24T19:00:00", false);
         // The editor couldn't show the rule, so it came back as the lossy version it was shown.
         edit.recurrence = recurrence_of(&current).0;
-        assert!(patch_for(&current, &edit).unwrap().is_empty());
+        assert!(patch_for(&current, &edit, None).unwrap().is_empty());
 
         edit.title = "Yin Yoga".into();
         edit.location = "Studio 4".into();
         edit.end = "2026-09-24T19:30:00".into();
-        let patch = patch_for(&current, &edit).unwrap();
+        let patch = patch_for(&current, &edit, None).unwrap();
         assert_eq!(
             Value::Object(patch.clone()),
             json!({ "title": "Yin Yoga", "locations/loc1/name": "Studio 4", "duration": "PT1H30M" })
@@ -632,7 +664,7 @@ mod tests {
 
         // Replacing the rule on purpose.
         edit.recurrence = None;
-        let patch = patch_for(&current, &edit).unwrap();
+        let patch = patch_for(&current, &edit, None).unwrap();
         assert_eq!(patch["recurrenceRule"], Value::Null);
 
         let mut applied = current.clone();
@@ -644,11 +676,70 @@ mod tests {
 
         // Turning it into an all-day event drops the zone.
         let day = input("2026-09-24T00:00:00", "2026-09-25T00:00:00", true);
-        let patch = patch_for(&current, &day).unwrap();
+        let patch = patch_for(&current, &day, None).unwrap();
         assert_eq!(patch["showWithoutTime"], true);
         assert_eq!(patch["timeZone"], Value::Null);
         assert_eq!(patch["duration"], "P1D");
         assert_eq!(patch["start"], "2026-09-24T00:00:00");
+    }
+
+    #[test]
+    fn shifts_a_series_by_as_much_as_the_edited_occurrence_moved() {
+        let weekly = Recurrence { frequency: Frequency::Weekly, interval: 1, by_day: None, until: None, count: None };
+        let series = json!({
+            "@type": "Event", "title": "Yoga", "start": "2026-09-01T18:30:00", "duration": "PT1H",
+            "timeZone": "Europe/Berlin", "locations": { "1": { "@type": "Location", "name": "Studio 3" } },
+            "recurrenceRule": { "frequency": "weekly" }
+        });
+        // The occurrence on 22 September moved half an hour later: so does the series, from its own start.
+        let mut edit = input("2026-09-22T19:00:00", "2026-09-22T20:00:00", false);
+        edit.recurrence = Some(weekly.clone());
+        let patch = patch_for(&series, &edit, Some("2026-09-22T18:30:00")).unwrap();
+        assert_eq!(Value::Object(patch), json!({ "start": "2026-09-01T19:00:00" }));
+
+        // Unmoved, nothing changes; without the occurrence it jumps to the date it was edited on.
+        edit.start = "2026-09-22T18:30:00".into();
+        edit.end = "2026-09-22T19:30:00".into();
+        assert!(patch_for(&series, &edit, Some("2026-09-22T18:30:00")).unwrap().is_empty());
+        assert_eq!(patch_for(&series, &edit, None).unwrap()["start"], "2026-09-22T18:30:00");
+
+        // A series kept in another zone moves by the same time and keeps its zone.
+        let mut elsewhere = series.clone();
+        elsewhere["timeZone"] = json!("America/New_York");
+        elsewhere["start"] = json!("2026-09-01T12:30:00");
+        edit.start = "2026-09-23T18:30:00".into();
+        edit.end = "2026-09-23T19:30:00".into();
+        let patch = patch_for(&elsewhere, &edit, Some("2026-09-22T18:30:00")).unwrap();
+        assert_eq!(Value::Object(patch), json!({ "start": "2026-09-02T12:30:00" }));
+
+        // All-day series move by whole days.
+        let days = json!({
+            "@type": "Event", "title": "Yoga", "start": "2026-09-01T00:00:00", "duration": "P1D",
+            "showWithoutTime": true, "locations": { "1": { "@type": "Location", "name": "Studio 3" } },
+            "recurrenceRule": { "frequency": "weekly" }
+        });
+        let mut day = input("2026-09-24T00:00:00", "2026-09-25T00:00:00", true);
+        day.recurrence = Some(weekly);
+        let patch = patch_for(&days, &day, Some("2026-09-22T00:00:00")).unwrap();
+        assert_eq!(Value::Object(patch), json!({ "start": "2026-09-03T00:00:00" }));
+
+        // An all-day series that gets a time keeps its day shift and takes the new time.
+        let mut timed = day.clone();
+        timed.all_day = false;
+        timed.start = "2026-09-23T09:00:00".into();
+        timed.end = "2026-09-23T10:00:00".into();
+        timed.time_zone = Some("Europe/Berlin".into());
+        let patch = patch_for(&days, &timed, Some("2026-09-22T00:00:00")).unwrap();
+        assert_eq!(patch["start"], "2026-09-02T09:00:00");
+        assert_eq!(patch["showWithoutTime"], false);
+        assert_eq!(patch["timeZone"], "Europe/Berlin");
+
+        // A single event ignores where it was shown.
+        let single = json!({ "@type": "Event", "title": "Yoga", "start": "2026-09-01T18:30:00", "duration": "PT1H",
+            "timeZone": "Europe/Berlin", "locations": { "1": { "@type": "Location", "name": "Studio 3" } } });
+        let once = input("2026-09-22T19:00:00", "2026-09-22T20:00:00", false);
+        let patch = patch_for(&single, &once, Some("2026-09-01T18:30:00")).unwrap();
+        assert_eq!(Value::Object(patch), json!({ "start": "2026-09-22T19:00:00" }));
     }
 
     #[test]

@@ -110,8 +110,12 @@ export interface Backend {
   calendarEvents(from: string, to: string, timeZone: string): Promise<CalendarOccurrence[]>;
   /** Returns the event's id. */
   createEvent(input: EventInput): Promise<string>;
-  /** The whole series; only changed fields are patched. */
-  updateEvent(eventId: string, input: EventInput): Promise<void>;
+  /**
+   * The whole series; only changed fields are patched. `occurrenceStart` is the start of the
+   * occurrence the edit began from: a repeating event's start moves by as much as that
+   * occurrence's start was moved, instead of jumping to its date.
+   */
+  updateEvent(eventId: string, input: EventInput, occurrenceStart?: string): Promise<void>;
   deleteEvent(occurrenceId: string, scope: EventDeleteScope): Promise<void>;
 
   listFolders(accountId?: string): Promise<Folder[]>;
