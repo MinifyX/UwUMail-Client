@@ -15,6 +15,7 @@ use crate::error::{Error, ErrorCode, Result};
 use crate::imap::{self, ImapSession, Login};
 use crate::jmap::Client as JmapClient;
 use crate::jmap::StateChange;
+use crate::mail_images::MailImages;
 use crate::model::*;
 use crate::pictures::{SenderPicture, SenderPictures};
 use crate::secrets::{Secret, SecretStore};
@@ -89,6 +90,7 @@ struct Inner {
     tokens: AsyncMutex<HashMap<String, (String, Instant)>>,
     attachments: AttachmentCache,
     pictures: SenderPictures,
+    mail_images: MailImages,
     /// (account id, path) of folders created by UwUMail, with when.
     created_folders: Mutex<HashMap<(String, String), Instant>>,
     /// Signed-in JMAP connections by account id.
@@ -165,6 +167,7 @@ impl Engine {
                 tokens: AsyncMutex::new(HashMap::new()),
                 attachments: AttachmentCache::new(&options.data_dir),
                 pictures: SenderPictures::new(&options.data_dir)?,
+                mail_images: MailImages::new()?,
                 created_folders: Mutex::new(HashMap::new()),
                 jmap: AsyncMutex::new(HashMap::new()),
                 offline_days: AtomicU32::new(0),
@@ -1410,6 +1413,11 @@ impl Engine {
     /// The brand logo or website icon for a company address, fetched once per domain.
     pub async fn sender_picture(&self, email: &str) -> Result<Option<SenderPicture>> {
         self.inner.pictures.get(email).await
+    }
+
+    /// A remote image of a mail, for the reader's dark mode; `None` when it can't be had.
+    pub async fn mail_image(&self, url: &str) -> Option<Vec<u8>> {
+        self.inner.mail_images.get(url).await
     }
 
     pub fn clear_sender_pictures(&self) -> Result<()> {

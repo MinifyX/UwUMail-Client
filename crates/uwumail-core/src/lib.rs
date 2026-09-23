@@ -16,6 +16,7 @@ pub mod jmap_settings;
 pub mod jmap_sieve;
 pub mod jmap_sync;
 pub mod links;
+pub mod mail_images;
 pub mod mailto;
 pub mod mime;
 pub mod model;

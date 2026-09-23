@@ -471,6 +471,13 @@ async fn get_sender_picture(engine: State<'_, Engine>, email: String) -> Command
     engine.sender_picture(&email).await
 }
 
+/// A remote image of a mail as raw bytes, so the reader can recolor it for dark mode.
+/// Empty when it can't be had.
+#[tauri::command]
+async fn fetch_mail_image(engine: State<'_, Engine>, url: String) -> CommandResult<tauri::ipc::Response> {
+    Ok(tauri::ipc::Response::new(engine.mail_image(&url).await.unwrap_or_default()))
+}
+
 #[tauri::command]
 fn clear_sender_pictures(engine: State<'_, Engine>) -> CommandResult<()> {
     engine.clear_sender_pictures()
@@ -645,6 +652,7 @@ pub fn run() {
             save_attachment,
             save_message,
             get_sender_picture,
+            fetch_mail_image,
             clear_sender_pictures,
             get_company_domain,
             open_link,

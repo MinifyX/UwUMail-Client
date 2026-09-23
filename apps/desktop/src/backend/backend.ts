@@ -180,6 +180,8 @@ export interface Backend {
   /** Brand logo or website icon for a company address; null for people and mail providers. */
   getSenderPicture(email: string): Promise<SenderPicture | null>;
   clearSenderPictures(): Promise<void>;
+  /** A remote image of a mail, for dark mode to recolor; null where the page has to do without. */
+  fetchMailImage(url: string): Promise<Blob | null>;
   /** Main domain of a company address (`news.shop.example` → `shop.example`); null for mail providers. */
   companyDomain(email: string): Promise<string | null>;
 

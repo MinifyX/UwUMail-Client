@@ -358,6 +358,14 @@ export class TauriBackend implements Backend {
     return call<void>("clear_sender_pictures");
   }
 
+  async fetchMailImage(url: string): Promise<Blob | null> {
+    const bytes = await call<ArrayBuffer>("fetch_mail_image", { url });
+    if (bytes.byteLength === 0) return null;
+    // Raster formats are recognized by their bytes, SVG only by its type.
+    const svg = /^\s*</.test(new TextDecoder().decode(bytes.slice(0, 64)));
+    return new Blob([bytes], svg ? { type: "image/svg+xml" } : {});
+  }
+
   companyDomain(email: string) {
     return call<string | null>("get_company_domain", { email });
   }
