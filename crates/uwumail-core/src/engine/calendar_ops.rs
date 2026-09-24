@@ -320,10 +320,16 @@ impl Inner {
 /// The hosts whose sites may get the mailbox password during CalDAV discovery: the ones that
 /// already get it (the mail servers) and an address typed in by hand. Not the mail domain: its
 /// own website is often someone else's (security-audit C-3), so discovery asks it without the
-/// password and follows it only to one of these.
+/// password and follows it only to one of these. The JMAP address only counts while the mailbox
+/// uses it: an IMAP mailbox keeps the one discovery found, which never had the password.
 pub(super) fn password_hosts(account: &AccountRecord, manual: Option<&Url>) -> Vec<String> {
     let host_of = |url: &Url| url.host_str().map(String::from);
-    let jmap = account.jmap_url.as_deref().and_then(|url| Url::parse(url).ok()).as_ref().and_then(host_of);
+    let jmap = (account.protocol == Protocol::Jmap)
+        .then_some(account.jmap_url.as_deref())
+        .flatten()
+        .and_then(|url| Url::parse(url).ok())
+        .as_ref()
+        .and_then(host_of);
     [Some(account.imap.host.clone()), Some(account.smtp.host.clone()), jmap, manual.and_then(host_of)]
         .into_iter()
         .flatten()
@@ -793,14 +799,41 @@ END:VCALENDAR
         };
         let manual = Url::parse("https://dav.calendars.example/dav/").unwrap();
         let hosts = password_hosts(&account, Some(&manual));
-        assert_eq!(
-            hosts,
-            ["imap.mailhost.example", "smtp.mailhost.example", "jmap.mailhost.example", "dav.calendars.example"]
-        );
+        assert_eq!(hosts, ["imap.mailhost.example", "smtp.mailhost.example", "dav.calendars.example"]);
         let client =
             dav::DavClient::new("mini", "dummy", &hosts.iter().map(String::as_str).collect::<Vec<_>>()).unwrap();
         assert!(!client.may_send_password(&Url::parse("https://shop.example/.well-known/caldav").unwrap()));
         assert!(client.may_send_password(&Url::parse("https://caldav.mailhost.example/").unwrap()));
+
+        // The JMAP address counts once the mailbox uses it, as its mail server.
+        let jmap = AccountRecord { protocol: Protocol::Jmap, ..account };
+        assert_eq!(
+            password_hosts(&jmap, None),
+            ["imap.mailhost.example", "smtp.mailhost.example", "jmap.mailhost.example"]
+        );
+    }
+
+    /// security-audit 2026-09-23 CC-7: an IMAP mailbox keeps the JMAP address discovery found, which
+    /// never had the password; it must not make that site trusted for the calendar or address book.
+    #[test]
+    fn an_unused_jmap_address_gets_no_password() {
+        let account = AccountRecord {
+            id: "a".into(),
+            name: "Home".into(),
+            email: "mini@shop.example".into(),
+            display_name: "Mini".into(),
+            color: AccountColor::Pink,
+            auth: AuthKind::Password,
+            username: "mini@shop.example".into(),
+            imap: ServerSettings { host: "imap.mailhost.example".into(), port: 993, security: Security::Tls },
+            smtp: ServerSettings { host: "smtp.mailhost.example".into(), port: 465, security: Security::Tls },
+            protocol: Protocol::Imap,
+            jmap_url: Some("https://jmap.elsewhere.example/session".into()),
+        };
+        let hosts = password_hosts(&account, None);
+        let client =
+            dav::DavClient::new("mini", "dummy", &hosts.iter().map(String::as_str).collect::<Vec<_>>()).unwrap();
+        assert!(!client.may_send_password(&Url::parse("https://dav.elsewhere.example/").unwrap()));
     }
 
     #[tokio::test]

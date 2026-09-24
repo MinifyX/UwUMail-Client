@@ -6,7 +6,7 @@ import { DeleteForeverQuestion } from "@/features/mail/DeleteForeverQuestion";
 import { FolderDialogs } from "@/features/mail/FolderDialogs";
 import { LinkSheet, LinkStatus } from "@/features/mail/LinkPreview";
 import { LinkWarning } from "@/features/mail/LinkWarning";
-import { AppLock } from "@/features/mobile/AppLock";
+import { AppLock, BehindLock } from "@/features/mobile/AppLock";
 import { useMobileBridge } from "@/features/mobile/useMobileBridge";
 import { UpdateHint } from "@/features/updates/UpdateHint";
 import { i18n, resolveLanguage } from "@/i18n";
@@ -27,14 +27,16 @@ export function App() {
 
   return (
     <>
-      {onboarded ? <MailShell /> : <Onboarding />}
-      <UpdateHint />
-      <LinkWarning />
-      <LinkSheet />
-      <LinkStatus />
-      <DeleteForeverQuestion />
-      <FolderDialogs />
-      <Toaster />
+      <BehindLock>
+        {onboarded ? <MailShell /> : <Onboarding />}
+        <UpdateHint />
+        <LinkWarning />
+        <LinkSheet />
+        <LinkStatus />
+        <DeleteForeverQuestion />
+        <FolderDialogs />
+        <Toaster />
+      </BehindLock>
       <AppLock />
     </>
   );

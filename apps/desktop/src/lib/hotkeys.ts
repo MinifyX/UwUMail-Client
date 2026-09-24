@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isLocked } from "@/state/lock";
 
 /** A handler that returns false leaves the key to the browser, e.g. Ctrl+A in a text field. */
 export type HotkeyMap = Record<string, (event: KeyboardEvent) => void | boolean>;
@@ -45,6 +46,8 @@ export function useHotkeys(map: HotkeyMap, { enabled = true, repeat = [] }: Hotk
     let pending: { key: string; at: number } | null = null;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return;
+      // Behind the app lock nothing may be opened, moved or deleted, keyboard or not.
+      if (isLocked()) return;
       const combo = comboOf(event);
       if (!combo.startsWith("mod+") && isTyping(event.target)) return;
       if (document.querySelector("dialog[open]") && combo !== "mod+k") return;

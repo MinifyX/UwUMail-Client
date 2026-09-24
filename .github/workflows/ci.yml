@@ -32,6 +32,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # The release scripts' own tests (scripts/*.test.mjs).
+      - run: node --test "scripts/*.test.mjs"
       - run: pnpm --filter @uwumail/desktop exec vite build
       - run: pnpm --filter @uwumail/setup exec vite build
 

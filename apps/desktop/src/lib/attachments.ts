@@ -71,6 +71,8 @@ const DANGEROUS = new Set(
     "svg svgz rdp wsb pub desktop",
     // Installer, theme and search-connector files, add-ins and Access databases with macros.
     "appinstaller theme themepack deskthemepack searchconnector-ms website ws xbap vsto vsix cab accde mdb mde adp ade",
+    // macOS files that run a command or open another file or address, more Windows macro and installer formats.
+    "terminal tool fileloc inetloc xlsb ppsm msu",
   ]
     .join(" ")
     .split(" "),
