@@ -147,6 +147,7 @@ impl Inner {
         match self.find_contacts_source(&account).await {
             Ok(source) => {
                 self.contacts_sources.lock().await.insert(account_id.to_string(), SourceState::Ready(source.clone()));
+                let _ = self.store.set_carddav_none_at(account_id, None);
                 Ok(source)
             }
             Err(problem) => {
@@ -156,6 +157,8 @@ impl Inner {
                         account_id.to_string(),
                         SourceState::Unavailable { problem: problem.clone(), since: Instant::now() },
                     );
+                    // Also past a restart, so the contacts aren't offered again at every start.
+                    let _ = self.store.set_carddav_none_at(account_id, Some(now_millis() / 1000));
                 }
                 Err(problem)
             }
@@ -186,6 +189,10 @@ impl Inner {
         }
         if !matches!(self.secrets.get(&account.id), Ok(Secret::Password { .. })) {
             return Some(self.contacts_source(account_id).await);
+        }
+        // An earlier search, maybe before a restart, found none.
+        if dav_none_recent(self.store.carddav_none_at(account_id).ok().flatten()) {
+            return Some(Err(Error::not_supported("No address book server was found for this mailbox.")));
         }
         None
     }
@@ -392,6 +399,8 @@ impl Engine {
             }
         }
         self.inner.store.set_carddav_url(account_id, url)?;
+        // A new address, or back to searching: whatever was found before doesn't count any more.
+        self.inner.store.set_carddav_none_at(account_id, None)?;
         self.inner.contacts_sources.lock().await.remove(account_id);
         self.inner.contacts_changed(account_id);
         Ok(())
@@ -784,6 +793,13 @@ mod tests {
         assert_eq!((unchecked.checked, &unchecked.source, &unchecked.problem), (false, &None, &None));
         assert!(engine.recipient_suggestions("pat").await.unwrap().is_empty());
         assert!(!engine.inner.contacts_sources.lock().await.contains_key("p"), "no search ran");
+        // A search that found none is remembered past a restart, until the address changes.
+        let find = |accounts: Vec<ContactsAccount>| accounts.into_iter().find(|account| account.account_id == "p");
+        engine.inner.store.set_carddav_none_at("p", Some(now_millis() / 1000 - 60)).unwrap();
+        let remembered = find(engine.contacts_accounts(false).await.unwrap()).unwrap();
+        assert!(remembered.checked && remembered.source.is_none() && remembered.problem.is_some());
+        engine.set_carddav_url("p", None).await.unwrap();
+        assert!(!find(engine.contacts_accounts(false).await.unwrap()).unwrap().checked);
         engine.inner.store.delete_account("p").unwrap();
         // Leaving it out is not an error for the contacts as a whole.
         assert!(engine.address_books().await.unwrap().is_empty());

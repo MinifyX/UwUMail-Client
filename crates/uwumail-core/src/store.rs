@@ -183,6 +183,12 @@ CREATE TABLE address_book_prefs (
     is_default INTEGER NOT NULL DEFAULT 0
 );
 "#,
+    r#"
+-- When the search for a CalDAV or CardDAV server last found none (unix seconds), so a mailbox
+-- without one doesn't offer the calendar or the contacts again after every start.
+ALTER TABLE accounts ADD COLUMN caldav_none_at INTEGER;
+ALTER TABLE accounts ADD COLUMN carddav_none_at INTEGER;
+"#,
 ];
 
 /// What this device remembers about one calendar.
@@ -459,6 +465,30 @@ impl Store {
 
     pub fn set_caldav_url(&self, account_id: &str, url: Option<&str>) -> Result<()> {
         self.conn().execute("UPDATE accounts SET caldav_url = ?1 WHERE id = ?2", params![url, account_id])?;
+        Ok(())
+    }
+
+    /// When the search for the account's CalDAV server last found none, in unix seconds.
+    pub fn caldav_none_at(&self, account_id: &str) -> Result<Option<i64>> {
+        Ok(self
+            .conn()
+            .query_row("SELECT caldav_none_at FROM accounts WHERE id = ?1", [account_id], |row| row.get(0))?)
+    }
+
+    pub fn set_caldav_none_at(&self, account_id: &str, at: Option<i64>) -> Result<()> {
+        self.conn().execute("UPDATE accounts SET caldav_none_at = ?1 WHERE id = ?2", params![at, account_id])?;
+        Ok(())
+    }
+
+    /// When the search for the account's CardDAV server last found none, in unix seconds.
+    pub fn carddav_none_at(&self, account_id: &str) -> Result<Option<i64>> {
+        Ok(self
+            .conn()
+            .query_row("SELECT carddav_none_at FROM accounts WHERE id = ?1", [account_id], |row| row.get(0))?)
+    }
+
+    pub fn set_carddav_none_at(&self, account_id: &str, at: Option<i64>) -> Result<()> {
+        self.conn().execute("UPDATE accounts SET carddav_none_at = ?1 WHERE id = ?2", params![at, account_id])?;
         Ok(())
     }
 
