@@ -40,3 +40,4 @@ Both audits were done with Claude, not by an independent security firm.
 - [September 2026 — 0.2.0-beta.1](docs/security-audit.md)
 - [September 2026 — Android app and later changes](docs/security-audit.md#addendum--the-android-app-and-changes-after-020-beta1)
 - [September 2026 — changes since 17 September](docs/security-audit.md#addendum--changes-since-17-september-2026)
+- [23 September 2026 — account setup, app shells, release pipeline, privacy proxy](docs/security-audit-2026-09-23.md)
