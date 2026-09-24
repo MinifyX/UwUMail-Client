@@ -130,6 +130,15 @@ const DANGEROUS: &[&str] = &[
     "mde",
     "adp",
     "ade",
+    // macOS files that run a command or open another file or address when opened, and more
+    // Windows formats with macros or an installer inside.
+    "terminal",
+    "tool",
+    "fileloc",
+    "inetloc",
+    "xlsb",
+    "ppsm",
+    "msu",
 ];
 
 /// Android app packages. On Android UwUMail never hands these to the installer.
@@ -207,10 +216,12 @@ pub fn safe_filename(name: &str) -> String {
     format!("{}{ext}", stem.chars().take(150 - ext.chars().count()).collect::<String>())
 }
 
-/// Marks a file as downloaded from the internet (Windows' "Mark of the Web"), like a browser or
-/// Outlook does: SmartScreen then warns before a program from it runs, and Office opens documents
-/// in Protected View with their macros blocked. Best effort: file systems without alternate data
-/// streams (FAT, some network drives) don't keep the mark. Does nothing on other systems.
+/// Marks a file as downloaded from the internet, like a browser or Outlook does. On Windows that is
+/// the "Mark of the Web": SmartScreen then warns before a program from it runs, and Office opens
+/// documents in Protected View with their macros blocked. On macOS it is the quarantine attribute:
+/// Gatekeeper then checks a program before it first runs, also one Archive Utility unpacks from the
+/// file, which passes the attribute on. Best effort: file systems without alternate data streams or
+/// extended attributes (FAT, some network drives) don't keep the mark. Does nothing on other systems.
 pub fn mark_from_internet(path: &Path) {
     #[cfg(windows)]
     {
@@ -220,8 +231,70 @@ pub fn mark_from_internet(path: &Path) {
             tracing::debug!("Couldn't mark a file as downloaded: {error}");
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    if let Err(error) = quarantine::set(path) {
+        tracing::debug!("Couldn't mark a file as downloaded: {error}");
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     let _ = path;
+}
+
+/// macOS' `com.apple.quarantine` extended attribute.
+#[cfg(target_os = "macos")]
+mod quarantine {
+    use std::ffi::{CString, c_char, c_int, c_void};
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    const NAME: &std::ffi::CStr = c"com.apple.quarantine";
+
+    unsafe extern "C" {
+        fn setxattr(
+            path: *const c_char,
+            name: *const c_char,
+            value: *const c_void,
+            size: usize,
+            position: u32,
+            options: c_int,
+        ) -> c_int;
+    }
+
+    fn c_path(path: &Path) -> std::io::Result<CString> {
+        CString::new(path.as_os_str().as_bytes()).map_err(std::io::Error::other)
+    }
+
+    /// `flags;time;agent;`: flag 0x1 is "downloaded"; the missing 0x40 means nobody has opened it
+    /// yet, so Gatekeeper asks. The time is seconds since 1970 in hex.
+    pub fn set(path: &Path) -> std::io::Result<()> {
+        let seconds = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs());
+        let value = format!("0081;{seconds:08x};UwUMail;");
+        let path = c_path(path)?;
+        // SAFETY: both names are NUL-terminated and outlive the call; `value` is `value.len()` bytes.
+        let result = unsafe { setxattr(path.as_ptr(), NAME.as_ptr(), value.as_ptr().cast(), value.len(), 0, 0) };
+        if result == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
+    }
+
+    /// The attribute's value, if the file has one.
+    #[cfg(test)]
+    pub fn get(path: &Path) -> Option<String> {
+        unsafe extern "C" {
+            fn getxattr(
+                path: *const c_char,
+                name: *const c_char,
+                value: *mut c_void,
+                size: usize,
+                position: u32,
+                options: c_int,
+            ) -> isize;
+        }
+        let path = c_path(path).ok()?;
+        let mut buffer = vec![0u8; 256];
+        // SAFETY: the buffer is writable for its whole length, which is what is passed.
+        let read = unsafe { getxattr(path.as_ptr(), NAME.as_ptr(), buffer.as_mut_ptr().cast(), buffer.len(), 0, 0) };
+        buffer.truncate(usize::try_from(read).ok()?);
+        String::from_utf8(buffer).ok()
+    }
 }
 
 /// Splits `"<message id>:<index>"`.
@@ -362,6 +435,13 @@ mod tests {
         // A profile can add certificates, a VPN or device management to an iPhone.
         assert!(is_dangerous("wlan.mobileconfig") && is_ios_installable("wlan.mobileconfig"));
         assert!(is_ios_installable("UwUMail.ipa") && !is_ios_installable("urlaub.jpg"));
+        // macOS runs a command or opens another file or address from these.
+        for name in ["Einstellungen.terminal", "skript.tool", "rechnung.fileloc", "link.inetloc"] {
+            assert!(is_dangerous(name), "{name}");
+        }
+        for name in ["tabelle.xlsb", "folien.ppsm", "patch.msu"] {
+            assert!(is_dangerous(name), "{name}");
+        }
     }
 
     #[test]
@@ -427,6 +507,11 @@ Content-Transfer-Encoding: base64\r\n\r\nSGFsbG8gZGEh\r\n--x--\r\n";
             stream.push(":Zone.Identifier");
             let mark = std::fs::read_to_string(stream).expect("the attachment carries the mark of the web");
             assert!(mark.contains("ZoneId=3"), "{mark}");
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let mark = quarantine::get(&file.path).expect("the attachment carries the quarantine attribute");
+            assert!(mark.starts_with("0081;") && mark.ends_with(";UwUMail;"), "{mark}");
         }
     }
 

@@ -33,6 +33,10 @@ describe("attachmentKind", () => {
     expect(isDangerous("login.svg")).toBe(true);
     expect(isDangerous("remote.rdp")).toBe(true);
     expect(isDangerous("sandbox.wsb")).toBe(true);
+    for (const name of ["Einstellungen.terminal", "skript.tool", "rechnung.fileloc", "link.inetloc"]) {
+      expect(isDangerous(name), name).toBe(true);
+    }
+    for (const name of ["tabelle.xlsb", "folien.ppsm", "patch.msu"]) expect(isDangerous(name), name).toBe(true);
     expect(isDangerous(".pdf")).toBe(false);
     // svg stays an image for its preview, even though saving it warns.
     expect(attachmentKind("logo.svg", "image/svg+xml")).toBe("image");
