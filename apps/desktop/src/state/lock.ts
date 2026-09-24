@@ -20,6 +20,18 @@ export const useAppLock = create<LockState>((set) => ({
   setLocked: (locked) => set({ locked }),
 }));
 
+/** Whether the lock covers UwUMail right now: it is on, on a phone, and not yet unlocked. */
+export function isLocked(): boolean {
+  return nativeMobile && useSettings.getState().appLock && useAppLock.getState().locked;
+}
+
+/** {@link isLocked}, for components. */
+export function useLocked(): boolean {
+  const locked = useAppLock((s) => s.locked);
+  const appLock = useSettings((s) => s.appLock);
+  return nativeMobile && appLock && locked;
+}
+
 /**
  * UwUMail went into the background or came back. Answers whether the lock is due: it was away for
  * at least `afterMinutes`. The phone's unlock screen hides UwUMail too; coming back from it doesn't

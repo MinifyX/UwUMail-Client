@@ -1,11 +1,25 @@
 import { Fingerprint } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { nativeMobile } from "@/backend/mobile";
 import { NyuScene } from "@/components/nyu/scenes";
 import { Button } from "@/components/ui/Button";
 import { useT } from "@/i18n";
-import { confirmIdentity, noteVisibility, useAppLock } from "@/state/lock";
+import { confirmIdentity, noteVisibility, useAppLock, useLocked } from "@/state/lock";
 import { useSettings } from "@/state/settings";
+
+/**
+ * Everything the app lock covers. While locked it is `inert`: not only hidden under the lock, but
+ * out of reach of the keyboard, focus and the screen reader, which would otherwise read the mail
+ * list behind the cover or press its buttons. `display: contents` keeps the layout as it was.
+ */
+export function BehindLock({ children }: { children: ReactNode }) {
+  const locked = useLocked();
+  return (
+    <div className="contents" inert={locked}>
+      {children}
+    </div>
+  );
+}
 
 /**
  * Settings → Security → App lock. Covers UwUMail when it opens and after it
@@ -15,7 +29,7 @@ export function AppLock() {
   const { t } = useT();
   const enabled = useSettings((s) => s.appLock && nativeMobile);
   const after = useSettings((s) => s.appLockAfter);
-  const locked = useAppLock((s) => s.locked) && enabled;
+  const locked = useLocked();
   const [asking, setAsking] = useState(false);
 
   const unlock = useCallback(async () => {
