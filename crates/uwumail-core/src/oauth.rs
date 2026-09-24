@@ -235,36 +235,67 @@ pub async fn sign_in(
             return exchange_code(http, &config, code, redirect_uri, verifier).await;
         }
     };
-    let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, async {
-        loop {
-            let (mut socket, _) = listener.accept().await?;
-            let mut buffer = vec![0u8; 8192];
-            let read = socket.read(&mut buffer).await?;
-            let request = String::from_utf8_lossy(&buffer[..read]).to_string();
-            // Browsers also ask for /favicon.ico; only the redirect carries a query.
-            if !request.starts_with("GET /?") {
-                let _ = socket.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n").await;
-                continue;
-            }
-            let url = match request_url(&request) {
-                Ok(url) if belongs_to(&url, &state) => url,
-                _ => {
-                    let _ = socket.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n").await;
-                    continue;
-                }
-            };
-            let result = redirect_parameters(&url);
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{DONE_PAGE}",
-                DONE_PAGE.len()
-            );
-            let _ = socket.write_all(response.as_bytes()).await;
-            return result;
-        }
-    })
-    .await
-    .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
+    let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_loopback(listener, state))
+        .await
+        .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
     exchange_code(http, &config, code, redirect_uri, verifier).await
+}
+
+/// How long one connection to the loopback listener may take to send its request.
+const REQUEST_WAIT: Duration = Duration::from_secs(10);
+
+/// Waits for the browser's redirect with this sign-in's `state`. Every connection is answered on
+/// its own, so one that says nothing, breaks off or sends something else neither holds up nor ends
+/// the sign-in: any program on the device can connect to the port.
+async fn wait_for_loopback(listener: TcpListener, state: String) -> Result<(String, String)> {
+    let (found, mut answers) = tokio::sync::mpsc::channel(1);
+    let mut connections = tokio::task::JoinSet::new();
+    loop {
+        tokio::select! {
+            Some(result) = answers.recv() => return result,
+            accepted = listener.accept() => {
+                let Ok((socket, _)) = accepted else {
+                    // Out of file handles, say: give the ones in use a moment to close.
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    continue;
+                };
+                // Finished ones are let go of, so a flood of connections holds nothing.
+                while connections.try_join_next().is_some() {}
+                let (found, state) = (found.clone(), state.clone());
+                connections.spawn(async move {
+                    if let Ok(Some(result)) = tokio::time::timeout(REQUEST_WAIT, answer(socket, &state)).await {
+                        let _ = found.send(result).await;
+                    }
+                });
+            }
+        }
+    }
+}
+
+/// Answers one connection to the loopback listener: the redirect of this sign-in, or `None`.
+async fn answer(mut socket: tokio::net::TcpStream, state: &str) -> Option<Result<(String, String)>> {
+    let mut buffer = vec![0u8; 8192];
+    let read = socket.read(&mut buffer).await.ok()?;
+    let request = String::from_utf8_lossy(&buffer[..read]).to_string();
+    // Browsers also ask for /favicon.ico; only the redirect carries a query.
+    if !request.starts_with("GET /?") {
+        let _ = socket.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n").await;
+        return None;
+    }
+    let url = match request_url(&request) {
+        Ok(url) if belongs_to(&url, state) => url,
+        _ => {
+            let _ = socket.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n").await;
+            return None;
+        }
+    };
+    let result = redirect_parameters(&url);
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{DONE_PAGE}",
+        DONE_PAGE.len()
+    );
+    let _ = socket.write_all(response.as_bytes()).await;
+    Some(result)
 }
 
 enum Receiver {
@@ -376,6 +407,29 @@ mod tests {
         assert!(wait_for_app_link(&mut incoming, "ours").await.is_err(), "a cancel with our state counts");
         drop(sender);
         assert!(wait_for_app_link(&mut incoming, "ours").await.is_err(), "a replaced sign-in ends");
+    }
+
+    #[tokio::test]
+    async fn other_connections_neither_hold_up_nor_end_a_loopback_sign_in() {
+        use tokio::net::TcpStream;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let waiting = tokio::spawn(wait_for_loopback(listener, "ours".into()));
+
+        // One that connects and says nothing, one that hangs up, and one with a wrong state.
+        let _silent = TcpStream::connect(address).await.unwrap();
+        drop(TcpStream::connect(address).await.unwrap());
+        let mut forged = TcpStream::connect(address).await.unwrap();
+        forged.write_all(b"GET /?code=evil&state=guess HTTP/1.1\r\n\r\n").await.unwrap();
+        let mut refused = String::new();
+        forged.read_to_string(&mut refused).await.unwrap();
+        assert!(refused.starts_with("HTTP/1.1 400"), "{refused}");
+
+        let mut browser = TcpStream::connect(address).await.unwrap();
+        browser.write_all(b"GET /?code=real&state=ours HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(5), waiting).await.expect("not held up").unwrap();
+        assert_eq!(result.unwrap(), ("real".to_string(), "ours".to_string()));
     }
 
     #[test]
