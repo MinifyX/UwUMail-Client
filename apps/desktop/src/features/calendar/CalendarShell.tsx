@@ -9,6 +9,7 @@ import { monthWeeks } from "@/lib/calendarDates";
 import { useIsPhone, useMediaQuery } from "@/lib/device";
 import { useHotkeys, type HotkeyMap } from "@/lib/hotkeys";
 import { useUi } from "@/state/ui";
+import { useContactsAvailable } from "../contacts/useContactsData";
 import { AgendaView } from "./AgendaView";
 import { CalendarSidebar, startNewEvent } from "./CalendarSidebar";
 import { DeleteScopeQuestion } from "./DeleteScopeQuestion";
@@ -26,7 +27,7 @@ const ROOM_FOR_SIDEBAR = "(min-width: 1100px)";
 const GRID_VIEWS: CalendarView[] = ["day", "week", "month"];
 
 /** Keys like the mail's: t today, d/w/m for the views, c for a new event, n/p or j/k to page. */
-function useCalendarHotkeys() {
+function useCalendarHotkeys(contacts: boolean) {
   const map = useMemo<HotkeyMap>(() => {
     const ui = () => useCalendarUi.getState();
     return {
@@ -43,6 +44,9 @@ function useCalendarHotkeys() {
       ArrowLeft: () => ui().step(-1),
       "g i": () => useUi.getState().setView({ kind: "unified", role: "inbox" }),
       "g m": () => useUi.getState().setSection("mail"),
+      "g k": () => {
+        if (contacts) useUi.getState().setSection("contacts");
+      },
       "mod+k": () => useUi.getState().setPaletteOpen(true),
       "mod+,": () => useUi.getState().openSettings(),
       "?": () => useUi.getState().setShortcutsOpen(true),
@@ -53,7 +57,7 @@ function useCalendarHotkeys() {
         else useUi.getState().setFolderDrawerOpen(false);
       },
     };
-  }, []);
+  }, [contacts]);
   useHotkeys(map, { repeat: ["n", "p", "j", "k", "ArrowRight", "ArrowLeft"] });
 }
 
@@ -111,7 +115,8 @@ function title(view: CalendarView, date: string): string {
 /** The calendar, where the mail list and reader would be. Phones get a list and single days. */
 export function CalendarShell() {
   const phone = useIsPhone();
-  useCalendarHotkeys();
+  const { data: contacts = false } = useContactsAvailable();
+  useCalendarHotkeys(contacts);
   return (
     <>
       {phone ? <PhoneCalendar /> : <DesktopCalendar />}

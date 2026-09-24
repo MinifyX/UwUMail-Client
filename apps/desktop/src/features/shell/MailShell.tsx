@@ -13,6 +13,7 @@ import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { AccountSetup } from "../accounts/AccountSetup";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
+import { useContactsAvailable } from "../contacts/useContactsData";
 import { Composer } from "../compose/Composer";
 import { loadLocalDraft } from "../compose/localDraft";
 import { MailboxNav } from "../mail/MailboxNav";
@@ -26,6 +27,7 @@ import { useWorkspaceGuard } from "../workspaces/workspaces";
 import { buildCommands } from "./commands";
 import { CommandPalette } from "./CommandPalette";
 import { LazyCalendar } from "./LazyCalendar";
+import { LazyContactDialogs, LazyContacts } from "./LazyContacts";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 
 /** Keys that scroll the open mail from the list as well. */
@@ -110,11 +112,29 @@ export function MailShell() {
     useUi.getState().setSection("mail");
     toast(t("calendar.noneFound"), "info");
   }, [calendarKnown, calendarAvailable, section, t]);
+  const { data: contactsAvailable = false, isSuccess: contactsKnown } = useContactsAvailable();
+  // Likewise for the contacts: no address book found when they opened, or the last one went.
+  useEffect(() => {
+    if (!contactsKnown || contactsAvailable || section !== "contacts") return;
+    useUi.getState().setSection("mail");
+    toast(t("contacts.noneFound"), "info");
+  }, [contactsKnown, contactsAvailable, section, t]);
   // Titles depend on tone, theme, layout and the workspaces, so rebuild when they change.
   const commands = useMemo(
-    () => buildCommands(client, t, { calendar: calendarAvailable }),
+    () => buildCommands(client, t, { calendar: calendarAvailable, contacts: contactsAvailable }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, t, layout, tone, theme, selectedThreadId, workspaces, workspaceNames, calendarAvailable],
+    [
+      client,
+      t,
+      layout,
+      tone,
+      theme,
+      selectedThreadId,
+      workspaces,
+      workspaceNames,
+      calendarAvailable,
+      contactsAvailable,
+    ],
   );
 
   const hotkeys = useMemo(() => {
@@ -158,7 +178,7 @@ export function MailShell() {
     }
     return map;
   }, [commands, phone]);
-  // The calendar brings its own keys.
+  // The calendar and the contacts bring their own keys.
   useHotkeys(hotkeys, { enabled: section === "mail", repeat: ["j", "k", "ArrowDown", "ArrowUp", ...SCROLL_KEYS] });
 
   return (
@@ -173,6 +193,8 @@ export function MailShell() {
         <MobileShell />
       ) : section === "calendar" ? (
         <LazyCalendar />
+      ) : section === "contacts" ? (
+        <LazyContacts />
       ) : pro ? (
         // A minmax(0,1fr) row keeps the columns at window height so each one scrolls on its own.
         <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,420px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
@@ -215,6 +237,7 @@ export function MailShell() {
 
       <Composer />
       <SettingsDialog />
+      <LazyContactDialogs />
       <AddAccountDialog />
       <CommandPalette commands={commands} />
       <ShortcutsDialog />

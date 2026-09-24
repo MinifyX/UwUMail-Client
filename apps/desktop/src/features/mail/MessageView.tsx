@@ -11,6 +11,8 @@ import {
   PenLine,
   Printer,
   Sun,
+  UserPlus,
+  UserRound,
 } from "lucide-react";
 import { Fragment, useId, useMemo, useState } from "react";
 import type { Account, Message } from "@/backend/types";
@@ -31,6 +33,9 @@ import { domainEntry, isDomainEntry, matchingEntries } from "@/lib/trustedSender
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
+import { contactWithEmail, draftFromSender } from "../contacts/format";
+import { startNewContact, useContactsUi } from "../contacts/state";
+import { useContactsAvailable, useLoadedContacts } from "../contacts/useContactsData";
 import { openDraftMessage } from "../compose/openDraft";
 import { useInlineImages } from "./useInlineImages";
 import { nativeMobile } from "@/backend/mobile";
@@ -407,6 +412,10 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
   const email = message.from.email;
   const domain = useCompanyDomain(email);
   const own = accounts.some((account) => account.email.toLowerCase() === email.toLowerCase());
+  const { data: contactsAvailable = false } = useContactsAvailable();
+  // Only contacts already loaded: opening a mail never searches for an address book server.
+  const { data: contacts = [] } = useLoadedContacts();
+  const known = contactsAvailable ? contactWithEmail(contacts, email) : undefined;
   const refresh = () => client.invalidateQueries();
   const block = (entry: string) => {
     useUi.getState().selectThread(null);
@@ -426,6 +435,24 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
     ...(own
       ? []
       : [
+          ...(known
+            ? [
+                {
+                  label: <MenuLabel icon={UserRound} text={t("contacts.showContact")} />,
+                  onSelect: () => {
+                    useUi.getState().setSection("contacts");
+                    useContactsUi.getState().select(known.id);
+                  },
+                },
+              ]
+            : contactsAvailable && email
+              ? [
+                  {
+                    label: <MenuLabel icon={UserPlus} text={t("contacts.addSender")} />,
+                    onSelect: () => startNewContact(draftFromSender(message.from.name, email)),
+                  },
+                ]
+              : []),
           { label: <MenuLabel icon={Ban} text={t("reader.blockSender", { email })} />, onSelect: () => block(email) },
           ...(domain
             ? [

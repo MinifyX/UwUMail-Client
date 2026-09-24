@@ -22,6 +22,8 @@ import {
   Star,
   Trash,
   Undo2,
+  UserPlus,
+  UsersRound,
 } from "lucide-react";
 import { backend } from "@/backend/backend";
 import { i18n } from "@/i18n";
@@ -32,6 +34,7 @@ import { announceMove, runLastUndo } from "@/state/undo";
 import { useUi } from "@/state/ui";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadDetail } from "@/backend/types";
+import { startNewContact } from "../contacts/state";
 import { requestMove } from "../mail/selection";
 import { SEARCH_INPUT_ID } from "../mail/ThreadList";
 import { switchWorkspace, WORKSPACE_ICONS, WORKSPACE_KEYS, workspaceName } from "../workspaces/workspaces";
@@ -65,7 +68,7 @@ async function afterChange(client: QueryClient) {
 export function buildCommands(
   client: QueryClient,
   t: (key: string, options?: Record<string, unknown>) => string,
-  { calendar = false }: { calendar?: boolean } = {},
+  { calendar = false, contacts = false }: { calendar?: boolean; contacts?: boolean } = {},
 ): Command[] {
   const ui = useUi.getState();
   const settings = useSettings.getState();
@@ -274,6 +277,27 @@ export function buildCommands(
           keys: [WORKSPACE_KEYS[workspace]],
           run: () => switchWorkspace(workspace),
         }))
+      : []),
+    ...(contacts
+      ? [
+          {
+            id: "goContacts",
+            title: t("shortcuts.goContacts"),
+            icon: UsersRound,
+            // "g p" is the private workspace here.
+            keys: ["g k"],
+            run: () => ui.setSection("contacts"),
+          },
+          {
+            id: "newContact",
+            title: t("contacts.newContact"),
+            icon: UserPlus,
+            run: () => {
+              ui.setSection("contacts");
+              startNewContact();
+            },
+          },
+        ]
       : []),
     {
       id: "layout",

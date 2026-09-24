@@ -163,6 +163,84 @@ async fn delete_event(engine: State<'_, Engine>, occurrence_id: String, scope: E
     engine.delete_event(&occurrence_id, scope).await
 }
 
+/// Per account: JMAP Contacts, CardDAV, or why there are no address books. `look: false` doesn't
+/// search for CardDAV servers.
+#[tauri::command]
+async fn contacts_accounts(engine: State<'_, Engine>, look: Option<bool>) -> CommandResult<Vec<ContactsAccount>> {
+    engine.contacts_accounts(look.unwrap_or(true)).await
+}
+
+#[tauri::command]
+async fn set_carddav_url(engine: State<'_, Engine>, account_id: String, url: Option<String>) -> CommandResult<()> {
+    engine.set_carddav_url(&account_id, url.as_deref()).await
+}
+
+/// Every address book of every account that has some.
+#[tauri::command]
+async fn list_address_books(engine: State<'_, Engine>) -> CommandResult<Vec<AddressBookInfo>> {
+    engine.address_books().await
+}
+
+#[tauri::command]
+async fn create_address_book(
+    engine: State<'_, Engine>,
+    account_id: Option<String>,
+    name: String,
+) -> CommandResult<AddressBookInfo> {
+    engine.create_address_book(account_id, &name).await
+}
+
+#[tauri::command]
+async fn rename_address_book(engine: State<'_, Engine>, address_book_id: String, name: String) -> CommandResult<()> {
+    engine.rename_address_book(&address_book_id, &name).await
+}
+
+/// Removes the address book with its contacts.
+#[tauri::command]
+async fn delete_address_book(engine: State<'_, Engine>, address_book_id: String) -> CommandResult<()> {
+    engine.delete_address_book(&address_book_id).await
+}
+
+#[tauri::command]
+async fn set_default_address_book(engine: State<'_, Engine>, address_book_id: String) -> CommandResult<()> {
+    engine.set_default_address_book(&address_book_id).await
+}
+
+/// Every contact card (JSContact) of every account.
+#[tauri::command]
+async fn list_contact_cards(engine: State<'_, Engine>) -> CommandResult<Vec<ContactCardEntry>> {
+    engine.contact_cards().await
+}
+
+#[tauri::command]
+async fn get_contact_card(engine: State<'_, Engine>, card_id: String) -> CommandResult<serde_json::Value> {
+    engine.contact_card(&card_id).await
+}
+
+#[tauri::command]
+async fn create_contact_card(
+    engine: State<'_, Engine>,
+    address_book_id: String,
+    card: serde_json::Value,
+) -> CommandResult<String> {
+    engine.create_contact_card(&address_book_id, card).await
+}
+
+/// Changes a card with a JMAP patch; `addressBookIds` moves it.
+#[tauri::command]
+async fn update_contact_card(
+    engine: State<'_, Engine>,
+    card_id: String,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> CommandResult<()> {
+    engine.update_contact_card(&card_id, patch).await
+}
+
+#[tauri::command]
+async fn delete_contact_card(engine: State<'_, Engine>, card_id: String) -> CommandResult<()> {
+    engine.delete_contact_card(&card_id).await
+}
+
 #[tauri::command]
 fn list_identities(engine: State<'_, Engine>) -> CommandResult<Vec<Identity>> {
     engine.list_identities()
@@ -370,9 +448,10 @@ async fn open_draft(engine: State<'_, Engine>, message_id: String) -> CommandRes
     engine.open_draft(&message_id).await
 }
 
+/// Recipient suggestions: the address books first, then addresses learned from mail.
 #[tauri::command]
-fn search_contacts(engine: State<'_, Engine>, query: String) -> CommandResult<Vec<Contact>> {
-    engine.search_contacts(&query)
+async fn search_contacts(engine: State<'_, Engine>, query: String) -> CommandResult<Vec<Contact>> {
+    engine.recipient_suggestions(&query).await
 }
 
 #[tauri::command]
@@ -651,6 +730,18 @@ pub fn run() {
             create_event,
             update_event,
             delete_event,
+            contacts_accounts,
+            set_carddav_url,
+            list_address_books,
+            create_address_book,
+            rename_address_book,
+            delete_address_book,
+            set_default_address_book,
+            list_contact_cards,
+            get_contact_card,
+            create_contact_card,
+            update_contact_card,
+            delete_contact_card,
             add_identity,
             rename_identity,
             remove_identity,

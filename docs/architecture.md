@@ -41,7 +41,7 @@ and reused (CLI, future sync server).
 | `mime` | Parse with `mail-parser`, build with `mail-builder`, sanitize HTML with `ammonia` |
 | `threading` | Conversation grouping (Message-ID / In-Reply-To / References, Gmail thread IDs when present) |
 | `store` | SQLite (WAL) with migrations and an FTS5 index for instant search |
-| `contacts` | Address book fed by sent and received mail, later CardDAV |
+| `contacts` | Address books over JMAP Contacts or CardDAV; recipient suggestions also learn from sent and received mail |
 
 The mail server is always the source of truth. The local store is a cache that
 can be deleted at any time and rebuilt.
@@ -106,6 +106,40 @@ UWUMAIL_LISTEN__PROXY=127.0.0.1:18080 … cargo run -p uwumail-server -- serve
 UWUMAIL_TEST_SERVER=http://127.0.0.1:18080 UWUMAIL_TEST_LOGIN=mini@a.test \
 UWUMAIL_TEST_PASSWORD=… cargo test -p uwumail-core --test uwumail_server -- --test-threads=1
 ```
+
+### Contacts
+
+Address books come from where each mailbox keeps them (`contacts/`,
+`engine/contacts_ops.rs`), the same way as calendars:
+
+- **UwUMail server:** JMAP Contacts (RFC 9610, `urn:ietf:params:jmap:contacts`,
+  UwUMail-Server `docs/jmap-contacts.md`), cards as JSContact.
+- **Other password mailboxes:** CardDAV (RFC 6352). The home is found like the
+  calendar's (RFC 6764: `_carddavs._tcp`, `/.well-known/carddav`, principal,
+  `addressbook-home-set`) or typed in under Settings → Mailboxes. The same
+  `DavClient` rules hold: HTTPS only, the password only to the mailbox's own
+  sites, size-limited answers. A book is read with one listing and
+  `addressbook-multiget` batches, and vCards become JSContact with `calcard`.
+  What JSContact has no field for stays in the card, so a change made here keeps
+  what a phone put there. CardDAV can't store a default address book, so the
+  default is kept on this device (`address_book_prefs`).
+- **Microsoft and Google sign-ins:** none for now.
+
+As for calendars, the search for a CardDAV server asks the mail domain's
+website, so it waits until the contacts or the contact editor open
+(`contacts_accounts(look: false)` answers from what is known). Opening a mail
+and typing a recipient never start it.
+
+There is no local copy. Each account's books and cards are kept in memory for
+five minutes, until a change made here, or until a JMAP push names
+`AddressBook` or `ContactCard`; `contacts:changed` tells the page. The page gets
+every card as JSContact with ids of the app (`account:remote`) and turns it into
+the view's shape in `backend/contacts.ts`, kept like the webmail's. Saving sends
+a JMAP patch of just what the editor changed: the server applies it over JMAP,
+and over CardDAV the engine applies it to the card read just before and writes it
+back with `If-Match`. Recipient suggestions list the address books first, then
+the addresses learned from mail. `tests/carddav_hostile.rs` covers discovery,
+reading, writing and hostile answers against local stubs.
 
 ### `apps/desktop/src-tauri` — the shell
 
