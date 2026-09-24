@@ -41,6 +41,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # The certificate every UwUMail APK is signed with, as in android.yml.
+  APK_CERTIFICATE_SHA256: de1cd496582140c9004e05ff087656cdb0b0f575a98dc664e809b5f9b510e301
+
 jobs:
   check:
     name: Check version and release notes
@@ -129,25 +133,37 @@ jobs:
           package-manager-cache: false
       # Only for the Tauri CLI, pinned by the lockfile. No install script runs on this runner.
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter @uwumail/desktop
+      # Each artifact by its exact name into a folder of its own; scripts/release-files.mjs then takes
+      # exactly the files each one is meant to hold, so no build can swap in another one's setup.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: release-windows
-          path: files
+          path: ${{ runner.temp }}/unpacked/release-windows
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-windows-arm64
-          path: files
+          path: ${{ runner.temp }}/unpacked/desktop-windows-arm64
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: desktop-macos-*
-          path: ${{ runner.temp }}/desktop
+          name: desktop-macos-universal
+          path: ${{ runner.temp }}/desktop/desktop-macos-universal
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: desktop-linux-*
-          path: ${{ runner.temp }}/desktop
-      - name: Unpack the macOS and Linux files
+          name: desktop-linux-x64
+          path: ${{ runner.temp }}/desktop/desktop-linux-x64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-linux-arm64
+          path: ${{ runner.temp }}/desktop/desktop-linux-arm64
+      - name: Take each build's own files
         run: |
-          for tar in "$RUNNER_TEMP"/desktop/*/*.tar; do tar -xf "$tar" -C files; done
+          for build in desktop-macos-universal desktop-linux-x64 desktop-linux-arm64; do
+            mkdir "$RUNNER_TEMP/unpacked/$build"
+            tar -xf "$RUNNER_TEMP/desktop/$build/$build.tar" -C "$RUNNER_TEMP/unpacked/$build"
+          done
+          mkdir files
+          node scripts/release-files.mjs "$RUNNER_TEMP/unpacked" files "$VERSION" \
+            release-windows desktop-windows-arm64 desktop-macos-universal desktop-linux-x64 desktop-linux-arm64
           ls -la files
       # Each update file as a copy under the versioned name installed apps expect in the signature
       # (the universal Mac program twice, once per name), which leaves <versioned name>.sig behind.
@@ -266,15 +282,13 @@ jobs:
       - name: Check the APK
         env:
           VERSION: ${{ needs.check.outputs.version }}
-          # The certificate every UwUMail APK is signed with, as in android.yml.
-          CERTIFICATE_SHA256: de1cd496582140c9004e05ff087656cdb0b0f575a98dc664e809b5f9b510e301
         run: |
           shopt -s nullglob
           apks=(apk/UwUMail-"$VERSION"-*.apk)
           [ "${#apks[@]}" = 1 ] || { echo "::error::Expected one APK for $VERSION, found: $(ls apk)"; exit 1; }
           tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
           "$tools/apksigner" verify --print-certs "${apks[0]}" > certs.txt
-          grep -qi "certificate SHA-256 digest: $CERTIFICATE_SHA256" certs.txt \
+          grep -qi "certificate SHA-256 digest: $APK_CERTIFICATE_SHA256" certs.txt \
             || { echo "::error::The APK isn't signed with UwUMail's certificate"; exit 1; }
           # The release name; the app checks the download by the SHA-256 in its feed.
           mkdir release
@@ -307,27 +321,58 @@ jobs:
           # Only runs scripts/release-feeds.mjs. Without this, setup-node v5 sees packageManager in
           # package.json and wants pnpm for its cache, which this job doesn't install.
           package-manager-cache: false
+      # As in the signing job: every artifact by its exact name, each one's own files only.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: release-*
-          merge-multiple: true
-          path: files
+          name: release-windows
+          path: ${{ runner.temp }}/unpacked/release-windows
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-windows-arm64
-          path: files
+          path: ${{ runner.temp }}/unpacked/desktop-windows-arm64
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: desktop-macos-*
-          path: ${{ runner.temp }}/desktop
+          name: release-signatures
+          path: ${{ runner.temp }}/unpacked/release-signatures
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: desktop-linux-*
-          path: ${{ runner.temp }}/desktop
-      - name: Unpack the macOS and Linux files
+          name: release-android
+          path: ${{ runner.temp }}/unpacked/release-android
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-ios
+          path: ${{ runner.temp }}/unpacked/release-ios
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-macos-universal
+          path: ${{ runner.temp }}/desktop/desktop-macos-universal
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-linux-x64
+          path: ${{ runner.temp }}/desktop/desktop-linux-x64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-linux-arm64
+          path: ${{ runner.temp }}/desktop/desktop-linux-arm64
+      - name: Take each artifact's own files
         run: |
-          for tar in "$RUNNER_TEMP"/desktop/*/*.tar; do tar -xf "$tar" -C files; done
+          for build in desktop-macos-universal desktop-linux-x64 desktop-linux-arm64; do
+            mkdir "$RUNNER_TEMP/unpacked/$build"
+            tar -xf "$RUNNER_TEMP/desktop/$build/$build.tar" -C "$RUNNER_TEMP/unpacked/$build"
+          done
+          mkdir files
+          node scripts/release-files.mjs "$RUNNER_TEMP/unpacked" files "$VERSION" \
+            release-windows desktop-windows-arm64 desktop-macos-universal desktop-linux-x64 desktop-linux-arm64 \
+            release-signatures release-android release-ios
           ls -la files
+      # Once more right before publishing: the android job checked the certificate, but its artifact
+      # could have been replaced since by any job of this run.
+      - name: Check the APK
+        run: |
+          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+          "$tools/apksigner" verify --print-certs files/UwUMail-android.apk > "$RUNNER_TEMP/certs.txt"
+          grep -qi "certificate SHA-256 digest: $APK_CERTIFICATE_SHA256" "$RUNNER_TEMP/certs.txt" \
+            || { echo "::error::The APK isn't signed with UwUMail's certificate"; exit 1; }
 
       # Checks every updater signature against the key the apps carry, before anything is published.
       - name: Write the update feeds

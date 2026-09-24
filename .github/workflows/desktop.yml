@@ -101,11 +101,15 @@ jobs:
         if: runner.os == 'macOS'
         run: bash scripts/desktop-smoke.sh target/setup "${{ steps.version.outputs.version }}" smoke
 
-      # The update programs have to stay executable, which a plain artifact zip forgets.
+      # The update programs have to stay executable, which a plain artifact zip forgets. Only the
+      # files this build makes, by name; the release takes nothing else from it either.
       - name: Pack for the next jobs
         run: |
+          names=$(node scripts/release-files.mjs --names "desktop-${{ matrix.id }}")
           cd target/setup
-          COPYFILE_DISABLE=1 tar -cf "$RUNNER_TEMP/desktop-${{ matrix.id }}.tar" UwUMail-*
+          # One name per line, none with spaces.
+          # shellcheck disable=SC2086
+          COPYFILE_DISABLE=1 tar -cf "$RUNNER_TEMP/desktop-${{ matrix.id }}.tar" $names
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.id }}
