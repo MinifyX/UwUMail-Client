@@ -5,6 +5,7 @@ import { WORKSPACES } from "@/lib/workspaces";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
+import { useContactsAvailable } from "../contacts/useContactsData";
 import { useWorkspaceName, WORKSPACE_KEYS } from "../workspaces/workspaces";
 
 const KEY_LABELS: Record<string, string> = { Delete: "Del", shift: "⇧", ArrowUp: "↑", ArrowDown: "↓" };
@@ -67,6 +68,17 @@ const CALENDAR_SHORTCUTS: [string, string, string?][] = [
   ["p", "calendarPrevious", "k"],
 ];
 
+/** The contacts' own keys, while they are on screen. */
+const CONTACT_SHORTCUTS: [string, string, string?][] = [
+  ["g k", "goContacts"],
+  ["c", "contactsNew"],
+  ["e", "contactsEdit"],
+  ["#", "contactsDelete", "Delete"],
+  ["j", "contactsNext", "ArrowDown"],
+  ["k", "contactsPrevious", "ArrowUp"],
+  ["g m", "goMail"],
+];
+
 export function ShortcutsDialog() {
   const { t } = useT();
   const open = useUi((s) => s.shortcutsOpen);
@@ -74,6 +86,7 @@ export function ShortcutsDialog() {
   const workspaces = useSettings((s) => s.workspaces);
   const nameOf = useWorkspaceName();
   const { data: calendar = false } = useCalendarsAvailable();
+  const { data: contacts = false } = useContactsAvailable();
   const shortcuts = SHORTCUTS.flatMap(([combo, key, alt]): [string, string, string?][] => {
     const row: [string, string, string?] = [combo, t(`shortcuts.${key}`), alt];
     // Switching workspaces joins the other "g" shortcuts.
@@ -97,6 +110,14 @@ export function ShortcutsDialog() {
           <ShortcutList
             shortcuts={CALENDAR_SHORTCUTS.map(([combo, key, alt]) => [combo, t(`shortcuts.${key}`), alt])}
           />
+        </>
+      )}
+      {contacts && (
+        <>
+          <h3 className="px-6 pt-1 pb-1 text-[12px] font-bold tracking-wide text-muted uppercase">
+            {t("nav.section.contacts")}
+          </h3>
+          <ShortcutList shortcuts={CONTACT_SHORTCUTS.map(([combo, key, alt]) => [combo, t(`shortcuts.${key}`), alt])} />
         </>
       )}
     </Dialog>

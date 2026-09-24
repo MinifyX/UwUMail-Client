@@ -49,6 +49,7 @@ import { toast } from "@/state/toasts";
 import { startAccountSync, useAccountSync } from "@/state/accountSync";
 import { useMailRulesAccounts } from "../rules/useMailRules";
 import { AccountCalendar } from "./AccountCalendar";
+import { AccountContacts } from "./AccountContacts";
 import { BlockedSenders } from "./BlockedSenders";
 import { LinkSettings } from "./LinkSettings";
 import { SettingsSyncRow } from "./SettingsSync";
@@ -481,6 +482,7 @@ function Accounts() {
                 </div>
               )}
               <AccountCalendar account={account} />
+              <AccountContacts account={account} />
             </li>
           );
         })}

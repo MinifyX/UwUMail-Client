@@ -6,6 +6,7 @@ import { useUi } from "@/state/ui";
 import { loadLocalDraft } from "../compose/localDraft";
 import { MailboxNav } from "../mail/MailboxNav";
 import { LazyCalendar } from "../shell/LazyCalendar";
+import { LazyContacts } from "../shell/LazyContacts";
 import { MobileList } from "./MobileList";
 import { MobileReader } from "./MobileReader";
 import { EDGE_ZONE } from "./SwipeRow";
@@ -115,6 +116,9 @@ export function MobileShell() {
       {section === "calendar" ? (
         // The calendar brings its own drawer, which the edge swipe opens as well.
         <LazyCalendar />
+      ) : section === "contacts" ? (
+        // So do the contacts.
+        <LazyContacts />
       ) : (
         <>
           <MobileList />

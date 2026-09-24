@@ -321,7 +321,7 @@ impl Inner {
 /// already get it (the mail servers) and an address typed in by hand. Not the mail domain: its
 /// own website is often someone else's (security-audit C-3), so discovery asks it without the
 /// password and follows it only to one of these.
-fn password_hosts(account: &AccountRecord, manual: Option<&Url>) -> Vec<String> {
+pub(super) fn password_hosts(account: &AccountRecord, manual: Option<&Url>) -> Vec<String> {
     let host_of = |url: &Url| url.host_str().map(String::from);
     let jmap = account.jmap_url.as_deref().and_then(|url| Url::parse(url).ok()).as_ref().and_then(host_of);
     [Some(account.imap.host.clone()), Some(account.smtp.host.clone()), jmap, manual.and_then(host_of)]

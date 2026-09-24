@@ -21,7 +21,7 @@ use crate::pictures::{SenderPicture, SenderPictures};
 use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
-use crate::{autoconfig, calendar, folders, mime, oauth};
+use crate::{autoconfig, calendar, contacts, folders, mime, oauth};
 use crate::{jmap_settings, jmap_sieve, jmap_sync};
 
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(5 * 60);
@@ -29,7 +29,8 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 /// The JMAP type of the shared settings.
 const USER_SETTINGS: &str = "UserSettings";
 /// JMAP types whose changes are nothing for the mail.
-const NOT_MAIL: [&str; 5] = [USER_SETTINGS, "Calendar", "CalendarEvent", "ParticipantIdentity", "SieveScript"];
+const NOT_MAIL: [&str; 7] =
+    [USER_SETTINGS, "Calendar", "CalendarEvent", "ParticipantIdentity", "AddressBook", "ContactCard", "SieveScript"];
 /// JMAP servers without push are asked for changes this often.
 const JMAP_POLL_EVERY: Duration = Duration::from_secs(60);
 /// Server search over IMAP asks at most this many folders per mailbox.
@@ -108,6 +109,12 @@ struct Inner {
     calendar_sources: AsyncMutex<HashMap<String, calendar::SourceState>>,
     /// Each account's calendars, with when they were read.
     calendar_lists: Mutex<HashMap<String, (Instant, Vec<calendar::CalendarEntry>)>>,
+    /// Where each account's contacts live (JMAP, a CardDAV home, or nowhere).
+    contacts_sources: AsyncMutex<HashMap<String, contacts::SourceState>>,
+    /// Each account's address books, with when they were read.
+    address_book_lists: Mutex<HashMap<String, (Instant, Vec<contacts::BookEntry>)>>,
+    /// Each account's contact cards, with when they were read.
+    contact_card_lists: Mutex<HashMap<String, (Instant, Vec<contacts::RemoteCard>)>>,
 }
 
 enum Credential {
@@ -141,6 +148,7 @@ macro_rules! with_session {
 }
 
 mod calendar_ops;
+mod contacts_ops;
 mod folder_ops;
 
 impl Engine {
@@ -176,6 +184,9 @@ impl Engine {
                 pending_sign_in: Mutex::new(None),
                 calendar_sources: AsyncMutex::new(HashMap::new()),
                 calendar_lists: Mutex::new(HashMap::new()),
+                contacts_sources: AsyncMutex::new(HashMap::new()),
+                address_book_lists: Mutex::new(HashMap::new()),
+                contact_card_lists: Mutex::new(HashMap::new()),
             }),
         })
     }
@@ -544,6 +555,8 @@ impl Engine {
         self.inner.jmap.lock().await.remove(account_id);
         self.inner.calendar_sources.lock().await.remove(account_id);
         self.inner.calendar_lists.lock().unwrap().remove(account_id);
+        self.inner.contacts_sources.lock().await.remove(account_id);
+        self.inner.forget_contacts(account_id);
         self.remove_cached_attachments(account_id)?;
         self.inner.store.delete_account(account_id)?;
         self.inner.secrets.delete(account_id)?;
@@ -2022,6 +2035,10 @@ async fn run_jmap_account(inner: &Inner, account_id: &str, wake: &Notify) -> Res
                         inner.calendar_lists.lock().unwrap().remove(account_id);
                     }
                     inner.emit(EngineEvent::CalendarChanged {});
+                }
+                if change.state_of("AddressBook").is_some() || change.state_of("ContactCard").is_some() {
+                    inner.forget_contacts(account_id);
+                    inner.emit(EngineEvent::ContactsChanged {});
                 }
                 // Settings, calendars and rules alone are nothing for the mail.
                 if change.only(&NOT_MAIL) {

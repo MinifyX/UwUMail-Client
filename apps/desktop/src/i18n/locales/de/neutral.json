@@ -12,10 +12,11 @@
     "compose": "Schreiben",
     "menu": "Ordner",
     "toggleFolder": "Ordner in {{name}} ein- oder ausblenden",
-    "apps": "Mail oder Kalender",
+    "apps": "Bereich wechseln",
     "section": {
       "mail": "Mail",
-      "calendar": "Kalender"
+      "calendar": "Kalender",
+      "contacts": "Kontakte"
     }
   },
   "filter": {
@@ -507,7 +508,14 @@
     "calendarMonth": "Monatsansicht",
     "calendarNew": "Neuer Termin",
     "calendarNext": "Nächster Tag, nächste Woche oder nächster Monat",
-    "calendarPrevious": "Vorheriger Tag, vorherige Woche oder vorheriger Monat"
+    "calendarPrevious": "Vorheriger Tag, vorherige Woche oder vorheriger Monat",
+    "goContacts": "Zu den Kontakten",
+    "goMail": "Zurück zur Mail",
+    "contactsNew": "Neuer Kontakt",
+    "contactsEdit": "Kontakt bearbeiten",
+    "contactsDelete": "Kontakt löschen",
+    "contactsNext": "Nächster Kontakt",
+    "contactsPrevious": "Vorheriger Kontakt"
   },
   "palette": {
     "placeholder": "Befehl eingeben",
@@ -966,6 +974,112 @@
     "found": "Kalender gefunden",
     "cleared": "Adresse entfernt. UwUMail sucht die Kalender wieder von selbst.",
     "notFound": "Keine Kalender gefunden: {{reason}}",
+    "failed": "Das hat nicht geklappt: {{reason}}"
+  },
+  "contacts": {
+    "title": "Kontakte",
+    "menu": "Adressbücher",
+    "all": "Alle Kontakte",
+    "addressBooks": "Adressbücher",
+    "newBook": "Neues Adressbuch",
+    "renameBook": "Umbenennen",
+    "makeDefault": "Als Standard festlegen",
+    "deleteBook": "Adressbuch löschen",
+    "deleteBookTitle": "„{{name}}“ löschen?",
+    "deleteBookBody_one": "Der {{count}} Kontakt darin wird auf allen Geräten gelöscht.",
+    "deleteBookBody_other": "Die {{count}} Kontakte darin werden auf allen Geräten gelöscht.",
+    "bookActions": "Aktionen für {{name}}",
+    "bookName": "Name",
+    "create": "Anlegen",
+    "default": "Standard",
+    "newContact": "Neuer Kontakt",
+    "editContact": "Kontakt bearbeiten",
+    "given": "Vorname",
+    "surname": "Nachname",
+    "organization": "Firma",
+    "jobTitle": "Position",
+    "emails": "E-Mail-Adressen",
+    "email": "E-Mail",
+    "addEmail": "E-Mail-Adresse hinzufügen",
+    "phones": "Telefonnummern",
+    "phone": "Telefon",
+    "addPhone": "Telefonnummer hinzufügen",
+    "addresses": "Adressen",
+    "address": "Adresse",
+    "addAddress": "Adresse hinzufügen",
+    "street": "Straße",
+    "postcode": "PLZ",
+    "locality": "Ort",
+    "country": "Land",
+    "birthday": "Geburtstag",
+    "birthdayWithoutYear": "{{date}}, ohne Jahr",
+    "clearBirthday": "Geburtstag entfernen",
+    "addressBook": "Adressbuch",
+    "note": "Notiz",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "back": "Zurück zu den Kontakten",
+    "writeMail": "Mail schreiben",
+    "kind": "Art",
+    "kinds": {
+      "home": "Privat",
+      "work": "Arbeit",
+      "other": "Sonstige",
+      "mobile": "Mobil"
+    },
+    "removeEntry": "Eintrag entfernen",
+    "search": "Kontakte durchsuchen",
+    "loading": "Kontakte werden geladen",
+    "loadFailed": "Die Kontakte konnten nicht geladen werden.",
+    "noMatches": "Keine passenden Kontakte",
+    "matches_one": "{{count}} Kontakt gefunden",
+    "matches_other": "{{count}} Kontakte gefunden",
+    "empty": {
+      "title": "Noch keine Kontakte",
+      "body": "Leg Kontakte hier an oder speichere Absender aus deinen Mails."
+    },
+    "nameless": "(Ohne Namen)",
+    "pick": "Wähl links einen Kontakt aus.",
+    "groupReadOnly": "Das ist eine Gruppe. Gruppen kannst du hier nur ansehen.",
+    "showContact": "Kontakt anzeigen",
+    "addSender": "Zu Kontakten hinzufügen",
+    "addCard": "Zu Kontakten hinzufügen",
+    "deleteTitle": "„{{name}}“ löschen?",
+    "deleteBody": "Der Kontakt wird auf allen Geräten gelöscht, die dieses Adressbuch abgleichen.",
+    "problem": {
+      "name": "Gib einen Namen, eine Firma oder eine E-Mail-Adresse ein.",
+      "bookName": "Gib dem Adressbuch einen Namen."
+    },
+    "toast": {
+      "created": "Kontakt gespeichert",
+      "saved": "Kontakt geändert",
+      "deleted": "„{{name}}“ gelöscht",
+      "failed": "Das hat nicht geklappt. {{reason}}",
+      "show": "Anzeigen",
+      "defaultSet": "Neue Kontakte landen jetzt in „{{name}}“",
+      "bookCreated": "Adressbuch „{{name}}“ angelegt",
+      "bookDeleted": "Adressbuch „{{name}}“ gelöscht"
+    },
+    "mailbox": "Postfach",
+    "bookReadOnly": "Dieses Adressbuch kannst du nur ansehen.",
+    "noneFound": "Keines deiner Postfächer hat ein Adressbuch. Unter Einstellungen → Postfächer kannst du eine CardDAV-Adresse eintragen."
+  },
+  "accountContacts": {
+    "title": "Kontakte",
+    "checking": "Suche Adressbücher …",
+    "source": {
+      "jmap": "UwUMail-Server",
+      "carddav": "CardDAV"
+    },
+    "unavailable": "Nicht verfügbar",
+    "signIn": "Adressbücher von Postfächern mit Microsoft- oder Google-Anmeldung gehen noch nicht.",
+    "url": "CardDAV-Adresse",
+    "urlHint": "Nur nötig, wenn UwUMail die Adressbücher nicht von selbst findet.",
+    "check": "Erneut prüfen",
+    "clear": "Adresse entfernen",
+    "found": "Adressbücher gefunden",
+    "cleared": "Adresse entfernt. UwUMail sucht die Adressbücher wieder von selbst.",
+    "notFound": "Keine Adressbücher gefunden: {{reason}}",
     "failed": "Das hat nicht geklappt: {{reason}}"
   }
 }

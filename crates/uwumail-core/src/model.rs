@@ -593,6 +593,53 @@ pub struct CalendarAccount {
     pub checked: bool,
 }
 
+/// An address book of one account. Its id starts with the account id, so ids are unique across
+/// accounts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddressBookInfo {
+    pub id: String,
+    pub account_id: String,
+    pub name: String,
+    pub is_default: bool,
+    pub sort_order: i64,
+    pub may_write: bool,
+    pub may_delete: bool,
+}
+
+/// A contact card of one account: JSContact (RFC 9553) with the app's ids in `id` and
+/// `addressBookIds`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactCardEntry {
+    pub account_id: String,
+    pub card: serde_json::Value,
+}
+
+/// Where an account's contacts come from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ContactsSource {
+    /// JMAP Contacts on a UwUMail server.
+    Jmap,
+    Carddav,
+}
+
+/// Whether an account has address books, and from where.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactsAccount {
+    pub account_id: String,
+    /// None when the account has no address books here (e.g. signed in with Microsoft or Google).
+    pub source: Option<ContactsSource>,
+    /// The CardDAV address typed in by hand, if any.
+    pub carddav_url: Option<String>,
+    /// Why there are no address books, when there aren't.
+    pub problem: Option<String>,
+    /// False while only a search for a CardDAV server could tell, which waits until the contacts open.
+    pub checked: bool,
+}
+
 /// A blocked sender: on this device, or on the UwUMail server of one account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -776,6 +823,9 @@ pub enum EngineEvent {
     /// Calendars or events may have changed (JMAP push, or a change made here).
     #[serde(rename = "calendar:changed")]
     CalendarChanged {},
+    /// Address books or contacts may have changed (JMAP push, or a change made here).
+    #[serde(rename = "contacts:changed")]
+    ContactsChanged {},
 }
 
 impl EngineEvent {
@@ -788,6 +838,7 @@ impl EngineEvent {
             Self::SendFailed { .. } => "send:failed",
             Self::SettingsChanged { .. } => "settings:changed",
             Self::CalendarChanged {} => "calendar:changed",
+            Self::ContactsChanged {} => "contacts:changed",
         }
     }
 }

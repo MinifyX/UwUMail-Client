@@ -83,6 +83,6 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 
 ## Later
 
-- [ ] CardDAV contact sync
+- [x] Contacts: JMAP Contacts on UwUMail servers, CardDAV for other mailboxes
 - [ ] Self-hostable sync server for settings, signatures and addons (AGPL-3.0)
 - [ ] Code signing for Windows and macOS
