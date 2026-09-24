@@ -1,8 +1,10 @@
 //! Remote pictures of a mail. The web view never loads one from its sender itself: it asks the app
 //! (`uwuimg:`), and only once the reader let the mail's pictures show. A UwUMail server fetches them for
 //! its own accounts; for every other account they come from here, through the privacy proxy when one is
-//! set, so the sender at most sees the proxy. Only from public websites: a mail must not make UwUMail
-//! read anything from the local network. The reader's dark mode reads the same copies to recolor them.
+//! set, so the sender at most sees the proxy. Only from addresses with a public host name: no IP
+//! address, no `localhost`, no name that only exists in the local network. A public name that the
+//! sender points at a local address still gets through (accepted risk I6, as for sender pictures).
+//! The reader's dark mode reads the same copies to recolor them.
 
 use std::time::Duration;
 
