@@ -29,7 +29,7 @@
         "img-src": "'self' data: blob: cid: asset: http://asset.localhost uwuimg: http://uwuimg.localhost",
         "font-src": "'self' data:",
         "connect-src": "ipc: http://ipc.localhost asset: http://asset.localhost",
-        "frame-src": "'self' blob: asset: http://asset.localhost uwuaddon: http://uwuaddon.localhost",
+        "frame-src": "'self' blob: asset: http://asset.localhost",
         "object-src": "'none'",
         "base-uri": "'none'",
         "form-action": "'none'",
