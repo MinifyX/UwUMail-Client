@@ -655,9 +655,15 @@ pub fn is_state_change(event: &str) -> bool {
 
 /// Finds the JMAP session URL for an address without signing in, or `None`.
 /// Only HTTPS addresses are probed; a server that asks for a login counts.
-pub async fn discover(http: &reqwest::Client, domain: &str, imap_host: Option<&str>) -> Option<String> {
+///
+/// The answer becomes where the password goes, and the site the calendar and address book trust
+/// with it, so only an answer on the site of one of `mail_hosts` (the IMAP and SMTP servers) is
+/// taken. The places asked (the mail domain's website, its SRV record) and wherever they redirect
+/// to are chosen by others: a website operator or a forged DNS answer must not be able to name a
+/// server of theirs (security audit 2026-09-23, CC-7).
+pub async fn discover(http: &reqwest::Client, domain: &str, mail_hosts: &[&str]) -> Option<String> {
     let domain = domain.trim().to_ascii_lowercase();
-    let host = imap_host.map(|h| h.trim().to_ascii_lowercase()).filter(|h| !h.is_empty());
+    let host = mail_hosts.first().map(|h| h.trim().to_ascii_lowercase()).filter(|h| !h.is_empty());
     for (known, session) in KNOWN_SESSIONS {
         let matches = |name: &str| name == *known || name.ends_with(&format!(".{known}"));
         if matches(&domain) || host.as_deref().is_some_and(matches) {
@@ -686,7 +692,16 @@ pub async fn discover(http: &reqwest::Client, domain: &str, imap_host: Option<&s
     }
 
     let probes = candidates.iter().map(|url| probe(http, url));
-    futures::future::join_all(probes).await.into_iter().flatten().next()
+    let mut found = futures::future::join_all(probes).await.into_iter().flatten();
+    found.find(|landed| on_mail_site(landed, mail_hosts))
+}
+
+/// Whether a discovered session address is an HTTPS address on the site of one of the mail servers.
+fn on_mail_site(url: &str, mail_hosts: &[&str]) -> bool {
+    let Ok(url) = Url::parse(url) else { return false };
+    let Some(host) = url.host_str().filter(|_| url.scheme() == "https") else { return false };
+    let site = crate::calendar::dav::site(host);
+    mail_hosts.iter().map(|h| h.trim()).filter(|h| !h.is_empty()).any(|h| crate::calendar::dav::site(h) == site)
 }
 
 async fn probe(http: &reqwest::Client, url: &str) -> Option<String> {
@@ -837,6 +852,20 @@ mod tests {
         let no_mail = json!({ "capabilities": { CORE: {} }, "apiUrl": "/", "downloadUrl": "/", "uploadUrl": "/" });
         assert_eq!(Session::parse(&no_mail, &base).unwrap_err().code, ErrorCode::NotSupported);
         assert_eq!(session.image_url, None, "an ordinary server fetches no pictures for us");
+    }
+
+    #[test]
+    fn discovery_only_takes_a_session_on_the_mail_servers_site() {
+        let mail = ["imap.mailhost.example", "smtp.mailhost.example"];
+        assert!(on_mail_site("https://mailhost.example/.well-known/jmap", &mail));
+        assert!(on_mail_site("https://jmap.mailhost.example/jmap/session", &mail));
+        // Where the mail domain's website or a forged SRV record may point.
+        assert!(!on_mail_site("https://shop.example/.well-known/jmap", &mail));
+        assert!(!on_mail_site("https://login.elsewhere.example/jmap/session", &mail));
+        // Never unencrypted, not even on the right site.
+        assert!(!on_mail_site("http://jmap.mailhost.example/jmap/session", &mail));
+        assert!(!on_mail_site("https://192.0.2.1/jmap/session", &["192.0.2.2"]));
+        assert!(!on_mail_site("not a url", &mail));
     }
 
     #[test]

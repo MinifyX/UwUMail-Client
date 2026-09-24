@@ -375,7 +375,8 @@ pub async fn discover(http: &reqwest::Client, email: &str) -> Result<DiscoveredS
     let mut settings = discover_imap(http, email, &domain).await;
     // OAuth providers (Google, Microsoft) don't offer JMAP.
     if settings.oauth.is_none() {
-        settings.jmap = crate::jmap::discover(http, &domain, Some(&settings.imap.host)).await;
+        let mail_hosts = [settings.imap.host.as_str(), settings.smtp.host.as_str()];
+        settings.jmap = crate::jmap::discover(http, &domain, &mail_hosts).await;
     }
     Ok(settings)
 }
