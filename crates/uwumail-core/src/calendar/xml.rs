@@ -13,6 +13,7 @@ use crate::error::{Error, Result};
 
 pub const DAV: &str = "DAV:";
 pub const CALDAV: &str = "urn:ietf:params:xml:ns:caldav";
+pub const CARDDAV: &str = "urn:ietf:params:xml:ns:carddav";
 pub const APPLE: &str = "http://apple.com/ns/ical/";
 pub const CALSERVER: &str = "http://calendarserver.org/ns/";
 

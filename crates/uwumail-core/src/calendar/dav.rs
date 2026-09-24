@@ -41,6 +41,8 @@ pub struct DavClient {
     username: String,
     password: String,
     trusted_sites: Vec<String>,
+    /// What the server is called in messages: "calendar server" or "address book server".
+    what: &'static str,
 }
 
 #[derive(Debug)]
@@ -81,7 +83,19 @@ impl DavClient {
             trusted_hosts.iter().map(|host| host.trim()).filter(|host| !host.is_empty()).map(site).collect();
         trusted_sites.sort();
         trusted_sites.dedup();
-        Ok(Self { http, username: username.to_string(), password: password.to_string(), trusted_sites })
+        Ok(Self {
+            http,
+            username: username.to_string(),
+            password: password.to_string(),
+            trusted_sites,
+            what: "calendar server",
+        })
+    }
+
+    /// The same client, speaking of the server as `what` ("address book server") in messages.
+    pub fn serving(mut self, what: &'static str) -> Self {
+        self.what = what;
+        self
     }
 
     pub fn may_send_password(&self, url: &Url) -> bool {
@@ -139,11 +153,12 @@ impl DavClient {
         let mut body = body;
         for _ in 0..=MAX_REDIRECTS {
             if target.scheme() != "https" {
-                return Err(Error::connection("UwUMail only talks to calendar servers over HTTPS."));
+                return Err(Error::connection(format!("UwUMail only talks to the {} over HTTPS.", self.what)));
             }
             if !self.may_send_password(&target) {
                 return Err(Error::auth(format!(
-                    "The calendar server sent the sign-in to {}, which isn't part of your mailbox. UwUMail didn't send your password there.",
+                    "The {} sent the sign-in to {}, which isn't part of your mailbox. UwUMail didn't send your password there.",
+                    self.what,
                     target.host_str().unwrap_or("another address")
                 )));
             }
@@ -162,11 +177,9 @@ impl DavClient {
             if status.is_redirection()
                 && let Some(location) = response.headers().get(reqwest::header::LOCATION)
             {
-                let location =
-                    location.to_str().map_err(|_| Error::connection("The calendar server sent a broken redirect."))?;
-                target = target
-                    .join(location)
-                    .map_err(|_| Error::connection("The calendar server sent a broken redirect."))?;
+                let broken = || Error::connection(format!("The {} sent a broken redirect.", self.what));
+                let location = location.to_str().map_err(|_| broken())?;
+                target = target.join(location).map_err(|_| broken())?;
                 if status == StatusCode::SEE_OTHER {
                     method_name = "GET".into();
                     body = None;
@@ -178,13 +191,13 @@ impl DavClient {
             let mut bytes = Vec::new();
             while let Some(chunk) = response.chunk().await? {
                 if bytes.len() + chunk.len() > limit {
-                    return Err(Error::connection("The calendar server's answer is too big."));
+                    return Err(Error::connection(format!("The {}'s answer is too big.", self.what)));
                 }
                 bytes.extend_from_slice(&chunk);
             }
             return Ok(DavResponse { status, url: target, etag, body: bytes });
         }
-        Err(Error::connection("The calendar server keeps redirecting."))
+        Err(Error::connection(format!("The {} keeps redirecting.", self.what)))
     }
 
     /// PROPFIND or REPORT, expecting a multistatus answer.
@@ -198,9 +211,9 @@ impl DavClient {
                 MAX_LISTING,
             )
             .await?;
-        check(response.status)?;
+        check_as(response.status, self.what)?;
         if response.status != StatusCode::MULTI_STATUS {
-            return Err(Error::not_supported("That address doesn't answer like a calendar server."));
+            return Err(Error::not_supported(format!("That address doesn't answer like a {}.", self.what)));
         }
         Ok((xml::parse(&response.body)?, response.url))
     }
@@ -208,17 +221,22 @@ impl DavClient {
 
 /// Turns an HTTP status into what went wrong, for anything that isn't a success.
 pub fn check(status: StatusCode) -> Result<()> {
+    check_as(status, "calendar server")
+}
+
+/// Like [`check`], for the server called `what` ("address book server").
+pub fn check_as(status: StatusCode, what: &str) -> Result<()> {
     match status {
         status if status.is_success() => Ok(()),
-        StatusCode::UNAUTHORIZED => Err(Error::auth("The calendar server didn't accept your password.")),
-        StatusCode::FORBIDDEN => Err(Error::invalid("The calendar server doesn't allow that.")),
-        StatusCode::NOT_FOUND | StatusCode::GONE => Err(Error::not_found("That's no longer on the calendar server.")),
-        StatusCode::PRECONDITION_FAILED => Err(Error::invalid(
-            "This changed on the calendar server in the meantime. Load the calendar again and retry.",
-        )),
-        StatusCode::INSUFFICIENT_STORAGE => Err(Error::invalid("The calendar server has no room left.")),
-        status if status.is_server_error() => Err(Error::connection(format!("The calendar server answered {status}."))),
-        status => Err(Error::invalid(format!("The calendar server refused it ({status})."))),
+        StatusCode::UNAUTHORIZED => Err(Error::auth(format!("The {what} didn't accept your password."))),
+        StatusCode::FORBIDDEN => Err(Error::invalid(format!("The {what} doesn't allow that."))),
+        StatusCode::NOT_FOUND | StatusCode::GONE => Err(Error::not_found(format!("That's no longer on the {what}."))),
+        StatusCode::PRECONDITION_FAILED => {
+            Err(Error::invalid(format!("This changed on the {what} in the meantime. Load it again and retry.")))
+        }
+        StatusCode::INSUFFICIENT_STORAGE => Err(Error::invalid(format!("The {what} has no room left."))),
+        status if status.is_server_error() => Err(Error::connection(format!("The {what} answered {status}."))),
+        status => Err(Error::invalid(format!("The {what} refused it ({status})."))),
     }
 }
 
@@ -247,7 +265,7 @@ pub fn responses<'a>(root: &'a Element, base: &Url) -> Vec<(Url, Vec<&'a Element
         .collect()
 }
 
-fn prop<'a>(props: &[&'a Element], namespace: &str, name: &str) -> Option<&'a Element> {
+pub fn prop<'a>(props: &[&'a Element], namespace: &str, name: &str) -> Option<&'a Element> {
     props.iter().copied().find(|element| element.is(namespace, name))
 }
 
@@ -260,40 +278,87 @@ fn href_in(element: &Element, base: &Url) -> Option<Url> {
 const PRINCIPAL_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:current-user-principal/><c:calendar-home-set/></d:prop></d:propfind>"#;
 
+/// What discovery looks for (RFC 6764): calendars (CalDAV) or address books (CardDAV).
+pub struct Service {
+    /// The SRV record's service and protocol, e.g. `_caldavs._tcp`.
+    pub srv: &'static str,
+    /// The name under `/.well-known/`.
+    pub well_known: &'static str,
+    /// The home set property: its namespace and name.
+    pub namespace: &'static str,
+    pub home_set: &'static str,
+    /// PROPFIND asking for the principal and the home set.
+    pub principal_body: &'static str,
+    pub none_found: &'static str,
+}
+
+pub const CALDAV_SERVICE: Service = Service {
+    srv: "_caldavs._tcp",
+    well_known: "caldav",
+    namespace: CALDAV,
+    home_set: "calendar-home-set",
+    principal_body: PRINCIPAL_BODY,
+    none_found: "No calendar server was found for this mailbox.",
+};
+
+pub const CARDDAV_SERVICE: Service = Service {
+    srv: "_carddavs._tcp",
+    well_known: "carddav",
+    namespace: xml::CARDDAV,
+    home_set: "addressbook-home-set",
+    principal_body: r#"<?xml version="1.0" encoding="utf-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:carddav"><d:prop><d:current-user-principal/><c:addressbook-home-set/></d:prop></d:propfind>"#,
+    none_found: "No address book server was found for this mailbox.",
+};
+
 /// The calendar home set found at an address: directly, or through the current user's principal.
 pub async fn home_at(client: &DavClient, url: &Url) -> Result<Option<Url>> {
-    let (root, landed) = client.multistatus("PROPFIND", url, "0", PRINCIPAL_BODY).await?;
-    let found = responses(&root, &landed);
-    if let Some(home) = found.iter().find_map(|(_, props)| href_in(prop(props, CALDAV, "calendar-home-set")?, &landed))
-    {
+    home_at_for(client, url, &CALDAV_SERVICE).await
+}
+
+/// The home set of `service` found at an address: directly, or through the current user's principal.
+pub async fn home_at_for(client: &DavClient, url: &Url, service: &Service) -> Result<Option<Url>> {
+    let home_in = |root: &Element, landed: &Url| {
+        responses(root, landed)
+            .iter()
+            .find_map(|(_, props)| href_in(prop(props, service.namespace, service.home_set)?, landed))
+    };
+    let (root, landed) = client.multistatus("PROPFIND", url, "0", service.principal_body).await?;
+    if let Some(home) = home_in(&root, &landed) {
         return Ok(Some(home));
     }
-    let Some(principal) =
-        found.iter().find_map(|(_, props)| href_in(prop(props, DAV, "current-user-principal")?, &landed))
+    let Some(principal) = responses(&root, &landed)
+        .iter()
+        .find_map(|(_, props)| href_in(prop(props, DAV, "current-user-principal")?, &landed))
     else {
         return Ok(None);
     };
-    let (root, landed) = client.multistatus("PROPFIND", &principal, "0", PRINCIPAL_BODY).await?;
-    Ok(responses(&root, &landed)
-        .iter()
-        .find_map(|(_, props)| href_in(prop(props, CALDAV, "calendar-home-set")?, &landed)))
+    let (root, landed) = client.multistatus("PROPFIND", &principal, "0", service.principal_body).await?;
+    Ok(home_in(&root, &landed))
 }
 
 /// Where to look for a mailbox's calendars (RFC 6764): the SRV record's host, then the mail
 /// domain's and the mail server's `/.well-known/caldav`.
 pub async fn candidates(domain: &str, hosts: &[String]) -> Vec<Url> {
+    candidates_for(domain, hosts, &CALDAV_SERVICE).await
+}
+
+/// Where to look for a mailbox's `service`: the SRV record's host, then the mail domain's and
+/// the mail server's `/.well-known/` address.
+pub async fn candidates_for(domain: &str, hosts: &[String], service: &Service) -> Vec<Url> {
+    let well_known = service.well_known;
     let mut found: Vec<String> = Vec::new();
     if let Some(resolver) = crate::autoconfig::resolver().await
-        && let Some((target, port)) = crate::autoconfig::srv(&resolver, &format!("_caldavs._tcp.{domain}.")).await
+        && let Some((target, port)) = crate::autoconfig::srv(&resolver, &format!("{}.{domain}.", service.srv)).await
     {
         found.push(if port == 443 {
-            format!("https://{target}/.well-known/caldav")
+            format!("https://{target}/.well-known/{well_known}")
         } else {
-            format!("https://{target}:{port}/.well-known/caldav")
+            format!("https://{target}:{port}/.well-known/{well_known}")
         });
     }
     for host in std::iter::once(domain).chain(hosts.iter().map(String::as_str)) {
-        let url = format!("https://{}/.well-known/caldav", host.trim().trim_end_matches('.'));
+        let url = format!("https://{}/.well-known/{well_known}", host.trim().trim_end_matches('.'));
         if !found.contains(&url) {
             found.push(url);
         }
@@ -303,36 +368,53 @@ pub async fn candidates(domain: &str, hosts: &[String]) -> Vec<Url> {
 
 /// The calendar home for a mailbox: at the address typed in by hand, or found by discovery.
 pub async fn discover(client: &DavClient, manual: Option<&Url>, domain: &str, hosts: &[String]) -> Result<Url> {
+    discover_for(client, manual, domain, hosts, &CALDAV_SERVICE).await
+}
+
+/// The home of `service` for a mailbox: at the address typed in by hand, or found by discovery.
+pub async fn discover_for(
+    client: &DavClient,
+    manual: Option<&Url>,
+    domain: &str,
+    hosts: &[String],
+    service: &Service,
+) -> Result<Url> {
     if let Some(manual) = manual {
-        return match home_at(client, manual).await {
+        return match home_at_for(client, manual, service).await {
             Ok(Some(home)) => Ok(home),
-            // The address may be the home (or a calendar's parent) itself.
+            // The address may be the home (or a collection's parent) itself.
             Ok(None) => Ok(manual.clone()),
             Err(error) => Err(error),
         };
     }
-    discover_among(client, &candidates(domain, hosts).await).await
+    discover_among_for(client, &candidates_for(domain, hosts, service).await, service).await
 }
 
 /// The calendar home at the first of `candidates` that has one. The password only goes where
 /// [`DavClient::locate`] leads.
 pub async fn discover_among(client: &DavClient, candidates: &[Url]) -> Result<Url> {
+    discover_among_for(client, candidates, &CALDAV_SERVICE).await
+}
+
+/// The home of `service` at the first of `candidates` that has one. The password only goes
+/// where [`DavClient::locate`] leads.
+pub async fn discover_among_for(client: &DavClient, candidates: &[Url], service: &Service) -> Result<Url> {
     let mut last_error = None;
     for candidate in candidates {
         let start = match client.locate(candidate).await {
             Ok(Some(start)) => start,
             Ok(None) => continue,
             Err(error) => {
-                tracing::debug!("No calendars at {candidate}: {error}");
+                tracing::debug!("Nothing at {candidate}: {error}");
                 last_error.get_or_insert(error);
                 continue;
             }
         };
-        match home_at(client, &start).await {
+        match home_at_for(client, &start, service).await {
             Ok(Some(home)) => return Ok(home),
             Ok(None) => {}
             Err(error) => {
-                tracing::debug!("No calendars at {candidate}: {error}");
+                tracing::debug!("Nothing at {candidate}: {error}");
                 // A wrong password is worth telling; a missing server isn't.
                 if error.code == crate::error::ErrorCode::AuthFailed || last_error.is_none() {
                     last_error = Some(error);
@@ -342,7 +424,7 @@ pub async fn discover_among(client: &DavClient, candidates: &[Url]) -> Result<Ur
     }
     match last_error {
         Some(error) if error.code == crate::error::ErrorCode::AuthFailed => Err(error),
-        _ => Err(Error::not_supported("No calendar server was found for this mailbox.")),
+        _ => Err(Error::not_supported(service.none_found)),
     }
 }
 
@@ -538,24 +620,38 @@ pub fn parse_objects(root: &Element, base: &Url) -> Vec<DavObject> {
 }
 
 pub async fn get_object(client: &DavClient, url: &Url) -> Result<DavObject> {
-    let response = client.send("GET", url, &[("Accept", "text/calendar".into())], None, MAX_OBJECT).await?;
-    check(response.status)?;
+    get_object_as(client, url, "text/calendar").await
+}
+
+/// One object of the media type `accept` (`text/vcard` for a contact).
+pub async fn get_object_as(client: &DavClient, url: &Url, accept: &str) -> Result<DavObject> {
+    let response = client.send("GET", url, &[("Accept", accept.into())], None, MAX_OBJECT).await?;
+    check_as(response.status, client.what)?;
     let data = String::from_utf8(response.body)
-        .map_err(|_| Error::invalid("The calendar server sent an event that isn't text."))?;
+        .map_err(|_| Error::invalid(format!("The {} sent something that isn't text.", client.what)))?;
     Ok(DavObject { url: response.url, etag: response.etag, data })
 }
 
 /// Stores an object: new (`etag` None, fails if something is there) or replacing the version
 /// with that etag. Returns the new etag, if the server says.
 pub async fn put_object(client: &DavClient, url: &Url, data: &str, etag: Option<&str>) -> Result<Option<String>> {
+    put_object_as(client, url, data, "text/calendar; charset=utf-8", etag).await
+}
+
+/// Like [`put_object`], for an object of `content_type` (`text/vcard` for a contact).
+pub async fn put_object_as(
+    client: &DavClient,
+    url: &Url,
+    data: &str,
+    content_type: &str,
+    etag: Option<&str>,
+) -> Result<Option<String>> {
     let condition = match etag {
         Some(etag) => ("If-Match", etag.to_string()),
         None => ("If-None-Match", "*".to_string()),
     };
-    let response = client
-        .send("PUT", url, &[condition], Some(("text/calendar; charset=utf-8", data.as_bytes())), MAX_LISTING)
-        .await?;
-    check(response.status)?;
+    let response = client.send("PUT", url, &[condition], Some((content_type, data.as_bytes())), MAX_LISTING).await?;
+    check_as(response.status, client.what)?;
     Ok(response.etag)
 }
 
@@ -564,7 +660,7 @@ pub async fn delete(client: &DavClient, url: &Url, etag: Option<&str>) -> Result
     let response = client.send("DELETE", url, &headers, None, MAX_LISTING).await?;
     match response.status {
         StatusCode::NOT_FOUND | StatusCode::GONE => Ok(()),
-        status => check(status),
+        status => check_as(status, client.what),
     }
 }
 
