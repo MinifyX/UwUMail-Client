@@ -226,7 +226,8 @@ reader rewrites every picture address to the app's `uwuimg:` scheme (with the
 message's account), and the app's CSP allows no other remote images. Rust then
 fetches it (`Engine::mail_image`): through the account's UwUMail server when it
 offers `urn:uwumail:jmap:remote` (the server may go through a VPN, see the
-server's docs/jmap-remote.md), otherwise from this device through the privacy
+server's docs/jmap-remote.md; for an IMAP account see "Sender pictures" below for
+how its server is recognised), otherwise from this device through the privacy
 proxy under Settings → Reading (`socks5://…`, `http://…`) when one is set. The
 same proxy carries sender-picture lookups and one-click unsubscribes; mail,
 calendars and updates never take it. Until the interface has said which proxy
@@ -350,6 +351,14 @@ With an account on a UwUMail server among the mailboxes, that server looks the
 picture up instead (`/jmap/picture`), whichever mailbox the mail came to, and
 the company never sees this device. Otherwise the lookup goes through the
 privacy proxy when one is set; the BIMI record is asked of DNS directly.
+
+That includes IMAP accounts on a UwUMail server. The server says what it is when
+an IMAP connection opens (`UwUMail IMAP ready`), and only then does the engine
+also sign in over JMAP, at the account's JMAP address or
+`https://<imap host>/.well-known/jmap`, just to have its pictures fetched. That
+sign-in lives apart from the JMAP accounts' connections, so nothing else treats
+the account as a JMAP one, and one that fails is not tried again while the app
+runs; other providers never see a JMAP sign-in at all.
 
 ## Installer and updates
 
