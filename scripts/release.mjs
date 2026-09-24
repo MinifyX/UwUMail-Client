@@ -25,9 +25,6 @@ import { fileURLToPath } from "node:url";
 
 import { FEED_BRANCH, REPOSITORY, checkSignature, releaseFeeds, signedName, updateAsset } from "./release-feeds.mjs";
 
-/** Still asked by 0.2.0-beta.2 and older; drop once that repo is archived. */
-const OLD_FEEDS = "MinifyX/UwUMail-Releases";
-
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const git = (args, cwd = root) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 const fail = (message) => {
@@ -125,8 +122,6 @@ try {
   };
   console.log(`\n▸ Updating ${Object.keys(feeds).join(", ")} on ${FEED_BRANCH}`);
   publishFeeds(REPOSITORY, FEED_BRANCH, `UwUMail ${version}`);
-  console.log(`\n▸ Updating the old feeds in ${OLD_FEEDS}`);
-  publishFeeds(OLD_FEEDS, "main", `UwUMail ${version} (now released in ${REPOSITORY})`);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
