@@ -104,6 +104,11 @@ struct Inner {
     created_folders: Mutex<HashMap<(String, String), Instant>>,
     /// Signed-in JMAP connections by account id.
     jmap: AsyncMutex<HashMap<String, Arc<JmapClient>>>,
+    /// IMAP accounts on a UwUMail server, signed in over JMAP only so that server fetches their
+    /// pictures. `None` when that didn't work; it isn't tried again while the app runs, so a server
+    /// that refuses never sees more than one attempt. Apart from `jmap`, so nothing else takes these
+    /// accounts for JMAP ones.
+    picture_logins: AsyncMutex<HashMap<String, Option<Arc<JmapClient>>>>,
     /// Mail from the last this many days is kept complete; older mail as
     /// previews. 0 keeps everything.
     offline_days: AtomicU32,
@@ -186,6 +191,7 @@ impl Engine {
                 mail_images: MailImages::new()?,
                 created_folders: Mutex::new(HashMap::new()),
                 jmap: AsyncMutex::new(HashMap::new()),
+                picture_logins: AsyncMutex::new(HashMap::new()),
                 offline_days: AtomicU32::new(0),
                 identities_checked: Mutex::new(HashMap::new()),
                 oauth_redirect: Mutex::new(None),
@@ -1450,9 +1456,8 @@ impl Engine {
     /// can't be had.
     pub async fn mail_image(&self, account_id: Option<&str>, url: &str) -> Option<(String, Vec<u8>)> {
         if let Some(account_id) = account_id
-            && self.inner.store.account(account_id).is_ok_and(|account| account.protocol == Protocol::Jmap)
-            && let Ok(client) = self.inner.jmap_client(account_id).await
-            && client.session.image_url.is_some()
+            && let Ok(account) = self.inner.store.account(account_id)
+            && let Some(client) = self.inner.picture_server_for(&account).await
         {
             return client.remote_image(url).await.ok().flatten();
         }
@@ -1666,16 +1671,48 @@ impl Inner {
     /// A signed-in UwUMail server that looks up sender pictures, if one of the accounts is on one.
     async fn picture_server(&self) -> Option<Arc<JmapClient>> {
         for account in self.store.accounts().ok()? {
-            if account.protocol != Protocol::Jmap {
-                continue;
-            }
-            if let Ok(client) = self.jmap_client(&account.id).await
+            if let Some(client) = self.picture_server_for(&account).await
                 && client.session.picture_url.is_some()
             {
                 return Some(client);
             }
         }
         None
+    }
+
+    /// The UwUMail server that fetches an account's pictures: the JMAP connection of a JMAP account,
+    /// or for an IMAP account on a UwUMail server a JMAP sign-in made only for that. `None` for
+    /// every other server.
+    async fn picture_server_for(&self, account: &AccountRecord) -> Option<Arc<JmapClient>> {
+        if account.protocol == Protocol::Jmap {
+            return self.jmap_client(&account.id).await.ok().filter(|client| client.session.image_url.is_some());
+        }
+        // Only a server that said it is one is asked; any other provider never sees a JMAP sign-in.
+        if !crate::imap::is_uwumail(&account.imap).await {
+            return None;
+        }
+        let mut logins = self.picture_logins.lock().await;
+        if let Some(known) = logins.get(&account.id) {
+            return known.clone();
+        }
+        let client = match self.secrets.get(&account.id) {
+            Ok(Secret::Password { password }) => {
+                let url = account
+                    .jmap_url
+                    .clone()
+                    .unwrap_or_else(|| format!("https://{}/.well-known/jmap", account.imap.host));
+                match JmapClient::connect(&self.http, &url, &account.username, &password).await {
+                    Ok(client) => Some(Arc::new(client)).filter(|client| client.session.image_url.is_some()),
+                    Err(error) => {
+                        tracing::info!("No pictures through the UwUMail server of {}: {error}", account.id);
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+        logins.insert(account.id.clone(), client.clone());
+        client
     }
 
     /// The signed-in JMAP connection of an account, connecting if needed.

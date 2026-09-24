@@ -114,11 +114,38 @@ async fn tls(stream: TcpStream, host: &str) -> Result<MailStream> {
     Ok(MailStream::Tls(Box::new(stream)))
 }
 
+/// Hosts by whether their IMAP greeting said they are a UwUMail server, as far as this run has seen.
+static UWUMAIL_HOSTS: LazyLock<Mutex<HashMap<String, bool>>> = LazyLock::new(Mutex::default);
+
+/// What a UwUMail server says when a connection opens.
+const UWUMAIL_GREETING: &str = "UwUMail IMAP ready";
+
 async fn greeting(client: &mut Client<MailStream>, host: &str) -> Result<()> {
     match timeout(CONNECT_TIMEOUT, client.read_response()).await {
-        Ok(Ok(Some(_))) => Ok(()),
+        Ok(Ok(Some(response))) => {
+            let uwumail = matches!(
+                response.parsed(),
+                async_imap::imap_proto::Response::Data { information: Some(text), .. } if text.contains(UWUMAIL_GREETING)
+            );
+            UWUMAIL_HOSTS.lock().unwrap_or_else(|e| e.into_inner()).insert(host.to_ascii_lowercase(), uwumail);
+            Ok(())
+        }
         _ => Err(Error::connection(format!("{host} didn't greet us like an IMAP server."))),
     }
+}
+
+/// Whether the IMAP server is a UwUMail server, which fetches a mail's pictures for its readers. Known
+/// from its greeting; asked with a connection of its own when no connection to it was made yet.
+pub async fn is_uwumail(settings: &ServerSettings) -> bool {
+    let host = settings.host.to_ascii_lowercase();
+    let known = |host: &str| UWUMAIL_HOSTS.lock().unwrap_or_else(|e| e.into_inner()).get(host).copied();
+    if let Some(uwumail) = known(&host) {
+        return uwumail;
+    }
+    if connect(settings).await.is_err() {
+        return false;
+    }
+    known(&host).unwrap_or(false)
 }
 
 pub async fn connect(settings: &ServerSettings) -> Result<Client<MailStream>> {
@@ -721,6 +748,31 @@ pub async fn uids_with_message_id(session: &mut ImapSession, folder_path: &str, 
 
 #[cfg(test)]
 mod tests {
+
+    /// An IMAP server that only greets.
+    async fn greeter(greeting: &'static str) -> u16 {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::io::AsyncWriteExt::write_all(&mut socket, greeting.as_bytes()).await.unwrap();
+            }
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn a_uwumail_server_is_known_by_its_greeting() {
+        use crate::model::{Security, ServerSettings};
+        let uwumail = greeter("* OK [CAPABILITY IMAP4rev1 ID IDLE] UwUMail IMAP ready\r\n").await;
+        let other = greeter("* OK [CAPABILITY IMAP4rev1] Dovecot ready.\r\n").await;
+        // Hosts are told apart by name, so each server gets its own.
+        let server = |host: &str, port| ServerSettings { host: host.into(), port, security: Security::None };
+        assert!(super::is_uwumail(&server("127.0.0.1", uwumail)).await);
+        assert!(!super::is_uwumail(&server("localhost", other)).await);
+        assert!(!super::is_uwumail(&server("unreachable.invalid", 1)).await, "nothing answered");
+    }
 
     #[test]
     fn tells_a_switched_off_mailbox_from_a_wrong_password() {
