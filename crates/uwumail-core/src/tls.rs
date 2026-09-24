@@ -54,20 +54,30 @@ const PRIVACY_PROXY_WAIT: Duration = Duration::from_secs(15);
 /// Sets the proxy for those requests: `http://host:port` or `socks5://host:port`, optionally with a
 /// login; empty for none. Clients built earlier pick it up on their next request.
 pub fn set_privacy_proxy(proxy: &str) -> Result<()> {
-    let proxy = proxy.trim();
-    let proxy = if proxy.is_empty() {
-        None
-    } else {
-        let scheme = proxy.split_once("://").map(|(scheme, _)| scheme.to_ascii_lowercase());
-        if !matches!(scheme.as_deref(), Some("http" | "socks5" | "socks5h")) {
-            return Err(Error::invalid("The proxy has to start with http://, socks5:// or socks5h://."));
-        }
-        reqwest::Proxy::all(proxy).map_err(|_| Error::invalid("That is not a proxy address."))?;
-        Some(proxy.to_owned())
-    };
+    let proxy = privacy_proxy_address(proxy)?;
     *PRIVACY_PROXY.write().unwrap_or_else(|e| e.into_inner()) = Some(proxy);
     PRIVACY_PROXY_TOLD.notify_waiters();
     Ok(())
+}
+
+/// The proxy as it is used, `None` for none. A SOCKS5 proxy always looks up names itself
+/// (`socks5h`): with `socks5`, this device would ask its own DNS server for the sender's host name
+/// first, and a tracking name made for one reader tells the sender through DNS what the proxy hides.
+fn privacy_proxy_address(proxy: &str) -> Result<Option<String>> {
+    let proxy = proxy.trim();
+    if proxy.is_empty() {
+        return Ok(None);
+    }
+    let Some((scheme, rest)) = proxy.split_once("://") else {
+        return Err(Error::invalid("The proxy has to start with http://, socks5:// or socks5h://."));
+    };
+    let proxy = match scheme.to_ascii_lowercase().as_str() {
+        "http" => format!("http://{rest}"),
+        "socks5" | "socks5h" => format!("socks5h://{rest}"),
+        _ => return Err(Error::invalid("The proxy has to start with http://, socks5:// or socks5h://.")),
+    };
+    reqwest::Proxy::all(&proxy).map_err(|_| Error::invalid("That is not a proxy address."))?;
+    Ok(Some(proxy))
 }
 
 async fn privacy_proxy() -> Result<Option<String>> {
@@ -126,4 +136,26 @@ pub fn http_client() -> Result<reqwest::ClientBuilder> {
         builder.tls_backend_preconfigured(config)
     };
     Ok(builder)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn socks_proxies_look_up_names_themselves() {
+        let address = |proxy: &str| privacy_proxy_address(proxy).unwrap();
+        assert_eq!(address("socks5://127.0.0.1:1080"), Some("socks5h://127.0.0.1:1080".into()));
+        assert_eq!(
+            address(" SOCKS5://user:secret@proxy.example:1080 "),
+            Some("socks5h://user:secret@proxy.example:1080".into())
+        );
+        assert_eq!(address("socks5h://127.0.0.1:9050"), Some("socks5h://127.0.0.1:9050".into()));
+        // An HTTP proxy gets the host name in the request anyway.
+        assert_eq!(address("http://192.0.2.1:3128"), Some("http://192.0.2.1:3128".into()));
+        assert_eq!(address("  "), None);
+        for refused in ["socks4://127.0.0.1:1080", "https://proxy.example", "127.0.0.1:1080", "ftp://x"] {
+            assert!(privacy_proxy_address(refused).is_err(), "{refused}");
+        }
+    }
 }
