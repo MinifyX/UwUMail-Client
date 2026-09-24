@@ -128,7 +128,11 @@ Address books come from where each mailbox keeps them (`contacts/`,
 As for calendars, the search for a CardDAV server asks the mail domain's
 website, so it waits until the contacts or the contact editor open
 (`contacts_accounts(look: false)` answers from what is known). Opening a mail
-and typing a recipient never start it.
+and typing a recipient never start it. A search that found nothing is kept in the
+database (`caldav_none_at`, `carddav_none_at`) for 30 days, so a mailbox without
+a server doesn't offer the calendar or the contacts after every start; a CalDAV
+or CardDAV address typed in under Settings, or going back to searching, forgets
+it, and "Check" there searches again.
 
 There is no local copy. Each account's books and cards are kept in memory for
 five minutes, until a change made here, or until a JMAP push names

@@ -41,6 +41,14 @@ const MAX_SEND_DELAY: u64 = 60;
 const IDENTITIES_EVERY: Duration = Duration::from_secs(10 * 60);
 /// Sign-in links waiting to be looked at; more at once only comes from someone flooding the link.
 const SIGN_IN_LINK_QUEUE: usize = 8;
+/// How long a search that found no CalDAV or CardDAV server keeps the calendar or the contacts from
+/// being offered at start. Afterwards they are offered once more, so a server added since is noticed.
+const DAV_NONE_REMEMBERED: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
+/// Whether a search that found no DAV server, at `at` (unix seconds), still counts.
+fn dav_none_recent(at: Option<i64>) -> bool {
+    at.is_some_and(|at| now_millis() / 1000 - at < DAV_NONE_REMEMBERED.as_secs() as i64)
+}
 
 fn now_millis() -> i64 {
     std::time::SystemTime::now()
