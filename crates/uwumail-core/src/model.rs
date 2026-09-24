@@ -636,6 +636,8 @@ pub struct ContactsAccount {
     pub carddav_url: Option<String>,
     /// Why there are no address books, when there aren't.
     pub problem: Option<String>,
+    /// False while only a search for a CardDAV server could tell, which waits until the contacts open.
+    pub checked: bool,
 }
 
 /// A blocked sender: on this device, or on the UwUMail server of one account.

@@ -163,10 +163,11 @@ async fn delete_event(engine: State<'_, Engine>, occurrence_id: String, scope: E
     engine.delete_event(&occurrence_id, scope).await
 }
 
-/// Per account: JMAP Contacts, CardDAV, or why there are no address books.
+/// Per account: JMAP Contacts, CardDAV, or why there are no address books. `look: false` doesn't
+/// search for CardDAV servers.
 #[tauri::command]
-async fn contacts_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<ContactsAccount>> {
-    engine.contacts_accounts().await
+async fn contacts_accounts(engine: State<'_, Engine>, look: Option<bool>) -> CommandResult<Vec<ContactsAccount>> {
+    engine.contacts_accounts(look.unwrap_or(true)).await
 }
 
 #[tauri::command]

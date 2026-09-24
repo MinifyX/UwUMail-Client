@@ -162,6 +162,34 @@ impl Inner {
         }
     }
 
+    /// What is known about an account's contacts without looking for a CardDAV server: remembered
+    /// answers, the account's own JMAP server, and sign-ins that can't have one. `None` when only
+    /// that search could tell — it asks the mail domain's website, so it waits until someone opens
+    /// the contacts.
+    async fn contacts_source_known(&self, account_id: &str) -> Option<Result<Source>> {
+        match self.contacts_sources.lock().await.get(account_id) {
+            Some(SourceState::Ready(source)) => return Some(Ok(source.clone())),
+            Some(SourceState::Unavailable { problem, since }) if since.elapsed() < RETRY_UNAVAILABLE => {
+                return Some(Err(problem.clone()));
+            }
+            _ => {}
+        }
+        let account = match self.store.account(account_id) {
+            Ok(account) => account,
+            Err(error) => return Some(Err(error)),
+        };
+        if account.protocol == Protocol::Jmap
+            && let Ok(client) = self.jmap_client(&account.id).await
+            && client.session.contacts_account_id.is_some()
+        {
+            return Some(self.contacts_source(account_id).await);
+        }
+        if !matches!(self.secrets.get(&account.id), Ok(Secret::Password { .. })) {
+            return Some(self.contacts_source(account_id).await);
+        }
+        None
+    }
+
     async fn find_contacts_source(&self, account: &AccountRecord) -> Result<Source> {
         if account.protocol == Protocol::Jmap {
             let client = self.jmap_client(&account.id).await?;
@@ -322,22 +350,32 @@ impl Inner {
 }
 
 impl Engine {
-    /// For each account: whether it has address books, from where, and why not.
-    pub async fn contacts_accounts(&self) -> Result<Vec<ContactsAccount>> {
+    /// For each account: whether it has address books, from where, and why not. Without `look`, no
+    /// CardDAV server is searched for; accounts only that search could answer for come back unchecked.
+    pub async fn contacts_accounts(&self, look: bool) -> Result<Vec<ContactsAccount>> {
         let accounts = self.inner.store.accounts()?;
-        let sources = accounts.iter().map(|account| self.inner.contacts_source(&account.id));
+        let sources = accounts.iter().map(|account| async move {
+            if look {
+                Some(self.inner.contacts_source(&account.id).await)
+            } else {
+                self.inner.contacts_source_known(&account.id).await
+            }
+        });
         let mut found = Vec::new();
-        for (account, source) in accounts.iter().zip(futures::future::join_all(sources).await) {
-            let (source, problem) = match source {
-                Ok(Source::Jmap) => (Some(ContactsSource::Jmap), None),
-                Ok(Source::Dav { .. }) => (Some(ContactsSource::Carddav), None),
-                Err(error) => (None, Some(error.message)),
+        for (account, known) in accounts.iter().zip(futures::future::join_all(sources).await) {
+            let checked = known.is_some();
+            let (source, problem) = match known {
+                Some(Ok(Source::Jmap)) => (Some(ContactsSource::Jmap), None),
+                Some(Ok(Source::Dav { .. })) => (Some(ContactsSource::Carddav), None),
+                Some(Err(error)) => (None, Some(error.message)),
+                None => (None, None),
             };
             found.push(ContactsAccount {
                 account_id: account.id.clone(),
                 source,
                 carddav_url: self.inner.store.carddav_url(&account.id)?,
                 problem,
+                checked,
             });
         }
         Ok(found)
@@ -617,15 +655,20 @@ impl Engine {
     }
 
     /// Recipient suggestions: people from the address books first, then addresses learned from
-    /// mail. An account whose contacts don't come quickly is left out this time.
+    /// mail. Only address books already known are asked: typing never starts a search for a CardDAV
+    /// server. An account whose contacts don't come quickly is left out this time.
     pub async fn recipient_suggestions(&self, query: &str) -> Result<Vec<Contact>> {
         let accounts = self.inner.store.accounts()?;
         let own: HashSet<String> = accounts.iter().map(|account| account.email.to_lowercase()).collect();
-        let reads =
-            accounts.iter().map(|account| tokio::time::timeout(SUGGESTION_WAIT, self.inner.remote_cards(&account.id)));
+        let reads = accounts.iter().map(|account| async move {
+            match self.inner.contacts_source_known(&account.id).await {
+                Some(Ok(_)) => tokio::time::timeout(SUGGESTION_WAIT, self.inner.remote_cards(&account.id)).await.ok(),
+                _ => None,
+            }
+        });
         let mut found: Vec<Contact> = Vec::new();
         for read in futures::future::join_all(reads).await {
-            if let Ok(Ok(cards)) = read {
+            if let Some(Ok(cards)) = read {
                 found.extend(suggestions_from(&cards, query));
             }
         }
@@ -720,10 +763,28 @@ mod tests {
             .unwrap();
         secrets.set("m", &Secret::OAuth { refresh_token: "r".into() }).unwrap();
 
-        let accounts = engine.contacts_accounts().await.unwrap();
+        // Known without asking anyone: a Microsoft sign-in has no address books here.
+        let accounts = engine.contacts_accounts(false).await.unwrap();
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].source, None);
+        assert!(accounts[0].checked);
         assert!(accounts[0].problem.as_deref().unwrap().contains("Microsoft"));
+
+        // A password account could have address books only a CardDAV search would find; that waits
+        // for the contacts, and typing a recipient doesn't start it.
+        let mut imap = engine.inner.store.account("m").unwrap();
+        imap.id = "p".into();
+        imap.auth = AuthKind::Password;
+        imap.email = "pat@example-company.de".into();
+        imap.username = imap.email.clone();
+        engine.inner.store.insert_account(&imap).unwrap();
+        secrets.set("p", &Secret::Password { password: "katzenpfote".into() }).unwrap();
+        let accounts = engine.contacts_accounts(false).await.unwrap();
+        let unchecked = accounts.iter().find(|account| account.account_id == "p").unwrap();
+        assert_eq!((unchecked.checked, &unchecked.source, &unchecked.problem), (false, &None, &None));
+        assert!(engine.recipient_suggestions("pat").await.unwrap().is_empty());
+        assert!(!engine.inner.contacts_sources.lock().await.contains_key("p"), "no search ran");
+        engine.inner.store.delete_account("p").unwrap();
         // Leaving it out is not an error for the contacts as a whole.
         assert!(engine.address_books().await.unwrap().is_empty());
         assert!(engine.contact_cards().await.unwrap().is_empty());

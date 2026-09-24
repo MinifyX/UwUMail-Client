@@ -1061,7 +1061,8 @@
       "bookDeleted": "Adressbuch „{{name}}“ gelöscht"
     },
     "mailbox": "Postfach",
-    "bookReadOnly": "Dieses Adressbuch kannst du nur ansehen."
+    "bookReadOnly": "Dieses Adressbuch kannst du nur ansehen.",
+    "noneFound": "Keines deiner Postfächer hat ein Adressbuch. Unter Einstellungen → Postfächer kannst du eine CardDAV-Adresse eintragen."
   },
   "accountContacts": {
     "title": "Kontakte",

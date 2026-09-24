@@ -494,12 +494,13 @@ export class DemoBackend implements Backend {
     const first = DEMO_ACCOUNTS[0]!.id;
     return this.accounts.map((account) =>
       account.id === first
-        ? { accountId: account.id, source: "jmap", carddavUrl: null, problem: null }
+        ? { accountId: account.id, source: "jmap", carddavUrl: null, problem: null, checked: true }
         : {
             accountId: account.id,
             source: null,
             carddavUrl: null,
             problem: lang() === "de" ? "Die Demo hat hier kein Adressbuch." : "The demo has no address book here.",
+            checked: true,
           },
     );
   }

@@ -35,7 +35,7 @@ import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
 import { contactWithEmail, draftFromSender } from "../contacts/format";
 import { startNewContact, useContactsUi } from "../contacts/state";
-import { useContacts, useContactsAvailable } from "../contacts/useContactsData";
+import { useContactsAvailable, useLoadedContacts } from "../contacts/useContactsData";
 import { openDraftMessage } from "../compose/openDraft";
 import { useInlineImages } from "./useInlineImages";
 import { nativeMobile } from "@/backend/mobile";
@@ -413,7 +413,8 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
   const domain = useCompanyDomain(email);
   const own = accounts.some((account) => account.email.toLowerCase() === email.toLowerCase());
   const { data: contactsAvailable = false } = useContactsAvailable();
-  const { data: contacts = [] } = useContacts();
+  // Only contacts already loaded: opening a mail never searches for an address book server.
+  const { data: contacts = [] } = useLoadedContacts();
   const known = contactsAvailable ? contactWithEmail(contacts, email) : undefined;
   const refresh = () => client.invalidateQueries();
   const block = (entry: string) => {

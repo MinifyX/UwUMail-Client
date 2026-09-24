@@ -21,13 +21,44 @@ export function useContactsAccounts() {
 }
 
 export function useAddressBooks() {
+  const client = useQueryClient();
   const { data: available = false } = useContactsAvailable();
-  return useQuery({ queryKey: queryKeys.addressBooks, queryFn: () => backend().addressBooks(), enabled: available });
+  return useQuery({
+    queryKey: queryKeys.addressBooks,
+    queryFn: async () => {
+      try {
+        return await backend().addressBooks();
+      } finally {
+        // Listing them is what searches for CardDAV servers; now it is known whether there are any.
+        void client.invalidateQueries({ queryKey: ["contactsAvailable"] });
+      }
+    },
+    enabled: available,
+  });
 }
 
 export function useContacts() {
+  const client = useQueryClient();
   const { data: available = false } = useContactsAvailable();
-  return useQuery({ queryKey: queryKeys.contacts, queryFn: () => backend().contacts(), enabled: available });
+  return useQuery({
+    queryKey: queryKeys.contacts,
+    queryFn: async () => {
+      try {
+        return await backend().contacts();
+      } finally {
+        void client.invalidateQueries({ queryKey: ["contactsAvailable"] });
+      }
+    },
+    enabled: available,
+  });
+}
+
+/**
+ * The contacts already loaded, without loading them: reading them may search for CardDAV servers,
+ * which waits until someone opens the contacts or the editor.
+ */
+export function useLoadedContacts() {
+  return useQuery({ queryKey: queryKeys.contacts, queryFn: () => backend().contacts(), enabled: false });
 }
 
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));

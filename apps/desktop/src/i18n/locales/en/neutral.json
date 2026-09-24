@@ -1061,7 +1061,8 @@
       "bookDeleted": "Address book “{{name}}” deleted"
     },
     "mailbox": "Mailbox",
-    "bookReadOnly": "This address book can only be viewed."
+    "bookReadOnly": "This address book can only be viewed.",
+    "noneFound": "None of your mailboxes has an address book. You can enter a CardDAV address under Settings → Mailboxes."
   },
   "accountContacts": {
     "title": "Contacts",

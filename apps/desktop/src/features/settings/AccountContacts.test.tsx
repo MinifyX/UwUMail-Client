@@ -55,9 +55,9 @@ describe("a mailbox's contacts settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sources = [
-      { accountId: "club", source: null, carddavUrl: null, problem: "No address book server found." },
-      { accountId: "uwu", source: "jmap", carddavUrl: null, problem: null },
-      { accountId: "work", source: null, carddavUrl: null, problem: "None for Microsoft sign-ins." },
+      { accountId: "club", source: null, carddavUrl: null, problem: "No address book server found.", checked: true },
+      { accountId: "uwu", source: "jmap", carddavUrl: null, problem: null, checked: true },
+      { accountId: "work", source: null, carddavUrl: null, problem: "None for Microsoft sign-ins.", checked: true },
     ];
   });
   afterEach(cleanup);

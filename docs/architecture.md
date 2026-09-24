@@ -125,6 +125,11 @@ Address books come from where each mailbox keeps them (`contacts/`,
   default is kept on this device (`address_book_prefs`).
 - **Microsoft and Google sign-ins:** none for now.
 
+As for calendars, the search for a CardDAV server asks the mail domain's
+website, so it waits until the contacts or the contact editor open
+(`contacts_accounts(look: false)` answers from what is known). Opening a mail
+and typing a recipient never start it.
+
 There is no local copy. Each account's books and cards are kept in memory for
 five minutes, until a change made here, or until a JMAP push names
 `AddressBook` or `ContactCard`; `contacts:changed` tells the page. The page gets

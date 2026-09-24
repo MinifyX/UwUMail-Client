@@ -467,6 +467,8 @@ export interface ContactsAccount {
   carddavUrl: string | null;
   /** Why there are no address books, when there aren't. */
   problem: string | null;
+  /** False while only a search for a CardDAV server could tell; that waits until the contacts open. */
+  checked: boolean;
 }
 
 export type BackendEvent =

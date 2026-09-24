@@ -244,12 +244,17 @@ export class TauriBackend implements Backend {
     return call<void>("delete_event", { occurrenceId, scope });
   }
 
+  /**
+   * Without searching for CardDAV servers, which asks the mail domain's website: an account only that
+   * search could answer for counts until the contacts are opened and it runs.
+   */
   async contactsAvailable() {
-    return (await this.contactsAccounts()).some((account) => account.source !== null);
+    const accounts = await call<ContactsAccount[]>("contacts_accounts", { look: false });
+    return accounts.some((account) => account.source !== null || !account.checked);
   }
 
   contactsAccounts() {
-    return call<ContactsAccount[]>("contacts_accounts");
+    return call<ContactsAccount[]>("contacts_accounts", { look: true });
   }
 
   setCardDavUrl(accountId: string, url: string | null) {

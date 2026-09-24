@@ -67,7 +67,13 @@ let books = BOOKS;
 const fake = {
   listAccounts: vi.fn(async () => ACCOUNTS),
   contactsAccounts: vi.fn(async () =>
-    ACCOUNTS.map((account) => ({ accountId: account.id, source: "carddav", carddavUrl: null, problem: null })),
+    ACCOUNTS.map((account) => ({
+      accountId: account.id,
+      source: "carddav",
+      carddavUrl: null,
+      problem: null,
+      checked: true,
+    })),
   ),
   createAddressBook: vi.fn(async () => BOOKS[0]!),
   contactsAvailable: vi.fn(async () => true),
