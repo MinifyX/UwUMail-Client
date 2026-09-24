@@ -1,0 +1,4 @@
+{
+  "de": "- Findet UwUMail für ein Postfach keinen Kalender- oder Kontakte-Server, merkt es sich das 30 Tage lang und bietet Kalender und Kontakte dort nicht nach jedem Start wieder an. Trägst du in den Einstellungen eine Adresse ein oder entfernst sie wieder, sucht UwUMail sofort neu",
+  "en": "- When UwUMail finds no calendar or contacts server for a mailbox, it remembers that for 30 days and no longer offers calendar and contacts there after every start. Typing in an address in the settings, or removing it again, makes UwUMail look again right away"
+}
