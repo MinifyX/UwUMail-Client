@@ -5,8 +5,9 @@ decides where OAuth tokens and passwords go (server discovery together with the 
 sign-in), the app shells, release pipeline and updater (the review of `apps/desktop`, `apps/setup`,
 `scripts/` and `.github/workflows/` at 502bb93), the Linux updater's AppImage hand-over, and the code
 merged since 502bb93 by the egress work (a33860b: the `uwuimg:` picture scheme, the privacy proxy, the
-CSP change and the update-check switch). JMAP discovery and the CalDAV password rules are left for a
-second pass after the contacts branch is merged.
+CSP change and the update-check switch). A second part, after the contacts branch was merged
+(0259bd3), covers JMAP discovery and which hosts may get the password for the calendar and the
+address book, and the new CardDAV client (`git diff a33860b 0259bd3`).
 
 Done with Claude, like the passes before; not an independent firm. It leaves out step-by-step exploits.
 To report something new see [SECURITY.md](../SECURITY.md).
@@ -18,6 +19,8 @@ To report something new see [SECURITY.md](../SECURITY.md).
 | CC-1 | Medium | Discovery could send a Microsoft or Google sign-in token to a server that only looks like the provider's | fixed in 16050b4 |
 | CC-2 | Medium | Forged SRV records could point setup at any server, which then receives the password | fixed in 16050b4 |
 | CC-3 | Low | A local program could still hold up or end an OAuth sign-in (L2 only partly held) | fixed in f92a5b3 |
+| CC-7 | Medium | JMAP discovery could name any server, which then got the password and became trusted for calendars and contacts | fixed in ed82072 |
+| CC-8 | Medium | One CardDAV address book could fill the memory | fixed in a9166ba |
 | EG-1 | Medium | A `socks5://` privacy proxy let the device look up the sender's host names itself | fixed in f411ce0 |
 | CS-1 | Medium | One platform's build could swap another platform's release file before signing | fixed in 5e40a7c |
 | CS-2 | Medium | The phone app lock hid the screen but not the keyboard or the screen reader | fixed in 99a5ef0 |
@@ -29,6 +32,8 @@ To report something new see [SECURITY.md](../SECURITY.md).
 | EG-2 | Low | `uwuimg:` passes a UwUMail server's content type through unchanged | listed |
 | EG-3 | Low | Pictures from a UwUMail server are read whole, without a size limit | listed |
 | EG-4 | Low | The BIMI lookup for sender pictures bypasses the privacy proxy | listed |
+| CC-9 | Low | IMAP mailboxes added earlier keep the JMAP address discovery found; switching to JMAP uses it | listed |
+| CC-10 | Low | The password goes to any host on the mail server's registrable domain | listed |
 | CC-6 | Informational | An autoconfig answer may pass through a plain-HTTP redirect as long as it ends on HTTPS | listed |
 | CS-5 | Informational | `fetch_mail_image`/`uwuimg:` check the host by name only (I6) | listed, comment corrected |
 | CS-6 | Informational | `.deb`/`.rpm` self-update: `pkexec` by `PATH`, file checked before root installs it | listed |
@@ -37,6 +42,7 @@ To report something new see [SECURITY.md](../SECURITY.md).
 | CS-9 | Informational | Any job of a release run can still replace another job's artifact before signing | listed |
 | EG-5 | Informational | With a UwUMail server among the accounts, every account's senders go to it for pictures | listed |
 | EG-6 | Informational | The proxy's login is kept and shown in plain text | listed |
+| CC-11 | Informational | A JMAP session may name its API endpoints on another site | listed |
 
 Nothing Critical or High. The Linux updater question (does it unpack the setup AppImage into a
 predictable folder in `/tmp`?) is answered with no: it has run the setup with `TMPDIR` set to the
@@ -129,7 +135,57 @@ _Regression test:_ `oauth::tests::other_connections_neither_hold_up_nor_end_a_lo
 | Fix | On macOS, `mark_from_internet` sets `com.apple.quarantine` (download flag, not yet approved), which covers every existing call site (cache, Save, `.eml`). Not `LSFileQuarantineEnabled`, which would quarantine the downloaded update too. The four macOS types and `xlsb`, `ppsm`, `msu` are on both dangerous lists. Files cached earlier stay unmarked until downloaded again. |
 | Regression test | `attachments::tests::extracts_and_caches_attachments` (quarantine attribute, macOS only), `recognizes_dangerous_files`, `lib/attachments.test.ts`. The macOS code was type-checked for `aarch64-apple-darwin` here but not run; CI runs the Rust tests on Linux only. |
 
+### CC-7 · Medium · JMAP discovery could name any server, which then got the password and became trusted for calendars and contacts
+
+| Field | Content |
+| --- | --- |
+| Severity | Medium — CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N (6.8) |
+| Component | `crates/uwumail-core/src/jmap.rs` (`discover`, `probe`), `engine/calendar_ops.rs` (`password_hosts`, also used by `engine/contacts_ops.rs`), before ed82072 |
+| Attacker & preconditions | Whoever runs the mail domain's website (C-3's attacker), or can forge the `_jmap._tcp` SRV record; the mailbox signs in with a password. |
+| Impact | Discovery asked `https://<domain>/.well-known/jmap` (and an SRV target) and followed every redirect, to any site and down to plain HTTP; wherever it landed with a login prompt became the JMAP address. Setup then preselects JMAP, so the first sign-in sent the password there. If the person picked IMAP instead, the address was stored anyway, and `password_hosts` trusted its whole site with the password for CalDAV and, since the contacts branch, CardDAV: a `/.well-known/caldav` or `/.well-known/carddav` redirect from the same website to that site then got the password as well. This is the C-3 rule ("discovery must not make the password go somewhere new") not holding for JMAP, and for IMAP mailboxes too. |
+| Evidence | Code review, local. |
+| Fix | Discovery only takes an HTTPS session address on the site of the IMAP or SMTP server it found (the hard-coded Fastmail entries aside). `password_hosts` counts the JMAP address only while the mailbox uses JMAP, when it is the mail server itself. A JMAP address typed in by hand is still used as typed. |
+| Regression test | `jmap::tests::discovery_only_takes_a_session_on_the_mail_servers_site`, `calendar_ops::tests::only_the_mail_servers_get_the_password`, `an_unused_jmap_address_gets_no_password` (these ran in CI only, see "What was run") |
+
+### CC-8 · Medium · One CardDAV address book could fill the memory
+
+| Field | Content |
+| --- | --- |
+| Severity | Medium — CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:N/I:N/A:H (5.3) |
+| Component | `crates/uwumail-core/src/contacts/carddav.rs` (`cards`), before a9166ba |
+| Attacker & preconditions | A hostile CardDAV server, or anyone who can write to an address book the user sees (as for C-4). |
+| Impact | Each multiget answer was limited to 16 MB, but an address book of 5,000 cards is read in 50 of them, all kept, turned into JSContact and cached, and every address book of an account is read at once. The read runs when the contacts open and for recipient suggestions while typing an address, so the app could be made to hold gigabytes, every time. |
+| Evidence | Code review, local; the new hostile-server test serves 45 MB of cards. |
+| Fix | Reading an address book stops once 16 MB of vCards (one listing's worth, as for a calendar) have arrived, with a warning in the log; the rest is left out. |
+| Regression test | `tests/carddav_hostile.rs` `a_huge_address_book_is_read_only_so_far` (ran in CI only) |
+
+The CardDAV client otherwise held up: discovery and every request go through the calendar's
+`DavClient` (HTTPS only, the password only to trusted sites, redirects checked by hand, answers read
+with a limit and the XML reader that refuses DOCTYPEs); card and book addresses are kept as paths and
+joined onto the home's origin (`dav_url`), listings keep to the book, file names come from a filtered
+uid, names sent to the server are XML-escaped, vCards nested deeper than four are skipped. In the
+app, contact fields are React text, a photo is only shown as a `data:image/…` address (a link would
+tell its site who looks; the app page's CSP would block it anyway), and phone links keep digits and
+`+` only. `calcard`'s vCard parser was not fuzzed.
+
+`FolderDialogs.test.tsx` › "creates a folder inside another one from its menu", flaky on `main`, was a
+test problem: the first render of the file paid for everything that loads once (about 1.5 s against
+0.5 s for the others) inside `findByRole`'s one second. The warm-up now happens in `beforeAll`
+(52d9a16).
+
 ### Low findings
+
+- **CC-9 · IMAP mailboxes added earlier keep the JMAP address discovery found** — stored for every
+  password mailbox (`jmap_url`); since CC-7 it no longer counts for calendars or contacts, but
+  Settings still offers to switch such a mailbox to JMAP, which signs in there with the password. For
+  mailboxes added before CC-7 that address may be one only the domain's website named. It takes the
+  person's own click. _Fix:_ offer the switch only for an address on the mail server's site, or ask
+  again for it.
+- **CC-10 · The password goes to any host on the mail server's registrable domain** — `dav::site`,
+  `jmap::may_send_credentials`. Deliberate (`imap.example.org` and `dav.example.org`), but at a
+  hoster that gives customers subdomains of its own mail domain without a public-suffix entry,
+  another customer's subdomain counts as trusted once a discovery redirect points there. _Fix:_ none
+  planned; a CalDAV/CardDAV address typed in by hand avoids discovery altogether.
 
 - **CC-4 · The Microsoft loopback redirect names `localhost`, the listener only binds `127.0.0.1`** —
   `oauth.rs` (`redirect_host: "localhost"`, `TcpListener::bind(("127.0.0.1", 0))`). A browser may try
@@ -186,6 +242,11 @@ _Regression test:_ `oauth::tests::other_connections_neither_hold_up_nor_end_a_lo
 - **EG-5 · With a UwUMail server among the accounts, every account's senders go to it for pictures** —
   `engine.rs` `picture_server`. By design (the server fetches, the sender never sees the device), but the
   server of one account learns whom the other accounts hear from. Worth a sentence in the settings.
+- **CC-11 · A JMAP session may name its API endpoints on another site** — `Session::parse` only
+  refuses plain HTTP endpoints for an HTTPS session; the login then goes to whatever `apiUrl`,
+  `downloadUrl` and `uploadUrl` name. The session comes from the server the mailbox signs in to,
+  which has the password already, so this gives nothing new away. _Fix (hardening):_ require the
+  endpoints on the session's site, as `get_from_server` does for pictures.
 - **EG-6 · The proxy's login is kept and shown in plain text** — stored with the other local settings
   (not synced), shown in a normal text field; an `http://` proxy gets it unencrypted. Same-user or
   shoulder-surfing only.
@@ -228,6 +289,10 @@ frontend), sharing `german()` with `background.rs` and merging the two `confirm`
 (Windows, `--test-threads=1`; the GreenMail/Stalwart integration tests skip without their servers and
 run in CI), `pnpm format:check`, `pnpm typecheck`, `pnpm lint`, `pnpm test` (two component tests timed out once while cargo was building next to them and passed on their own), `node --test
 "scripts/*.test.mjs"`, and a type check of the macOS quarantine code for `aarch64-apple-darwin`.
+
+For the second part (CC-7, CC-8) `cargo fmt --check` and `cargo clippy --workspace --all-targets --
+-D warnings` ran here, which compiles the new tests; running them had to be left to CI, because the
+shared disk had fallen below the limit for local builds.
 
 ## What could not be tested
 
