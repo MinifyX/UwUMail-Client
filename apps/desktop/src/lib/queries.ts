@@ -287,18 +287,14 @@ export function useThreadActions() {
   };
 }
 
-/** Keeps queries fresh when the engine reports changes. Mount once. */
-export function useBackendEvents() {
-  const client = useQueryClient();
-  const { t } = useT();
-  const runInBackground = useSettings((s) => s.runInBackground);
+/**
+ * Tells the app shell how to look for updates. Mount once, at the root: the shell waits for this
+ * before its first automatic check, and it has to come before setup is finished too, or an app that
+ * never got past setup would never hear of the version that fixes it.
+ */
+export function useUpdateSettings() {
   const updateChannel = useSettings((s) => s.updateChannel);
   const updateChecks = useSettings((s) => s.updateChecks);
-  const privacyProxy = useSettings((s) => s.privacyProxy);
-
-  useEffect(() => {
-    void backend().setRunInBackground(runInBackground);
-  }, [runInBackground]);
 
   useEffect(() => {
     void backend().setUpdateChannel(updateChannel);
@@ -307,6 +303,18 @@ export function useBackendEvents() {
   useEffect(() => {
     void backend().setUpdateChecks(updateChecks);
   }, [updateChecks]);
+}
+
+/** Keeps queries fresh when the engine reports changes. Mount once. */
+export function useBackendEvents() {
+  const client = useQueryClient();
+  const { t } = useT();
+  const runInBackground = useSettings((s) => s.runInBackground);
+  const privacyProxy = useSettings((s) => s.privacyProxy);
+
+  useEffect(() => {
+    void backend().setRunInBackground(runInBackground);
+  }, [runInBackground]);
 
   // Remote pictures wait for this before they go anywhere. A kept address was checked when it was
   // saved; should the app still turn it down, they stay away rather than leave without it.

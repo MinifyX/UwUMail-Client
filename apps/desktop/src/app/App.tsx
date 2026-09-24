@@ -10,6 +10,7 @@ import { AppLock, BehindLock } from "@/features/mobile/AppLock";
 import { useMobileBridge } from "@/features/mobile/useMobileBridge";
 import { UpdateHint } from "@/features/updates/UpdateHint";
 import { i18n, resolveLanguage } from "@/i18n";
+import { useUpdateSettings } from "@/lib/queries";
 import { useApplyTheme } from "@/lib/theme";
 import { useSettings } from "@/state/settings";
 
@@ -18,6 +19,7 @@ export function App() {
   const language = useSettings((s) => s.language);
   useApplyTheme();
   useMobileBridge();
+  useUpdateSettings();
 
   useEffect(() => {
     const resolved = resolveLanguage(language);
