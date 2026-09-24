@@ -25,6 +25,8 @@ pub const CALENDARS: &str = "urn:ietf:params:jmap:calendars";
 /// A UwUMail server that fetches a mail's remote pictures and sender logos for its readers
 /// (UwUMail-Server docs/jmap-remote.md), so their senders never see who reads.
 pub const REMOTE: &str = "urn:uwumail:jmap:remote";
+/// Address books and contact cards (RFC 9610).
+pub const CONTACTS: &str = "urn:ietf:params:jmap:contacts";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -90,6 +92,8 @@ pub struct Session {
     /// (`{accountId}`, `{email}`) for us, if it does.
     pub image_url: Option<String>,
     pub picture_url: Option<String>,
+    /// The account whose address books this login sees, if the server has JMAP Contacts.
+    pub contacts_account_id: Option<String>,
 }
 
 impl Session {
@@ -120,6 +124,7 @@ impl Session {
         let calendar_account_id = extension_account(CALENDARS);
         let remote = capabilities.get(REMOTE);
         let remote_url = |key: &str| remote.and_then(|r| r.get(key)).and_then(Value::as_str).map(|u| absolute(base, u));
+        let contacts_account_id = extension_account(CONTACTS);
         let limit = |key: &str, fallback: usize| {
             core.and_then(|c| c.get(key)).and_then(Value::as_u64).map_or(fallback, |n| n.clamp(1, 10_000) as usize)
         };
@@ -142,6 +147,7 @@ impl Session {
             calendar_account_id,
             image_url: remote_url("imageUrl"),
             picture_url: remote_url("pictureUrl"),
+            contacts_account_id,
         })
     }
 
@@ -336,6 +342,9 @@ impl Client {
         }
         if self.session.calendar_account_id.is_some() {
             using.push(CALENDARS);
+        }
+        if self.session.contacts_account_id.is_some() {
+            using.push(CONTACTS);
         }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self
@@ -937,6 +946,19 @@ mod tests {
         assert_eq!(Session::parse(&document, &base).unwrap().calendar_account_id.as_deref(), Some("a1"));
         document["capabilities"].as_object_mut().unwrap().remove(SIEVE);
         assert_eq!(Session::parse(&document, &base).unwrap().sieve_account_id, None);
+    }
+
+    #[test]
+    fn notices_contacts() {
+        let base = Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let mut document = json!({
+            "capabilities": { CORE: {}, MAIL: {}, CONTACTS: {} },
+            "primaryAccounts": { MAIL: "a1", CONTACTS: "k7" },
+            "apiUrl": "/jmap/api", "downloadUrl": "/jmap/download", "uploadUrl": "/jmap/upload",
+        });
+        assert_eq!(Session::parse(&document, &base).unwrap().contacts_account_id.as_deref(), Some("k7"));
+        document["capabilities"].as_object_mut().unwrap().remove(CONTACTS);
+        assert_eq!(Session::parse(&document, &base).unwrap().contacts_account_id, None);
     }
 
     #[test]

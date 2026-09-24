@@ -173,6 +173,16 @@ CREATE TABLE calendar_prefs (
     is_default INTEGER NOT NULL DEFAULT 0
 );
 "#,
+    r#"
+-- Address books over CardDAV: an address typed in by hand, and the default address book, which
+-- CardDAV itself doesn't keep. Contacts themselves stay on the server.
+ALTER TABLE accounts ADD COLUMN carddav_url TEXT;
+CREATE TABLE address_book_prefs (
+    book_id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    is_default INTEGER NOT NULL DEFAULT 0
+);
+"#,
 ];
 
 /// What this device remembers about one calendar.
@@ -485,6 +495,45 @@ impl Store {
 
     pub fn forget_calendar(&self, calendar_id: &str) -> Result<()> {
         self.conn().execute("DELETE FROM calendar_prefs WHERE calendar_id = ?1", [calendar_id])?;
+        Ok(())
+    }
+
+    /// The CardDAV address typed in by hand for an account.
+    pub fn carddav_url(&self, account_id: &str) -> Result<Option<String>> {
+        Ok(self.conn().query_row("SELECT carddav_url FROM accounts WHERE id = ?1", [account_id], |row| row.get(0))?)
+    }
+
+    pub fn set_carddav_url(&self, account_id: &str, url: Option<&str>) -> Result<()> {
+        self.conn().execute("UPDATE accounts SET carddav_url = ?1 WHERE id = ?2", params![url, account_id])?;
+        Ok(())
+    }
+
+    /// The address book of the account chosen as the default on this device, if any.
+    pub fn default_address_book(&self, account_id: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT book_id FROM address_book_prefs WHERE account_id = ?1 AND is_default = 1",
+                [account_id],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Makes one address book of the account the default; the others stop being it.
+    pub fn set_default_address_book(&self, account_id: &str, book_id: &str) -> Result<()> {
+        let conn = self.conn();
+        conn.execute("UPDATE address_book_prefs SET is_default = 0 WHERE account_id = ?1", [account_id])?;
+        conn.execute(
+            "INSERT INTO address_book_prefs (book_id, account_id, is_default) VALUES (?1, ?2, 1)
+             ON CONFLICT (book_id) DO UPDATE SET is_default = 1",
+            params![book_id, account_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn forget_address_book(&self, book_id: &str) -> Result<()> {
+        self.conn().execute("DELETE FROM address_book_prefs WHERE book_id = ?1", [book_id])?;
         Ok(())
     }
 
@@ -1775,6 +1824,24 @@ mod tests {
         assert!(!store.calendar_prefs(&account).unwrap().contains_key("acc:/cal/a/"));
         store.delete_account(&account).unwrap();
         assert!(store.calendar_prefs(&account).unwrap().is_empty());
+    }
+
+    #[test]
+    fn remembers_carddav_addresses_and_the_default_address_book() {
+        let (store, account, _, _) = store_with_account();
+        assert_eq!(store.carddav_url(&account).unwrap(), None);
+        store.set_carddav_url(&account, Some("https://dav.example.org/")).unwrap();
+        assert_eq!(store.carddav_url(&account).unwrap().as_deref(), Some("https://dav.example.org/"));
+
+        assert_eq!(store.default_address_book(&account).unwrap(), None);
+        store.set_default_address_book(&account, "acc:/ab/a/").unwrap();
+        store.set_default_address_book(&account, "acc:/ab/b/").unwrap();
+        assert_eq!(store.default_address_book(&account).unwrap().as_deref(), Some("acc:/ab/b/"));
+        store.forget_address_book("acc:/ab/b/").unwrap();
+        assert_eq!(store.default_address_book(&account).unwrap(), None);
+        store.set_default_address_book(&account, "acc:/ab/a/").unwrap();
+        store.delete_account(&account).unwrap();
+        assert_eq!(store.default_address_book(&account).unwrap(), None);
     }
 
     #[test]
