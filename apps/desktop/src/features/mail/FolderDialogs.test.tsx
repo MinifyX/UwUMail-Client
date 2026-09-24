@@ -77,7 +77,13 @@ describe("folder management", () => {
     HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
       this.open = false;
     };
-  });
+    // The first render of the navigation pays for everything that loads once (modules, the query
+    // client, the translations). Done here, it no longer eats into the first test's one second for
+    // finding the folder menu, which on a busy machine it sometimes didn't fit into.
+    setup();
+    await screen.findByRole("button", { name: "More for Receipts" }, { timeout: 20_000 });
+    cleanup();
+  }, 30_000);
 
   beforeEach(() => {
     vi.clearAllMocks();
