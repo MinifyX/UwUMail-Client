@@ -467,6 +467,8 @@ impl Engine {
             AuthKind::Microsoft | AuthKind::Google => {
                 let provider =
                     if new.auth == AuthKind::Microsoft { OAuthProvider::Microsoft } else { OAuthProvider::Google };
+                // Before the browser opens: the token must not be able to go anywhere else.
+                autoconfig::check_oauth_servers(provider, &[&record.imap, &record.smtp])?;
                 let mut waiting = None;
                 let redirect = match self.inner.oauth_redirect.lock().unwrap().clone() {
                     Some(uri) => {
@@ -1605,14 +1607,17 @@ impl Inner {
         match self.secrets.get(&account.id)? {
             Secret::Password { password } => Ok(Credential::Password(password)),
             Secret::OAuth { refresh_token } => {
+                let provider =
+                    if account.auth == AuthKind::Microsoft { OAuthProvider::Microsoft } else { OAuthProvider::Google };
+                // Every token goes to these two servers; an account saved before this check must not
+                // keep sending them elsewhere.
+                autoconfig::check_oauth_servers(provider, &[&account.imap, &account.smtp])?;
                 let mut tokens = self.tokens.lock().await;
                 if let Some((token, expires)) = tokens.get(&account.id)
                     && *expires > Instant::now() + Duration::from_secs(60)
                 {
                     return Ok(Credential::Token(token.clone()));
                 }
-                let provider =
-                    if account.auth == AuthKind::Microsoft { OAuthProvider::Microsoft } else { OAuthProvider::Google };
                 let fresh = oauth::refresh(&self.http, provider, &refresh_token).await?;
                 if let Some(rotated) = &fresh.refresh_token
                     && *rotated != refresh_token
@@ -2217,6 +2222,66 @@ mod tests {
         // Flooding only fills the small queue.
         let flood = (0..100).filter(|_| engine.finish_sign_in("app.uwumail://oauth?state=x")).count();
         assert_eq!(flood, SIGN_IN_LINK_QUEUE);
+    }
+
+    #[tokio::test]
+    async fn oauth_tokens_only_go_to_the_providers_servers() {
+        let dir = tempfile::tempdir().unwrap();
+        let secrets = Arc::new(crate::secrets::MemorySecrets::default());
+        let opened = Arc::new(Mutex::new(Vec::<String>::new()));
+        let seen = opened.clone();
+        let engine = Engine::new(EngineOptions {
+            data_dir: dir.path().to_path_buf(),
+            secrets: secrets.clone(),
+            open_url: Arc::new(move |url| seen.lock().unwrap().push(url.to_string())),
+        })
+        .unwrap();
+        let lookalike = ServerSettings { host: "outlook.example.org".into(), port: 993, security: Security::Tls };
+        let microsoft_smtp =
+            ServerSettings { host: "smtp.office365.com".into(), port: 587, security: Security::Starttls };
+
+        // What a discovery answer from someone other than Microsoft could suggest.
+        let new = NewAccount {
+            display_name: "Alex".into(),
+            email: "alex@example.org".into(),
+            auth: AuthKind::Microsoft,
+            password: None,
+            imap: lookalike.clone(),
+            smtp: microsoft_smtp.clone(),
+            username: "alex@example.org".into(),
+            color: AccountColor::Sky,
+            protocol: Protocol::Imap,
+            jmap_url: None,
+            sign_in_as: None,
+        };
+        let error = engine.add_account(new).await.unwrap_err();
+        assert_eq!(error.code, crate::error::ErrorCode::InvalidInput, "{error:?}");
+        assert!(opened.lock().unwrap().is_empty(), "the sign-in page never opened");
+
+        // A mailbox saved that way earlier doesn't get a token either, not even a fresh one.
+        let record = AccountRecord {
+            id: "m".into(),
+            name: "Work".into(),
+            email: "alex@example.org".into(),
+            display_name: "Alex".into(),
+            color: AccountColor::Sky,
+            auth: AuthKind::Microsoft,
+            username: "alex@example.org".into(),
+            imap: lookalike,
+            smtp: microsoft_smtp,
+            protocol: Protocol::Imap,
+            jmap_url: None,
+        };
+        engine.inner.store.insert_account(&record).unwrap();
+        secrets.set("m", &Secret::OAuth { refresh_token: "r".into() }).unwrap();
+        engine
+            .inner
+            .tokens
+            .lock()
+            .await
+            .insert("m".into(), ("cached".into(), Instant::now() + Duration::from_secs(3600)));
+        let error = engine.inner.credential(&record).await.err().unwrap();
+        assert_eq!(error.code, crate::error::ErrorCode::InvalidInput, "{error:?}");
     }
 
     #[test]

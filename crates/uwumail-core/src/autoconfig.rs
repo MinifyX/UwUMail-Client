@@ -61,31 +61,53 @@ fn fill_placeholders(template: &str, email: &str) -> String {
     template.replace("%EMAILADDRESS%", email).replace("%EMAILLOCALPART%", local).replace("%EMAILDOMAIN%", domain)
 }
 
-/// Known providers that only allow OAuth for IMAP.
-pub fn oauth_provider_for(host_or_domain: &str) -> Option<OAuthProvider> {
-    let value = host_or_domain.to_ascii_lowercase();
-    let google = ["gmail.com", "googlemail.com", "google.com"];
-    let microsoft = [
-        "outlook.com",
-        "hotmail.com",
-        "live.com",
-        "msn.com",
-        "office365.com",
-        "outlook.office365.com",
-        "protection.outlook.com",
-    ];
-    let matches = |suffixes: &[&str]| suffixes.iter().any(|s| value == *s || value.ends_with(&format!(".{s}")));
-    if matches(&google) {
+/// Domains the providers own, under which their mail servers live.
+const GOOGLE_DOMAINS: &[&str] = &["gmail.com", "googlemail.com", "google.com"];
+const MICROSOFT_DOMAINS: &[&str] =
+    &["outlook.com", "hotmail.com", "live.com", "msn.com", "office365.com", "office.com"];
+
+/// The provider a server belongs to: only a name under a domain the provider owns. A name like
+/// `outlook.example.org` is anybody's, and a server that looks like the provider's would receive
+/// the provider's sign-in token.
+pub fn oauth_provider_of_host(host: &str) -> Option<OAuthProvider> {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    let under = |domains: &[&str]| domains.iter().any(|d| host == *d || host.ends_with(&format!(".{d}")));
+    if under(GOOGLE_DOMAINS) {
         Some(OAuthProvider::Google)
-    } else if matches(&microsoft)
-        || value.starts_with("hotmail.")
-        || value.starts_with("live.")
-        || value.starts_with("outlook.")
-    {
+    } else if under(MICROSOFT_DOMAINS) {
         Some(OAuthProvider::Microsoft)
     } else {
         None
     }
+}
+
+/// Known providers that only allow OAuth for IMAP, by the domain of a mail address. Microsoft's
+/// national domains (`outlook.de`, `hotmail.co.uk`) count too: they get Microsoft's own servers
+/// ([`microsoft_settings`]), never servers named after them.
+pub fn oauth_provider_for(domain: &str) -> Option<OAuthProvider> {
+    let value = domain.to_ascii_lowercase();
+    oauth_provider_of_host(&value).or_else(|| {
+        (value.starts_with("hotmail.") || value.starts_with("live.") || value.starts_with("outlook."))
+            .then_some(OAuthProvider::Microsoft)
+    })
+}
+
+/// An OAuth sign-in only ever goes to the provider's own servers, and only encrypted. Whoever
+/// answers discovery (the domain's website, its DNS, or the network in between) could otherwise
+/// name a server of theirs and receive a token that opens the mailbox at the provider.
+pub(crate) fn check_oauth_servers(provider: OAuthProvider, servers: &[&ServerSettings]) -> Result<()> {
+    for server in servers {
+        if oauth_provider_of_host(&server.host) != Some(provider) {
+            return Err(Error::invalid(format!(
+                "{} isn't a server of the provider you sign in with, so UwUMail won't send your sign-in there.",
+                server.host
+            )));
+        }
+        if server.security == Security::None {
+            return Err(Error::invalid(format!("The connection to {} would not be encrypted.", server.host)));
+        }
+    }
+    Ok(())
 }
 
 /// Exchange Online's IMAP and SMTP hosts. Every mailbox in Microsoft 365 uses
@@ -127,20 +149,20 @@ async fn microsoft_tenant(http: &reqwest::Client, domain: &str) -> bool {
 pub(crate) fn parse_client_config(xml: &str, email: &str, source: DiscoverySource) -> Option<DiscoveredSettings> {
     let config: ClientConfig = quick_xml::de::from_str(xml).ok()?;
     let provider = config.email_provider;
-    let imap = provider.incoming.iter().find(|s| s.kind.eq_ignore_ascii_case("imap"))?;
-    let smtp =
-        provider.outgoing.iter().filter(|s| s.kind.eq_ignore_ascii_case("smtp")).min_by_key(|s| {
-            match security(&s.socket_type) {
-                Security::Tls => 0,
-                Security::Starttls => 1,
-                Security::None => 2,
-            }
-        })?;
+    // The most secure of each kind: a file that lists a plain connection first doesn't get it used.
+    let rank = |s: &&ServerXml| match security(&s.socket_type) {
+        Security::Tls => 0,
+        Security::Starttls => 1,
+        Security::None => 2,
+    };
+    let imap = provider.incoming.iter().filter(|s| s.kind.eq_ignore_ascii_case("imap")).min_by_key(rank)?;
+    let smtp = provider.outgoing.iter().filter(|s| s.kind.eq_ignore_ascii_case("smtp")).min_by_key(rank)?;
     let wants_oauth = imap.authentication.iter().any(|a| a.eq_ignore_ascii_case("OAuth2"));
     let domain = email.split_once('@').map(|(_, d)| d).unwrap_or_default();
-    let oauth = oauth_provider_for(domain)
-        .or_else(|| oauth_provider_for(&imap.hostname))
-        .filter(|_| wants_oauth || oauth_provider_for(domain).is_some());
+    // Only when the server really is the provider's: the file comes from whoever runs the domain's
+    // website, and a sign-in with Google or Microsoft must not end up at a server of theirs.
+    let oauth = oauth_provider_of_host(&imap.hostname)
+        .filter(|provider| wants_oauth || oauth_provider_for(domain) == Some(*provider));
     Some(DiscoveredSettings {
         email: email.to_string(),
         provider_name: provider
@@ -220,7 +242,7 @@ async fn mx_host(domain: &str) -> Option<String> {
 /// that uses Entra for sign-in but keeps its mail elsewhere.
 async fn hosted_by_microsoft(http: &reqwest::Client, domain: &str) -> bool {
     let (tenant, mx) = tokio::join!(microsoft_tenant(http, domain), mx_host(domain));
-    match mx.as_deref().and_then(oauth_provider_for) {
+    match mx.as_deref().and_then(oauth_provider_of_host) {
         Some(OAuthProvider::Microsoft) => true,
         Some(_) => false,
         None => tenant,
@@ -235,7 +257,9 @@ async fn from_mx(http: &reqwest::Client, email: &str, domain: &str) -> Option<Di
     }
     let url = format!("https://autoconfig.thunderbird.net/v1.1/{provider_domain}");
     let mut settings = fetch_config(http, &url, email, DiscoverySource::Mx).await?;
-    settings.oauth = settings.oauth.or_else(|| oauth_provider_for(&host));
+    // Only for the provider's own servers, as in `parse_client_config`.
+    let imap_provider = oauth_provider_of_host(&settings.imap.host);
+    settings.oauth = settings.oauth.or_else(|| oauth_provider_of_host(&host).filter(|p| imap_provider == Some(*p)));
     Some(settings)
 }
 
@@ -254,6 +278,14 @@ pub(crate) async fn srv(resolver: &hickory_resolver::TokioResolver, name: &str) 
     (!target.is_empty()).then(|| (target.to_string(), record.port))
 }
 
+/// Whether `host` lies under the same registrable domain as the mail domain (`mail.example.org`
+/// for `example.org`, `imap.example.co.uk` for `shop.example.co.uk`).
+fn same_site(host: &str, domain: &str) -> bool {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    let site = |name: &str| psl::domain(name.as_bytes()).map(|d| d.as_bytes().to_vec());
+    site(&host).is_some_and(|site_of_host| Some(site_of_host) == site(domain))
+}
+
 async fn from_srv(email: &str, domain: &str) -> Option<DiscoveredSettings> {
     let resolver = resolver().await?;
     let (imaps_name, submissions_name, submission_name) = (
@@ -269,10 +301,16 @@ async fn from_srv(email: &str, domain: &str) -> Option<DiscoveredSettings> {
         (None, Some((host, port))) => ServerSettings { host, port, security: Security::Starttls },
         _ => return None,
     };
+    // SRV answers are plain DNS, which anyone on the network in between can forge, and a server's
+    // certificate only proves its own name. So a server on another site than the address's own is
+    // not taken unseen (RFC 6186, section 6): setup then guesses and shows the servers it uses.
+    if !same_site(&imap_host, domain) || !same_site(&smtp.host, domain) {
+        return None;
+    }
     Some(DiscoveredSettings {
         email: email.to_string(),
         provider_name: None,
-        oauth: oauth_provider_for(&imap_host),
+        oauth: oauth_provider_of_host(&imap_host),
         imap: ServerSettings { host: imap_host, port: imap_port, security: Security::Tls },
         smtp,
         username: email.to_string(),
@@ -424,6 +462,52 @@ mod tests {
         assert_eq!(oauth_provider_for("example-com.mail.protection.outlook.com"), Some(OAuthProvider::Microsoft));
         assert_eq!(oauth_provider_for("aspmx.l.google.com"), Some(OAuthProvider::Google));
         assert_eq!(oauth_provider_for("posteo.de"), None);
+    }
+
+    #[test]
+    fn only_the_providers_own_servers_get_a_sign_in() {
+        // Named like the provider, but anybody's.
+        for host in ["outlook.example.org", "hotmail.example.org", "live.example.org", "imap.gmail.com.example.org"] {
+            assert_eq!(oauth_provider_of_host(host), None, "{host}");
+        }
+        assert_eq!(oauth_provider_of_host("outlook.office365.com."), Some(OAuthProvider::Microsoft));
+        assert_eq!(oauth_provider_of_host("IMAP.gmail.com"), Some(OAuthProvider::Google));
+        // As a mail address's domain, Microsoft's national domains still count: they get Microsoft's servers.
+        assert_eq!(oauth_provider_for("hotmail.co.uk"), Some(OAuthProvider::Microsoft));
+
+        // A domain's own file that names a look-alike server for a Microsoft sign-in.
+        let lookalike =
+            GMAIL.replace("imap.gmail.com", "outlook.example.org").replace("smtp.gmail.com", "smtp.example.org");
+        let settings = parse_client_config(&lookalike, "alex@example.org", DiscoverySource::Autoconfig).unwrap();
+        assert_eq!(settings.oauth, None, "no OAuth sign-in for a server that isn't the provider's");
+
+        let microsoft = microsoft_settings("alex@example.org", DiscoverySource::Microsoft);
+        assert!(check_oauth_servers(OAuthProvider::Microsoft, &[&microsoft.imap, &microsoft.smtp]).is_ok());
+        let foreign = ServerSettings { host: "outlook.example.org".into(), port: 993, security: Security::Tls };
+        assert!(check_oauth_servers(OAuthProvider::Microsoft, &[&foreign, &microsoft.smtp]).is_err());
+        assert!(check_oauth_servers(OAuthProvider::Google, &[&microsoft.imap]).is_err(), "another provider's");
+        let plain = ServerSettings { security: Security::None, ..microsoft.imap.clone() };
+        assert!(check_oauth_servers(OAuthProvider::Microsoft, &[&plain]).is_err(), "never unencrypted");
+    }
+
+    #[test]
+    fn a_plain_connection_listed_first_is_not_taken() {
+        let xml = GMAIL.replace(
+            "<incomingServer type=\"imap\">",
+            "<incomingServer type=\"imap\"><hostname>imap.gmail.com</hostname><port>143</port><socketType>plain</socketType></incomingServer>\n    <incomingServer type=\"imap\">",
+        );
+        let settings = parse_client_config(&xml, "mini@gmail.com", DiscoverySource::Ispdb).unwrap();
+        assert_eq!(settings.imap, ServerSettings { host: "imap.gmail.com".into(), port: 993, security: Security::Tls });
+    }
+
+    #[test]
+    fn srv_answers_only_count_on_the_addresses_own_site() {
+        assert!(same_site("mail.example.org", "example.org"));
+        assert!(same_site("imap.example.org.", "shop.example.org"));
+        assert!(same_site("imap.example.co.uk", "example.co.uk"));
+        assert!(!same_site("imap.example.net", "example.org"));
+        assert!(!same_site("example.co.uk", "other.co.uk"));
+        assert!(!same_site("co.uk", "example.co.uk"));
     }
 
     #[test]
