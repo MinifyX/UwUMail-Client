@@ -4,12 +4,15 @@ import { BackendError, type Backend, type BackendErrorCode } from "./backend";
 import type {
   BlockedSender,
   Account,
+  AddressBookInfo,
   AttachmentContent,
   BackendEvent,
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
   Contact,
+  ContactInput,
+  ContactsAccount,
   DiscoveredSettings,
   DraftContent,
   DraftSaveResult,
@@ -33,6 +36,7 @@ import type {
   UpdateInfo,
 } from "./types";
 import type { ImageProxy } from "@/lib/remoteImages";
+import { cardFromInput, patchFromInput, toContactRecord, type JmapCard } from "./contacts";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 
 /** Where the app hands out a mail's remote pictures (`uwuimg:` in Rust), spelled for this platform. */
@@ -69,6 +73,7 @@ const EVENT_NAMES = [
   "compose:mailto",
   "settings:changed",
   "calendar:changed",
+  "contacts:changed",
   "update:ready",
 ] as const;
 
@@ -237,6 +242,59 @@ export class TauriBackend implements Backend {
 
   deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
     return call<void>("delete_event", { occurrenceId, scope });
+  }
+
+  async contactsAvailable() {
+    return (await this.contactsAccounts()).some((account) => account.source !== null);
+  }
+
+  contactsAccounts() {
+    return call<ContactsAccount[]>("contacts_accounts");
+  }
+
+  setCardDavUrl(accountId: string, url: string | null) {
+    return call<void>("set_carddav_url", { accountId, url });
+  }
+
+  addressBooks() {
+    return call<AddressBookInfo[]>("list_address_books");
+  }
+
+  createAddressBook(name: string, accountId?: string) {
+    return call<AddressBookInfo>("create_address_book", { accountId: accountId ?? null, name });
+  }
+
+  renameAddressBook(id: string, name: string) {
+    return call<void>("rename_address_book", { addressBookId: id, name });
+  }
+
+  deleteAddressBook(id: string) {
+    return call<void>("delete_address_book", { addressBookId: id });
+  }
+
+  setDefaultAddressBook(id: string) {
+    return call<void>("set_default_address_book", { addressBookId: id });
+  }
+
+  async contacts() {
+    const entries = await call<{ accountId: string; card: JmapCard }[]>("list_contact_cards");
+    return entries.map((entry) => toContactRecord(entry.card, entry.accountId));
+  }
+
+  createContact(input: ContactInput) {
+    return call<string>("create_contact_card", { addressBookId: input.addressBookId, card: cardFromInput(input) });
+  }
+
+  // The card as the server has it now, so only what the editor changed goes back.
+  async updateContact(id: string, input: ContactInput) {
+    const card = await call<JmapCard>("get_contact_card", { cardId: id });
+    const patch = patchFromInput(card, input);
+    if (Object.keys(patch).length === 0) return;
+    await call<void>("update_contact_card", { cardId: id, patch });
+  }
+
+  deleteContact(id: string) {
+    return call<void>("delete_contact_card", { cardId: id });
   }
 
   createFolder(input: { accountId?: string; name: string; parentId: string | null }) {

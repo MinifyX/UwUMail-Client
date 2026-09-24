@@ -1,12 +1,16 @@
 import type {
   BlockedSender,
   Account,
+  AddressBookInfo,
   AttachmentContent,
   BackendEvent,
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
   Contact,
+  ContactInput,
+  ContactRecord,
+  ContactsAccount,
   DiscoveredSettings,
   DraftContent,
   DraftSaveResult,
@@ -123,6 +127,28 @@ export interface Backend {
   updateEvent(eventId: string, input: EventInput, occurrenceStart?: string): Promise<void>;
   deleteEvent(occurrenceId: string, scope: EventDeleteScope): Promise<void>;
 
+  /** Whether any account has address books (see contactsAccounts); without one the contacts stay hidden. */
+  contactsAvailable(): Promise<boolean>;
+  /** Per account: JMAP Contacts, CardDAV, or why there are no address books (e.g. Microsoft or Google sign-in). */
+  contactsAccounts(): Promise<ContactsAccount[]>;
+  /** A CardDAV address typed in by hand for an account; null goes back to finding it by itself. */
+  setCardDavUrl(accountId: string, url: string | null): Promise<void>;
+  /** Every address book of every account that has some; ids start with the account id. */
+  addressBooks(): Promise<AddressBookInfo[]>;
+  /** In the given account, or the first one that has address books. */
+  createAddressBook(name: string, accountId?: string): Promise<AddressBookInfo>;
+  renameAddressBook(id: string, name: string): Promise<void>;
+  /** Removes the address book with its contacts. */
+  deleteAddressBook(id: string): Promise<void>;
+  setDefaultAddressBook(id: string): Promise<void>;
+  /** Every contact of every address book. */
+  contacts(): Promise<ContactRecord[]>;
+  /** Returns the new contact's id. */
+  createContact(input: ContactInput): Promise<string>;
+  /** Changes what the editor shows and leaves the rest of the card as it is. */
+  updateContact(id: string, input: ContactInput): Promise<void>;
+  deleteContact(id: string): Promise<void>;
+
   listFolders(accountId?: string): Promise<Folder[]>;
   /** A new folder below `parentId`, or at the top of the mailbox (the only one when `accountId` is left out). Returns its id. */
   createFolder(input: { accountId?: string; name: string; parentId: string | null }): Promise<string>;
@@ -164,6 +190,7 @@ export interface Backend {
   deleteDraft(accountId: string, draftKey: string): Promise<void>;
   openDraft(messageId: string): Promise<DraftContent>;
 
+  /** Recipient suggestions: people from the address books first, then addresses learned from mail. */
   searchContacts(query: string): Promise<Contact[]>;
 
   /** Downloads the attachment on first use. */

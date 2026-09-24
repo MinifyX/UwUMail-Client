@@ -3,6 +3,7 @@ import { isDangerous } from "@/lib/attachments";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
+import { DemoContacts } from "./demo-contacts";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, welcomeMessage } from "./demo-data";
 import { demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
@@ -13,6 +14,8 @@ import type {
   Address,
   BackendEvent,
   Contact,
+  ContactInput,
+  ContactsAccount,
   DiscoveredSettings,
   DraftContent,
   DraftSaveResult,
@@ -477,6 +480,79 @@ export class DemoBackend implements Backend {
   async deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
     await wait(120);
     this.calendar.deleteEvent(occurrenceId, scope);
+  }
+
+  // Only the first demo mailbox plays a server with address books.
+  private addressBook = new DemoContacts(lang(), DEMO_ACCOUNTS[0]!.id, () => this.emit({ type: "contacts:changed" }));
+
+  async contactsAvailable() {
+    return (await this.contactsAccounts()).some((account) => account.source !== null);
+  }
+
+  async contactsAccounts(): Promise<ContactsAccount[]> {
+    await wait(80);
+    const first = DEMO_ACCOUNTS[0]!.id;
+    return this.accounts.map((account) =>
+      account.id === first
+        ? { accountId: account.id, source: "jmap", carddavUrl: null, problem: null }
+        : {
+            accountId: account.id,
+            source: null,
+            carddavUrl: null,
+            problem: lang() === "de" ? "Die Demo hat hier kein Adressbuch." : "The demo has no address book here.",
+          },
+    );
+  }
+
+  async setCardDavUrl(accountId: string) {
+    await wait(80);
+    if (!this.accounts.some((a) => a.id === accountId)) throw new BackendError("not_found", "Account not found");
+    throw new BackendError("not_supported", "The demo has no CardDAV server.");
+  }
+
+  async addressBooks() {
+    await wait(60);
+    return this.accounts.some((a) => a.id === DEMO_ACCOUNTS[0]!.id) ? this.addressBook.addressBooks() : [];
+  }
+
+  async createAddressBook(name: string) {
+    await wait(120);
+    return this.addressBook.createAddressBook(name);
+  }
+
+  async renameAddressBook(id: string, name: string) {
+    await wait(60);
+    this.addressBook.renameAddressBook(id, name);
+  }
+
+  async deleteAddressBook(id: string) {
+    await wait(120);
+    this.addressBook.deleteAddressBook(id);
+  }
+
+  async setDefaultAddressBook(id: string) {
+    await wait(60);
+    this.addressBook.setDefaultAddressBook(id);
+  }
+
+  async contacts() {
+    await wait(100);
+    return this.accounts.some((a) => a.id === DEMO_ACCOUNTS[0]!.id) ? this.addressBook.contacts() : [];
+  }
+
+  async createContact(input: ContactInput) {
+    await wait(150);
+    return this.addressBook.createContact(input);
+  }
+
+  async updateContact(id: string, input: ContactInput) {
+    await wait(150);
+    this.addressBook.updateContact(id, input);
+  }
+
+  async deleteContact(id: string) {
+    await wait(120);
+    this.addressBook.deleteContact(id);
   }
 
   async createFolder(input: { accountId?: string; name: string; parentId: string | null }) {
@@ -950,10 +1026,13 @@ export class DemoBackend implements Backend {
         else counts.set(key, { name: address.name, email: address.email, timesContacted: 1, lastUsed: message.date });
       }
     }
-    return [...counts.values()]
+    const fromHistory = [...counts.values()]
       .filter((c) => !q || c.email.toLowerCase().includes(q) || c.name?.toLowerCase().includes(q))
-      .sort((a, b) => b.timesContacted - a.timesContacted)
-      .slice(0, 8);
+      .sort((a, b) => b.timesContacted - a.timesContacted);
+    // The address books first, as the engine puts them.
+    const fromBooks = this.addressBook.search(q);
+    const known = new Set(fromBooks.map((c) => c.email.toLowerCase()));
+    return [...fromBooks, ...fromHistory.filter((c) => !known.has(c.email.toLowerCase()))].slice(0, 8);
   }
 
   async setRunInBackground() {}
