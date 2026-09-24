@@ -12,10 +12,11 @@
     "compose": "Write",
     "menu": "Folders",
     "toggleFolder": "Show or hide folders in {{name}}",
-    "apps": "Mail or calendar",
+    "apps": "Switch section",
     "section": {
       "mail": "Mail",
-      "calendar": "Calendar"
+      "calendar": "Calendar",
+      "contacts": "Contacts"
     }
   },
   "filter": {
@@ -507,7 +508,14 @@
     "calendarMonth": "Month view",
     "calendarNew": "New event",
     "calendarNext": "Next day, week or month",
-    "calendarPrevious": "Previous day, week or month"
+    "calendarPrevious": "Previous day, week or month",
+    "goContacts": "Go to contacts",
+    "goMail": "Back to mail",
+    "contactsNew": "New contact",
+    "contactsEdit": "Edit contact",
+    "contactsDelete": "Delete contact",
+    "contactsNext": "Next contact",
+    "contactsPrevious": "Previous contact"
   },
   "palette": {
     "placeholder": "Type a command",
@@ -966,6 +974,111 @@
     "found": "Calendars found",
     "cleared": "Address removed. UwUMail looks for the calendars by itself again.",
     "notFound": "No calendars found: {{reason}}",
+    "failed": "That didn't work: {{reason}}"
+  },
+  "contacts": {
+    "title": "Contacts",
+    "menu": "Address books",
+    "all": "All contacts",
+    "addressBooks": "Address books",
+    "newBook": "New address book",
+    "renameBook": "Rename",
+    "makeDefault": "Make default",
+    "deleteBook": "Delete address book",
+    "deleteBookTitle": "Delete “{{name}}”?",
+    "deleteBookBody_one": "The {{count}} contact in it will be deleted on every device.",
+    "deleteBookBody_other": "The {{count}} contacts in it will be deleted on every device.",
+    "bookActions": "Actions for {{name}}",
+    "bookName": "Name",
+    "create": "Create",
+    "default": "Default",
+    "newContact": "New contact",
+    "editContact": "Edit contact",
+    "given": "First name",
+    "surname": "Last name",
+    "organization": "Company",
+    "jobTitle": "Job title",
+    "emails": "Email addresses",
+    "email": "Email",
+    "addEmail": "Add email address",
+    "phones": "Phone numbers",
+    "phone": "Phone",
+    "addPhone": "Add phone number",
+    "addresses": "Addresses",
+    "address": "Address",
+    "addAddress": "Add address",
+    "street": "Street",
+    "postcode": "Postcode",
+    "locality": "City",
+    "country": "Country",
+    "birthday": "Birthday",
+    "birthdayWithoutYear": "{{date}}, without year",
+    "clearBirthday": "Remove birthday",
+    "addressBook": "Address book",
+    "note": "Note",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back to contacts",
+    "writeMail": "Write mail",
+    "kind": "Type",
+    "kinds": {
+      "home": "Home",
+      "work": "Work",
+      "other": "Other",
+      "mobile": "Mobile"
+    },
+    "removeEntry": "Remove entry",
+    "search": "Search contacts",
+    "loading": "Loading contacts",
+    "loadFailed": "The contacts couldn't be loaded.",
+    "noMatches": "No matching contacts",
+    "matches_one": "{{count}} contact found",
+    "matches_other": "{{count}} contacts found",
+    "empty": {
+      "title": "No contacts yet",
+      "body": "Add contacts here or save senders from your mail."
+    },
+    "nameless": "(No name)",
+    "pick": "Pick a contact on the left.",
+    "groupReadOnly": "This is a group. Groups can only be viewed here.",
+    "showContact": "Show contact",
+    "addSender": "Add to contacts",
+    "addCard": "Add to contacts",
+    "deleteTitle": "Delete “{{name}}”?",
+    "deleteBody": "The contact will be deleted on every device that syncs this address book.",
+    "problem": {
+      "name": "Enter a name, a company or an email address.",
+      "bookName": "Give the address book a name."
+    },
+    "toast": {
+      "created": "Contact saved",
+      "saved": "Contact updated",
+      "deleted": "“{{name}}” deleted",
+      "failed": "That didn't work. {{reason}}",
+      "show": "Show",
+      "defaultSet": "New contacts now go into “{{name}}”",
+      "bookCreated": "Address book “{{name}}” created",
+      "bookDeleted": "Address book “{{name}}” deleted"
+    },
+    "mailbox": "Mailbox",
+    "bookReadOnly": "This address book can only be viewed."
+  },
+  "accountContacts": {
+    "title": "Contacts",
+    "checking": "Looking for address books…",
+    "source": {
+      "jmap": "UwUMail server",
+      "carddav": "CardDAV"
+    },
+    "unavailable": "Not available",
+    "signIn": "Address books of mailboxes signed in with Microsoft or Google aren't supported yet.",
+    "url": "CardDAV address",
+    "urlHint": "Only needed when UwUMail doesn't find the address books by itself.",
+    "check": "Check again",
+    "clear": "Remove address",
+    "found": "Address books found",
+    "cleared": "Address removed. UwUMail looks for the address books by itself again.",
+    "notFound": "No address books found: {{reason}}",
     "failed": "That didn't work: {{reason}}"
   }
 }

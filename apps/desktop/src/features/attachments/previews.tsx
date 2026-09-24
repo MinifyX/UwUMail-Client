@@ -1,9 +1,13 @@
 import clsx from "clsx";
-import { CalendarDays, Mail, MapPin, Phone, User } from "lucide-react";
+import { CalendarDays, Mail, MapPin, Phone, User, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AttachmentContent } from "@/backend/types";
 import { useT } from "@/i18n";
+import { Button } from "@/components/ui/Button";
 import { parseCsv, parseIcs, parseVcf, type AttachmentKind } from "@/lib/attachments";
+import { draftFromCard } from "../contacts/format";
+import { startNewContact } from "../contacts/state";
+import { useContactsAvailable } from "../contacts/useContactsData";
 
 const TEXT_LIMIT = 1024 * 1024;
 const CSV_ROWS = 500;
@@ -167,6 +171,7 @@ function CalendarPreview({ file }: { file: AttachmentContent }) {
 function ContactPreview({ file }: { file: AttachmentContent }) {
   const { t } = useT();
   const state = useText(file.url);
+  const { data: contactsAvailable = false } = useContactsAvailable();
   if (!state) return <p className="p-6 text-[13px] text-muted">{t("attachment.loading")}</p>;
   if ("error" in state) return <p className="p-6 text-[13px] text-danger">{state.error}</p>;
   return (
@@ -199,6 +204,11 @@ function ContactPreview({ file }: { file: AttachmentContent }) {
               </li>
             ))}
           </ul>
+          {contactsAvailable && (
+            <Button size="sm" icon={UserPlus} onClick={() => startNewContact(draftFromCard(card))}>
+              {t("contacts.addCard")}
+            </Button>
+          )}
         </article>
       ))}
     </div>
