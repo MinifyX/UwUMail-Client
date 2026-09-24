@@ -148,3 +148,49 @@ async fn hostile_answers_are_refused() {
     assert!(error.message.contains("address book server"), "{}", error.message);
     assert!(error.message.contains("too big"), "{}", error.message);
 }
+
+/// security-audit 2026-09-23 CC-8: an address book whose every multiget answer is as big as allowed
+/// is read only up to `MAX_BOOK_BYTES`, not 50 answers of 16 MB each.
+#[tokio::test]
+async fn a_huge_address_book_is_read_only_so_far() {
+    let padding = "X".repeat(90 * 1024);
+    let mail = https_stub(move |request: &Request| match request.method.as_str() {
+        "PROPFIND" => {
+            let cards: String = (0..500)
+                .map(|n| {
+                    format!(
+                        "<d:response><d:href>/dav/ab/mini/contacts/{n}.vcf</d:href><d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
+                    )
+                })
+                .collect();
+            Response::multistatus(format!("<d:multistatus xmlns:d=\"DAV:\">{cards}</d:multistatus>"))
+        }
+        "REPORT" => {
+            let body = request.text();
+            let cards: String = body
+                .split("<d:href>")
+                .skip(1)
+                .filter_map(|rest| rest.split("</d:href>").next())
+                .map(|href| {
+                    format!(
+                        r#"<d:response><d:href>{href}</d:href><d:propstat><d:prop><c:address-data>BEGIN:VCARD
+VERSION:3.0
+FN:{padding}
+END:VCARD
+</c:address-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"#
+                    )
+                })
+                .collect();
+            Response::multistatus(format!(
+                r#"<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:carddav">{cards}</d:multistatus>"#
+            ))
+        }
+        _ => Response::new(404, ""),
+    })
+    .await;
+    let cards = carddav::cards(&client(), &mail.url(MAIL_HOST, "/dav/ab/mini/contacts/")).await.unwrap();
+    let read: usize = cards.iter().map(|card| card.data.len()).sum();
+    assert!((carddav::MAX_BOOK_BYTES..2 * carddav::MAX_BOOK_BYTES).contains(&read), "{read}");
+    let multigets = mail.seen().iter().filter(|request| request.method == "REPORT").count();
+    assert!(multigets < 5, "stopped after {multigets} of 5 batches");
+}

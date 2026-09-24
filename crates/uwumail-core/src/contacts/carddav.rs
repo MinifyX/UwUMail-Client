@@ -17,6 +17,8 @@ pub const WHAT: &str = "address book server";
 const MAX_CARDS: usize = 5000;
 /// Cards asked for in one multiget.
 const MULTIGET_BATCH: usize = 100;
+/// vCard text read from one address book at most: what one calendar listing may hold.
+pub const MAX_BOOK_BYTES: usize = MAX_LISTING;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DavBook {
@@ -145,12 +147,19 @@ pub fn parse_cards(root: &Element, base: &Url) -> Vec<DavObject> {
 }
 
 /// Every card of an address book: the listing, then the vCards in batches (addressbook-multiget),
-/// which every CardDAV server answers.
+/// which every CardDAV server answers. At most [`MAX_BOOK_BYTES`] of vCards (and one batch more):
+/// each answer may be 16 MB, and 5000 cards come in 50 of them, which a hostile server, or anyone
+/// who can write to a shared address book, could use to fill the memory.
 pub async fn cards(client: &DavClient, book: &Url) -> Result<Vec<DavObject>> {
     let (root, landed) = client.multistatus("PROPFIND", book, "1", LISTING_BODY).await?;
     let urls = parse_listing(&root, &landed, book);
     let mut found = Vec::new();
+    let mut read = 0;
     for batch in urls.chunks(MULTIGET_BATCH) {
+        if read >= MAX_BOOK_BYTES {
+            tracing::warn!("The address book at {book} holds more than UwUMail reads; the rest is left out.");
+            break;
+        }
         let hrefs: String = batch
             .iter()
             .map(|url| format!("<d:href>{}</d:href>", xml::escape(url.path())))
@@ -161,7 +170,9 @@ pub async fn cards(client: &DavClient, book: &Url) -> Result<Vec<DavObject>> {
 <c:addressbook-multiget xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:carddav"><d:prop><d:getetag/><c:address-data/></d:prop>{hrefs}</c:addressbook-multiget>"#
         );
         let (root, landed) = client.multistatus("REPORT", book, "1", &body).await?;
-        found.extend(parse_cards(&root, &landed));
+        let cards = parse_cards(&root, &landed);
+        read += cards.iter().map(|card| card.data.len()).sum::<usize>();
+        found.extend(cards);
     }
     Ok(found)
 }
