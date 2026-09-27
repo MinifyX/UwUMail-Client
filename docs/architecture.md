@@ -66,7 +66,10 @@ IMAP (and forth), which rebuilds the local cache.
   open. An email in several mailboxes is shown in one (trash, junk, inbox,
   custom, drafts, sent, archive — first match).
 - **Push:** an EventSource connection wakes the sync on every state change,
-  with a check every minute when the server offers no push.
+  with a check every minute when the server offers no push. On Android a
+  server that announces a Web Push key (`urn:ietf:params:jmap:webpush-vapid`,
+  UwUMail Server 0.14 and newer) can push through UnifiedPush instead (see
+  Android below; `jmap_push.rs`, `engine/push_ops.rs`).
 - **Sending:** the message is built like for SMTP, uploaded, imported into Sent
   and submitted with an explicit envelope (so Bcc works); if the submission
   fails, the Sent copy is removed.
@@ -194,6 +197,19 @@ checked in because it carries UwUMail's own Kotlin code.
   never around while third-party build code runs.
 - **App lock:** covers the UI (dialogs close while locked); with it on,
   notifications leave out sender and subject and Recents shows no preview.
+- **UnifiedPush:** with a distributor app installed (ntfy, NextPush, Sunup, …)
+  and the switch under Reading on, `Push.kt` registers every JMAP account whose
+  server announces a Web Push key as its own UnifiedPush instance. The engine
+  makes a JMAP `PushSubscription` (RFC 8620 §7.2) for the endpoint, with the
+  connector's Web Push keys (RFC 8291) and a `deviceClientId` hashed from a
+  random installation id and the account, answers the server's
+  `PushVerification`, renews it about daily for another week (after syncs and
+  from `PushRenewJob`, a periodic job), makes it again when the server lost it
+  or the verification never came, and drops it when the server's key changed.
+  The connector decrypts each push; a `StateChange` naming the login's accounts
+  syncs right away under a wake lock. `MailWatchService` and its notification
+  stop once every account is verified this way; IMAP accounts and other JMAP
+  servers keep it.
 
 ### `apps/desktop/src` — the UI
 
