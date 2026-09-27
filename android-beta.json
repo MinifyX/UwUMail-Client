@@ -1,9 +1,9 @@
 {
-  "version": "0.5.0-beta.3",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.5.0-beta.3/UwUMail-android.apk",
-  "sha256": "593e145866a2ab2ce8644c3bce30982236ba4978592e83ec2ac0cf7bda9d4e64",
+  "version": "0.5.0-beta.4",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.5.0-beta.4/UwUMail-android.apk",
+  "sha256": "1860e9f4ef0fafec1a3f73a7d1d87c4257de60e5394cccffa7ca1e7dc08627f8",
   "notes": {
-    "de": "- Findet UwUMail für ein Postfach keinen Kalender- oder Kontakte-Server, merkt es sich das 30 Tage lang und bietet Kalender und Kontakte dort nicht nach jedem Start wieder an. Trägst du in den Einstellungen eine Adresse ein oder entfernst sie wieder, sucht UwUMail sofort neu",
-    "en": "- When UwUMail finds no calendar or contacts server for a mailbox, it remembers that for 30 days and no longer offers calendar and contacts there after every start. Typing in an address in the settings, or removing it again, makes UwUMail look again right away"
+    "de": "- Neu auf Android: Ist eine UnifiedPush-App installiert (etwa ntfy, NextPush oder Sunup), kommen neue Mails für Postfächer auf einem UwUMail Server ab 0.14 über diese App. UwUMail muss dafür nicht selbst verbunden bleiben, und die dauerhafte Mitteilung verschwindet, sobald alle Postfächer so versorgt sind. Einschalten unter Einstellungen → Lesen. Andere Postfächer bleiben verbunden wie bisher\n- IMAP-Postfächer auf einem UwUMail Server holen Bilder und Absenderbilder jetzt auch über den Server, so erfahren Absender nicht, wer ihre Mail liest",
+    "en": "- New on Android: with a UnifiedPush app installed (such as ntfy, NextPush or Sunup), new mail for mailboxes on a UwUMail server 0.14 or newer arrives through that app. UwUMail no longer has to stay connected itself, and the lasting notification goes away once every mailbox is covered. Turn it on under Settings → Reading. Other mailboxes stay connected as before\n- IMAP mailboxes on a UwUMail server now get pictures and sender pictures through the server too, so senders don't learn who reads their mail"
   }
 }
