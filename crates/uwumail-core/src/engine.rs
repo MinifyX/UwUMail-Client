@@ -128,6 +128,12 @@ struct Inner {
     address_book_lists: Mutex<HashMap<String, (Instant, Vec<contacts::BookEntry>)>>,
     /// Each account's contact cards, with when they were read.
     contact_card_lists: Mutex<HashMap<String, (Instant, Vec<contacts::RemoteCard>)>>,
+    /// One JMAP sync per account at a time: the sync loop and a push message may both start one.
+    sync_locks: Mutex<HashMap<String, Arc<AsyncMutex<()>>>>,
+    /// Push subscriptions are made, answered and renewed one at a time.
+    push_lock: AsyncMutex<()>,
+    /// When each account's session was last read again to look for a new push key.
+    push_key_checked: Mutex<HashMap<String, Instant>>,
 }
 
 enum Credential {
@@ -163,6 +169,7 @@ macro_rules! with_session {
 mod calendar_ops;
 mod contacts_ops;
 mod folder_ops;
+mod push_ops;
 
 impl Engine {
     /// Must be called inside a Tokio runtime.
@@ -201,6 +208,9 @@ impl Engine {
                 contacts_sources: AsyncMutex::new(HashMap::new()),
                 address_book_lists: Mutex::new(HashMap::new()),
                 contact_card_lists: Mutex::new(HashMap::new()),
+                sync_locks: Mutex::new(HashMap::new()),
+                push_lock: AsyncMutex::new(()),
+                push_key_checked: Mutex::new(HashMap::new()),
             }),
         })
     }
@@ -549,6 +559,7 @@ impl Engine {
         }
         self.inner.spawn_sync(&id);
         self.inner.emit(EngineEvent::MailChanged { account_id: id.clone() });
+        self.inner.emit(EngineEvent::PushChanged { reregister: record.protocol == Protocol::Jmap });
         self.list_accounts()?
             .into_iter()
             .find(|a| a.id == id)
@@ -556,6 +567,7 @@ impl Engine {
     }
 
     pub async fn remove_account(&self, account_id: &str) -> Result<()> {
+        self.stop_push_briefly(account_id).await;
         let runtime = self.inner.accounts.lock().unwrap().remove(account_id);
         if let Some(runtime) = runtime {
             if let Some(task) = runtime.task {
@@ -575,7 +587,22 @@ impl Engine {
         self.inner.store.delete_account(account_id)?;
         self.inner.secrets.delete(account_id)?;
         self.inner.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
+        self.inner.emit(EngineEvent::PushChanged { reregister: true });
         Ok(())
+    }
+
+    /// Asks the server to stop pushing for an account that goes away or leaves JMAP. The server
+    /// would keep the subscription until it ends otherwise; a server that doesn't answer quickly
+    /// isn't waited for.
+    async fn stop_push_briefly(&self, account_id: &str) {
+        if self.inner.push_record(account_id).is_none() {
+            return;
+        }
+        match tokio::time::timeout(Duration::from_secs(5), self.push_unsubscribe(account_id)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => tracing::info!("Couldn't end the push subscription of {account_id}: {error}"),
+            Err(_) => tracing::info!("The server took too long to end the push subscription of {account_id}"),
+        }
     }
 
     /// Attachment files stay on disk after their mail is gone from the database, so they go first.
@@ -595,6 +622,7 @@ impl Engine {
             return Err(Error::invalid("This mailbox can't use that protocol."));
         }
         if account.protocol != protocol {
+            self.stop_push_briefly(account_id).await;
             if protocol == Protocol::Jmap {
                 let url = account.jmap_url.as_deref().unwrap_or_default();
                 let Secret::Password { password } = self.inner.secrets.get(account_id)? else {
@@ -617,6 +645,7 @@ impl Engine {
             self.inner.store.set_account_protocol(account_id, protocol)?;
             self.inner.spawn_sync(account_id);
             self.inner.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
+            self.inner.emit(EngineEvent::PushChanged { reregister: true });
         }
         self.list_accounts()?
             .into_iter()
@@ -1905,6 +1934,8 @@ impl Inner {
     }
 
     async fn sync_jmap(&self, client: &JmapClient, account_id: &str) -> Result<()> {
+        let lock = Arc::clone(self.sync_locks.lock().unwrap().entry(account_id.to_string()).or_default());
+        let _syncing = lock.lock().await;
         let identities_due = {
             let mut checked = self.identities_checked.lock().unwrap();
             let due = checked.get(account_id).is_none_or(|at| at.elapsed() >= IDENTITIES_EVERY);
@@ -1943,7 +1974,30 @@ impl Inner {
             self.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
         }
         self.set_status(account_id, AccountStatus::Idle);
+        self.check_push(client, account_id).await;
         Ok(())
+    }
+
+    /// Passes on what a push says changed besides mail (settings, calendars, contacts), and says
+    /// whether the mail may have changed.
+    fn apply_state_change(&self, client: &JmapClient, account_id: &str, change: &StateChange) -> bool {
+        if client.session.user_settings && change.may_have_changed(USER_SETTINGS) {
+            let state = change.state_of(USER_SETTINGS).map(String::from);
+            self.emit(EngineEvent::SettingsChanged { account_id: account_id.to_string(), state });
+        }
+        // Only what a push names: a quiet minute or a wake-up isn't a calendar change.
+        if change.state_of("Calendar").is_some() || change.state_of("CalendarEvent").is_some() {
+            if change.state_of("Calendar").is_some() {
+                self.calendar_lists.lock().unwrap().remove(account_id);
+            }
+            self.emit(EngineEvent::CalendarChanged {});
+        }
+        if change.state_of("AddressBook").is_some() || change.state_of("ContactCard").is_some() {
+            self.forget_contacts(account_id);
+            self.emit(EngineEvent::ContactsChanged {});
+        }
+        // Settings, calendars and rules alone are nothing for the mail.
+        !change.only(&NOT_MAIL)
     }
 
     async fn sync_folders(&self, session: &mut ImapSession, account: &AccountRecord) -> Result<Vec<FolderRecord>> {
@@ -2070,23 +2124,7 @@ async fn run_jmap_account(inner: &Inner, account_id: &str, wake: &Notify) -> Res
         };
         match outcome {
             Ok(change) => {
-                if client.session.user_settings && change.may_have_changed(USER_SETTINGS) {
-                    let state = change.state_of(USER_SETTINGS).map(String::from);
-                    inner.emit(EngineEvent::SettingsChanged { account_id: account_id.to_string(), state });
-                }
-                // Only what a push names: a quiet minute or a wake-up isn't a calendar change.
-                if change.state_of("Calendar").is_some() || change.state_of("CalendarEvent").is_some() {
-                    if change.state_of("Calendar").is_some() {
-                        inner.calendar_lists.lock().unwrap().remove(account_id);
-                    }
-                    inner.emit(EngineEvent::CalendarChanged {});
-                }
-                if change.state_of("AddressBook").is_some() || change.state_of("ContactCard").is_some() {
-                    inner.forget_contacts(account_id);
-                    inner.emit(EngineEvent::ContactsChanged {});
-                }
-                // Settings, calendars and rules alone are nothing for the mail.
-                if change.only(&NOT_MAIL) {
+                if !inner.apply_state_change(&client, account_id, &change) {
                     continue;
                 }
             }

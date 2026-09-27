@@ -13,6 +13,7 @@ pub mod error;
 pub mod folders;
 pub mod imap;
 pub mod jmap;
+pub mod jmap_push;
 pub mod jmap_settings;
 pub mod jmap_sieve;
 pub mod jmap_sync;

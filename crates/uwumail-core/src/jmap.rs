@@ -27,6 +27,8 @@ pub const CALENDARS: &str = "urn:ietf:params:jmap:calendars";
 pub const REMOTE: &str = "urn:uwumail:jmap:remote";
 /// Address books and contact cards (RFC 9610).
 pub const CONTACTS: &str = "urn:ietf:params:jmap:contacts";
+/// The key a server signs its Web Push messages with (VAPID, RFC 9749).
+pub const WEBPUSH_VAPID: &str = "urn:ietf:params:jmap:webpush-vapid";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -94,6 +96,12 @@ pub struct Session {
     pub picture_url: Option<String>,
     /// The account whose address books this login sees, if the server has JMAP Contacts.
     pub contacts_account_id: Option<String>,
+    /// The server's VAPID public key (base64url, uncompressed P-256), if it signs its Web Push
+    /// messages (RFC 9749).
+    pub vapid_key: Option<String>,
+    /// The session's `state`: API answers carry it as `sessionState`, and a different one there
+    /// means the session changed (RFC 8620 §2).
+    pub state: Option<String>,
 }
 
 impl Session {
@@ -148,6 +156,14 @@ impl Session {
             image_url: remote_url("imageUrl"),
             picture_url: remote_url("pictureUrl"),
             contacts_account_id,
+            vapid_key: capabilities
+                .get(WEBPUSH_VAPID)
+                .and_then(|vapid| vapid.get("applicationServerKey"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|key| !key.is_empty())
+                .map(String::from),
+            state: text("state").map(String::from),
         })
     }
 
@@ -265,6 +281,8 @@ pub struct Client {
     http: reqwest::Client,
     auth: Auth,
     pub session: Session,
+    /// The `sessionState` of the latest API answer.
+    latest_session_state: std::sync::Mutex<Option<String>>,
 }
 
 impl Client {
@@ -294,7 +312,7 @@ impl Client {
         {
             return Err(Error::connection("The JMAP server asked for unencrypted connections. UwUMail refused."));
         }
-        let mut client = Self { http: http.clone(), auth, session };
+        let mut client = Self { http: http.clone(), auth, session, latest_session_state: Default::default() };
 
         // Self-hosted servers often announce a public name that isn't reachable
         // from here (a reverse proxy, a LAN address, a test setup). Fall back to
@@ -320,6 +338,29 @@ impl Client {
 
     pub fn account_id(&self) -> &str {
         &self.session.account_id
+    }
+
+    /// The accounts of this login that UwUMail reads: mail, and calendars, contacts and rules
+    /// where the server keeps those in other accounts.
+    pub fn account_ids(&self) -> Vec<&str> {
+        let session = &self.session;
+        let mut ids = vec![session.account_id.as_str()];
+        for id in [&session.calendar_account_id, &session.contacts_account_id, &session.sieve_account_id]
+            .into_iter()
+            .flatten()
+        {
+            if !ids.contains(&id.as_str()) {
+                ids.push(id);
+            }
+        }
+        ids
+    }
+
+    /// Whether an API answer named another session state than the session this client read, so
+    /// the session (e.g. its push key) may have changed since.
+    pub fn session_outdated(&self) -> bool {
+        let latest = self.latest_session_state.lock().unwrap();
+        matches!((latest.as_deref(), self.session.state.as_deref()), (Some(latest), Some(known)) if latest != known)
     }
 
     /// Sends method calls in one request. Call ids are their positions.
@@ -364,6 +405,9 @@ impl Client {
             return Err(Error::connection(format!("The mail server answered {status}. {}", short(&detail))));
         }
         let document: Value = response.json().await.map_err(|e| Error::connection(format!("Bad JMAP answer: {e}")))?;
+        if let Some(state) = document.get("sessionState").and_then(Value::as_str) {
+            *self.latest_session_state.lock().unwrap() = Some(state.to_string());
+        }
         let answers = document
             .get("methodResponses")
             .and_then(Value::as_array)
@@ -975,6 +1019,23 @@ mod tests {
         assert_eq!(Session::parse(&document, &base).unwrap().calendar_account_id.as_deref(), Some("a1"));
         document["capabilities"].as_object_mut().unwrap().remove(SIEVE);
         assert_eq!(Session::parse(&document, &base).unwrap().sieve_account_id, None);
+    }
+
+    #[test]
+    fn reads_the_push_key_and_session_state() {
+        let base = Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let key = "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4"; // gitleaks:allow (public test key)
+        let mut document = json!({
+            "capabilities": { CORE: {}, MAIL: {}, WEBPUSH_VAPID: { "applicationServerKey": key } },
+            "primaryAccounts": { MAIL: "a1", CALENDARS: "c9" },
+            "apiUrl": "/jmap/api", "downloadUrl": "/jmap/download", "uploadUrl": "/jmap/upload",
+            "state": "75128aab4b1b",
+        });
+        let session = Session::parse(&document, &base).unwrap();
+        assert_eq!(session.vapid_key.as_deref(), Some(key));
+        assert_eq!(session.state.as_deref(), Some("75128aab4b1b"));
+        document["capabilities"].as_object_mut().unwrap().remove(WEBPUSH_VAPID);
+        assert_eq!(Session::parse(&document, &base).unwrap().vapid_key, None, "push without a key is plain Web Push");
     }
 
     #[test]

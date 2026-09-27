@@ -13,6 +13,26 @@ export type LaunchAction =
     }
   | { kind: "open"; threadId: string; messageId: string };
 
+/** UnifiedPush on Android: new mail for JMAP accounts through a distributor app. */
+export interface PushStatus {
+  /** Distributor apps on the phone. */
+  distributors: { id: string; name: string }[];
+  /** The one in use: picked in the settings, or the only one there is. */
+  distributor: string | null;
+  /** Switched on in the settings. */
+  enabled: boolean;
+  /** Switched on, instant mail wanted and a distributor there. */
+  active: boolean;
+  /** Accounts with a confirmed subscription, ones still setting up, and ones without push. */
+  accounts: { active: number; waiting: number; other: number } | null;
+  /** Accounts the distributor or the mail server refused. */
+  failed: number;
+  /** UwUMail is still registering. */
+  working: boolean;
+  /** UwUMail still keeps its own lasting connection (and its notification). */
+  watchNeeded: boolean;
+}
+
 /** True inside the Android app. */
 export const nativeAndroid = isTauri() && isAndroid;
 /** True inside the iOS app. */
@@ -49,6 +69,12 @@ export const mobile = {
   uiReady: () => call<void>("mobile_action", { action: "uiReady" }),
   /** Android's settings for the lasting "waiting for mail" notification. */
   openWatchSettings: () => call<void>("mobile_action", { action: "watchSettings" }),
+
+  /** UnifiedPush: what's installed and how far the accounts are. Null outside Android. */
+  pushStatus: () => call<PushStatus>("push_status"),
+  /** Switches UnifiedPush on or off with a distributor; answers with the status right after. */
+  setUnifiedPush: (enabled: boolean, distributor: string | null) =>
+    call<PushStatus>("set_unified_push", { enabled, distributor }),
 
   /** Days of mail kept complete on the phone (0 keeps everything). */
   setOfflineDays: (days: number) => call<void>("set_offline_days", { days: days > 0 ? days : null }),

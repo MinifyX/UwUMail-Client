@@ -643,6 +643,19 @@ fn mobile_action(app: AppHandle, action: String) -> CommandResult<()> {
     platform::mobile_action(&app, &action)
 }
 
+/// Android: UnifiedPush for JMAP accounts, for the settings. `None` elsewhere.
+#[tauri::command]
+fn push_status() -> CommandResult<Option<serde_json::Value>> {
+    platform::push_status()
+}
+
+/// Android: new mail for JMAP accounts through a UnifiedPush distributor instead of UwUMail's
+/// own lasting connection.
+#[tauri::command]
+fn set_unified_push(enabled: bool, distributor: Option<String>) -> CommandResult<Option<serde_json::Value>> {
+    platform::set_unified_push(enabled, distributor)
+}
+
 #[tauri::command]
 fn set_update_channel(app: AppHandle, channel: Channel) {
     platform::set_update_channel(&app, channel);
@@ -794,6 +807,8 @@ pub fn run() {
             set_mobile_prefs,
             set_system_bars,
             mobile_action,
+            push_status,
+            set_unified_push,
             set_update_channel,
             set_update_checks,
             update_status,

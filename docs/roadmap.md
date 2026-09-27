@@ -54,6 +54,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Phone layout: list with filters, conversation with thumb-height actions, drawer, full-screen composer
 - [x] Swipe actions (configurable), long press to select, Nyu pull to refresh, back gesture
 - [x] Instant new mail through a foreground service; notifications with "Mark as read" and "Archive"
+- [x] New mail through UnifiedPush for JMAP accounts on servers with Web Push (UwUMail Server 0.14+), without the lasting notification
 - [x] Passwords in the Android Keystore, optional app lock with fingerprint, face or PIN
 - [x] Last 90 days offline (configurable), older mail as previews; server search for everything
 - [x] Share to UwUMail, `mailto:` links, attachments to Downloads, Nyu splash and themed icon

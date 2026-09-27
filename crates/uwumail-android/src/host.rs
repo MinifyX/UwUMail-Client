@@ -9,9 +9,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::broadcast::error::RecvError;
+use uwumail_core::jmap_push::Endpoint;
 use uwumail_core::model::{EngineEvent, FlagChange, Message};
 use uwumail_core::{Engine, EngineOptions, Error, Result};
 
@@ -19,6 +20,14 @@ use crate::{bridge, launch, secrets::KeystoreSecrets};
 
 /// Android gives a broadcast about ten seconds.
 const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(8);
+/// A push message keeps UwUMail awake this long at most for its sync.
+const PUSH_MESSAGE_TIMEOUT: Duration = Duration::from_secs(25);
+/// Asking every JMAP server whether it takes push subscriptions.
+const PUSH_TARGETS_TIMEOUT: Duration = Duration::from_secs(30);
+/// Making, renewing or ending one push subscription.
+const PUSH_SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(30);
+/// Renewing every subscription from the background job; Android gives a job about ten minutes.
+const PUSH_MAINTAIN_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Where the provider sends the browser after signing in. Registered in the OAuth apps too (docs/oauth.md).
 const OAUTH_REDIRECT: &str = "app.uwumail://oauth";
@@ -98,6 +107,13 @@ pub(crate) fn start_engine(data_dir: PathBuf, cache_dir: PathBuf) -> Result<()> 
                         tracing::warn!("Couldn't show the notification: {error}");
                     }
                 }
+                // Kotlin registers with the push service again, or decides whether the mail
+                // service still has to stay connected. It only queues that and returns.
+                Ok(EngineEvent::PushChanged { reregister }) => {
+                    if let Err(error) = bridge::call("pushChanged", &json!({ "reregister": reregister })) {
+                        tracing::warn!("Couldn't pass on the push change: {error}");
+                    }
+                }
                 Ok(_) | Err(RecvError::Lagged(_)) => continue,
                 Err(RecvError::Closed) => break,
             }
@@ -146,6 +162,27 @@ fn notify(engine: &Engine, account_id: &str, message_ids: &[String]) -> Result<(
     Ok(())
 }
 
+/// The running engine for calls that must not wait for it (see [`engine`]).
+fn running() -> Result<Engine> {
+    ENGINE.get().cloned().ok_or_else(|| Error::internal("The mail engine isn't running."))
+}
+
+/// Runs push work on a Java thread and waits for it, at most `limit`.
+fn push_work<T>(limit: Duration, work: impl Future<Output = Result<T>>) -> Result<T> {
+    runtime()
+        .block_on(tokio::time::timeout(limit, work))
+        .map_err(|_| Error::connection("The mail server took too long."))?
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PushEndpoint {
+    account_id: String,
+    install_id: String,
+    #[serde(flatten)]
+    endpoint: Endpoint,
+}
+
 /// Calls from Kotlin (`UwuNative.call`).
 pub(crate) fn handle(method: &str, payload: &str) -> Result<Option<String>> {
     let payload: serde_json::Value = if payload.is_empty() { json!({}) } else { serde_json::from_str(payload)? };
@@ -191,6 +228,49 @@ pub(crate) fn handle(method: &str, payload: &str) -> Result<Option<String>> {
             })
             .to_string(),
         )),
+        // UnifiedPush: the JMAP accounts whose servers take push subscriptions, with their keys.
+        // Called on a Java thread; asks the servers.
+        "pushTargets" => {
+            let engine = running()?;
+            let (targets, unreachable) = push_work(PUSH_TARGETS_TIMEOUT, engine.push_targets())?;
+            Ok(Some(json!({ "targets": targets, "unreachable": unreachable }).to_string()))
+        }
+        // The push service gave an account an endpoint: subscribe the server to it.
+        "pushEndpoint" => {
+            let request: PushEndpoint = serde_json::from_value(payload)?;
+            let engine = running()?;
+            push_work(
+                PUSH_SUBSCRIPTION_TIMEOUT,
+                engine.push_subscribe(&request.account_id, &request.install_id, request.endpoint),
+            )?;
+            Ok(None)
+        }
+        // A decrypted push message. Returns once its sync is done, so Kotlin keeps UwUMail awake meanwhile.
+        "pushMessage" => {
+            let account_id = payload["accountId"].as_str().unwrap_or_default();
+            let body = payload["body"].as_str().unwrap_or_default();
+            let engine = running()?;
+            push_work(PUSH_MESSAGE_TIMEOUT, engine.push_received(account_id, body.as_bytes()))?;
+            Ok(None)
+        }
+        // The account left the push service, or UnifiedPush was switched off.
+        "pushUnsubscribe" => {
+            let account_id = payload["accountId"].as_str().unwrap_or_default();
+            let engine = running()?;
+            push_work(PUSH_SUBSCRIPTION_TIMEOUT, engine.push_unsubscribe(account_id))?;
+            Ok(None)
+        }
+        // Now and then from a background job: renews the subscriptions before they end.
+        "pushMaintain" => {
+            let engine = running()?;
+            push_work(PUSH_MAINTAIN_TIMEOUT, engine.push_maintain())?;
+            Ok(None)
+        }
+        // How many accounts get new mail through the push service. Only reads the store.
+        "pushOverview" => {
+            let overview = running()?.push_overview()?;
+            Ok(Some(json!({ "overview": overview, "coversAll": overview.covers_all() }).to_string()))
+        }
         // The phone got (back) online: reconnect right away instead of waiting.
         "networkAvailable" => {
             if let Some(engine) = ENGINE.get() {

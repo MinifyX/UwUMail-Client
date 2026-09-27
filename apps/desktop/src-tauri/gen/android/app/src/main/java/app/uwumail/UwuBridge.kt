@@ -58,12 +58,24 @@ object UwuBridge {
                 null
             }
             "setPrefs" -> {
+                val instant = Prefs.backgroundPush(app)
                 Prefs.update(app, args)
-                MailWatchService.sync(app)
+                // Instant mail switched on or off: UnifiedPush registrations follow, then the service.
+                if (Prefs.backgroundPush(app) != instant) Push.refresh(app) else MailWatchService.sync(app)
                 activity.get()?.let { window -> window.runOnUiThread { window.applyPrivacy() } }
                 null
             }
             "offlineDays" -> Prefs.offlineDays(app).toString()
+            "pushChanged" -> {
+                Push.changed(app, args.optBoolean("reregister", false))
+                null
+            }
+            "pushStatus" -> Push.status(app).toString()
+            "setUnifiedPush" -> {
+                val distributor = if (args.isNull("distributor")) null else args.getString("distributor")
+                Push.configure(app, args.getBoolean("enabled"), distributor)
+                Push.status(app).toString()
+            }
             "setSystemBars" -> {
                 activity.get()?.setSystemBars(args.getBoolean("dark"), args.getString("background"))
                 null

@@ -826,6 +826,11 @@ pub enum EngineEvent {
     /// Address books or contacts may have changed (JMAP push, or a change made here).
     #[serde(rename = "contacts:changed")]
     ContactsChanged {},
+    /// Which accounts get new mail through a push service may have changed (Android). With
+    /// `reregister`, the accounts or a server's push key changed, so the app registers them with
+    /// its push service again; otherwise a subscription was confirmed or lost.
+    #[serde(rename = "push:changed")]
+    PushChanged { reregister: bool },
 }
 
 impl EngineEvent {
@@ -839,6 +844,7 @@ impl EngineEvent {
             Self::SettingsChanged { .. } => "settings:changed",
             Self::CalendarChanged {} => "calendar:changed",
             Self::ContactsChanged {} => "contacts:changed",
+            Self::PushChanged { .. } => "push:changed",
         }
     }
 }

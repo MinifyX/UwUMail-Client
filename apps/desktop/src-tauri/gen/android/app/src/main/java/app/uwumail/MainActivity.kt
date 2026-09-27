@@ -81,6 +81,9 @@ class MainActivity : TauriActivity() {
         })
 
         Launch.handle(this, intent)
+        // Registers the accounts with the UnifiedPush distributor again, as its docs ask for at
+        // every start, in case it changed or was uninstalled.
+        Push.refresh(this)
     }
 
     override fun onNewIntent(intent: Intent) {

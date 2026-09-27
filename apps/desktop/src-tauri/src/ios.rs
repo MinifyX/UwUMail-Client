@@ -201,6 +201,15 @@ pub fn mobile_action(app: &AppHandle, action: &str) -> Result<(), Error> {
     }
 }
 
+/// UnifiedPush is Android's; nothing to show here.
+pub fn push_status() -> Result<Option<serde_json::Value>, Error> {
+    Ok(None)
+}
+
+pub fn set_unified_push(_enabled: bool, _distributor: Option<String>) -> Result<Option<serde_json::Value>, Error> {
+    Ok(None)
+}
+
 pub fn set_update_channel(_app: &AppHandle, _channel: Channel) {}
 
 pub fn set_update_checks(_app: &AppHandle, _enabled: bool) {}

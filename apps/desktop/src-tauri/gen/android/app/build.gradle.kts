@@ -85,9 +85,25 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
+    // UnifiedPush: registration with the distributor, Web Push keys and decryption (RFC 8291).
+    // 3.0.10 is the newest release whose Kotlin standard library (2.0) the Kotlin plugin here (1.9)
+    // can still read; 3.1 and later bring Kotlin 2.2.
+    implementation("org.unifiedpush.android:connector:3.0.10")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
+}
+
+// The connector brings Tink for Java, with the full Protobuf and an optional HTTP client that isn't
+// there. Tink's Android build of the same version is made for R8 (as the connector's docs suggest).
+configurations.configureEach {
+    val tink = "com.google.crypto.tink:tink-android:1.17.0"
+    resolutionStrategy {
+        force(tink)
+        dependencySubstitution {
+            substitute(module("com.google.crypto.tink:tink")).using(module(tink))
+        }
+    }
 }
 
 apply(from = "tauri.build.gradle.kts")

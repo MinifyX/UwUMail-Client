@@ -8,7 +8,11 @@ import android.content.Intent
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> MailWatchService.start(context)
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                MailWatchService.start(context)
+                // Tells the distributor about UwUMail's accounts again and renews their subscriptions.
+                Push.refresh(context)
+            }
         }
     }
 }

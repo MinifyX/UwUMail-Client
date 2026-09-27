@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import pkg from "../../../package.json";
 import { backend } from "@/backend/backend";
 import { mobile, nativeAndroid, nativeIos, nativeMobile } from "@/backend/mobile";
@@ -54,6 +54,7 @@ import { BlockedSenders } from "./BlockedSenders";
 import { LinkSettings } from "./LinkSettings";
 import { SettingsSyncRow } from "./SettingsSync";
 import { Row } from "./Row";
+import { PUSH_STATUS_KEY, UnifiedPush } from "./UnifiedPush";
 import { Writing } from "./Writing";
 import { useUi, type SettingsSection } from "@/state/ui";
 import { WorkspacePicker, WorkspaceSettings } from "../workspaces/WorkspaceSettings";
@@ -273,6 +274,12 @@ function Reading() {
   const settings = useSettings();
   const phone = useIsPhone();
   const client = useQueryClient();
+  // Shared with the UnifiedPush setting: whether UwUMail still keeps its lasting notification.
+  const { data: pushStatus } = useQuery({
+    queryKey: PUSH_STATUS_KEY,
+    queryFn: () => mobile.pushStatus(),
+    enabled: nativeAndroid,
+  });
   return (
     <>
       <div className="border-b border-hairline py-4">
@@ -385,7 +392,8 @@ function Reading() {
             label={t(nativeAndroid ? "settings.backgroundPush" : "settings.runInBackground")}
             description={t(nativeAndroid ? "settings.backgroundPushDesc" : "settings.runInBackgroundDesc")}
           />
-          {nativeAndroid && settings.runInBackground && (
+          {nativeAndroid && settings.runInBackground && <UnifiedPush />}
+          {nativeAndroid && settings.runInBackground && pushStatus?.watchNeeded !== false && (
             <Button
               size="sm"
               variant="ghost"

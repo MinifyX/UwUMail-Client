@@ -150,6 +150,18 @@ pub fn mobile_action(_app: &AppHandle, action: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// UnifiedPush for JMAP accounts: the distributors on the phone, the one in use and how many
+/// accounts get new mail through it (see Push.kt).
+pub fn push_status() -> Result<Option<serde_json::Value>, Error> {
+    uwumail_android::call_json("pushStatus", &json!({}))
+}
+
+/// Switches UnifiedPush on or off, with the distributor picked in the settings. Registering runs in
+/// the background; the answer is the status right after the switch.
+pub fn set_unified_push(enabled: bool, distributor: Option<String>) -> Result<Option<serde_json::Value>, Error> {
+    uwumail_android::call_json("setUnifiedPush", &json!({ "enabled": enabled, "distributor": distributor }))
+}
+
 pub fn set_update_channel(_app: &AppHandle, channel: Channel) {
     updates::set_channel(channel);
 }

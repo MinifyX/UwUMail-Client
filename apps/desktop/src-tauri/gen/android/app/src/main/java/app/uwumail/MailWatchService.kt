@@ -13,12 +13,16 @@ import androidx.core.content.ContextCompat
 /**
  * Keeps the UwUMail process, and with it the engine's IMAP IDLE and JMAP push
  * connections, alive while no window is open. Android requires the lasting,
- * quiet notification for that.
+ * quiet notification for that. Not needed once every account gets its new
+ * mail through UnifiedPush (see [Push]).
  */
 class MailWatchService : Service() {
     companion object {
+        /** Instant mail is wanted and not every account gets it through UnifiedPush. */
+        private fun needed(context: Context) = Prefs.backgroundPush(context) && Push.watchNeeded(context)
+
         fun start(context: Context) {
-            if (!Prefs.backgroundPush(context)) return
+            if (!needed(context)) return
             try {
                 ContextCompat.startForegroundService(context, Intent(context, MailWatchService::class.java))
             } catch (error: Exception) {
@@ -28,12 +32,12 @@ class MailWatchService : Service() {
         }
 
         fun sync(context: Context) {
-            if (Prefs.backgroundPush(context)) start(context) else context.stopService(Intent(context, MailWatchService::class.java))
+            if (needed(context)) start(context) else context.stopService(Intent(context, MailWatchService::class.java))
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!Prefs.backgroundPush(this)) {
+        if (!needed(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
