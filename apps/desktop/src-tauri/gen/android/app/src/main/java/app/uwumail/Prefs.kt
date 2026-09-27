@@ -22,6 +22,46 @@ object Prefs {
         }.apply()
     }
 
+    /** New mail for JMAP accounts through a UnifiedPush distributor (off until chosen in the settings). */
+    fun unifiedPush(context: Context) = prefs(context).getBoolean("unifiedPush", false)
+
+    /** The distributor app picked in the settings, if any. */
+    fun pushDistributor(context: Context): String? = prefs(context).getString("pushDistributor", null)
+
+    fun setUnifiedPush(context: Context, enabled: Boolean, distributor: String?) {
+        prefs(context).edit().apply {
+            putBoolean("unifiedPush", enabled)
+            if (distributor != null) putString("pushDistributor", distributor)
+        }.apply()
+    }
+
+    /** Accounts registered with the distributor. */
+    fun pushInstances(context: Context): Set<String> = prefs(context).getStringSet("pushInstances", null)?.toSet() ?: emptySet()
+
+    fun setPushInstances(context: Context, accounts: Set<String>) {
+        prefs(context).edit().putStringSet("pushInstances", accounts).apply()
+    }
+
+    /** Why the distributor refused an account, by account id. */
+    fun pushFailures(context: Context): JSONObject =
+        prefs(context).getString("pushFailures", null)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: JSONObject()
+
+    @Synchronized
+    fun setPushFailure(context: Context, account: String, reason: String?) {
+        val failures = pushFailures(context)
+        if (reason == null) failures.remove(account) else failures.put(account, reason)
+        prefs(context).edit().putString("pushFailures", failures.toString()).apply()
+    }
+
+    /**
+     * A random value for this installation. Hashed with the account, it names UwUMail's push
+     * subscriptions on the mail server (the JMAP deviceClientId).
+     */
+    @Synchronized
+    fun pushInstallId(context: Context): String =
+        prefs(context).getString("pushInstallId", null)
+            ?: UUID.randomUUID().toString().also { prefs(context).edit().putString("pushInstallId", it).commit() }
+
     /** Days of mail kept complete on the phone; 0 keeps everything. */
     fun offlineDays(context: Context) = prefs(context).getInt("offlineDays", 90)
 

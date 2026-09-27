@@ -12,6 +12,8 @@
     <!-- Installing UwUMail updates (Android asks the user once). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Staying awake for the sync a UnifiedPush message asks for. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:name=".UwuApplication"
@@ -78,6 +80,23 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps a push connection (IMAP IDLE / JMAP EventSource) to the user's own mail servers open, so new mail arrives immediately." />
         </service>
+
+        <!-- New mail through a UnifiedPush distributor (see Push.kt). The connector library
+             receives from the distributor and hands over to this service; nothing else may. -->
+        <service
+            android:name=".UwuPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Renews the JMAP push subscriptions now and then (see PushRenewJob.kt). Only the
+             system's job scheduler may start it. -->
+        <service
+            android:name=".PushRenewJob"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <receiver
             android:name=".NotificationActionReceiver"
