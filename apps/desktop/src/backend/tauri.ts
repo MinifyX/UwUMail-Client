@@ -1,4 +1,4 @@
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { BackendError, type Backend, type BackendErrorCode } from "./backend";
 import type {
@@ -23,7 +23,9 @@ import type {
   FlagChange,
   Folder,
   Identity,
+  ImageSizeProbe,
   ImageTextResult,
+  RemoteImageSize,
   MailtoDraft,
   MovedMessage,
   NewAccount,
@@ -48,6 +50,9 @@ function pictures(): string {
   picturesBase ??= convertFileSrc("picture", "uwuimg");
   return picturesBase;
 }
+
+/** Numbers the page's picture size probes, so one can be stopped. */
+let nextProbe = 0;
 
 interface EngineError {
   code: BackendErrorCode;
@@ -490,6 +495,25 @@ export class TauriBackend implements Backend {
   imageProxy(accountId: string): ImageProxy {
     const base = pictures();
     return (url) => `${base}?account=${encodeURIComponent(accountId)}&url=${encodeURIComponent(url)}`;
+  }
+
+  imageSizes(accountId: string): ImageSizeProbe {
+    return async (urls, onSize, signal) => {
+      if (signal.aborted || urls.length === 0) return;
+      const probe = (nextProbe = (nextProbe + 1) % 0x7fffffff);
+      const channel = new Channel<RemoteImageSize>();
+      channel.onmessage = (size) => {
+        if (!signal.aborted) onSize(size);
+      };
+      // Stops the fetching too, not only the listening: the mail was closed or waited long enough.
+      const stop = () => void call<void>("cancel_image_sizes", { probe }).catch(() => {});
+      signal.addEventListener("abort", stop, { once: true });
+      try {
+        await call<void>("image_sizes", { accountId, urls, probe, onSize: channel });
+      } finally {
+        signal.removeEventListener("abort", stop);
+      }
+    };
   }
 
   setPrivacyProxy(proxy: string) {

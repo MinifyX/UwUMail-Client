@@ -563,6 +563,55 @@ async fn fetch_mail_image(
     Ok(tauri::ipc::Response::new(bytes.unwrap_or_default()))
 }
 
+/// The page's picture size probes that are still running, by its number for each, so it can stop
+/// one: when the mail closes, or it has waited long enough.
+#[derive(Default)]
+struct ImageProbes(std::sync::Mutex<std::collections::HashMap<u32, std::sync::Arc<tokio::sync::Notify>>>);
+
+impl ImageProbes {
+    /// The signal that stops that probe. A stop may come before the probe itself; it waits here.
+    fn stopper(&self, probe: u32) -> std::sync::Arc<tokio::sync::Notify> {
+        let mut probes = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        // Stops for probes that had already ended are forgotten.
+        if probes.len() >= 64 {
+            probes.retain(|_, stop| std::sync::Arc::strong_count(stop) > 1);
+        }
+        std::sync::Arc::clone(probes.entry(probe).or_default())
+    }
+
+    fn done(&self, probe: u32) {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).remove(&probe);
+    }
+}
+
+/// The sizes of a mail's remote pictures before they load, sent to `on_size` one by one as they
+/// become known (see `Engine::image_sizes`). Ends when all are told, or `cancel_image_sizes` stops it.
+#[tauri::command]
+async fn image_sizes(
+    engine: State<'_, Engine>,
+    probes: State<'_, ImageProbes>,
+    account_id: String,
+    mut urls: Vec<String>,
+    probe: u32,
+    on_size: tauri::ipc::Channel<uwumail_core::mail_images::RemoteImageSize>,
+) -> CommandResult<()> {
+    urls.truncate(uwumail_core::jmap::MAX_SIZE_URLS);
+    let stop = probes.stopper(probe);
+    let result = tokio::select! {
+        result = engine.image_sizes(&account_id, &urls, |size| {
+            let _ = on_size.send(size);
+        }) => result,
+        () = stop.notified() => Ok(()),
+    };
+    probes.done(probe);
+    result
+}
+
+#[tauri::command]
+fn cancel_image_sizes(probes: State<'_, ImageProbes>, probe: u32) {
+    probes.stopper(probe).notify_one();
+}
+
 /// The proxy remote pictures, sender pictures and one-click unsubscribes take; empty for none.
 #[tauri::command]
 fn set_privacy_proxy(engine: State<'_, Engine>, proxy: String) -> CommandResult<()> {
@@ -715,6 +764,7 @@ pub fn run() {
             });
 
             app.manage(engine);
+            app.manage(ImageProbes::default());
             platform::after_start(app)?;
             Ok(())
         })
@@ -797,6 +847,8 @@ pub fn run() {
             save_message,
             get_sender_picture,
             fetch_mail_image,
+            image_sizes,
+            cancel_image_sizes,
             clear_sender_pictures,
             set_privacy_proxy,
             get_company_domain,

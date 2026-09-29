@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Message } from "@/backend/types";
+import type { ImageSizeProbe, Message } from "@/backend/types";
+import { useT } from "@/i18n";
 import { textToHtml } from "@/lib/format";
 import { replaceContentIds } from "@/lib/inlineImages";
 import { proxyRemoteImages, type ImageProxy } from "@/lib/remoteImages";
@@ -9,6 +10,7 @@ import { hideLinkStatus, watchLinks } from "./linkEvents";
 import { darkenImages, type RemoteImageLoader } from "./darkImages";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
 import { forwardFrameKeys } from "./readerKeys";
+import { deferRemotePictures, loadRemotePictures, PICTURE_STYLES, type PictureProgress } from "./remotePictures";
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)"'\]]/g;
 
@@ -50,11 +52,18 @@ export const ROOT_ID = "uwu-mail-root";
 const NOMINAL_VIEWPORT_HEIGHT = 900;
 
 /**
+ * A number with a height-based viewport unit. A match only starts where no number goes on before
+ * it, and a number can be split one way only, so a long run of digits costs linear time instead of
+ * freezing the tab (security-audit WM-1).
+ */
+const VIEWPORT_HEIGHT = /(?<![\d.])(-?(?:\d+(?:\.\d+)?|\.\d+))(dvh|svh|lvh|vh|vmin|vmax)\b/gi;
+
+/**
  * The frame is always as tall as the mail, so `100vh` inside it means "as tall
  * as myself" and grows forever. Height-based viewport units become fixed pixels.
  */
 export function fixViewportHeightUnits(html: string): string {
-  return html.replace(/(-?\d*\.?\d+)(dvh|svh|lvh|vh|vmin|vmax)\b/gi, (_, amount: string) => {
+  return html.replace(VIEWPORT_HEIGHT, (_, amount: string) => {
     const pixels = (parseFloat(amount) * NOMINAL_VIEWPORT_HEIGHT) / 100;
     return `${Math.round(pixels * 100) / 100}px`;
   });
@@ -75,7 +84,8 @@ function withRemoteImages(html: string, allowRemote: boolean, imageProxy: ImageP
 
 /**
  * `dark` for plain text means app colors; for HTML it means the mail's own
- * dark mode styles (only used when the mail declares them).
+ * dark mode styles (only used when the mail declares them). With `deferPictures`,
+ * allowed remote `<img>`s start out as placeholders for `loadRemotePictures`.
  */
 export function buildDocument(
   message: Message,
@@ -83,10 +93,17 @@ export function buildDocument(
   variant: "light" | "dark",
   inlineImages: ReadonlyMap<string, string> = new Map(),
   imageProxy?: ImageProxy | null,
+  deferPictures = false,
 ) {
   const isHtml = message.bodyHtml !== null;
   const dark = variant === "dark";
-  const pictures = withRemoteImages(isHtml ? sanitize(message.bodyHtml!) : "", allowRemote, imageProxy);
+  const defer = isHtml && allowRemote && deferPictures;
+  const sanitized = isHtml ? sanitize(message.bodyHtml!) : "";
+  const pictures = withRemoteImages(
+    defer ? deferRemotePictures(sanitized, imageProxy) : sanitized,
+    allowRemote,
+    imageProxy,
+  );
   const body = isHtml
     ? fixViewportHeightUnits(
         // cid: links survive the sanitizer, our own blob URLs wouldn't: swap them afterwards.
@@ -115,7 +132,7 @@ blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${dark ? "#4d233
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>${frame}
-${isHtml ? html : text}</style></head><body><div id="${ROOT_ID}">${body}</div></body></html>`;
+${isHtml ? html : text}${defer ? `\n${PICTURE_STYLES}` : ""}</style></head><body><div id="${ROOT_ID}">${body}</div></body></html>`;
 }
 
 export interface PrintLabels {
@@ -226,6 +243,8 @@ interface MessageBodyProps {
   loadRemoteImage?: RemoteImageLoader;
   /** Sends allowed remote pictures through the app, so their senders never see this device. */
   imageProxy?: ImageProxy | null;
+  /** Asks the server for the sizes of remote pictures, so they wait in their place; see remotePictures.ts. */
+  imageSizes?: ImageSizeProbe | null;
 }
 
 export function MessageBody({
@@ -237,11 +256,13 @@ export function MessageBody({
   darkImages = false,
   loadRemoteImage,
   imageProxy,
+  imageSizes = null,
 }: MessageBodyProps) {
+  const { t } = useT();
   const [height, setHeight] = useState(120);
   const variant = appearance.kind === "dark" ? "dark" : "light";
   const html = useMemo(
-    () => buildDocument(message, allowRemote, variant, inlineImages, imageProxy),
+    () => buildDocument(message, allowRemote, variant, inlineImages, imageProxy, true),
     [message, allowRemote, variant, inlineImages, imageProxy],
   );
   // Remount the frame whenever the look changes: recoloring happens in the
@@ -255,21 +276,32 @@ export function MessageBody({
   useEffect(() => {
     onAutoDecisionRef.current = onAutoDecision;
   });
+  const [progress, setProgress] = useState<(PictureProgress & { signature: string }) | null>(null);
   // A mail that goes away under the pointer never reports the pointer leaving its link.
   useEffect(() => hideLinkStatus, [signature]);
-  const stopImages = useRef<(() => void) | null>(null);
+  /** Stops what the shown document started: picture loading, recoloring, measuring. */
+  const teardown = useRef<(() => void) | null>(null);
   useEffect(
     () => () => {
-      stopImages.current?.();
-      stopImages.current = null;
+      teardown.current?.();
+      teardown.current = null;
     },
     [signature],
   );
+  /** Documents already set up, so the early start and the load event never both do it. */
+  const prepared = useRef(new WeakSet<Document>());
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
 
-  const handleLoad = (frame: HTMLIFrameElement) => {
+  const setUp = (frame: HTMLIFrameElement) => {
     const doc = frame.contentDocument;
     const root = doc?.getElementById(ROOT_ID);
-    if (!doc || !root) return;
+    if (!doc || !root || prepared.current.has(doc)) return;
+    prepared.current.add(doc);
+    teardown.current?.();
+    const stops: (() => void)[] = [];
+    teardown.current = () => {
+      for (const stop of stops) stop();
+    };
 
     let shownDark = variant === "dark";
     if (needsPass) {
@@ -281,9 +313,10 @@ export function MessageBody({
     }
     // Also for mails with their own dark mode: their images are usually still made for white paper.
     if (darkImages && shownDark && message.bodyHtml !== null) {
-      stopImages.current?.();
-      stopImages.current = darkenImages(root, allowRemote ? loadRemoteImage : undefined);
+      stops.push(darkenImages(root, allowRemote ? loadRemoteImage : undefined));
     }
+    // After darkenImages, which follows each picture from the moment it gets its real address.
+    stops.push(loadRemotePictures(root, imageSizes, (next) => setProgress({ ...next, signature })));
 
     let pending = 0;
     let last = 0;
@@ -312,6 +345,10 @@ export function MessageBody({
     };
     updateHeight();
     observer.observe(root);
+    stops.push(() => {
+      observer.disconnect();
+      cancelAnimationFrame(pending);
+    });
     // Images load after the document; their size changes the height too.
     doc.addEventListener("load", updateHeight, true);
     // ↑/↓ and the other shortcuts keep working while the focus is inside the mail.
@@ -319,21 +356,79 @@ export function MessageBody({
     watchLinks(frame, doc);
   };
 
+  // A srcdoc frame's load event waits for every picture in it, and one dead host held the whole
+  // mail back. So the document is set up as soon as it is parsed; the load event stays as a
+  // fallback. Always the latest `setUp`, which knows the current look.
+  const setUpRef = useRef(setUp);
+  useEffect(() => {
+    setUpRef.current = setUp;
+  });
+  useEffect(() => {
+    let frame = 0;
+    const until = performance.now() + 10_000;
+    const check = () => {
+      const element = frameRef.current;
+      const doc = element?.contentDocument;
+      if (
+        element &&
+        doc &&
+        doc.URL === "about:srcdoc" &&
+        doc.readyState !== "loading" &&
+        doc.getElementById(ROOT_ID) &&
+        !prepared.current.has(doc)
+      ) {
+        setUpRef.current(element);
+        return;
+      }
+      if (performance.now() < until) frame = requestAnimationFrame(check);
+    };
+    frame = requestAnimationFrame(check);
+    return () => cancelAnimationFrame(frame);
+  }, [html, signature]);
+
   const scheme = variant === "dark" || done?.dark ? "dark" : "light";
   // Hide until recolored, so dark mode never flashes white paper.
   const hidden = needsPass && !done;
+  const loading = progress?.signature === signature && progress.done < progress.total ? progress : null;
+  const label = loading ? t("reader.remoteProgress", { done: loading.done, total: loading.total }) : "";
 
   return (
-    <iframe
-      key={signature}
-      title={message.subject}
-      // No allow-scripts: mail content can never run code. allow-same-origin only
-      // lets the app measure the height, recolor for dark mode and intercept links.
-      sandbox="allow-same-origin"
-      srcDoc={html}
-      onLoad={(event) => handleLoad(event.currentTarget)}
-      style={{ height, colorScheme: scheme, opacity: hidden ? 0 : 1 }}
-      className="block w-full rounded-2xl border-0 transition-opacity duration-150"
-    />
+    <div className="relative">
+      {loading && (
+        <div
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={loading.total}
+          aria-valuenow={loading.done}
+          aria-valuetext={label}
+          aria-label={label}
+          // Over the top of the mail rather than above it, so nothing moves when it comes and goes;
+          // a moment late, so pictures that come quickly don't flash it.
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 animate-fade [animation-delay:300ms] [animation-fill-mode:both]"
+        >
+          <div className="h-[3px] overflow-hidden rounded-t-2xl bg-pink-tint">
+            <div
+              className="h-full bg-pink-solid transition-[width] duration-200"
+              style={{ width: `${(loading.done / loading.total) * 100}%` }}
+            />
+          </div>
+          <span className="absolute top-2 right-2 rounded-full border border-hairline bg-surface/90 px-2 py-0.5 text-[11.5px] font-semibold text-muted tabular-nums shadow-sm">
+            {label}
+          </span>
+        </div>
+      )}
+      <iframe
+        key={signature}
+        ref={frameRef}
+        title={message.subject}
+        // No allow-scripts: mail content can never run code. allow-same-origin only
+        // lets the app measure the height, recolor for dark mode and intercept links.
+        sandbox="allow-same-origin"
+        srcDoc={html}
+        onLoad={(event) => setUp(event.currentTarget)}
+        style={{ height, colorScheme: scheme, opacity: hidden ? 0 : 1 }}
+        className="block w-full rounded-2xl border-0 transition-opacity duration-150"
+      />
+    </div>
   );
 }

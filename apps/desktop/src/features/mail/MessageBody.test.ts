@@ -76,6 +76,47 @@ describe("buildDocument", () => {
   });
 });
 
+describe("remote pictures in the reader", () => {
+  const proxy = (url: string) => `uwuimg://localhost/picture?account=a1&url=${encodeURIComponent(url)}`;
+  /** As it stands in the serialized document. */
+  const shown = (url: string) => proxy(url).replace(/&/g, "&amp;");
+  const mail = message({
+    bodyHtml:
+      '<p>Hi</p><img src="https://cdn.example/hero.jpg" width="600" height="300"><img src="cid:logo">' +
+      '<div style="background:url(https://cdn.example/bg.png)">x</div>',
+  });
+
+  // Regression: a srcdoc frame's load event waits for every picture, so one dead tracking host
+  // kept the whole mail hidden until fetching it gave up.
+  it("names no remote picture in the document, only placeholders of their size", () => {
+    const doc = buildDocument(mail, true, "light", new Map(), proxy, true);
+    expect(doc).not.toMatch(/ src="uwuimg:/);
+    expect(doc).toContain(`data-uwu-src="${shown("https://cdn.example/hero.jpg")}"`);
+    expect(doc).toContain("width='600'%20height='300'");
+    expect(doc).toContain("data-uwu-pending");
+    expect(doc).toContain("@keyframes uwu-shimmer");
+    // Backgrounds stay as they were, through the app.
+    expect(doc).toContain(shown("https://cdn.example/bg.png"));
+    expect(doc).toContain("img-src data: cid: blob: uwuimg: http://uwuimg.localhost;");
+  });
+
+  it("defers nothing while remote pictures are blocked, or without being asked to", () => {
+    const blocked = buildDocument(mail, false, "light", new Map(), proxy, true);
+    expect(blocked).not.toContain("data-uwu-");
+    expect(blocked).toContain('src="https://cdn.example/hero.jpg"');
+    const direct = buildDocument(mail, true, "light", new Map(), proxy);
+    expect(direct).not.toContain("data-uwu-");
+    expect(direct).toContain(`src="${shown("https://cdn.example/hero.jpg")}"`);
+  });
+
+  it("prints with the real pictures", () => {
+    const labels = { from: "From", to: "To", cc: "Cc", date: "Date" };
+    const doc = buildPrintDocument(mail, true, new Map(), labels, "today", proxy);
+    expect(doc).toContain(`src="${shown("https://cdn.example/hero.jpg")}"`);
+    expect(doc).not.toContain("data-uwu-");
+  });
+});
+
 describe("frame height", () => {
   // Regression: the frame is as tall as its content, so 100vh grew forever.
   it("turns viewport height units into fixed pixels", () => {
@@ -85,6 +126,20 @@ describe("frame height", () => {
     expect(buildDocument(message({ bodyHtml: '<div style="min-height:100vh">Hi</div>' }), false, "light")).toContain(
       "min-height:900px",
     );
+    expect(fixViewportHeightUnits("a:-.5dvh;b:1.5svh;c:50VMAX;d:.5vh;e:10vhx")).toBe(
+      "a:-4.5px;b:13.5px;c:450px;d:4.5px;e:10vhx",
+    );
+  });
+
+  // Regression (security-audit WM-1): a mail of nothing but digits froze the tab for minutes,
+  // because the old pattern could split a run of digits in many ways and tried all of them.
+  it("stays fast on a long run of digits", () => {
+    const digits = "1".repeat(200_000);
+    const started = performance.now();
+    expect(fixViewportHeightUnits(digits)).toBe(digits);
+    expect(fixViewportHeightUnits(`${digits}vh`)).toMatch(/px$/);
+    expect(fixViewportHeightUnits("1.".repeat(100_000))).toBe("1.".repeat(100_000));
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("detects a layout that grows by the same step every frame", () => {

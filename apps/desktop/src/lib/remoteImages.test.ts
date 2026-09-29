@@ -50,5 +50,21 @@ describe("proxyCss", () => {
     expect(out).toContain(`url("${proxy("http://x.example/2.png")}")`);
     expect(out).toContain(`url("${proxy("https://x.example/3.png")}")`);
     expect(out).toContain("url(cid:inline)");
+    expect(proxyCss("a{background:url( https://x.example/4.png )}", proxy)).toContain(
+      `url("${proxy("https://x.example/4.png")}")`,
+    );
+  });
+
+  // Regression: a style made of `url(url(url(…` or of `url(` and a long run of spaces backtracked
+  // for minutes, once remote pictures were allowed for the mail.
+  it("stays fast on CSS built to make it backtrack", () => {
+    const started = performance.now();
+    const nested = "url(".repeat(50_000);
+    expect(proxyCss(nested, proxy)).toBe(nested);
+    const spaces = `url(${" ".repeat(200_000)}x`;
+    expect(proxyCss(spaces, proxy)).toBe(spaces);
+    const quotes = 'url("'.repeat(50_000);
+    expect(proxyCss(quotes, proxy)).toBe(quotes);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 });

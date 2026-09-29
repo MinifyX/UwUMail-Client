@@ -183,6 +183,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const trustedSenders = useSettings((s) => s.trustedSenders);
   // The same function for the whole life of the view, so the body isn't rebuilt on every render.
   const imageProxy = useMemo(() => backend().imageProxy(message.accountId), [message.accountId]);
+  const imageSizes = useMemo(() => backend().imageSizes(message.accountId), [message.accountId]);
   const mailAppearance = useSettings((s) => s.mailAppearance);
   const senderChoice = useSettings((s) => s.senderAppearance[message.from.email.toLowerCase()]);
   const darkImages = useSettings((s) => s.darkImages);
@@ -318,6 +319,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           darkImages={darkImages}
           loadRemoteImage={loadMailImage}
           imageProxy={imageProxy}
+          imageSizes={imageSizes}
         />
       </div>
 

@@ -5,6 +5,8 @@
 // designed mails light. Colors are recomputed in OKLCH so hues survive: a pink
 // button stays pink, only darker.
 
+import { PENDING, SOURCE } from "./remotePictures";
+
 export interface Rgba {
   r: number;
   g: number;
@@ -134,9 +136,12 @@ export function darkenBorder(color: Rgba): Rgba {
 
 // ------------------------------------------------------------- detection
 
-/** Whether the mail's own CSS brings dark mode styles. */
+/**
+ * Whether the mail's own CSS brings dark mode styles. A `color-scheme` value is a list of
+ * keywords; reading it word by word keeps this linear on any mail (security-audit WM-1).
+ */
 export function declaresDarkMode(html: string): boolean {
-  return /prefers-color-scheme\s*:\s*dark/i.test(html) || /color-scheme\s*:[^;}"]*\bdark\b/i.test(html);
+  return /prefers-color-scheme\s*:\s*dark/i.test(html) || /color-scheme\s*:\s*(?:[\w-]+\s+)*?dark\b/i.test(html);
 }
 
 /**
@@ -243,12 +248,17 @@ export function darkenDocument(root: HTMLElement): void {
   const originalBackground = new Map<Element, Rgba>();
   for (const element of elements) {
     const style = styles.get(element)!;
-    if ((element.parentElement && protectedElements.has(element.parentElement)) || hasBackgroundImage(style)) {
+    // A remote picture still waiting shows our own shimmer, not a background of the mail's.
+    const waiting = element.hasAttribute(PENDING);
+    if (
+      (element.parentElement && protectedElements.has(element.parentElement)) ||
+      (!waiting && hasBackgroundImage(style))
+    ) {
       // Text on a background image or gradient was designed for it.
       protectedElements.add(element);
       continue;
     }
-    const background = parseColor(style.backgroundColor);
+    const background = waiting ? null : parseColor(style.backgroundColor);
     if (background && background.a > 0) originalBackground.set(element, background);
   }
 
@@ -300,7 +310,10 @@ export function darkenDocument(root: HTMLElement): void {
     }
 
     // Transparent logos with dark ink would vanish on a dark background.
-    if (element.tagName === "IMG" && TRANSPARENT_IMAGE.test(element.getAttribute("src") ?? "")) {
+    if (
+      element.tagName === "IMG" &&
+      TRANSPARENT_IMAGE.test(element.getAttribute(SOURCE) ?? element.getAttribute("src") ?? "")
+    ) {
       writes.push(() => {
         element.style.setProperty("background-color", IMAGE_BACKING, "important");
         element.style.setProperty("border-radius", "3px");
