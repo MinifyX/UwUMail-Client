@@ -27,6 +27,9 @@ const MAX_THREAD_MAILS: usize = 20;
 /// Label log entries are kept this long.
 const LOG_DAYS: i64 = 400;
 
+/// New inbox mail of one account: (account id, message ids).
+type LabelJob = (String, Vec<String>);
+
 /// What the engine keeps for the assistant while it runs.
 pub(super) struct AssistState {
     /// Streams the page may stop, by its stream id.
@@ -34,8 +37,8 @@ pub(super) struct AssistState {
     /// The client for requests to providers (no redirects).
     http: OnceLock<reqwest::Client>,
     /// New inbox mail of mailboxes without a server assistant, for auto-labels.
-    queue: mpsc::UnboundedSender<(String, Vec<String>)>,
-    queue_rx: Mutex<Option<mpsc::UnboundedReceiver<(String, Vec<String>)>>>,
+    queue: mpsc::UnboundedSender<LabelJob>,
+    queue_rx: Mutex<Option<mpsc::UnboundedReceiver<LabelJob>>>,
 }
 
 impl AssistState {

@@ -266,7 +266,7 @@ impl Store {
         let conn = self.conn();
         let mut stmt = conn.prepare(
             "SELECT id, name, kind, base_url, model, fast_model, key_hint, created_at FROM assist_providers
-             ORDER BY created_at, id",
+             ORDER BY created_at, rowid",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(ProviderRecord {
@@ -336,7 +336,7 @@ impl Store {
     pub fn assist_labels(&self) -> Result<Vec<Label>> {
         let conn = self.conn();
         let mut stmt =
-            conn.prepare("SELECT id, name, description, keyword, color FROM assist_labels ORDER BY created_at, id")?;
+            conn.prepare("SELECT id, name, description, keyword, color FROM assist_labels ORDER BY created_at, rowid")?;
         let rows = stmt.query_map([], |row| {
             Ok(Label {
                 id: row.get(0)?,
@@ -560,7 +560,7 @@ mod tests {
         store.change_keyword(std::slice::from_ref(&id), "privat", true).unwrap();
         let thread = store.get_thread(&message.thread_id, true).unwrap().thread;
         assert_eq!(thread.keywords, ["privat", "rechnungen"]);
-        assert_eq!(store.messages_with_keyword("privat").unwrap(), [id.clone()]);
+        assert_eq!(store.messages_with_keyword("privat").unwrap(), std::slice::from_ref(&id));
         assert!(store.messages_with_keyword("priv").unwrap().is_empty());
     }
 
@@ -590,7 +590,7 @@ mod tests {
             undone: false,
         };
         store.insert_label_log(&entry).unwrap();
-        assert_eq!(store.label_log(Some(std::slice::from_ref(&id)), 10).unwrap(), [entry.clone()]);
+        assert_eq!(store.label_log(Some(std::slice::from_ref(&id)), 10).unwrap(), std::slice::from_ref(&entry));
         store.mark_label_undone("l1").unwrap();
         assert!(store.label_log(None, 10).unwrap()[0].undone);
         store.delete_assist_label("g1").unwrap();
