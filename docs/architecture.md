@@ -476,8 +476,11 @@ inbox mail after a sync: at most 20 mails at once and 200 per day, each with
 its reason in the label log, undoable there. Mail is never moved or deleted.
 
 **Events.** `assist_extract_events {messageId, includeImages}` asks the
-mailbox's assistant for appointments; the text of pictures is added where
-`// 0.6-merge: image text` sits in `engine/assist_ops.rs`.
+mailbox's assistant for appointments. With `includeImages` a UwUMail server
+reads the pictures itself; on the device the text of the mail's embedded and
+attached pictures (never remote ones) comes from `Engine::image_text` (see
+[Text in pictures](#text-in-pictures)), at most 8 000 characters, as data like
+the mail.
 
 ### Addons
 
