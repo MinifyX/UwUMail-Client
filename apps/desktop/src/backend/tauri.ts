@@ -99,7 +99,8 @@ export function engineError(error: unknown): BackendError {
   if (!isEngineError(error)) return new BackendError("internal", String(error));
   const assist = error.assist;
   if (assist && typeof assist.type === "string") {
-    const retryAfter = typeof assist.retryAfter === "number" && Number.isFinite(assist.retryAfter) ? assist.retryAfter : null;
+    const retryAfter =
+      typeof assist.retryAfter === "number" && Number.isFinite(assist.retryAfter) ? assist.retryAfter : null;
     const properties = Array.isArray(assist.properties)
       ? assist.properties.filter((property): property is string => typeof property === "string")
       : [];

@@ -1172,7 +1172,9 @@ export class DemoBackend implements Backend {
   }
 
   async applyAssistLabels(messageIds: string[]) {
-    const server = messageIds.filter((id) => this.messages.find((m) => m.id === id)?.accountId === DEMO_ACCOUNTS[0]!.id);
+    const server = messageIds.filter(
+      (id) => this.messages.find((m) => m.id === id)?.accountId === DEMO_ACCOUNTS[0]!.id,
+    );
     const device = messageIds.filter((id) => !server.includes(id));
     return {
       ...(server.length > 0 ? await this.assistServer.apply(server) : {}),

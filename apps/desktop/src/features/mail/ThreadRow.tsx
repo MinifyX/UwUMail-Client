@@ -7,6 +7,7 @@ import { useT } from "@/i18n";
 import { displayName, formatListDate } from "@/lib/format";
 import type { useThreadActions } from "@/lib/queries";
 import type { ListDensity } from "@/state/settings";
+import { ThreadLabelChips } from "../assist/LabelChips";
 import { THREAD_DRAG_TYPE } from "./selection";
 
 interface ThreadRowProps {
@@ -176,14 +177,22 @@ export function ThreadRow({
         </span>
 
         {compact ? (
-          <span className="truncate text-[13px]">
-            <span className={clsx(unread ? "font-semibold text-ink" : "text-ink/80")}>{subject}</span>
-            <span className="text-muted"> · {thread.snippet}</span>
+          <span className="flex min-w-0 items-center gap-1.5 text-[13px]">
+            <ThreadLabelChips accountId={thread.accountIds[0]} keywords={thread.keywords} />
+            <span className="min-w-0 truncate">
+              <span className={clsx(unread ? "font-semibold text-ink" : "text-ink/80")}>{subject}</span>
+              <span className="text-muted"> · {thread.snippet}</span>
+            </span>
           </span>
         ) : (
           <>
-            <span className={clsx("truncate text-[13.5px]", unread ? "font-semibold text-ink" : "text-ink/80")}>
-              {subject}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <ThreadLabelChips accountId={thread.accountIds[0]} keywords={thread.keywords} />
+              <span
+                className={clsx("min-w-0 truncate text-[13.5px]", unread ? "font-semibold text-ink" : "text-ink/80")}
+              >
+                {subject}
+              </span>
             </span>
             <span
               className={clsx(

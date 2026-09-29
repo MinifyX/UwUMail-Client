@@ -1,5 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { createContext, createElement, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  createElement,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { AssistError, backend, BackendError } from "@/backend/backend";
 import {
   type AssistAnswer,
@@ -61,20 +70,24 @@ export function useAssistOptions(): { data: AssistOptions | null } {
   return { data: scopes?.find((each) => each.id === scope)?.options ?? null };
 }
 
-/** Per feature whether it can be used for the current mailbox; null without an assistant. */
-export function useAssistFeatures() {
-  const accountId = useContext(AccountContext);
+/**
+ * Per feature whether it can be used for the current mailbox (or the one given); null without an
+ * assistant.
+ */
+export function useAssistFeatures(forAccount?: string) {
+  const context = useContext(AccountContext);
+  const accountId = forAccount ?? context;
   return useQuery({
     queryKey: [...queryKeys.assistFeatures, accountId],
     queryFn: () => backend().assistFeatures(accountId!),
-    enabled: accountId !== null,
+    enabled: Boolean(accountId),
     staleTime: 60_000,
   });
 }
 
 /** Whether one feature can be used now. */
-export function useAssistFeature(feature: AssistFeature): boolean {
-  const { data } = useAssistFeatures();
+export function useAssistFeature(feature: AssistFeature, forAccount?: string): boolean {
+  const { data } = useAssistFeatures(forAccount);
   return data?.[feature] === true;
 }
 

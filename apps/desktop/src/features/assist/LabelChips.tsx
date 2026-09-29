@@ -11,7 +11,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { chipStyle, labelsOff, labelsOn, setByAssistant } from "./labels";
-import { assistErrorText, providerLabel, useAssistLabels, useAssistScope, useLabelLog } from "./useAssist";
+import {
+  AssistForAccount,
+  assistErrorText,
+  providerLabel,
+  useAssistLabels,
+  useAssistScope,
+  useLabelLog,
+} from "./useAssist";
 
 /** Puts a label's keyword on a mail or takes it off, then shows the change. */
 function useSetKeyword() {
@@ -64,6 +71,16 @@ export function ListLabelChips({ keywords }: { keywords: string[] | undefined })
   );
 }
 
+/** A conversation's labels in the list, in the scope of its mailbox; nothing without keywords. */
+export function ThreadLabelChips({ accountId, keywords }: { accountId: string | undefined; keywords?: string[] }) {
+  if (!accountId || !keywords || keywords.length === 0) return null;
+  return (
+    <AssistForAccount accountId={accountId}>
+      <ListLabelChips keywords={keywords} />
+    </AssistForAccount>
+  );
+}
+
 interface MessageLabelsProps {
   message: Message;
   /** Keywords may be set on it (own mail, or a shared folder that allows it). */
@@ -85,7 +102,9 @@ export function MessageLabels({ message, canEdit }: MessageLabelsProps) {
   if (labels.length === 0 || (on.length === 0 && !canEdit)) return null;
 
   const put = (label: AssistLabel) =>
-    void setKeyword(message.id, label.keyword, true).then(() => toast(t("assist.labels.added", { name: label.name }), "success"));
+    void setKeyword(message.id, label.keyword, true).then(() =>
+      toast(t("assist.labels.added", { name: label.name }), "success"),
+    );
 
   return (
     <div className="-mt-1 flex flex-wrap items-center gap-1.5">
@@ -188,7 +207,9 @@ function LabelChip({
 
   const remove = () => {
     setOpen(false);
-    void setKeyword(message.id, label.keyword, false).then(() => toast(t("assist.labels.removed", { name: label.name }), "success"));
+    void setKeyword(message.id, label.keyword, false).then(() =>
+      toast(t("assist.labels.removed", { name: label.name }), "success"),
+    );
   };
 
   return (

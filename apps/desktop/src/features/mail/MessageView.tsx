@@ -33,6 +33,9 @@ import { domainEntry, isDomainEntry, matchingEntries } from "@/lib/trustedSender
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
+import { MessageLabels } from "../assist/LabelChips";
+import { MessageAssistCards, useMessageAssistItems } from "../assist/ReaderAssist";
+import { AssistForAccount } from "../assist/useAssist";
 import { contactWithEmail, draftFromSender } from "../contacts/format";
 import { startNewContact, useContactsUi } from "../contacts/state";
 import { useContactsAvailable, useLoadedContacts } from "../contacts/useContactsData";
@@ -232,100 +235,105 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   }
 
   return (
-    <article className="flex animate-fade flex-col gap-4 rounded-[20px] border border-hairline bg-surface p-5">
-      <header className="flex items-start gap-3">
-        <Avatar address={message.from} />
-        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-1">
-          <div className="min-w-[min(100%,12rem)] flex-1">
-            <p className="flex flex-wrap items-baseline gap-x-2">
-              <Tooltip
-                content={fullAddress(message.from)}
-                onActivate={toggleDetails}
-                className="min-w-0 text-[15px] font-bold break-words"
-              >
-                {displayName(message.from)}
-              </Tooltip>
-              <span className="selectable min-w-0 truncate text-[12.5px] text-muted">
-                {visibleText(message.from.email)}
-              </span>
-            </p>
-            <p className="flex min-w-0 items-center gap-0.5 text-[12.5px] text-muted">
-              <span className="min-w-0 truncate">
-                <RecipientNames recipients={message.to} mine={myAddresses} onActivate={toggleDetails} />
-              </span>
-              <button
-                type="button"
-                aria-expanded={showDetails}
-                aria-controls={detailsId}
-                aria-label={showDetails ? t("reader.hideAddresses") : t("reader.showAddresses")}
-                title={showDetails ? t("reader.hideAddresses") : t("reader.showAddresses")}
-                onClick={toggleDetails}
-                className="grid size-6 shrink-0 place-items-center rounded-full text-muted hover:bg-pink-tint hover:text-pink-ink focus-visible:shadow-focus focus-visible:outline-none"
-              >
-                <ChevronDown
-                  className={clsx("size-3.5 transition-transform", showDetails && "rotate-180")}
-                  strokeWidth={2.4}
-                  aria-hidden
-                />
-              </button>
-            </p>
-          </div>
-          <div className="ml-auto flex shrink-0 items-center gap-3">
-            {message.flags.draft && (
-              <>
-                <span className="rounded-full bg-danger-tint px-2 py-0.5 text-[12px] font-bold text-danger">
-                  {t("reader.draft")}
+    <AssistForAccount accountId={message.accountId}>
+      <article className="flex animate-fade flex-col gap-4 rounded-[20px] border border-hairline bg-surface p-5">
+        <header className="flex items-start gap-3">
+          <Avatar address={message.from} />
+          <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-1">
+            <div className="min-w-[min(100%,12rem)] flex-1">
+              <p className="flex flex-wrap items-baseline gap-x-2">
+                <Tooltip
+                  content={fullAddress(message.from)}
+                  onActivate={toggleDetails}
+                  className="min-w-0 text-[15px] font-bold break-words"
+                >
+                  {displayName(message.from)}
+                </Tooltip>
+                <span className="selectable min-w-0 truncate text-[12.5px] text-muted">
+                  {visibleText(message.from.email)}
                 </span>
-                <Button size="sm" icon={PenLine} onClick={() => void openDraftMessage(message.id)}>
-                  {t("reader.continueDraft")}
-                </Button>
-              </>
-            )}
-            {!message.flags.draft && !myAddresses.has(message.from.email.toLowerCase()) && (
-              <UnsubscribeButton message={message} />
-            )}
-            {theme === "dark" && <AppearanceToggle message={message} appearance={appearance} autoDark={autoDark} />}
-            {!message.flags.draft && (
-              <MessageMenu
-                message={message}
-                accounts={accounts}
-                onPrint={() => printMessage(message, allowRemote, inlineImages.urls, imageProxy)}
-              />
-            )}
-            <time dateTime={message.date} className="text-[12.5px] text-muted">
-              {formatFullDate(message.date, i18n.language)}
-            </time>
+              </p>
+              <p className="flex min-w-0 items-center gap-0.5 text-[12.5px] text-muted">
+                <span className="min-w-0 truncate">
+                  <RecipientNames recipients={message.to} mine={myAddresses} onActivate={toggleDetails} />
+                </span>
+                <button
+                  type="button"
+                  aria-expanded={showDetails}
+                  aria-controls={detailsId}
+                  aria-label={showDetails ? t("reader.hideAddresses") : t("reader.showAddresses")}
+                  title={showDetails ? t("reader.hideAddresses") : t("reader.showAddresses")}
+                  onClick={toggleDetails}
+                  className="grid size-6 shrink-0 place-items-center rounded-full text-muted hover:bg-pink-tint hover:text-pink-ink focus-visible:shadow-focus focus-visible:outline-none"
+                >
+                  <ChevronDown
+                    className={clsx("size-3.5 transition-transform", showDetails && "rotate-180")}
+                    strokeWidth={2.4}
+                    aria-hidden
+                  />
+                </button>
+              </p>
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-3">
+              {message.flags.draft && (
+                <>
+                  <span className="rounded-full bg-danger-tint px-2 py-0.5 text-[12px] font-bold text-danger">
+                    {t("reader.draft")}
+                  </span>
+                  <Button size="sm" icon={PenLine} onClick={() => void openDraftMessage(message.id)}>
+                    {t("reader.continueDraft")}
+                  </Button>
+                </>
+              )}
+              {!message.flags.draft && !myAddresses.has(message.from.email.toLowerCase()) && (
+                <UnsubscribeButton message={message} />
+              )}
+              {theme === "dark" && <AppearanceToggle message={message} appearance={appearance} autoDark={autoDark} />}
+              {!message.flags.draft && (
+                <MessageMenu
+                  message={message}
+                  accounts={accounts}
+                  onPrint={() => printMessage(message, allowRemote, inlineImages.urls, imageProxy)}
+                />
+              )}
+              <time dateTime={message.date} className="text-[12.5px] text-muted">
+                {formatFullDate(message.date, i18n.language)}
+              </time>
+            </div>
           </div>
+        </header>
+
+        {showDetails && <AddressDetails id={detailsId} message={message} />}
+
+        {!message.flags.draft && <MessageLabels message={message} canEdit />}
+        <MessageAssistCards message={message} inJunk={inJunk} />
+
+        {message.hasRemoteContent && !allowRemote && (
+          <RemoteImagesBanner email={message.from.email} onLoad={() => setLoadRemote(true)} />
+        )}
+        {message.hasRemoteContent && remoteSetting !== "always" && trustedBy.length > 0 && !inJunk && (
+          <TrustedImagesNote entries={trustedBy} onUntrust={() => setLoadRemote(false)} />
+        )}
+
+        <div className="selectable">
+          <MessageBody
+            message={message}
+            allowRemote={allowRemote}
+            appearance={appearance}
+            onAutoDecision={(dark) => setAutoDecision({ key: decisionKey, dark })}
+            inlineImages={inlineImages.urls}
+            darkImages={darkImages}
+            loadRemoteImage={loadMailImage}
+            imageProxy={imageProxy}
+          />
         </div>
-      </header>
 
-      {showDetails && <AddressDetails id={detailsId} message={message} />}
-
-      {message.hasRemoteContent && !allowRemote && (
-        <RemoteImagesBanner email={message.from.email} onLoad={() => setLoadRemote(true)} />
-      )}
-      {message.hasRemoteContent && remoteSetting !== "always" && trustedBy.length > 0 && !inJunk && (
-        <TrustedImagesNote entries={trustedBy} onUntrust={() => setLoadRemote(false)} />
-      )}
-
-      <div className="selectable">
-        <MessageBody
-          message={message}
-          allowRemote={allowRemote}
-          appearance={appearance}
-          onAutoDecision={(dark) => setAutoDecision({ key: decisionKey, dark })}
-          inlineImages={inlineImages.urls}
-          darkImages={darkImages}
-          loadRemoteImage={loadMailImage}
-          imageProxy={imageProxy}
+        <AttachmentTiles
+          attachments={message.attachments.filter((attachment) => !inlineImages.shown.has(attachment.id))}
+          sender={message.from}
         />
-      </div>
-
-      <AttachmentTiles
-        attachments={message.attachments.filter((attachment) => !inlineImages.shown.has(attachment.id))}
-        sender={message.from}
-      />
-    </article>
+      </article>
+    </AssistForAccount>
   );
 }
 
@@ -417,6 +425,8 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
   const { data: contacts = [] } = useLoadedContacts();
   const known = contactsAvailable ? contactWithEmail(contacts, email) : undefined;
   const refresh = () => client.invalidateQueries();
+  // Every mailbox here is the person's own: the assistant may read all of it.
+  const assistItems = useMessageAssistItems(message, true, own);
   const block = (entry: string) => {
     useUi.getState().selectThread(null);
     void blockSender(entry, message.accountId, [message.id], refresh);
@@ -463,6 +473,7 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
               ]
             : []),
         ]),
+    ...assistItems,
   ];
   return (
     <Menu
