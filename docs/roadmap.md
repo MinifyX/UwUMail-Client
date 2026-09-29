@@ -85,5 +85,6 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 ## Later
 
 - [x] Contacts: JMAP Contacts on UwUMail servers, CardDAV for other mailboxes
+- [x] Birthdays: the server's birthdays calendar with ages, a local one from CardDAV cards, moving birthday events into contacts, anniversaries and reminders (reminders on UwUMail servers only)
 - [ ] Self-hostable sync server for settings, signatures and addons (AGPL-3.0)
 - [ ] Code signing for Windows and macOS
