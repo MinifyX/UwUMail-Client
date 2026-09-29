@@ -473,7 +473,6 @@ async fn open_draft(engine: State<'_, Engine>, message_id: String) -> CommandRes
     engine.open_draft(&message_id).await
 }
 
-/// Recipient suggestions: the address books first, then addresses learned from mail.
 // ------------------------------------------------------------------------------ AI assistant
 // Answers are in UwUMail Server's JMAP shapes (docs/jmap-assist.md) with the app's own ids; the
 // page normalizes them (src/backend/assistConvert.ts).
@@ -657,6 +656,7 @@ async fn set_keywords(
     engine.set_keywords(&message_ids, &keywords).await
 }
 
+/// Recipient suggestions: the address books first, then addresses learned from mail.
 #[tauri::command]
 async fn search_contacts(engine: State<'_, Engine>, query: String) -> CommandResult<Vec<Contact>> {
     engine.recipient_suggestions(&query).await
