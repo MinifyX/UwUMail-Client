@@ -98,5 +98,6 @@ One thing to know when a dependency is added: on iOS, Cargo builds a static
 library and Xcode does the linking, so `cargo:rustc-link-lib=framework=…` from a
 crate's build script never reaches the linker. The frameworks have to be listed
 in `tauri.ios.conf.json` under `bundle > iOS > frameworks` instead — that's why
-`SystemConfiguration` is in there, for the DNS resolver's system settings. A
+`SystemConfiguration` is in there, for the DNS resolver's system settings, and
+`Vision` for reading the text in pictures (`crates/uwumail-ocr`). A
 missing one shows up as "Undefined symbols for architecture arm64".
