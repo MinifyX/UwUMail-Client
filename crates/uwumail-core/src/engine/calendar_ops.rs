@@ -853,6 +853,7 @@ END:VCALENDAR
             data_dir: dir.path().to_path_buf(),
             secrets: secrets.clone(),
             open_url: Arc::new(|_| {}),
+            recognizer: None,
         })
         .unwrap();
         engine

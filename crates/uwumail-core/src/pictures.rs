@@ -231,7 +231,7 @@ pub fn icon_links(html: &str, base: &Url) -> Vec<(Url, PictureKind)> {
 }
 
 /// `name="value"` pairs of a tag, up to its closing `>`. Names are lowercase.
-fn attributes(tag: &str) -> Vec<(String, String)> {
+pub(crate) fn attributes(tag: &str) -> Vec<(String, String)> {
     let bytes = tag.as_bytes();
     let mut pairs = Vec::new();
     let mut i = 0;

@@ -1,0 +1,17 @@
+[package]
+name = "uwumail-ocr"
+description = "The system's text recognition for the text in mail pictures: Vision on macOS and iOS, Windows.Media.Ocr on Windows"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# Nothing but the system's own frameworks: no models to ship, nothing to install.
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+objc2.workspace = true
+objc2-foundation.workspace = true
+objc2-vision.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true

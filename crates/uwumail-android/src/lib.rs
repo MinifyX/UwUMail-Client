@@ -12,6 +12,7 @@ mod bridge;
 mod host;
 pub mod launch;
 pub mod native;
+mod ocr;
 mod secrets;
 pub mod updates;
 

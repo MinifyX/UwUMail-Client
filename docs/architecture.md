@@ -43,6 +43,7 @@ and reused (CLI, future sync server).
 | `store` | SQLite (WAL) with migrations and an FTS5 index for instant search |
 | `contacts` | Address books over JMAP Contacts or CardDAV; recipient suggestions also learn from sent and received mail |
 | `mail_images`, `image_size` | Remote pictures of mail for the reader (`uwuimg:`): fair, quick fetching, a small memory cache, and their sizes before they show |
+| `ocr` | Text in a mail's pictures: limits, picture sizes, the UwUMail server's `Email/imageText` answer mapped to the app's ids, the `TextRecognizer` the platform hands in (see [Text in pictures](#text-in-pictures)) |
 
 The mail server is always the source of truth. The local store is a cache that
 can be deleted at any time and rebuilt.
@@ -441,6 +442,40 @@ also sign in over JMAP, at the account's JMAP address or
 sign-in lives apart from the JMAP accounts' connections, so nothing else treats
 the account as a JMAP one, and one that fails is not tried again while the app
 runs; other providers never see a JMAP sign-in at all.
+
+## Text in pictures
+
+Some mails carry what matters only as a picture: a poster, an invitation, a
+flyer with the date on it. `Engine::image_text` (command `image_text`) reads the
+text in a mail's pictures so dates can be found there like in the text.
+
+- **UwUMail accounts** (a JMAP session with `urn:uwumail:jmap:imagetext`) ask
+  their server (`Email/imageText`, UwUMail-Server `docs/jmap-image-text.md`),
+  which reads the pictures with Tesseract. The same request asks `Email/get`
+  for the email's attachments, so the server's blob ids become the app's
+  attachment ids (by Content-ID, then name and size, then position). A server
+  whose OCR is off (`unavailable`) leaves the pictures to this device.
+- **Every other mailbox** (IMAP, other JMAP servers) is read on this device,
+  and its pictures never leave it for this. The engine takes the embedded
+  (`cid:`) and attached PNG, JPEG, GIF and WebP pictures from the attachment
+  cache or the message (downloaded once for all of them), and remote pictures
+  only when the reader let this mail load them, fetched through
+  `Engine::mail_image` like the reader's (the UwUMail server or the privacy
+  proxy). The server's limits apply: at most 20 pictures, none under 64 pixels
+  on a side (icons, spacers, tracking pixels), none over 10 MB or
+  40 megapixels, 20 seconds a picture, 90 a mail, two pictures at a time on
+  the device; the rest count in `skipped`. Results are kept in memory for the
+  last 64 mails, unless a picture couldn't be fetched or read.
+
+The recognizer is handed to the engine in `EngineOptions::recognizer` when the
+app starts:
+
+| Platform | Recognizer | Notes |
+| --- | --- | --- |
+| macOS, iOS | Vision `VNRecognizeTextRequest` (`crates/uwumail-ocr`, objc2) | Accurate level with language correction; the language is detected on macOS 13+ (iOS always, it needs 17); macOS 11–12 get a fixed list of Latin languages. iOS links `Vision` via `tauri.ios.conf.json`. |
+| Windows | `Windows.Media.Ocr` (`crates/uwumail-ocr`, `windows` crate) | The first of the user's languages with an installed recognizer; `unavailable` when none has one. Pictures over `OcrEngine::MaxImageDimension` are shrunk first. |
+| Android | ML Kit Latin text recognition from Google Play services (`PictureText.kt`, through `UwuBridge`) | The unbundled `play-services-mlkit-text-recognition`: the model comes with Play services (a few hundred KB in the APK instead of several MB per ABI for the bundled one). Without Play services the feature is `unavailable`. The picture crosses the bridge as a file in the app's cache, deleted right after. |
+| Linux | none | `unavailable`: the feature stays quietly off. |
 
 ## Installer and updates
 

@@ -28,6 +28,8 @@ pub const CALENDARS: &str = "urn:ietf:params:jmap:calendars";
 pub const REMOTE: &str = "urn:uwumail:jmap:remote";
 /// Address books and contact cards (RFC 9610).
 pub const CONTACTS: &str = "urn:ietf:params:jmap:contacts";
+/// A UwUMail server that reads the text in a mail's pictures (UwUMail-Server docs/jmap-image-text.md).
+pub const IMAGETEXT: &str = "urn:uwumail:jmap:imagetext";
 /// The key a server signs its Web Push messages with (VAPID, RFC 9749).
 pub const WEBPUSH_VAPID: &str = "urn:ietf:params:jmap:webpush-vapid";
 
@@ -108,6 +110,8 @@ pub struct Session {
     /// The server's VAPID public key (base64url, uncompressed P-256), if it signs its Web Push
     /// messages (RFC 9749).
     pub vapid_key: Option<String>,
+    /// The server reads the text in a mail's pictures (`Email/imageText`, a UwUMail server).
+    pub image_text: bool,
     /// The session's `state`: API answers carry it as `sessionState`, and a different one there
     /// means the session changed (RFC 8620 §2).
     pub state: Option<String>,
@@ -173,6 +177,7 @@ impl Session {
                 .map(str::trim)
                 .filter(|key| !key.is_empty())
                 .map(String::from),
+            image_text: capabilities.contains_key(IMAGETEXT),
             state: text("state").map(String::from),
         })
     }
@@ -376,6 +381,11 @@ impl Client {
 
     /// Sends method calls in one request. Call ids are their positions.
     pub async fn call(&self, calls: Vec<(&str, Value)>) -> Result<Responses> {
+        self.call_within(calls, CALL_TIMEOUT).await
+    }
+
+    /// Like [`call`](Self::call), for methods the server may take longer for, e.g. reading pictures.
+    pub async fn call_within(&self, calls: Vec<(&str, Value)>, limit: Duration) -> Result<Responses> {
         let method_calls: Vec<Value> = calls
             .into_iter()
             .enumerate()
@@ -398,12 +408,15 @@ impl Client {
         if self.session.contacts_account_id.is_some() {
             using.push(CONTACTS);
         }
+        if self.session.image_text {
+            using.push(IMAGETEXT);
+        }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self
             .http
             .post(&self.session.api_url)
             .header(reqwest::header::AUTHORIZATION, self.auth.header())
-            .timeout(CALL_TIMEOUT)
+            .timeout(limit)
             .json(&body)
             .send()
             .await?;

@@ -51,6 +51,7 @@ async fn sync_send_reply_flag_and_trash() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let mut events = engine.subscribe();
@@ -262,6 +263,7 @@ async fn old_mail_becomes_previews_and_server_search_finds_the_rest() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     // Like the phone: only the last 30 days complete.
@@ -353,6 +355,7 @@ async fn drafts_are_saved_replaced_continued_and_removed_on_send() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let unique = uuid::Uuid::new_v4().simple().to_string();
@@ -465,6 +468,7 @@ async fn undo_send_takes_mail_back_and_otherwise_sends_it() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let mut events = engine.subscribe();
@@ -592,6 +596,7 @@ async fn move_spam_and_blocked_senders() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let unique = uuid::Uuid::new_v4().simple().to_string();
@@ -723,6 +728,7 @@ async fn unsubscribes_from_a_newsletter_by_mail() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let unique = uuid::Uuid::new_v4().simple().to_string();
