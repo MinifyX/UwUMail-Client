@@ -29,13 +29,71 @@ pub enum ErrorCode {
 pub struct Error {
     pub code: ErrorCode,
     pub message: String,
+    /// A refusal of the AI assistant, with the type its UwUMail server (or this device) gave it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assist: Option<Box<AssistFailure>>,
+}
+
+/// Why the assistant refused, as UwUMail Server names it (docs/jmap-assist.md "Common errors"):
+/// `assistUnavailable`, `overQuota`, `providerFailed`, `notFound`, `forbidden`,
+/// `invalidArguments` or `invalidProperties`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistFailure {
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Seconds to wait, when a busy provider named them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_after: Option<u64>,
+    /// For `invalidProperties`: the fields it names.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<String>,
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl Error {
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
-        Self { code, message: message.into() }
+        Self { code, message: message.into(), assist: None }
+    }
+
+    /// A refusal of the assistant. `kind` is the server's error type; the code follows from it.
+    pub fn assist(kind: &str, message: impl Into<String>) -> Self {
+        let code = match kind {
+            "assistUnavailable" | "unknownMethod" | "unknownCapability" | "accountNotSupportedByMethod" => {
+                ErrorCode::NotSupported
+            }
+            "notFound" => ErrorCode::NotFound,
+            "providerFailed" => ErrorCode::ConnectionFailed,
+            "forbidden" | "overQuota" | "invalidArguments" | "invalidProperties" => ErrorCode::InvalidInput,
+            _ => ErrorCode::Internal,
+        };
+        Self {
+            code,
+            message: message.into(),
+            assist: Some(Box::new(AssistFailure { kind: kind.to_string(), retry_after: None, properties: Vec::new() })),
+        }
+    }
+
+    /// The same refusal, with the seconds a busy provider asked to wait.
+    pub fn with_retry_after(mut self, seconds: Option<u64>) -> Self {
+        if let Some(failure) = self.assist.as_mut() {
+            failure.retry_after = seconds;
+        }
+        self
+    }
+
+    /// The same refusal, naming the fields that were refused.
+    pub fn with_properties(mut self, properties: Vec<String>) -> Self {
+        if let Some(failure) = self.assist.as_mut() {
+            failure.properties = properties;
+        }
+        self
+    }
+
+    /// The assistant's error type, when this is one of its refusals.
+    pub fn assist_kind(&self) -> Option<&str> {
+        self.assist.as_deref().map(|failure| failure.kind.as_str())
     }
 
     pub fn auth(message: impl Into<String>) -> Self {
