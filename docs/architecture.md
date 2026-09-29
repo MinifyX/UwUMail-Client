@@ -42,6 +42,7 @@ and reused (CLI, future sync server).
 | `threading` | Conversation grouping (Message-ID / In-Reply-To / References, Gmail thread IDs when present) |
 | `store` | SQLite (WAL) with migrations and an FTS5 index for instant search |
 | `contacts` | Address books over JMAP Contacts or CardDAV; recipient suggestions also learn from sent and received mail |
+| `mail_images`, `image_size` | Remote pictures of mail for the reader (`uwuimg:`): fair, quick fetching, a small memory cache, and their sizes before they show |
 
 The mail server is always the source of truth. The local store is a cache that
 can be deleted at any time and rebuilt.
@@ -250,6 +251,28 @@ proxy under Settings → Reading (`socks5://…`, `http://…`) when one is set.
 same proxy carries sender-picture lookups and one-click unsubscribes; mail,
 calendars and updates never take it. Until the interface has said which proxy
 it wants, these requests wait rather than leave without it.
+
+A mail's text shows at once; its remote pictures follow. The reader document
+names none of them (`features/mail/remotePictures.ts`): each `<img>` starts as a
+transparent SVG placeholder of the size the mail gives it, with a shimmer, and
+keeps its `uwuimg:` address aside. The page then asks for the sizes
+(`Backend.imageSizes`, Tauri command `image_sizes` answering over a `Channel`,
+stopped by `cancel_image_sizes` when the mail closes or after 20 s;
+`Engine::image_sizes`). A UwUMail server that announces `imageSizesUrl` in
+`urn:uwumail:jmap:remote` tells them itself (streamed NDJSON, at most 200
+addresses; for IMAP accounts on such a server through the picture login). For
+every other account the app fetches the pictures (`MailImages::probe`, at most
+100 per mail) and reads each size from its header (`image_size`: PNG, GIF, JPEG,
+WebP, SVG `width`/`height`/`viewBox`), keeping the bytes in a memory cache (at
+most 32 MB and 2000 pictures, 5 minutes) that the following `uwuimg:` requests
+and dark mode read from. A picture gets its real address once its placeholder
+has the real size, so nothing moves when it arrives; one with both sides in the
+mail loads at once. What can't be had becomes a quiet box of its size, a
+tracking pixel (at most 2×2, or no size anywhere) stays an invisible speck. A
+thin bar over the mail counts them in. Own fetching is kept fair: 3.5 s to
+connect, 9 s per picture, at most 8 requests at once and 3 per host, so one slow
+host never holds up the rest, and a host that didn't answer is left alone for a
+minute. Dark mode recolors a picture only once its real one has loaded.
 
 ### Dates in mail
 

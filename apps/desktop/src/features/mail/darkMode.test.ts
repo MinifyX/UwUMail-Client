@@ -73,6 +73,17 @@ describe("detection", () => {
     );
     expect(declaresDarkMode("<style>:root { color-scheme: light dark; }</style>")).toBe(true);
     expect(declaresDarkMode('<p style="color: #333">Hi</p>')).toBe(false);
+    expect(declaresDarkMode('<div style="color-scheme:only dark">Hi</div>')).toBe(true);
+    expect(declaresDarkMode("<style>:root { color-scheme: normal; } .dark { color: #000 }</style>")).toBe(false);
+  });
+
+  // Regression (security-audit WM-1): every `color-scheme:` read on to the end of the mail, so
+  // many of them without a `;` took quadratic time and froze the tab.
+  it("stays fast on many color-scheme declarations", () => {
+    const started = performance.now();
+    expect(declaresDarkMode("color-scheme:".repeat(100_000))).toBe(false);
+    expect(declaresDarkMode(`color-scheme: ${"light ".repeat(100_000)}`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("forces the color scheme queries to match the rendering", () => {

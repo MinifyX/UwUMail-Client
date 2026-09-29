@@ -5,7 +5,7 @@ import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
 import { DemoContacts } from "./demo-contacts";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMessage } from "./demo-data";
-import { demoSenderPicture } from "./demo-pictures";
+import { DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
   BlockedSender,
@@ -26,6 +26,7 @@ import type {
   FlagChange,
   Folder,
   Identity,
+  ImageSizeProbe,
   ImageTextResult,
   MailtoDraft,
   MovedMessage,
@@ -1066,8 +1067,27 @@ export class DemoBackend implements Backend {
   async setUpdateChecks() {}
 
   imageProxy() {
-    // No app to fetch through; the demo's remote pictures point at hosts that never answer.
-    return null;
+    // The demo's stand-in for the app "fetches" the sample mail's pictures; every other address
+    // stays as it is and blocked, like one that can't be had.
+    return (url: string) => DEMO_REMOTE_PICTURES[url.trim()]?.url ?? url;
+  }
+
+  /** Sizes the way the app finds them out: each after its own moment, a dead host after a short wait. */
+  imageSizes(): ImageSizeProbe {
+    return async (urls, onSize, signal) => {
+      await Promise.all(
+        urls.map(async (url) => {
+          const known = DEMO_REMOTE_PICTURES[url];
+          await wait(known?.delay ?? 600);
+          if (signal.aborted) return;
+          onSize(
+            known?.url
+              ? { url, width: known.width, height: known.height, failed: false }
+              : { url, width: null, height: null, failed: true },
+          );
+        }),
+      );
+    };
   }
 
   async setPrivacyProxy() {}

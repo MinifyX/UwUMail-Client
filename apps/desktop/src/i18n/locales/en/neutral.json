@@ -96,6 +96,7 @@
     "remoteUntrust": "Stop",
     "remoteUntrustedAddress": "Images from {{email}} are blocked again",
     "remoteUntrustedDomain": "Images from {{domain}} are blocked again",
+    "remoteProgress": "Loading pictures {{done}}/{{total}}",
     "attachments_one": "{{count}} attachment",
     "attachments_other": "{{count}} attachments",
     "earlier_one": "{{count}} earlier message",

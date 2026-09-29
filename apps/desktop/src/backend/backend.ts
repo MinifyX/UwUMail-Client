@@ -21,6 +21,7 @@ import type {
   FlagChange,
   Folder,
   Identity,
+  ImageSizeProbe,
   ImageTextResult,
   MailtoDraft,
   MovedMessage,
@@ -219,6 +220,13 @@ export interface Backend {
    * no app to do that (the demo); the pictures then load directly.
    */
   imageProxy(accountId: string): ImageProxy | null;
+  /**
+   * Finds out the sizes of a mail's remote pictures before they load, so each waits in its place
+   * (see remotePictures.ts): the account's UwUMail server tells them, for other mailboxes the app
+   * reads them from the pictures it fetches, and keeps those for the reader. Null where there is
+   * nothing to ask; the pictures then load as they come.
+   */
+  imageSizes(accountId: string): ImageSizeProbe | null;
   /** The proxy remote pictures, sender pictures and one-click unsubscribes take; empty for none. */
   setPrivacyProxy(proxy: string): Promise<void>;
   /**

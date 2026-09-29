@@ -23,6 +23,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Several sender addresses per mailbox: aliases from the JMAP server or added by hand, replies from the address the mail went to
 - [x] Signatures per sender address: formatted with pictures, several per address, defaults for new mail and replies, switchable while writing
 - [x] Embedded images (cid:) in received mail; pictures in sent mail travel as inline parts
+- [x] Remote pictures load after the text: each waits in its final size with a shimmer, a bar counts them in, dead hosts and tracking pixels hold nothing up (sizes from the UwUMail server, or read here for other mailboxes)
 - [x] Move to folder (menu with search, v, drag and drop), multi-select (Ctrl/Shift+click, x), spam and not spam, blocked senders, undo for moves (toast and z), shortcuts g i / g s / g d / g f, ! and Ctrl+Shift+D
 - [x] Unsubscribe button for newsletters: one click (RFC 8058) or by mail, otherwise the sender's page; archive earlier issues with undo
 - [x] Print a mail (desktop) and save it as an .eml file
