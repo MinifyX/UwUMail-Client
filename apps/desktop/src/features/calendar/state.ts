@@ -37,7 +37,17 @@ export interface QuickCreate {
 /** The full editor: an occurrence to change, or the start of a new event. */
 export interface EditorRequest {
   occurrence: CalendarOccurrence | null;
-  draft?: { start: WallTime; end: WallTime; allDay: boolean; title?: string };
+  /** A new event's first values, e.g. an appointment found in a mail (see features/dates). */
+  draft?: {
+    start: WallTime;
+    end: WallTime;
+    allDay: boolean;
+    title?: string;
+    location?: string;
+    description?: string;
+    /** The account whose default calendar to offer first, e.g. the mail's. */
+    accountId?: string;
+  };
 }
 
 interface CalendarUiState {

@@ -57,8 +57,8 @@ function initialForm(request: EditorRequest, defaultCalendar: string): Form {
     start: request.draft?.start ?? withClock(todayKey(), "09:00"),
     end: request.draft?.end ?? withClock(todayKey(), "10:00"),
     calendarId: defaultCalendar,
-    location: "",
-    description: "",
+    location: request.draft?.location ?? "",
+    description: request.draft?.description ?? "",
     recurrence: null,
   };
   const recurrence = source.recurrence;
@@ -113,7 +113,7 @@ function recurrenceOf(form: Form): Recurrence | null {
   };
 }
 
-/** The whole event: times, repetition, calendar, place and notes. Mounted once in the calendar. */
+/** The whole event: times, repetition, calendar, place and notes. Mounted once for the whole app (see LazyCalendarDialogs). */
 export function EventEditor() {
   const request = useCalendarUi((s) => s.editor);
   const close = useCalendarUi((s) => s.closeEditor);
@@ -130,7 +130,13 @@ function EditorDialog({ request, onClose }: { request: EditorRequest | null; onC
     (calendar) => calendar.mayWrite && (!request?.occurrence || calendar.accountId === request.occurrence.accountId),
   );
   const groups = groupByAccount(writable, accounts);
-  const fallback = writable.find((calendar) => calendar.isDefault) ?? writable[0];
+  // A new event from a mail goes to that mail's account where it has a calendar.
+  const own = writable.filter((calendar) => calendar.accountId === request?.draft?.accountId);
+  const fallback =
+    own.find((calendar) => calendar.isDefault) ??
+    own[0] ??
+    writable.find((calendar) => calendar.isDefault) ??
+    writable[0];
   const [form, setFormState] = useState<Form | null>(() => (request ? initialForm(request, fallback?.id ?? "") : null));
   const [dirty, setDirty] = useState(false);
   const [tried, setTried] = useState(false);

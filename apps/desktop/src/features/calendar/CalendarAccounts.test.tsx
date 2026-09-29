@@ -132,6 +132,29 @@ describe("calendars of several mailboxes", () => {
     expect(picker.value).toBe("b:club");
   });
 
+  it("starts an event from a mail in that mail's mailbox, with its place and notes", async () => {
+    renderWithClient(<EventEditor />);
+    act(() =>
+      useCalendarUi.getState().openEditor({
+        occurrence: null,
+        draft: {
+          start: "2026-09-23T10:00:00",
+          end: "2026-09-23T11:00:00",
+          allDay: false,
+          title: "Lesung",
+          location: "Café Lindenblüte",
+          description: "From the mail",
+          accountId: "a",
+        },
+      }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    const picker = await within(dialog).findByLabelText<HTMLSelectElement>("Calendar");
+    await waitFor(() => expect(picker.value).toBe("a:home"));
+    expect(within(dialog).getByLabelText<HTMLInputElement>("Location").value).toBe("Café Lindenblüte");
+    expect(within(dialog).getByLabelText<HTMLTextAreaElement>("Description").value).toBe("From the mail");
+  });
+
   it("keeps an event in its own mailbox", async () => {
     const occurrence: CalendarOccurrence = {
       id: "a:e1",

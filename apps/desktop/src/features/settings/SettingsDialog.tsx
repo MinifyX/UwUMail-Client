@@ -360,6 +360,14 @@ function Reading() {
           {t("settings.clearSenderPictures")}
         </Button>
       </div>
+      <div className="border-b border-hairline py-4">
+        <Toggle
+          checked={settings.detectEvents}
+          onChange={(detectEvents) => settings.update({ detectEvents })}
+          label={t("settings.detectEvents")}
+          description={t("settings.detectEventsDesc")}
+        />
+      </div>
       <PrivacyProxy />
       {phone && (
         <Row label={t("settings.swipeRight")} description={t("settings.swipeDesc")}>
