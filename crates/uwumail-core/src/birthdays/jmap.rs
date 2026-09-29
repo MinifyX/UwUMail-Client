@@ -130,7 +130,8 @@ pub fn import_entries(entries: &[BirthdayImportEntry], app_account: &str) -> Res
                     Some(book) => json!(remote(book, app_account)?),
                     None => Value::Null,
                 };
-                let name: String = name.trim().chars().take(200).collect();
+                let name: String = name.chars().filter(|c| !c.is_control()).take(200).collect();
+                let name = name.trim();
                 value.insert("newContact".into(), json!({ "name": name, "addressBookId": book }));
             }
             _ => return Err(Error::invalid("Each birthday goes into one contact, or into a new one with a name.")),
