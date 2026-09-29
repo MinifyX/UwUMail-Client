@@ -592,20 +592,23 @@ mod tests {
         (Store::open_in_memory().unwrap(), MemorySecrets::default())
     }
 
+    /// Made up for the tests.
+    const TEST_KEY: &str = "sk-geheim-a1b2"; // gitleaks:allow
+
     #[test]
     fn keys_go_to_the_keychain_and_only_a_hint_to_the_page() {
         let (store, secrets) = device();
         let device = Device { store: &store, secrets: &secrets };
         let created = device
-            .create_provider(&json!({ "name": "Mistral", "kind": "mistral", "apiKey": " sk-geheim-a1b2 " }))
+            .create_provider(&json!({ "name": "Mistral", "kind": "mistral", "apiKey": format!(" {TEST_KEY} ") }))
             .unwrap();
         let id = created["id"].as_str().unwrap().to_string();
         assert_eq!(created["keyHint"], "…a1b2");
         assert_eq!(created["hasKey"], true);
         assert!(!created.to_string().contains("geheim"));
         assert!(!device.providers_json().unwrap().to_string().contains("geheim"));
-        assert_eq!(secrets.get(&secret_id(&id)).unwrap(), Secret::ApiKey { api_key: "sk-geheim-a1b2".into() });
-        assert_eq!(device.endpoint(&device.provider(&id).unwrap()).unwrap().api_key.as_deref(), Some("sk-geheim-a1b2"));
+        assert_eq!(secrets.get(&secret_id(&id)).unwrap(), Secret::ApiKey { api_key: TEST_KEY.into() });
+        assert_eq!(device.endpoint(&device.provider(&id).unwrap()).unwrap().api_key.as_deref(), Some(TEST_KEY));
 
         // Leaving the key out keeps it; "" removes it.
         device.update_provider(&id, &json!({ "name": "Mistral EU" })).unwrap();

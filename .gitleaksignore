@@ -1,0 +1,3 @@
+# Made-up keys in tests, flagged in the commit that added them (the lines now carry gitleaks:allow).
+785c42c7f86462a5c97993be1816c94c7031ddb0:crates/uwumail-core/src/assist/local.rs:generic-api-key:600
+785c42c7f86462a5c97993be1816c94c7031ddb0:crates/uwumail-core/src/assist/local.rs:generic-api-key:607
