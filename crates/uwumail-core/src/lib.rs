@@ -23,6 +23,7 @@ pub mod mailto;
 pub mod mime;
 pub mod model;
 pub mod oauth;
+pub mod ocr;
 pub mod pictures;
 pub mod secrets;
 pub mod smtp;
@@ -31,3 +32,4 @@ pub mod tls;
 
 pub use engine::{Engine, EngineOptions};
 pub use error::{Error, ErrorCode, Result};
+pub use ocr::TextRecognizer;

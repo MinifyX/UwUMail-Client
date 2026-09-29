@@ -262,6 +262,31 @@ pub struct Attachment {
     pub content_id: Option<String>,
 }
 
+/// The text in a mail's pictures (UwUMail Server's `Email/imageText`, or this device's OCR).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageTextResult {
+    /// The app's message id.
+    pub email_id: String,
+    /// Nothing can read pictures here (no OCR on the server or this system); `images` is then empty.
+    pub unavailable: bool,
+    /// Pictures in which text was found, in the order they come in the mail.
+    pub images: Vec<ImageText>,
+    /// Pictures that were not read: too small, too big, too many, unreadable or not fetched.
+    pub skipped: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageText {
+    /// `cid:<content-id>` for an embedded picture, `blob:<attachment id>` for an attached one,
+    /// else the picture's `http(s)` address.
+    pub source: String,
+    pub text: String,
+    pub width: u32,
+    pub height: u32,
+}
+
 /// How a mailing list says to unsubscribe (List-Unsubscribe, RFC 2369 and 8058).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

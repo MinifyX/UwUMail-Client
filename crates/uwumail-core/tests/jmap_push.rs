@@ -215,6 +215,7 @@ async fn setup(web_push: bool) -> Setup {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let no_server = ServerSettings { host: String::new(), port: 0, security: Security::Tls };

@@ -133,6 +133,7 @@ async fn the_engine_reports_settings_changes() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let mut events = engine.subscribe();

@@ -63,6 +63,9 @@ pub struct EngineOptions {
     pub data_dir: PathBuf,
     pub secrets: Arc<dyn SecretStore>,
     pub open_url: UrlOpener,
+    /// The system's OCR for the text in pictures of mailboxes whose server doesn't read them;
+    /// `None` where there is none (Linux).
+    pub recognizer: Option<Arc<dyn crate::ocr::TextRecognizer>>,
 }
 
 #[derive(Clone)]
@@ -134,6 +137,12 @@ struct Inner {
     push_lock: AsyncMutex<()>,
     /// When each account's session was last read again to look for a new push key.
     push_key_checked: Mutex<HashMap<String, Instant>>,
+    /// Reads the text in pictures on this device (see `ocr`).
+    recognizer: Option<Arc<dyn crate::ocr::TextRecognizer>>,
+    /// Pictures being read on this device right now, across all mails.
+    ocr_permits: Arc<tokio::sync::Semaphore>,
+    /// The text in the pictures of the mails read last.
+    image_texts: Mutex<crate::ocr::ResultCache>,
 }
 
 enum Credential {
@@ -169,6 +178,7 @@ macro_rules! with_session {
 mod calendar_ops;
 mod contacts_ops;
 mod folder_ops;
+mod ocr_ops;
 mod push_ops;
 
 impl Engine {
@@ -211,6 +221,9 @@ impl Engine {
                 sync_locks: Mutex::new(HashMap::new()),
                 push_lock: AsyncMutex::new(()),
                 push_key_checked: Mutex::new(HashMap::new()),
+                recognizer: options.recognizer,
+                ocr_permits: Arc::new(tokio::sync::Semaphore::new(crate::ocr::PARALLEL)),
+                image_texts: Mutex::new(crate::ocr::ResultCache::default()),
             }),
         })
     }
@@ -2306,6 +2319,7 @@ mod tests {
             data_dir: dir.path().to_path_buf(),
             secrets: Arc::new(crate::secrets::MemorySecrets::default()),
             open_url: Arc::new(|_| {}),
+            recognizer: None,
         })
         .unwrap();
         assert!(!engine.finish_sign_in("app.uwumail://oauth?code=1&state=2"), "no app link set up");
@@ -2334,6 +2348,7 @@ mod tests {
             data_dir: dir.path().to_path_buf(),
             secrets: secrets.clone(),
             open_url: Arc::new(move |url| seen.lock().unwrap().push(url.to_string())),
+            recognizer: None,
         })
         .unwrap();
         let lookalike = ServerSettings { host: "outlook.example.org".into(), port: 993, security: Security::Tls };
