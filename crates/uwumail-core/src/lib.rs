@@ -11,6 +11,7 @@ pub mod contacts;
 pub mod engine;
 pub mod error;
 pub mod folders;
+pub mod image_size;
 pub mod imap;
 pub mod jmap;
 pub mod jmap_push;

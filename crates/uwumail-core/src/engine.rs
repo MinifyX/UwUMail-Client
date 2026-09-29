@@ -1500,7 +1500,27 @@ impl Engine {
                 "webp" => "image/webp",
                 _ => "application/octet-stream",
             });
-        Some((media_type.to_string(), bytes))
+        Some((media_type.to_string(), Arc::unwrap_or_clone(bytes)))
+    }
+
+    /// The sizes of a mail's remote pictures before they load, each passed to `on_size` as soon as
+    /// it is known. A UwUMail server tells them for its own accounts (`imageSizesUrl`); for every
+    /// other account they are read from the pictures fetched here, which then wait in memory for
+    /// the reader. An error when the account's server fetches its pictures but tells no sizes: the
+    /// reader then loads them without.
+    pub async fn image_sizes(
+        &self,
+        account_id: &str,
+        urls: &[String],
+        on_size: impl FnMut(crate::mail_images::RemoteImageSize),
+    ) -> Result<()> {
+        let account = self.inner.store.account(account_id)?;
+        if let Some(client) = self.inner.picture_server_for(&account).await {
+            // Its pictures come through the server, never from here.
+            return client.image_sizes(urls, on_size).await;
+        }
+        self.inner.mail_images.probe(urls, on_size).await;
+        Ok(())
     }
 
     /// The proxy for requests that tell a sender something about the reader: remote pictures, sender

@@ -131,3 +131,61 @@ async fn hostile_events_are_shown_safely_or_left_out() {
     // Text stays text: the page renders it as such (EventPopover, React text nodes).
     assert!(shown.iter().any(|o| o.location == "<img src=x onerror=alert(1)>"));
 }
+
+fn sizes_session(sizes_url: &str) -> Value {
+    let mut session = session();
+    session["capabilities"][uwumail_core::jmap::REMOTE] =
+        json!({ "imageUrl": "/image/{accountId}?url={url}", "imageSizesUrl": sizes_url });
+    session
+}
+
+/// The picture sizes a server tells are taken for the addresses asked about only, each once, and
+/// a server that says nothing sensible can't make the reader wait for more.
+#[tokio::test]
+async fn picture_sizes_take_only_what_was_asked() {
+    let stub = http_stub(|request| {
+        if request.path.starts_with("/.well-known/jmap") {
+            return Response::json(&sizes_session("/sizes/{accountId}"));
+        }
+        if !request.path.starts_with("/sizes/") {
+            return answer(request);
+        }
+        let asked: Value = serde_json::from_slice(&request.body).unwrap_or_default();
+        assert_eq!(asked["urls"].as_array().map(Vec::len), Some(2), "each address once");
+        Response::new(
+            200,
+            "{\"url\":\"https://cdn.example.com/a.png\",\"width\":640,\"height\":480}\n\
+             {\"url\":\"http://127.0.0.1/admin\",\"width\":1,\"height\":1}\n\
+             {\"url\":\"https://cdn.example.com/a.png\",\"failed\":true}\n\
+             {\"url\":\"https://t.example.net/o.gif\",\"width\":99999999999,\"height\":1}\n",
+        )
+        .header("content-type", "application/x-ndjson")
+    })
+    .await;
+    let client = client(&stub).await;
+    let urls = ["https://cdn.example.com/a.png", "https://t.example.net/o.gif", "https://cdn.example.com/a.png"]
+        .map(String::from);
+    let mut sizes = Vec::new();
+    client.image_sizes(&urls, |size| sizes.push(size)).await.unwrap();
+    assert_eq!(sizes.len(), 2);
+    assert_eq!((sizes[0].width, sizes[0].height, sizes[0].failed), (Some(640), Some(480), false));
+    assert_eq!((sizes[1].url.as_str(), sizes[1].width, sizes[1].failed), ("https://t.example.net/o.gif", None, false));
+    let request = stub.seen().into_iter().find(|r| r.path == "/sizes/a1").expect("asked the server");
+    assert_eq!(request.method, "POST");
+    assert!(request.has_password());
+}
+
+/// A sizes address on another site never gets the login.
+#[tokio::test]
+async fn picture_sizes_stay_on_the_servers_site() {
+    let stub = http_stub(|request| {
+        if request.path.starts_with("/.well-known/jmap") {
+            return Response::json(&sizes_session("https://collector.example.net/sizes/{accountId}"));
+        }
+        answer(request)
+    })
+    .await;
+    let client = client(&stub).await;
+    let error = client.image_sizes(&["https://cdn.example.com/a.png".to_string()], |_| {}).await.unwrap_err();
+    assert!(error.message.contains("another site"), "{}", error.message);
+}
