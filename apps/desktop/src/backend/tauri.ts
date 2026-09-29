@@ -5,6 +5,8 @@ import type {
   BlockedSender,
   Account,
   AddressBookInfo,
+  AssistEventsResult,
+  AssistFeatures,
   AttachmentContent,
   BackendEvent,
   CalendarAccount,
@@ -21,6 +23,7 @@ import type {
   FlagChange,
   Folder,
   Identity,
+  ImageTextResult,
   MailtoDraft,
   MovedMessage,
   NewAccount,
@@ -450,6 +453,18 @@ export class TauriBackend implements Backend {
 
   companyDomain(email: string) {
     return call<string | null>("get_company_domain", { email });
+  }
+
+  imageText(messageId: string, remote: boolean) {
+    return call<ImageTextResult>("image_text", { messageId, remote });
+  }
+
+  assistFeatures(accountId: string) {
+    return call<AssistFeatures | null>("assist_features", { accountId });
+  }
+
+  extractEvents(messageId: string, includeImages: boolean) {
+    return call<AssistEventsResult>("assist_extract_events", { messageId, includeImages });
   }
 
   searchContacts(query: string) {

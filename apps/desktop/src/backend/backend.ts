@@ -2,6 +2,8 @@ import type {
   BlockedSender,
   Account,
   AddressBookInfo,
+  AssistEventsResult,
+  AssistFeatures,
   AttachmentContent,
   BackendEvent,
   CalendarAccount,
@@ -19,6 +21,7 @@ import type {
   FlagChange,
   Folder,
   Identity,
+  ImageTextResult,
   MailtoDraft,
   MovedMessage,
   NewAccount,
@@ -218,6 +221,24 @@ export interface Backend {
   imageProxy(accountId: string): ImageProxy | null;
   /** The proxy remote pictures, sender pictures and one-click unsubscribes take; empty for none. */
   setPrivacyProxy(proxy: string): Promise<void>;
+  /**
+   * The text in a mail's pictures, e.g. for dates on a poster: a UwUMail account's server reads
+   * them (`Email/imageText`), other mailboxes the system's OCR (macOS, iOS, Windows, Android;
+   * `unavailable` on Linux). Remote pictures are only read when `remote` is true, which the reader
+   * passes only once they may load.
+   */
+  imageText(messageId: string, remote: boolean): Promise<ImageTextResult>;
+  /**
+   * Per feature whether the AI assistant can do it now for this mailbox: its UwUMail server's
+   * (`urn:uwumail:jmap:assist`) or the providers set up on this device. Null without an assistant,
+   * and everything about it stays hidden.
+   */
+  assistFeatures(accountId: string): Promise<AssistFeatures | null>;
+  /**
+   * Appointments, deadlines and trips the assistant reads out of a mail, for "add to calendar".
+   * With `includeImages` the text in its pictures is read too (where that works).
+   */
+  extractEvents(messageId: string, includeImages: boolean): Promise<AssistEventsResult>;
   /** Main domain of a company address (`news.shop.example` → `shop.example`); null for mail providers. */
   companyDomain(email: string): Promise<string | null>;
 

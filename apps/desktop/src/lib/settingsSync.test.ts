@@ -22,6 +22,8 @@ const base: SyncedSettings = {
   senderPictures: true,
   undoSendSeconds: 10,
   linkConfirm: true,
+  assistRefineEvents: false,
+  detectEvents: true,
   trustedSenders: [],
   senderAppearance: {},
   linkDomains: [],
@@ -39,6 +41,9 @@ describe("keys the server takes", () => {
     expect(isSyncable("linkConfirm", false)).toBe(true);
     expect(isSyncable("darkImages", "yes")).toBe(false);
     expect(isSyncable("listDensity", "compact")).toBe(false);
+    expect(isSyncable("assist.refineEvents", true)).toBe(true);
+    expect(isSyncable("assist.refineEvents", "on")).toBe(false);
+    expect(isSyncable("assistRefineEvents", true)).toBe(false);
   });
 
   it("takes names every object inherits for nothing", () => {
@@ -111,10 +116,12 @@ describe("settings as keys", () => {
   it("covers every synced field of the defaults", () => {
     expect(Object.keys(settingsToValues(DEFAULT_SETTINGS)).sort()).toEqual(
       [
+        "assist.refineEvents",
         "conversations",
         "darkImages",
         "language",
         "linkConfirm",
+        "mail.detectEvents",
         "mailAppearance",
         "remoteImages",
         "senderPictures",
@@ -149,6 +156,22 @@ describe("settings as keys", () => {
       senderAppearance: {},
       linkDomains: ["uwumail.test"],
     });
+  });
+
+  it("maps a choice with a key of its own onto its setting", () => {
+    expect(settingsToValues({ ...base, assistRefineEvents: true })).toMatchObject({ "assist.refineEvents": true });
+    expect(applyToSettings(base, { "assist.refineEvents": true })).toEqual({ assistRefineEvents: true });
+    expect(applyToSettings(base, { "assist.refineEvents": false })).toEqual({});
+  });
+
+  it("keeps finding dates in mail under its namespaced key", () => {
+    expect(isSyncable("mail.detectEvents", false)).toBe(true);
+    expect(isSyncable("mail.detectEvents", "off")).toBe(false);
+    expect(isSyncable("detectEvents", false)).toBe(false);
+    expect(settingsToValues({ ...base, detectEvents: false })["mail.detectEvents"]).toBe(false);
+    expect(settingsToValues(base)).not.toHaveProperty("detectEvents");
+    expect(applyToSettings(base, { "mail.detectEvents": false })).toEqual({ detectEvents: false });
+    expect(applyToSettings(base, { detectEvents: false })).toEqual({});
   });
 
   it("diffs into a patch with null for removals", () => {

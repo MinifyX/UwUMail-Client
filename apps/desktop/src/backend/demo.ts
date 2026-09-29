@@ -10,6 +10,8 @@ import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
   BlockedSender,
   Account,
+  AssistEventsResult,
+  AssistFeatures,
   AttachmentContent,
   Address,
   BackendEvent,
@@ -24,6 +26,7 @@ import type {
   FlagChange,
   Folder,
   Identity,
+  ImageTextResult,
   MailtoDraft,
   MovedMessage,
   Message,
@@ -1006,6 +1009,19 @@ export class DemoBackend implements Backend {
   async fetchMailImage(): Promise<Blob | null> {
     // The demo's images are embedded; remote ones can only be read where their server allows it.
     return null;
+  }
+
+  async imageText(messageId: string): Promise<ImageTextResult> {
+    await wait(120);
+    return { emailId: messageId, unavailable: true, images: [], skipped: 0 };
+  }
+
+  async assistFeatures(): Promise<AssistFeatures | null> {
+    return null;
+  }
+
+  async extractEvents(): Promise<AssistEventsResult> {
+    throw new BackendError("not_supported", "The demo has no assistant.");
   }
 
   async companyDomain(email: string) {
