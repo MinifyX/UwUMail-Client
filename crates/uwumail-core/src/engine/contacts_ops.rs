@@ -37,7 +37,7 @@ fn check_name(name: &str) -> Result<&str> {
 }
 
 /// The name a card goes by: its full name, its name's parts, its company.
-fn card_name(card: &Value) -> Option<String> {
+pub(super) fn card_name(card: &Value) -> Option<String> {
     let name = card.get("name");
     if let Some(full) = name.and_then(|n| n.get("full")).and_then(Value::as_str).map(str::trim)
         && !full.is_empty()
@@ -169,7 +169,7 @@ impl Inner {
     /// answers, the account's own JMAP server, and sign-ins that can't have one. `None` when only
     /// that search could tell — it asks the mail domain's website, so it waits until someone opens
     /// the contacts.
-    async fn contacts_source_known(&self, account_id: &str) -> Option<Result<Source>> {
+    pub(super) async fn contacts_source_known(&self, account_id: &str) -> Option<Result<Source>> {
         match self.contacts_sources.lock().await.get(account_id) {
             Some(SourceState::Ready(source)) => return Some(Ok(source.clone())),
             Some(SourceState::Unavailable { problem, since }) if since.elapsed() < RETRY_UNAVAILABLE => {
@@ -313,7 +313,7 @@ impl Inner {
     }
 
     /// An account's cards, from memory while fresh.
-    async fn remote_cards(&self, account_id: &str) -> Result<Vec<RemoteCard>> {
+    pub(super) async fn remote_cards(&self, account_id: &str) -> Result<Vec<RemoteCard>> {
         if let Some((at, cards)) = self.contact_card_lists.lock().unwrap().get(account_id)
             && at.elapsed() < LIST_FRESH
         {

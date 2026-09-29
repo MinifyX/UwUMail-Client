@@ -202,6 +202,23 @@ impl Store {
         Ok(out)
     }
 
+    /// Local ids of JMAP emails by their server id, for those stored.
+    pub fn ids_by_remote(
+        &self,
+        account_id: &str,
+        remote_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT id FROM messages WHERE account_id = ?1 AND remote_id = ?2 LIMIT 1")?;
+        let mut found = std::collections::HashMap::new();
+        for remote in remote_ids {
+            if let Some(id) = stmt.query_row(params![account_id, remote], |row| row.get::<_, String>(0)).optional()? {
+                found.insert(remote.clone(), id);
+            }
+        }
+        Ok(found)
+    }
+
     /// The newest messages in the inboxes of these accounts, newest first.
     pub fn recent_inbox(&self, account_ids: &[String], limit: u32) -> Result<Vec<String>> {
         if account_ids.is_empty() {

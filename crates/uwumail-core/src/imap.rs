@@ -375,6 +375,47 @@ pub fn flags_of(fetch: &Fetch) -> MessageFlags {
     flags
 }
 
+/// The own keywords of a message (lower case, no `\` system flags or `$` keywords), e.g. labels.
+pub fn keywords_of(fetch: &Fetch) -> Vec<String> {
+    fetch
+        .flags()
+        .filter_map(|flag| match flag {
+            Flag::Custom(name) if !name.starts_with('$') && !name.starts_with('\\') => Some(name.to_lowercase()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Whether a folder keeps own keywords: its PERMANENTFLAGS name `\*`, or the keyword itself.
+pub fn may_keep_keyword(permanent: &[Flag<'_>], keyword: &str) -> bool {
+    permanent.iter().any(|flag| match flag {
+        Flag::MayCreate => true,
+        Flag::Custom(name) => name.eq_ignore_ascii_case(keyword),
+        _ => false,
+    })
+}
+
+/// Sets (`on`) or takes off an own keyword. Refused with `not_supported` where the folder doesn't
+/// keep own keywords, before anything is changed.
+pub async fn store_keyword(
+    session: &mut ImapSession,
+    folder_path: &str,
+    uids: &[u32],
+    keyword: &str,
+    on: bool,
+) -> Result<()> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let mailbox = session.select(folder_path).await?;
+    if on && !may_keep_keyword(&mailbox.permanent_flags, keyword) {
+        return Err(Error::not_supported("This mail server doesn't keep labels (own keywords) on mail."));
+    }
+    let operation = format!("{}FLAGS.SILENT ({keyword})", if on { "+" } else { "-" });
+    let _: Vec<Fetch> = session.uid_store(uid_set(uids), operation).await?.try_collect().await?;
+    Ok(())
+}
+
 fn uid_set(uids: &[u32]) -> String {
     uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",")
 }
@@ -500,6 +541,10 @@ pub async fn sync_folder(
                     &mime::parse(raw),
                 )?;
                 if let Some(id) = inserted {
+                    let keywords = keywords_of(&fetch);
+                    if !keywords.is_empty() {
+                        store.set_keywords(&id, &keywords)?;
+                    }
                     result.new_message_ids.push(id);
                     result.changed = true;
                 }
@@ -513,18 +558,24 @@ pub async fn sync_folder(
 
     // Step 3: flag changes and deletions of what we already had.
     if max_uid > 0 {
-        let current: HashMap<u32, MessageFlags> = if mailbox.exists == 0 {
-            HashMap::new()
+        let fetched: Vec<Fetch> = if mailbox.exists == 0 {
+            Vec::new()
         } else {
-            session
-                .uid_fetch(format!("1:{max_uid}"), "(UID FLAGS)")
-                .await?
-                .try_collect::<Vec<Fetch>>()
-                .await?
-                .iter()
-                .filter_map(|fetch| fetch.uid.map(|uid| (uid, flags_of(fetch))))
-                .collect()
+            session.uid_fetch(format!("1:{max_uid}"), "(UID FLAGS)").await?.try_collect::<Vec<Fetch>>().await?
         };
+        let current: HashMap<u32, MessageFlags> =
+            fetched.iter().filter_map(|fetch| fetch.uid.map(|uid| (uid, flags_of(fetch)))).collect();
+        // Own keywords (labels) set here or by other apps.
+        let known_keywords = store.keywords_by_uid(&folder.id)?;
+        for fetch in &fetched {
+            let Some(uid) = fetch.uid else { continue };
+            let mut keywords = keywords_of(fetch);
+            keywords.sort();
+            keywords.dedup();
+            if known_keywords.get(&uid).is_some_and(|known| *known != keywords.join(" ")) {
+                result.changed |= store.set_keywords_by_uid(&folder.id, uid, &keywords)?;
+            }
+        }
         let mut gone = Vec::new();
         for stored in store.stored_flags(&folder.id)? {
             if stored.uid > max_uid {

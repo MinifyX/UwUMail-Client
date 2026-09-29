@@ -846,6 +846,19 @@ pub fn flags_from_keywords(keywords: Option<&Value>) -> crate::model::MessageFla
     }
 }
 
+/// The own keywords among JMAP keywords (lower case, without the `$` system ones), e.g. labels.
+pub fn own_keywords(keywords: Option<&Value>) -> Vec<String> {
+    keywords
+        .and_then(Value::as_object)
+        .map(|map| {
+            map.iter()
+                .filter(|(key, value)| value.as_bool() == Some(true) && !key.starts_with('$') && key.len() <= 64)
+                .map(|(key, _)| key.to_lowercase())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// A folder role from a JMAP mailbox role.
 pub fn role_from_jmap(role: Option<&str>) -> Option<crate::model::FolderRole> {
     use crate::model::FolderRole;
