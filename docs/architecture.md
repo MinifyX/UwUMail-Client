@@ -91,8 +91,9 @@ and reports `settings:changed` when a push names `UserSettings`, and once push
 is up. Everything else happens in the page, in two files that are identical in
 UwUMail-Webmail:
 
-- `lib/settingsSync.ts` maps settings onto keys (choices one key each, lists one
-  key per entry, signatures `signature:<id>`), checks values the way the server
+- `lib/settingsSync.ts` maps settings onto keys (choices one key each, some in a
+  feature's namespace such as `mail.detectEvents` and `assist.refineEvents`,
+  lists one key per entry, signatures `signature:<id>`), checks values the way the server
   does, and merges: the first time lists become the union of both sides and the
   server's choices win; after that the server wins unless a change made here is
   still waiting.
