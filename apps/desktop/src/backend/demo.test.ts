@@ -31,7 +31,12 @@ describe("DemoBackend calendar", () => {
     const year = new Date().getFullYear();
     const events = await demo.calendarEvents(`${year}-04-01T00:00:00`, `${year}-05-01T00:00:00`, "UTC");
     const leni = events.find((e) => e.birthday?.contactId === "contact-leni" && e.birthday.kind === "birth")!;
-    expect(leni).toMatchObject({ calendarId: birthdays.id, readOnly: true, allDay: true, start: `${year}-04-12T00:00:00` });
+    expect(leni).toMatchObject({
+      calendarId: birthdays.id,
+      readOnly: true,
+      allDay: true,
+      start: `${year}-04-12T00:00:00`,
+    });
     expect(leni.birthday!.age).toBe(year - 1996);
     expect(leni.title).toBe(`Leni Wanders (${year - 1996})`);
 

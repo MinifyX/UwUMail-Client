@@ -83,6 +83,11 @@ const fake = {
   createContact: vi.fn(async () => "k3"),
   updateContact: vi.fn(async () => {}),
   deleteContact: vi.fn(async () => {}),
+  // Only the UwUMail account ("acc") sends birthday reminders.
+  birthdayFeatures: vi.fn(async () => [
+    { accountId: "acc", server: true, import: true },
+    { accountId: "club", server: false, import: false },
+  ]),
 };
 
 vi.mock("@/backend/backend", async (original) => ({
@@ -203,6 +208,98 @@ describe("contacts flows", () => {
       "k1",
       expect.objectContaining({ addressBookId: "b2", organization: "Nyu & Co", given: "Mina", birthdayChanged: false }),
     );
+  });
+
+  it("keeps a birthday without a year and adds an anniversary and reminders", async () => {
+    renderContacts({ shell: false });
+    act(() =>
+      useContactsUi.getState().openEditor({ contact: { ...CONTACTS[0]!, birthday: "--02-29", reminders: [] } }),
+    );
+    const dialog = await findDialog("Edit contact");
+    const birthday = within(dialog).getByRole("group", { name: "Birthday" });
+    expect(within(birthday).getByLabelText<HTMLInputElement>("Day").value).toBe("29");
+    expect(within(birthday).getByLabelText<HTMLSelectElement>("Month").value).toBe("2");
+    expect(within(birthday).getByLabelText<HTMLInputElement>("Year (optional)").value).toBe("");
+
+    const anniversary = within(dialog).getByRole("group", { name: "Wedding anniversary" });
+    fireEvent.change(within(anniversary).getByLabelText("Day"), { target: { value: "12" } });
+    fireEvent.change(within(anniversary).getByLabelText("Month"), { target: { value: "6" } });
+    fireEvent.change(within(anniversary).getByLabelText("Year (optional)"), { target: { value: "2021" } });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "1 week before" }));
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "On the day at 9:00" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(fake.updateContact).toHaveBeenCalledTimes(1));
+    expect(fake.updateContact).toHaveBeenCalledWith(
+      "k1",
+      expect.objectContaining({
+        birthday: "--02-29",
+        birthdayChanged: false,
+        anniversary: "2021-06-12",
+        anniversaryChanged: true,
+        reminders: [
+          { daysBefore: 0, time: "09:00" },
+          { daysBefore: 7, time: "09:00" },
+        ],
+      }),
+    );
+  });
+
+  it("refuses a day that doesn't exist, like 29 February 2023", async () => {
+    renderContacts({ shell: false });
+    act(() => startNewContact({ given: "Lea" }));
+    const dialog = await findDialog("New contact");
+    await waitFor(() => expect(within(dialog).getByLabelText<HTMLSelectElement>("Address book").value).toBe("b1"));
+    const birthday = within(dialog).getByRole("group", { name: "Birthday" });
+    fireEvent.change(within(birthday).getByLabelText("Day"), { target: { value: "29" } });
+    fireEvent.change(within(birthday).getByLabelText("Month"), { target: { value: "2" } });
+    fireEvent.change(within(birthday).getByLabelText("Year (optional)"), { target: { value: "2023" } });
+    expect(within(birthday).getByRole("alert").textContent).toBe("This day doesn't exist.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(fake.createContact).not.toHaveBeenCalled();
+
+    fireEvent.change(within(birthday).getByLabelText("Year (optional)"), { target: { value: "2024" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(fake.createContact).toHaveBeenCalledTimes(1));
+    expect(fake.createContact).toHaveBeenCalledWith(
+      expect.objectContaining({ given: "Lea", birthday: "2024-02-29", birthdayChanged: true }),
+    );
+  });
+
+  it("shows the age in the list and when the birthday comes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 3, 12, 10, 0));
+    try {
+      fake.contacts.mockResolvedValueOnce([
+        { ...CONTACTS[0]!, birthday: "1996-04-12", reminders: [{ daysBefore: 1, time: "09:00" }] },
+        { ...CONTACTS[1]!, birthday: "1970-12-24", anniversary: "--06-12" },
+      ]);
+      renderContacts();
+      const list = await screen.findByRole("list", { name: "Contacts" });
+      expect((await within(list).findByLabelText("30 years old")).textContent).toBe("30");
+      expect(within(list).getByLabelText("55 years old")).toBeTruthy();
+
+      fireEvent.click(within(list).getByText("Mina Sommer"));
+      const mina = await screen.findByRole("region", { name: "Mina Sommer" });
+      expect(within(mina).getByText("turns 30 · today!")).toBeTruthy();
+      expect(within(mina).getByText("1 day before")).toBeTruthy();
+
+      fireEvent.click(within(list).getByText("Otto Beispiel"));
+      const otto = await screen.findByRole("region", { name: "Otto Beispiel" });
+      expect(within(otto).getByText("55 years old · turns 56 on December 24, 2026")).toBeTruthy();
+      expect(within(otto).getByText("next on June 12, 2026")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("offers reminders only where the UwUMail server sends them", async () => {
+    renderContacts({ shell: false });
+    act(() => useContactsUi.getState().openEditor({ contact: { ...CONTACTS[0]!, accountId: "club" } }));
+    const dialog = await findDialog("Edit contact");
+    expect(within(dialog).getByRole("group", { name: "Birthday" })).toBeTruthy();
+    await waitFor(() => expect(fake.birthdayFeatures).toHaveBeenCalled());
+    expect(within(dialog).queryByRole("checkbox", { name: "1 week before" })).toBeNull();
   });
 
   it("groups the address books of several mailboxes and asks where a new one goes", async () => {
