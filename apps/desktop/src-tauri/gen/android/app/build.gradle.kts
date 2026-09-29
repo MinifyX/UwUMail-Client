@@ -89,6 +89,10 @@ dependencies {
     // 3.0.10 is the newest release whose Kotlin standard library (2.0) the Kotlin plugin here (1.9)
     // can still read; 3.1 and later bring Kotlin 2.2.
     implementation("org.unifiedpush.android:connector:3.0.10")
+    // Text in mail pictures (PictureText.kt): ML Kit's recognizer from Google Play services, whose
+    // model Play services downloads, a few hundred KB in the APK instead of several MB per ABI for
+    // the bundled model. Without Play services the feature is off.
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
