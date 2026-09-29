@@ -3,6 +3,7 @@ import type { CalendarInfo, CalendarOccurrence } from "@/backend/types";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
 import { todayKey, type DateKey } from "@/lib/calendarDates";
+import { BirthdayMark } from "./BirthdayMark";
 import { eventColor, formatDayLong, formatTime, formatWeekdayShort } from "./format";
 import { daysOf, isAllDayRow } from "./layout";
 import { anchorOf, useCalendarUi } from "./state";
@@ -80,7 +81,8 @@ export function AgendaView({ days, occurrences, calendars }: AgendaViewProps) {
                   >
                     <span className="w-1 shrink-0 rounded-full" style={{ background: color }} aria-hidden />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-semibold">
+                      <span className="flex items-center gap-1.5 truncate text-[15px] font-semibold">
+                        <BirthdayMark occurrence={occurrence} className="size-4" />
                         {occurrence.title || t("calendar.untitled")}
                       </span>
                       <span className="block truncate text-[13px] text-muted">

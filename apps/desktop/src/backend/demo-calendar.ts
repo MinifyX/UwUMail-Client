@@ -357,7 +357,8 @@ export class DemoCalendar {
 
   deleteCalendar(id: string) {
     const calendar = this.calendar(id);
-    if (calendar.isBirthdays) throw new BackendError("invalid_input", "The birthdays calendar comes from the contacts.");
+    if (calendar.isBirthdays)
+      throw new BackendError("invalid_input", "The birthdays calendar comes from the contacts.");
     if (!calendar.mayDelete) throw new BackendError("invalid_input", "This calendar can't be deleted.");
     this.calendarList = this.calendarList.filter((c) => c.id !== id);
     this.events = this.events.filter((event) => event.calendarId !== id);

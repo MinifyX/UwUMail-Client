@@ -418,8 +418,7 @@ export interface BirthdayScan {
 
 /** What to do with one found birthday: into a contact, or into a new one with this name. */
 export type BirthdayImportEntry =
-  | { eventId: string; contactId: string; overwrite?: boolean }
-  | { eventId: string; newContactName: string };
+  { eventId: string; contactId: string; overwrite?: boolean } | { eventId: string; newContactName: string };
 
 export interface BirthdayImportResult {
   imported: { eventId: string; contactId: string; created: boolean; eventDeleted: boolean }[];

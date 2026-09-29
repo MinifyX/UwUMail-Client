@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { ContactRecord } from "@/backend/types";
+import { useUi } from "@/state/ui";
 
 /** What a new contact starts with, e.g. the sender of a mail or a vCard someone sent. */
 export interface ContactDraft {
@@ -51,4 +52,10 @@ export const useContactsUi = create<ContactsUiState>((set) => ({
 /** A new contact, with what is known already. */
 export function startNewContact(draft?: ContactDraft) {
   useContactsUi.getState().openEditor({ contact: null, draft });
+}
+
+/** Shows one contact in the contacts, from anywhere (a birthday in the calendar, a mail). */
+export function showContact(contactId: string) {
+  useUi.getState().setSection("contacts");
+  useContactsUi.setState({ bookId: null, search: "", selectedId: contactId });
 }

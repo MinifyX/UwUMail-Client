@@ -108,9 +108,13 @@ describe("reading cards", () => {
   });
 
   it("reads Apple's year 1604 and a year 0 as no year", () => {
-    const apple = card({ anniversaries: { k: { kind: "birth", date: { "@type": "PartialDate", year: 1604, month: 4, day: 12 } } } });
+    const apple = card({
+      anniversaries: { k: { kind: "birth", date: { "@type": "PartialDate", year: 1604, month: 4, day: 12 } } },
+    });
     expect(toContactRecord(apple, "a").birthday).toBe("--04-12");
-    const zero = card({ anniversaries: { k: { kind: "birth", date: { "@type": "PartialDate", year: 0, month: 4, day: 12 } } } });
+    const zero = card({
+      anniversaries: { k: { kind: "birth", date: { "@type": "PartialDate", year: 0, month: 4, day: 12 } } },
+    });
     expect(toContactRecord(zero, "a").birthday).toBe("--04-12");
   });
 

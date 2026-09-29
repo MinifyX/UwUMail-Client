@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import type { CalendarInfo, CalendarOccurrence } from "@/backend/types";
 import { useT } from "@/i18n";
 import { addDays, atMidnight, dateOf, diffDays, todayKey, type DateKey } from "@/lib/calendarDates";
+import { BirthdayMark } from "./BirthdayMark";
 import { EVENT_TINT, eventColor, eventStyle, formatDayLong, formatTime, formatWeekdayShort } from "./format";
 import { daysOf, isAllDayRow } from "./layout";
 import { anchorOf, useCalendarUi } from "./state";
@@ -162,6 +163,7 @@ export function MonthView({ weeks, month, occurrences, calendars }: MonthViewPro
                       >
                         {!bar && <span className="size-2 shrink-0 rounded-full bg-[var(--event)]" aria-hidden />}
                         {!bar && <span className="shrink-0 text-muted">{formatTime(occurrence.start)}</span>}
+                        <BirthdayMark occurrence={occurrence} />
                         <span className="min-w-0 truncate">{occurrence.title || t("calendar.untitled")}</span>
                       </button>
                     );

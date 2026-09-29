@@ -14,13 +14,46 @@ describe("DemoBackend calendar", () => {
   it("has calendars for the UwUMail server account only", async () => {
     const demo = new DemoBackend();
     const calendars = await demo.calendars();
-    expect(calendars.map((c) => c.accountId)).toEqual(["acc-private", "acc-private", "acc-private"]);
+    expect(calendars.map((c) => c.accountId)).toEqual(["acc-private", "acc-private", "acc-private", "acc-private"]);
     expect(calendars.filter((c) => c.isDefault)).toHaveLength(1);
     expect(calendars.some((c) => !c.mayWrite)).toBe(true);
     const accounts = await demo.calendarAccounts();
     expect(accounts.find((a) => a.accountId === "acc-private")?.source).toBe("jmap");
     expect(accounts.find((a) => a.accountId === "acc-studio")).toMatchObject({ source: null });
     await expect(demo.createCalendar({ accountId: "acc-studio", name: "Nope", color: null })).rejects.toThrow();
+  });
+
+  it("has a birthdays calendar from the contacts, with the age, and takes birthday events over", async () => {
+    const demo = new DemoBackend();
+    const birthdays = (await demo.calendars()).find((c) => c.isBirthdays)!;
+    expect(birthdays.mayWrite).toBe(false);
+    await expect(demo.deleteCalendar(birthdays.id)).rejects.toThrow();
+    const year = new Date().getFullYear();
+    const events = await demo.calendarEvents(`${year}-04-01T00:00:00`, `${year}-05-01T00:00:00`, "UTC");
+    const leni = events.find((e) => e.birthday?.contactId === "contact-leni" && e.birthday.kind === "birth")!;
+    expect(leni).toMatchObject({ calendarId: birthdays.id, readOnly: true, allDay: true, start: `${year}-04-12T00:00:00` });
+    expect(leni.birthday!.age).toBe(year - 1996);
+    expect(leni.title).toBe(`Leni Wanders (${year - 1996})`);
+
+    expect((await demo.birthdayFeatures()).find((f) => f.accountId === "acc-private")).toMatchObject({
+      server: true,
+      import: true,
+    });
+    const scan = await demo.scanBirthdays("acc-private");
+    const mia = scan.candidates.find((c) => c.name === "Mia Mood")!;
+    const oma = scan.candidates.find((c) => c.name === "Oma Hilde")!;
+    expect(mia).toMatchObject({ match: "matched", birthday: expect.stringMatching(/^1999-/) });
+    expect(oma.match).toBe("unmatched");
+    const result = await demo.importBirthdays("acc-private", [
+      { eventId: mia.eventId, contactId: "contact-mia" },
+      { eventId: oma.eventId, newContactName: "Oma Hilde" },
+    ]);
+    expect(result.failed).toEqual([]);
+    expect(result.imported.map((i) => i.created)).toEqual([false, true]);
+    const contacts = await demo.contacts();
+    expect(contacts.find((c) => c.id === "contact-mia")?.birthday).toBe(mia.birthday);
+    expect(contacts.some((c) => c.displayName === "Oma Hilde")).toBe(true);
+    expect((await demo.scanBirthdays("acc-private")).candidates.some((c) => c.eventId === mia.eventId)).toBe(false);
   });
 
   it("expands the weekly series and shows all-day events up to the next midnight", async () => {

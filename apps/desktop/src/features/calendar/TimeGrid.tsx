@@ -23,6 +23,7 @@ import {
   formatTime,
   formatWeekdayShort,
 } from "./format";
+import { BirthdayMark } from "./BirthdayMark";
 import { layoutBars, layoutDay, piecesOn } from "./layout";
 import { anchorOf, useCalendarUi } from "./state";
 import { inputOf, useEventActions } from "./useCalendarData";
@@ -258,12 +259,13 @@ export function TimeGrid({ days, occurrences, calendars }: TimeGridProps) {
                 }}
                 onClick={(event) => showPopover(bar.occurrence, anchorOf(event.currentTarget))}
                 className={clsx(
-                  "absolute flex h-[21px] items-center truncate px-2 text-left text-[12px] font-semibold",
+                  "absolute flex h-[21px] items-center gap-1 truncate px-2 text-left text-[12px] font-semibold",
                   EVENT_TINT,
                   bar.continuesBefore ? "rounded-l-none" : "rounded-l-md",
                   bar.continuesAfter ? "rounded-r-none" : "rounded-r-md",
                 )}
               >
+                <BirthdayMark occurrence={bar.occurrence} />
                 <span className="truncate">{bar.occurrence.title || t("calendar.untitled")}</span>
               </button>
             );

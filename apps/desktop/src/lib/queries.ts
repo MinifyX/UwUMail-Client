@@ -384,12 +384,16 @@ export function useBackendEvents() {
           void client.invalidateQueries({ queryKey: queryKeys.calendarEvents });
           void client.invalidateQueries({ queryKey: queryKeys.calendarAccounts });
           void client.invalidateQueries({ queryKey: ["calendarsAvailable"] });
+          void client.invalidateQueries({ queryKey: ["birthdayFeatures"] });
           break;
         case "contacts:changed":
           void client.invalidateQueries({ queryKey: queryKeys.addressBooks });
           void client.invalidateQueries({ queryKey: queryKeys.contacts });
           void client.invalidateQueries({ queryKey: queryKeys.contactsAccounts });
           void client.invalidateQueries({ queryKey: ["contactsAvailable"] });
+          // Birthdays calendars are made from the contacts.
+          void client.invalidateQueries({ queryKey: queryKeys.calendars });
+          void client.invalidateQueries({ queryKey: queryKeys.calendarEvents });
           break;
       }
     });
