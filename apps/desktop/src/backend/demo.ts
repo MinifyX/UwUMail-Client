@@ -15,6 +15,10 @@ import type {
   AttachmentContent,
   Address,
   BackendEvent,
+  BirthdayFeatures,
+  BirthdayImportEntry,
+  BirthdayImportResult,
+  BirthdayScan,
   Contact,
   ContactInput,
   ContactsAccount,
@@ -422,7 +426,11 @@ export class DemoBackend implements Backend {
       });
   }
 
-  private calendar = new DemoCalendar(lang(), () => this.emit({ type: "calendar:changed" }));
+  private calendar = new DemoCalendar(
+    lang(),
+    () => this.emit({ type: "calendar:changed" }),
+    () => this.addressBook.contacts(),
+  );
 
   async calendars() {
     await wait(100);
@@ -483,6 +491,54 @@ export class DemoBackend implements Backend {
   async deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
     await wait(120);
     this.calendar.deleteEvent(occurrenceId, scope);
+  }
+
+  async birthdayFeatures(): Promise<BirthdayFeatures[]> {
+    await wait(40);
+    // The first mailbox plays a UwUMail server with the birthdays calendar and the import.
+    const first = DEMO_ACCOUNTS[0]!.id;
+    return this.accounts.map((account) => ({
+      accountId: account.id,
+      server: account.id === first,
+      import: account.id === first,
+    }));
+  }
+
+  async scanBirthdays(accountId: string): Promise<BirthdayScan> {
+    await wait(250);
+    if (accountId !== DEMO_ACCOUNTS[0]!.id) throw new BackendError("not_supported", "The demo has no calendar here.");
+    return { candidates: this.calendar.scanBirthdays(), truncated: false };
+  }
+
+  async importBirthdays(accountId: string, entries: BirthdayImportEntry[]): Promise<BirthdayImportResult> {
+    await wait(300);
+    if (accountId !== DEMO_ACCOUNTS[0]!.id) throw new BackendError("not_supported", "The demo has no calendar here.");
+    const found = new Map(this.calendar.scanBirthdays().map((candidate) => [candidate.eventId, candidate]));
+    const result: BirthdayImportResult = { imported: [], failed: [] };
+    for (const entry of entries) {
+      const candidate = found.get(entry.eventId);
+      if (!candidate) {
+        result.failed.push({ eventId: entry.eventId, reason: "notFound" });
+        continue;
+      }
+      try {
+        let contactId: string;
+        let created = false;
+        if ("contactId" in entry) {
+          this.addressBook.setBirthday(entry.contactId, candidate.birthday, entry.overwrite === true);
+          contactId = entry.contactId;
+        } else {
+          contactId = this.addressBook.createNamed(entry.newContactName, candidate.birthday);
+          created = true;
+        }
+        // Like the server: an event of a calendar that is only read stays where it is.
+        if (candidate.mayDeleteEvent) this.calendar.removeEvent(entry.eventId);
+        result.imported.push({ eventId: entry.eventId, contactId, created, eventDeleted: candidate.mayDeleteEvent });
+      } catch (error) {
+        result.failed.push({ eventId: entry.eventId, reason: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return result;
   }
 
   // Only the first demo mailbox plays a server with address books.
