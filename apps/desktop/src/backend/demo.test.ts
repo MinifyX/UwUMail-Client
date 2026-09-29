@@ -216,3 +216,45 @@ describe("DemoBackend folders", () => {
     expect((await demo.listFolders("acc-private")).find((f) => f.role === "trash")!.total).toBe(0);
   });
 });
+
+/** One mailbox's inbox, one mail per row. */
+const inbox = (accountId: string) => ({
+  view: { kind: "folder" as const, accountId, folderId: `${accountId}:inbox` },
+  filter: "all" as const,
+  conversations: false,
+  limit: 50,
+});
+
+describe("DemoBackend assistant", () => {
+  it("has the server's assistant for the UwUMail account and this device's for the other", async () => {
+    const demo = new DemoBackend();
+    const scopes = await demo.assistScopes();
+    expect(scopes.map((scope) => [scope.id, scope.accountIds])).toEqual([
+      ["acc-private", ["acc-private"]],
+      ["device", ["acc-studio"]],
+    ]);
+    expect((await demo.assistProviders("acc-private"))[0]!.scope).toBe("server");
+    expect((await demo.assistProviders("device"))[0]!.kind).toBe("ollama");
+    expect((await demo.assistFeatures("acc-studio"))?.summarize).toBe(true);
+    await expect(demo.createAssistProvider("device", { name: "C", kind: "chatgpt" })).rejects.toThrow();
+  });
+
+  it("finds events in a mail and loses its features without a provider", async () => {
+    const demo = new DemoBackend();
+    const { threads } = await demo.listThreads(inbox("acc-private"));
+    const { messages } = await demo.getThread(threads[0]!.id, false);
+    const result = await demo.extractEvents(messages[0]!.id, false);
+    expect(Array.isArray(result.events)).toBe(true);
+    await demo.deleteAssistProvider("device", "d1");
+    expect(await demo.assistFeatures("acc-studio")).toBeNull();
+  });
+
+  it("puts keywords on mail and shows them in the list", async () => {
+    const demo = new DemoBackend();
+    const { threads } = await demo.listThreads(inbox("acc-studio"));
+    const { messages } = await demo.getThread(threads[0]!.id, false);
+    await demo.setKeywords([messages[0]!.id], { travel: true });
+    const again = await demo.listThreads(inbox("acc-studio"));
+    expect(again.threads.find((thread) => thread.id === threads[0]!.id)?.keywords).toContain("travel");
+  });
+});

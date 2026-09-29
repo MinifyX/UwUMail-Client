@@ -265,5 +265,14 @@
     "checking": "Ich schnupper nach Kalendern (｡･ω･｡)",
     "found": "Kalender gefunden! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
     "notFound": "Da sind keine Kalender (・_・;) {{reason}}"
+  },
+  "assist": {
+    "thinking": "Ich denk ganz doll nach … (・ω・)",
+    "compose": {
+      "applied": "Hab’s in deinen Entwurf gesteckt ✿"
+    },
+    "labels": {
+      "startersTitle": "Magst du mit ein paar Labels anfangen? (｀・ω・´)"
+    }
   }
 }

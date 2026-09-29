@@ -492,7 +492,7 @@ export type BackendEvent =
   /** Address books or contacts changed, here, on the server or on another device. */
   | { type: "contacts:changed" }
   /** The AI assistant's providers, settings or labels changed, here, on the server or on another device. */
-  | { type: "assist:changed"; accountId?: string }
+  | { type: "assist:changed"; accountId?: string | null }
   | ({ type: "update:ready" } & UpdateInfo);
 
 /** What the server found out about one remote picture of a mail, see `Backend.imageSizes`. */
