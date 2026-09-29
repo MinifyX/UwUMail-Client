@@ -1,5 +1,7 @@
 #[cfg(desktop)]
 mod background;
+#[cfg(not(target_os = "android"))]
+mod ocr;
 #[cfg(desktop)]
 mod updates;
 
@@ -563,6 +565,13 @@ async fn fetch_mail_image(
     Ok(tauri::ipc::Response::new(bytes.unwrap_or_default()))
 }
 
+/// The text in a mail's pictures, e.g. for the dates on a poster. Remote pictures only with `remote`,
+/// which the reader passes once they may load for this mail.
+#[tauri::command]
+async fn image_text(engine: State<'_, Engine>, message_id: String, remote: bool) -> CommandResult<ImageTextResult> {
+    engine.image_text(&message_id, remote).await
+}
+
 /// The proxy remote pictures, sender pictures and one-click unsubscribes take; empty for none.
 #[tauri::command]
 fn set_privacy_proxy(engine: State<'_, Engine>, proxy: String) -> CommandResult<()> {
@@ -797,6 +806,7 @@ pub fn run() {
             save_message,
             get_sender_picture,
             fetch_mail_image,
+            image_text,
             clear_sender_pictures,
             set_privacy_proxy,
             get_company_domain,
