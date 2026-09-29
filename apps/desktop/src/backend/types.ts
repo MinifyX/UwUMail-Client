@@ -105,6 +105,11 @@ export interface ThreadSummary {
   hasAttachments: boolean;
   /** Somewhere in the conversation is an unsent draft. */
   hasDraft: boolean;
+  /**
+   * The own keywords of its messages (lower case, without the `$` system ones), e.g. the labels
+   * the AI assistant set. Missing where the engine keeps none.
+   */
+  keywords?: string[];
 }
 
 export interface ThreadPage {
@@ -160,6 +165,8 @@ export interface Message {
   hasRemoteContent: boolean;
   attachments: Attachment[];
   unsubscribe?: Unsubscribe;
+  /** Its own keywords (lower case, without the `$` system ones), e.g. AI assistant labels. */
+  keywords?: string[];
 }
 
 export interface ThreadDetail {
@@ -565,7 +572,7 @@ export type BackendEvent =
   /** Address books or contacts changed, here, on the server or on another device. */
   | { type: "contacts:changed" }
   /** The AI assistant's providers, settings or labels changed, here, on the server or on another device. */
-  | { type: "assist:changed"; accountId?: string }
+  | { type: "assist:changed"; accountId?: string | null }
   | ({ type: "update:ready" } & UpdateInfo);
 
 /** What the server found out about one remote picture of a mail, see `Backend.imageSizes`. */
@@ -613,6 +620,27 @@ export interface ImageText {
 // AI assistant (UwUMail Server's `urn:uwumail:jmap:assist`, see the server's docs/jmap-assist.md).
 // UwUMail accounts ask their server; every other mailbox asks the providers set up on this device,
 // from the Rust side (never from this page).
+
+/** The scope id of the providers, settings, labels and usage kept on this device. */
+export const DEVICE_ASSIST_SCOPE = "device";
+
+/**
+ * Where the assistant's providers, settings, labels and usage live: a UwUMail account's server
+ * (its `urn:uwumail:jmap:assist`), or this device for every other mailbox.
+ */
+export interface AssistScope {
+  /** The UwUMail account's id, or `DEVICE_ASSIST_SCOPE`. */
+  id: string;
+  kind: "server" | "device";
+  /** The UwUMail account for a server scope; null for this device. */
+  accountId: string | null;
+  /** The mailboxes it serves: the UwUMail account, or every mailbox without an assistant of its own. */
+  accountIds: string[];
+  options: AssistOptions;
+}
+
+/** A piece of a streamed answer, as the engine hands it to the page. */
+export type AssistStreamEvent = { kind: "subject"; subject: string } | { kind: "delta"; text: string };
 
 /** What the assistant does, as the server names it. */
 export type AssistFeature = "compose" | "summarize" | "spamCheck" | "extractEvents" | "autoLabels";

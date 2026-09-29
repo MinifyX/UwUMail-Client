@@ -45,6 +45,7 @@ and reused (CLI, future sync server).
 | `mail_images`, `image_size` | Remote pictures of mail for the reader (`uwuimg:`): fair, quick fetching, a small memory cache, and their sizes before they show |
 | `ocr` | Text in a mail's pictures: limits, picture sizes, the UwUMail server's `Email/imageText` answer mapped to the app's ids, the `TextRecognizer` the platform hands in (see [Text in pictures](#text-in-pictures)) |
 | `birthdays` | Birthdays and anniversaries of the contacts: the server's birthdays calendar, a local one for other mailboxes, and moving birthday events into contacts |
+| `assist` | The AI assistant: the UwUMail server's (`server`), or providers called from this device (`provider`, `local`), with the prompts, answer checks, spam signals and stream parser they share (see [AI assistant](#ai-assistant)) |
 
 The mail server is always the source of truth. The local store is a cache that
 can be deleted at any time and rebuilt.
@@ -423,6 +424,61 @@ programs don't show `data:` images. Received mail works the other way round:
 attachments keep their Content-ID, and the reader turns `cid:` links into blob
 URLs of the cached files, which the mail frame's policy already allows.
 
+### AI assistant
+
+Writing help (write, rewrite with presets, adjust, translate, with a subject
+proposal), summaries of a mail or a conversation, a second opinion on spam,
+appointments read out of a mail, and labels. It is off until someone sets it
+up, and it never acts on its own except for auto-labels, which are opt-in.
+
+**Where it runs.** Each mailbox gets its assistant from a *scope*:
+
+| Scope | For | What answers |
+| --- | --- | --- |
+| a UwUMail account's id | a JMAP account whose session has `urn:uwumail:jmap:assist` | the server (`assist::server`): every `Assist*` method with the login's own `accountId`, streamed through the session's `streamUrl` (SSE) |
+| `device` | every other mailbox (IMAP, other JMAP servers) | the providers set up on this device (`assist::local` + `assist::provider`), called straight from Rust |
+
+The page only sees scopes (`assist_scopes`) and per-mailbox features
+(`assist_features {accountId}`, null hides everything). Both kinds answer in
+the server's JMAP shapes with the app's own message ids; the page normalizes
+them in `src/backend/assistConvert.ts`. Streamed pieces reach the page through
+a Tauri channel; `assist_cancel` stops the request.
+
+**Local providers.** OpenAI, Anthropic (API key only), Gemini, Mistral,
+OpenRouter, Ollama and OpenAI-compatible servers. No ChatGPT sign-in on the
+device. Keys go into the OS keychain (`assist-provider:<id>`); the page only
+gets `hasKey` and the last four characters. Provider addresses must be
+`https`, except `http` for Ollama and OpenAI-compatible servers on loopback or
+private addresses; no logins, queries or fragments in them, and no redirects
+are followed. "Test" lists the provider's models.
+
+**Limits.** 60 s without a byte and 180 s per answer (20 s for the model
+list); 1 MiB per answer body, 4 MiB per stream, 200 000 characters of text.
+Mail goes to the model as quoted data, cut to 20 000 characters (4 000 for
+labels), with at most 20 links. 10 providers and 30 labels on the device.
+Every cut is by characters, never in the middle of one.
+
+**Prompt injection.** The same rules as on the server: the prompts are the
+server's, the mail is data between tags the mail can't close, JSON answers are
+checked against their schema, a label can only be one of the person's own, and
+written text is only a preview until the person clicks Insert or Replace.
+Nothing is ever sent by the assistant.
+
+**Spam check.** The model's verdict comes with local signals: the
+`Authentication-Results` added by the own server (SPF, DKIM, DMARC; only the
+one above the second `Received`), `X-Spam-Status`, how often the sender wrote
+before and ended in junk, whether they are in the contacts.
+
+**Labels.** A label is a keyword on the mail (`messages.keywords`), set with
+JMAP `Email/set` or IMAP `STORE +FLAGS`, the latter only where the folder's
+`PERMANENTFLAGS` has `\*`. Auto-labels (device scope, opt-in) look at new
+inbox mail after a sync: at most 20 mails at once and 200 per day, each with
+its reason in the label log, undoable there. Mail is never moved or deleted.
+
+**Events.** `assist_extract_events {messageId, includeImages}` asks the
+mailbox's assistant for appointments; the text of pictures is added where
+`// 0.6-merge: image text` sits in `engine/assist_ops.rs`.
+
 ### Addons
 
 See [addons.md](addons.md). In short: each addon runs in its own sandboxed
@@ -440,6 +496,8 @@ the host too, limited to the hosts in the manifest.
 | Sender pictures (30 days per domain) | `<app data>/pictures/<domain>.<logo\|icon>.<ext>` |
 | Installed addons | `<app data>/addons/<addon id>/` |
 | Passwords, OAuth refresh tokens | OS keychain, service `UwUMail` |
+| AI providers, settings, labels, label log, usage (device scope) | `<app data>/uwumail.db` (`assist_*` tables) |
+| AI provider keys (device scope) | OS keychain, service `UwUMail`, entry `assist-provider:<id>` |
 | UI settings | WebView local storage (`uwumail.settings`) |
 | Mails whose appointment bar was put away (newest 500) | WebView local storage (`uwumail.datesDismissed`) |
 
@@ -669,7 +727,9 @@ and accepted risks, and [SECURITY.md](../SECURITY.md) for reporting issues. In
 short: mail content never runs in the app page; file access, the dangerous-file
 warning and save locations are decided in Rust, not by the page; links only
 open for `https`, `http` and `mailto`, with a warning when the text shows a
-different site than the target.
+different site than the target. The AI assistant's keys stay in the keychain
+and never reach the page or the log; what it sends and accepts is listed under
+[AI assistant](#ai-assistant).
 
 ## Build and release
 

@@ -309,3 +309,130 @@ async fn birthdays_are_imported_in_parts() {
     assert!(birthdays::import(&client, "acc", &[other]).await.is_err());
     assert_eq!(stub.seen().len(), before);
 }
+
+// The AI assistant of a UwUMail server (`urn:uwumail:jmap:assist`), with a server that refuses,
+// streams and tries to slip things past the client.
+
+const ASSIST: &str = "urn:uwumail:jmap:assist";
+
+fn assist_session() -> Value {
+    json!({
+        "capabilities": { CORE: {}, MAIL: {}, ASSIST: { "streamUrl": "/jmap/assist/stream" } },
+        "accounts": { "a1": { "name": "mini@a.test", "accountCapabilities": { ASSIST: {
+            "features": { "compose": true, "summarize": true, "spamCheck": false, "extractEvents": "yes" },
+            "mayAddProviders": true, "maxLabels": 30
+        } } } },
+        "primaryAccounts": { MAIL: "a1" },
+        "username": "mini@a.test",
+        "apiUrl": "/api",
+        "downloadUrl": "/download/{accountId}/{blobId}/{name}?type={type}",
+        "uploadUrl": "/upload/{accountId}/",
+        "state": "s1",
+    })
+}
+
+fn assist_answer(request: &Request) -> Response {
+    if request.path.starts_with("/.well-known/jmap") {
+        return Response::json(&assist_session());
+    }
+    let body: Value = serde_json::from_slice(&request.body).unwrap_or_default();
+    if request.path == "/jmap/assist/stream" {
+        let stream = if body["arguments"]["instruction"] == "fail" {
+            "event: error\ndata: {\"type\":\"overQuota\",\"description\":\"Today's limit\\u0007 is used up.\"}\n\n"
+                .to_string()
+        } else {
+            // A comment, a subject, deltas split oddly, an unknown event, then the answer, and
+            // text after it that must be ignored.
+            [
+                ": keep-alive\n\n",
+                "event: subject\ndata: {\"subject\":\"Lunch on Friday\"}\n\n",
+                "event: delta\ndata: {\"text\":\"Hi Leni, \"}\n\n",
+                "event: delta\r\ndata: {\"text\":\"Friday works.\"}\r\n\r\n",
+                "event: surprise\ndata: {}\n\n",
+                "event: done\ndata: {\"text\":\"Hi Leni, Friday works.\",\"subject\":\"Lunch on Friday\"}\n\n",
+                "event: delta\ndata: {\"text\":\"ignored\"}\n\n",
+            ]
+            .concat()
+        };
+        return Response::new(200, stream).header("content-type", "text/event-stream");
+    }
+    let calls = body["methodCalls"].as_array().cloned().unwrap_or_default();
+    let responses: Vec<Value> = calls
+        .iter()
+        .map(|call| {
+            let (name, arguments, id) = (call[0].as_str().unwrap_or_default(), &call[1], &call[2]);
+            let result = match name {
+                "Core/echo" => arguments.clone(),
+                "AssistLabel/get" => json!({ "accountId": arguments["accountId"], "list": [
+                    { "id": "l1", "name": "Travel", "keyword": "travel", "description": "", "color": null }
+                ] }),
+                "AssistLabel/set" => json!({ "notCreated": { "k1": {
+                    "type": "invalidProperties", "description": "That name is taken.", "properties": ["name"]
+                } } }),
+                "Assist/spamCheck" => {
+                    return json!(["error", { "type": "providerFailed", "description": "Busy", "retryAfter": 12.2 }, id]);
+                }
+                _ => return json!(["error", { "type": "unknownMethod" }, id]),
+            };
+            json!([name, result, id])
+        })
+        .collect();
+    Response::json(&json!({ "methodResponses": responses, "sessionState": "s1" }))
+}
+
+#[tokio::test]
+async fn the_servers_assistant_answers_refuses_and_streams_safely() {
+    use std::sync::{Arc, Mutex};
+    use uwumail_core::assist::{StreamEvent, StreamSink, server};
+
+    let stub = http_stub(assist_answer).await;
+    let jmap = client(&stub).await;
+
+    // Only real `true`s count as features.
+    let features = server::features(&jmap).unwrap();
+    assert_eq!(features["compose"], true);
+    assert_eq!(features["extractEvents"], false);
+    assert_eq!(features["spamCheck"], false);
+
+    // Every call names the login's own account, whatever the page asked for.
+    let labels = server::labels(&jmap).await.unwrap();
+    assert_eq!(labels[0]["keyword"], "travel");
+    let sent = stub.seen().into_iter().find(|r| r.text().contains("AssistLabel/get")).unwrap();
+    assert!(sent.text().contains("\"accountId\":\"a1\""), "{}", sent.text());
+
+    // Refusals keep their type, the fields they name and how long to wait.
+    let refused = server::create_label(&jmap, json!({ "name": "Travel" })).await.unwrap_err();
+    assert_eq!(refused.assist_kind(), Some("invalidProperties"));
+    assert_eq!(refused.assist.as_ref().unwrap().properties, ["name"]);
+    let busy = server::spam_check(&jmap, "m1", Some("en")).await.unwrap_err();
+    assert_eq!(busy.assist_kind(), Some("providerFailed"));
+    assert_eq!(busy.assist.as_ref().unwrap().retry_after, Some(13));
+
+    // The stream: subject and deltas reach the page as they come, the answer is `done`'s.
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let seen = events.clone();
+    let sink: StreamSink = Arc::new(move |event: StreamEvent| seen.lock().unwrap().push(event));
+    let answer = server::stream_or_call(
+        &jmap,
+        "Assist/compose",
+        json!({ "mode": "write", "instruction": "lunch" }),
+        Some(sink.clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(answer["text"], "Hi Leni, Friday works.");
+    let events = events.lock().unwrap().clone();
+    assert_eq!(events.len(), 3, "{events:?}");
+    assert!(matches!(&events[0], StreamEvent::Subject { subject } if subject == "Lunch on Friday"));
+    assert!(matches!(&events[2], StreamEvent::Delta { text } if text == "Friday works."));
+    let request = stub.seen().into_iter().find(|r| r.path == "/jmap/assist/stream").unwrap();
+    assert_eq!(request.header("accept"), Some("text/event-stream"));
+    assert!(request.text().contains("\"accountId\":\"a1\""));
+
+    // An error event is the assistant's refusal, without control characters.
+    let failed = server::stream_or_call(&jmap, "Assist/compose", json!({ "instruction": "fail" }), Some(sink))
+        .await
+        .unwrap_err();
+    assert_eq!(failed.assist_kind(), Some("overQuota"));
+    assert!(!failed.message.contains('\u{7}'), "{}", failed.message);
+}

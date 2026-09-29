@@ -231,6 +231,9 @@ pub struct ThreadSummary {
     pub has_attachments: bool,
     /// Somewhere in the conversation is an unsent draft.
     pub has_draft: bool,
+    /// The own keywords of its messages (lower case, no `$` system ones), e.g. assistant labels.
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,6 +336,9 @@ pub struct Message {
     pub attachments: Vec<Attachment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unsubscribe: Option<Unsubscribe>,
+    /// Its own keywords (lower case, no `$` system ones), e.g. assistant labels.
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -866,6 +872,12 @@ pub enum EngineEvent {
     /// its push service again; otherwise a subscription was confirmed or lost.
     #[serde(rename = "push:changed")]
     PushChanged { reregister: bool },
+    /// The AI assistant's providers, settings or labels changed, or it labelled new mail.
+    #[serde(rename = "assist:changed", rename_all = "camelCase")]
+    AssistChanged {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        account_id: Option<String>,
+    },
 }
 
 impl EngineEvent {
@@ -880,6 +892,7 @@ impl EngineEvent {
             Self::CalendarChanged {} => "calendar:changed",
             Self::ContactsChanged {} => "contacts:changed",
             Self::PushChanged { .. } => "push:changed",
+            Self::AssistChanged { .. } => "assist:changed",
         }
     }
 }

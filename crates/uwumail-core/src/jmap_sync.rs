@@ -270,7 +270,8 @@ pub async fn sync_emails(
         let flags = jmap::flags_from_keywords(email.get("keywords"));
         match (known.get(&id), folder) {
             (Some(local), Some(folder)) => {
-                result.changed |= store.update_remote_message(&local.id, &folder.id, flags)?
+                result.changed |= store.update_remote_message(&local.id, &folder.id, flags)?;
+                result.changed |= store.set_keywords(&local.id, &jmap::own_keywords(email.get("keywords")))?;
             }
             (Some(local), None) => removed.push(local.id.clone()),
             (None, Some(folder)) => new_emails.push((email.clone(), folder.id.clone(), flags)),
@@ -312,6 +313,7 @@ pub async fn sync_emails(
             received(&email),
             &parsed,
         )? {
+            store.set_keywords(&local, &jmap::own_keywords(email.get("keywords")))?;
             result.new_message_ids.push(local);
             result.changed = true;
         }
@@ -373,6 +375,7 @@ async fn store_previews(
                 received(&email),
                 &parsed,
             )? {
+                store.set_keywords(&local, &jmap::own_keywords(email.get("keywords")))?;
                 added.push((id.to_string(), local));
             }
         }

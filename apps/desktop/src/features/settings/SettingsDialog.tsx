@@ -12,11 +12,14 @@ import {
   PenLine,
   Plus,
   Puzzle,
+  Sparkles,
   Upload,
   Users,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { AssistantSettings } from "../assist/settings/AssistantSettings";
+import { useAssistScopes } from "../assist/useAssist";
 import { lazy, Suspense, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import pkg from "../../../package.json";
@@ -66,6 +69,7 @@ const SECTIONS: { id: SettingsSection; icon: LucideIcon; phoneOnly?: boolean }[]
   { id: "mail", icon: Mail },
   { id: "compose", icon: PenLine },
   { id: "rules", icon: ListFilter },
+  { id: "assistant", icon: Sparkles },
   { id: "security", icon: Lock, phoneOnly: true },
   { id: "accounts", icon: Users },
   { id: "addons", icon: Puzzle },
@@ -625,8 +629,13 @@ export function SettingsDialog() {
   const [pending, setPending] = useState<"close" | SettingsSection | null>(null);
   // Rules only where a server runs them.
   const { data: rulesAccounts = [] } = useMailRulesAccounts();
+  // The AI assistant only where one can be set up: a server's, or this device's for other mailboxes.
+  const { data: assistScopes = [] } = useAssistScopes();
   const sections = SECTIONS.filter(
-    (item) => (!item.phoneOnly || nativeMobile) && (item.id !== "rules" || rulesAccounts.length > 0),
+    (item) =>
+      (!item.phoneOnly || nativeMobile) &&
+      (item.id !== "rules" || rulesAccounts.length > 0) &&
+      (item.id !== "assistant" || assistScopes.length > 0),
   );
 
   const requestClose = () => {
@@ -681,6 +690,7 @@ export function SettingsDialog() {
                 <MailRules />
               </Suspense>
             )}
+            {section === "assistant" && <AssistantSettings />}
             {section === "security" && <Security />}
             {section === "accounts" && <Accounts />}
             {section === "addons" && <Addons />}

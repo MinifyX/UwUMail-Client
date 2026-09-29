@@ -143,6 +143,8 @@ struct Inner {
     ocr_permits: Arc<tokio::sync::Semaphore>,
     /// The text in the pictures of the mails read last.
     image_texts: Mutex<crate::ocr::ResultCache>,
+    /// The AI assistant's streams and auto-label queue.
+    assist: assist_ops::AssistState,
 }
 
 enum Credential {
@@ -176,6 +178,7 @@ macro_rules! with_session {
 }
 
 mod birthday_ops;
+mod assist_ops;
 mod calendar_ops;
 mod contacts_ops;
 mod folder_ops;
@@ -225,6 +228,7 @@ impl Engine {
                 recognizer: options.recognizer,
                 ocr_permits: Arc::new(tokio::sync::Semaphore::new(crate::ocr::PARALLEL)),
                 image_texts: Mutex::new(crate::ocr::ResultCache::default()),
+                assist: assist_ops::AssistState::new(),
             }),
         })
     }
@@ -257,6 +261,7 @@ impl Engine {
     /// Starts background sync for every saved account, and sends what was
     /// still waiting in the outbox when UwUMail last stopped.
     pub fn start(&self) -> Result<()> {
+        assist_ops::start_auto_labels(self.clone());
         for account in self.inner.store.accounts()? {
             self.inner.spawn_sync(&account.id);
         }
@@ -1716,6 +1721,7 @@ impl Inner {
                 tokens.insert(account.id.clone(), (fresh.access_token.clone(), Instant::now() + fresh.expires_in));
                 Ok(Credential::Token(fresh.access_token))
             }
+            Secret::ApiKey { .. } => Err(Error::auth("No saved password for this mailbox.")),
         }
     }
 
@@ -1998,6 +2004,10 @@ impl Inner {
                 .filter(|m| Some(&m.folder_id) == inbox.as_ref())
                 .collect();
             let arrived = self.drop_blocked(arrived).await;
+            if result.had_messages {
+                let ids: Vec<String> = arrived.iter().map(|m| m.id.clone()).collect();
+                self.queue_auto_labels(account_id, &ids);
+            }
             let unseen: Vec<String> =
                 arrived.into_iter().filter(|m| !m.flags.seen && result.had_messages).map(|m| m.id).collect();
             if !unseen.is_empty() {
@@ -2071,6 +2081,10 @@ impl Inner {
         let result = imap::sync_folder(session, &self.store, folder, self.full_after()).await?;
         if folder.role == Some(FolderRole::Inbox) && !result.new_message_ids.is_empty() {
             let arrived = self.drop_blocked(self.store.messages_by_ids(&result.new_message_ids)?).await;
+            if result.had_messages {
+                let ids: Vec<String> = arrived.iter().map(|m| m.id.clone()).collect();
+                self.queue_auto_labels(&folder.account_id, &ids);
+            }
             let unseen: Vec<String> =
                 arrived.into_iter().filter(|m| !m.flags.seen && result.had_messages).map(|m| m.id).collect();
             if !unseen.is_empty() {

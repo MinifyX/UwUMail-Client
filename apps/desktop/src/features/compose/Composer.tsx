@@ -40,6 +40,9 @@ import { useWorkspaceName } from "../workspaces/workspaces";
 import { initialDraft, replyFrom, type DraftState } from "./draft";
 import { RecipientInput } from "./RecipientInput";
 import { undoSend } from "./undoSend";
+import { ComposeAssistButton, ComposeAssistPanel } from "../assist/ComposeAssist";
+import { AssistForAccount } from "../assist/useAssist";
+import { useComposeAssist } from "../assist/useComposeAssist";
 
 /** Quiet for this long after the last change, then the draft goes to the server. */
 const DRAFT_SAVE_DELAY = 2500;
@@ -219,6 +222,21 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const changed = () => {
     dirty.current = true;
   };
+
+  // The AI assistant: its answer goes into the draft only on a click.
+  const assist = useComposeAssist({
+    accountId,
+    editor,
+    body,
+    subject: draft.subject,
+    replyToEmailId: inReplyTo ?? null,
+    onChanged: (html) => {
+      body.current = html;
+      setError(null);
+      changed();
+      setEdits((count) => count + 1);
+    },
+  });
 
   useEffect(() => {
     if (!dirty.current || finished.current) return;
@@ -627,6 +645,21 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         />
       </div>
 
+      {assist.open && (
+        <AssistForAccount accountId={accountId}>
+          <ComposeAssistPanel
+            key={assist.open.key}
+            start={assist.open.start}
+            context={assist.open.context}
+            subjectEmpty={!draft.subject.trim()}
+            onInsert={(text) => assist.apply("insert", text)}
+            onReplace={(text) => assist.apply("replace", text)}
+            onSubject={(subject) => update({ subject })}
+            onClose={assist.close}
+          />
+        </AssistForAccount>
+      )}
+
       {attachments.length > 0 && (
         <ul className="flex flex-wrap gap-2 border-t border-hairline px-4 py-2">
           {attachments.map((attachment, index) => (
@@ -721,6 +754,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             />
           )}
         />
+        {assist.available && <ComposeAssistButton onPick={assist.start} />}
         <input
           ref={fileInput}
           type="file"

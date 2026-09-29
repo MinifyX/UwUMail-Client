@@ -13,8 +13,17 @@ const SERVICE: &str = "UwUMail";
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Secret {
-    Password { password: String },
-    OAuth { refresh_token: String },
+    Password {
+        password: String,
+    },
+    OAuth {
+        refresh_token: String,
+    },
+    /// The key of an AI provider set up on this device (entry `assist-provider:<id>`).
+    #[serde(rename = "apikey")]
+    ApiKey {
+        api_key: String,
+    },
 }
 
 impl std::fmt::Debug for Secret {
@@ -22,6 +31,7 @@ impl std::fmt::Debug for Secret {
         match self {
             Self::Password { .. } => f.write_str("Secret::Password(***)"),
             Self::OAuth { .. } => f.write_str("Secret::OAuth(***)"),
+            Self::ApiKey { .. } => f.write_str("Secret::ApiKey(***)"),
         }
     }
 }
@@ -87,5 +97,10 @@ mod tests {
     fn debug_output_never_contains_the_secret() {
         let secret = Secret::Password { password: "hunter2".into() };
         assert!(!format!("{secret:?}").contains("hunter2"));
+        let key = Secret::ApiKey { api_key: "sk-geheim".into() };
+        assert!(!format!("{key:?}").contains("geheim"));
+        // What the keychain (and Android's Keystore bridge) keeps: a JSON string that reads back.
+        let stored = serde_json::to_string(&key).unwrap();
+        assert_eq!(serde_json::from_str::<Secret>(&stored).unwrap(), key);
     }
 }

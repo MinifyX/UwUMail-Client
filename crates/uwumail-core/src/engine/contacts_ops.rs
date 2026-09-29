@@ -37,7 +37,7 @@ fn check_name(name: &str) -> Result<&str> {
 }
 
 /// The name a card goes by: its full name, its name's parts, its company.
-fn card_name(card: &Value) -> Option<String> {
+pub(super) fn card_name(card: &Value) -> Option<String> {
     let name = card.get("name");
     if let Some(full) = name.and_then(|n| n.get("full")).and_then(Value::as_str).map(str::trim)
         && !full.is_empty()

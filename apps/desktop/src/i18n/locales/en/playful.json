@@ -265,5 +265,14 @@
     "checking": "Sniffing around for calendars (｡･ω･｡)",
     "found": "Found your calendars! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
     "notFound": "No calendars there (・_・;) {{reason}}"
+  },
+  "assist": {
+    "thinking": "Thinking really hard… (・ω・)",
+    "compose": {
+      "applied": "Popped it into your draft ✿"
+    },
+    "labels": {
+      "startersTitle": "Want a few labels to start with? (｀・ω・´)"
+    }
   }
 }

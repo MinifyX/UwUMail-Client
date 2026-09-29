@@ -474,6 +474,189 @@ async fn open_draft(engine: State<'_, Engine>, message_id: String) -> CommandRes
 }
 
 /// Recipient suggestions: the address books first, then addresses learned from mail.
+// ------------------------------------------------------------------------------ AI assistant
+// Answers are in UwUMail Server's JMAP shapes (docs/jmap-assist.md) with the app's own ids; the
+// page normalizes them (src/backend/assistConvert.ts).
+
+type Json = serde_json::Value;
+
+#[tauri::command]
+async fn assist_scopes(engine: State<'_, Engine>) -> CommandResult<Json> {
+    engine.assist_scopes().await
+}
+
+#[tauri::command]
+async fn assist_features(engine: State<'_, Engine>, account_id: String) -> CommandResult<Option<Json>> {
+    engine.assist_features(&account_id).await
+}
+
+#[tauri::command]
+async fn assist_providers(engine: State<'_, Engine>, scope: String) -> CommandResult<Json> {
+    engine.assist_providers(&scope).await
+}
+
+#[tauri::command]
+async fn assist_create_provider(engine: State<'_, Engine>, scope: String, input: Json) -> CommandResult<Json> {
+    engine.assist_create_provider(&scope, input).await
+}
+
+#[tauri::command]
+async fn assist_update_provider(
+    engine: State<'_, Engine>,
+    scope: String,
+    provider_id: String,
+    patch: Json,
+) -> CommandResult<()> {
+    engine.assist_update_provider(&scope, &provider_id, patch).await
+}
+
+#[tauri::command]
+async fn assist_delete_provider(engine: State<'_, Engine>, scope: String, provider_id: String) -> CommandResult<()> {
+    engine.assist_delete_provider(&scope, &provider_id).await
+}
+
+#[tauri::command]
+async fn assist_models(engine: State<'_, Engine>, scope: String, provider_id: String) -> CommandResult<Json> {
+    engine.assist_models(&scope, &provider_id).await
+}
+
+#[tauri::command]
+async fn assist_chatgpt_login(engine: State<'_, Engine>, scope: String, provider_id: String) -> CommandResult<Json> {
+    engine.assist_chatgpt_login(&scope, &provider_id).await
+}
+
+#[tauri::command]
+async fn assist_chatgpt_poll(engine: State<'_, Engine>, scope: String, provider_id: String) -> CommandResult<Json> {
+    engine.assist_chatgpt_poll(&scope, &provider_id).await
+}
+
+#[tauri::command]
+async fn assist_settings(engine: State<'_, Engine>, scope: String) -> CommandResult<Json> {
+    engine.assist_settings(&scope).await
+}
+
+#[tauri::command]
+async fn assist_update_settings(engine: State<'_, Engine>, scope: String, patch: Json) -> CommandResult<()> {
+    engine.assist_update_settings(&scope, patch).await
+}
+
+#[tauri::command]
+async fn assist_usage(engine: State<'_, Engine>, scope: String, days: Option<u32>) -> CommandResult<Json> {
+    engine.assist_usage(&scope, days).await
+}
+
+#[tauri::command]
+async fn assist_labels(engine: State<'_, Engine>, scope: String) -> CommandResult<Json> {
+    engine.assist_labels(&scope).await
+}
+
+#[tauri::command]
+async fn assist_create_label(engine: State<'_, Engine>, scope: String, input: Json) -> CommandResult<Json> {
+    engine.assist_create_label(&scope, input).await
+}
+
+#[tauri::command]
+async fn assist_update_label(
+    engine: State<'_, Engine>,
+    scope: String,
+    label_id: String,
+    patch: Json,
+) -> CommandResult<()> {
+    engine.assist_update_label(&scope, &label_id, patch).await
+}
+
+#[tauri::command]
+async fn assist_delete_label(engine: State<'_, Engine>, scope: String, label_id: String) -> CommandResult<()> {
+    engine.assist_delete_label(&scope, &label_id).await
+}
+
+#[tauri::command]
+async fn assist_label_log(
+    engine: State<'_, Engine>,
+    scope: String,
+    message_ids: Option<Vec<String>>,
+    limit: Option<u32>,
+) -> CommandResult<Json> {
+    engine.assist_label_log(&scope, message_ids, limit).await
+}
+
+#[tauri::command]
+async fn assist_undo_labels(engine: State<'_, Engine>, scope: String, log_ids: Vec<String>) -> CommandResult<()> {
+    engine.assist_undo_labels(&scope, &log_ids).await
+}
+
+#[tauri::command]
+async fn assist_apply_labels(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<Json> {
+    engine.assist_apply_labels(&message_ids).await
+}
+
+#[tauri::command]
+async fn assist_recent_inbox(engine: State<'_, Engine>, scope: String, limit: u32) -> CommandResult<Vec<String>> {
+    engine.assist_recent_inbox(&scope, limit).await
+}
+
+/// Streamed pieces go to the page through `on_event` while the model writes.
+fn assist_sink(on_event: tauri::ipc::Channel<uwumail_core::assist::StreamEvent>) -> uwumail_core::assist::StreamSink {
+    std::sync::Arc::new(move |event| {
+        let _ = on_event.send(event);
+    })
+}
+
+#[tauri::command]
+async fn assist_compose(
+    engine: State<'_, Engine>,
+    account_id: String,
+    request: Json,
+    stream_id: Option<String>,
+    on_event: tauri::ipc::Channel<uwumail_core::assist::StreamEvent>,
+) -> CommandResult<Json> {
+    let sink = stream_id.as_ref().map(|_| assist_sink(on_event));
+    engine.assist_compose(&account_id, request, stream_id.as_deref(), sink).await
+}
+
+#[tauri::command]
+async fn assist_summarize(
+    engine: State<'_, Engine>,
+    request: Json,
+    stream_id: Option<String>,
+    on_event: tauri::ipc::Channel<uwumail_core::assist::StreamEvent>,
+) -> CommandResult<Json> {
+    let sink = stream_id.as_ref().map(|_| assist_sink(on_event));
+    engine.assist_summarize(request, stream_id.as_deref(), sink).await
+}
+
+#[tauri::command]
+fn assist_cancel(engine: State<'_, Engine>, stream_id: String) {
+    engine.assist_cancel(&stream_id);
+}
+
+#[tauri::command]
+async fn assist_spam_check(
+    engine: State<'_, Engine>,
+    message_id: String,
+    language: Option<String>,
+) -> CommandResult<Json> {
+    engine.assist_spam_check(&message_id, language.as_deref()).await
+}
+
+#[tauri::command]
+async fn assist_extract_events(
+    engine: State<'_, Engine>,
+    message_id: String,
+    include_images: bool,
+) -> CommandResult<Json> {
+    engine.assist_extract_events(&message_id, include_images).await
+}
+
+#[tauri::command]
+async fn set_keywords(
+    engine: State<'_, Engine>,
+    message_ids: Vec<String>,
+    keywords: std::collections::HashMap<String, bool>,
+) -> CommandResult<()> {
+    engine.set_keywords(&message_ids, &keywords).await
+}
+
 #[tauri::command]
 async fn search_contacts(engine: State<'_, Engine>, query: String) -> CommandResult<Vec<Contact>> {
     engine.recipient_suggestions(&query).await
@@ -876,6 +1059,32 @@ pub fn run() {
             delete_draft,
             open_draft,
             search_contacts,
+            assist_scopes,
+            assist_features,
+            assist_providers,
+            assist_create_provider,
+            assist_update_provider,
+            assist_delete_provider,
+            assist_models,
+            assist_chatgpt_login,
+            assist_chatgpt_poll,
+            assist_settings,
+            assist_update_settings,
+            assist_usage,
+            assist_labels,
+            assist_create_label,
+            assist_update_label,
+            assist_delete_label,
+            assist_label_log,
+            assist_undo_labels,
+            assist_apply_labels,
+            assist_recent_inbox,
+            assist_compose,
+            assist_summarize,
+            assist_cancel,
+            assist_spam_check,
+            assist_extract_events,
+            set_keywords,
             get_attachment,
             open_attachment,
             save_attachment,

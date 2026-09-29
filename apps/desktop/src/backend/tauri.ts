@@ -1,12 +1,46 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { BackendError, type Backend, type BackendErrorCode } from "./backend";
+import { AssistError, BackendError, type Backend, type BackendErrorCode } from "./backend";
+import {
+  answerOf,
+  assistSettingsUpdate,
+  labelCreate,
+  labelUpdate,
+  providerCreate,
+  providerUpdate,
+  toAppliedLabels,
+  toAssistFeaturesOrNull,
+  toAssistLabel,
+  toAssistLabels,
+  toAssistModels,
+  toAssistProvider,
+  toAssistProviders,
+  toAssistScopes,
+  toAssistSettings,
+  toChatgptLogin,
+  toChatgptPoll,
+  toComposeText,
+  toEvents,
+  toLabelLog,
+  toSpamCheck,
+  toSummaryText,
+  toUsage,
+  type Raw,
+} from "./assistConvert";
 import type {
   BlockedSender,
   Account,
   AddressBookInfo,
+  AssistComposeRequest,
+  AssistComposeResult,
   AssistEventsResult,
-  AssistFeatures,
+  AssistLabelInput,
+  AssistProviderInput,
+  AssistSettingsPatch,
+  AssistStreamEvent,
+  AssistStreamHandlers,
+  AssistSummarizeRequest,
+  AssistSummary,
   AttachmentContent,
   BackendEvent,
   BirthdayFeatures,
@@ -61,19 +95,88 @@ let nextProbe = 0;
 interface EngineError {
   code: BackendErrorCode;
   message: string;
+  /** A refusal of the AI assistant, with the type its server (or this device) gave it. */
+  assist?: { type?: unknown; retryAfter?: unknown; properties?: unknown } | null;
 }
 
 function isEngineError(value: unknown): value is EngineError {
   return typeof value === "object" && value !== null && "code" in value && "message" in value;
 }
 
+/** The engine's error as the page's: an `AssistError` where the assistant refused, else a `BackendError`. */
+export function engineError(error: unknown): BackendError {
+  if (!isEngineError(error)) return new BackendError("internal", String(error));
+  const assist = error.assist;
+  if (assist && typeof assist.type === "string") {
+    const retryAfter =
+      typeof assist.retryAfter === "number" && Number.isFinite(assist.retryAfter) ? assist.retryAfter : null;
+    const properties = Array.isArray(assist.properties)
+      ? assist.properties.filter((property): property is string => typeof property === "string")
+      : [];
+    return new AssistError(assist.type, error.message || null, { retryAfter, properties });
+  }
+  return new BackendError(error.code, error.message);
+}
+
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(command, args);
   } catch (error) {
-    if (isEngineError(error)) throw new BackendError(error.code, error.message);
-    throw new BackendError("internal", String(error));
+    throw engineError(error);
   }
+}
+
+function aborted(): DOMException {
+  return new DOMException("Aborted", "AbortError");
+}
+
+/**
+ * A command of the assistant that can stream (`assist_compose`, `assist_summarize`): with handlers
+ * the text comes in pieces through a Tauri channel while the model writes, and aborting asks the
+ * engine to stop it (`assist_cancel`) and rejects at once with an `AbortError`, as a fetch does.
+ * Without handlers the channel stays quiet and only the whole answer comes.
+ */
+export async function streamCall(
+  command: string,
+  args: Record<string, unknown>,
+  handlers?: AssistStreamHandlers,
+): Promise<unknown> {
+  const signal = handlers?.signal;
+  if (signal?.aborted) throw aborted();
+  const streaming = handlers !== undefined && (handlers.onDelta !== undefined || handlers.onSubject !== undefined);
+  const streamId = streaming ? crypto.randomUUID() : null;
+  let done = false;
+  const onEvent = new Channel<AssistStreamEvent>();
+  onEvent.onmessage = (event) => {
+    if (done || signal?.aborted) return;
+    if (event.kind === "subject" && typeof event.subject === "string") handlers?.onSubject?.(event.subject);
+    else if (event.kind === "delta" && typeof event.text === "string") handlers?.onDelta?.(event.text);
+  };
+  const answer = call<unknown>(command, { ...args, streamId, onEvent });
+  if (!signal) return answer;
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      if (done) return;
+      done = true;
+      if (streamId) void call<void>("assist_cancel", { streamId }).catch(() => undefined);
+      reject(aborted());
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    answer.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        if (done) return;
+        done = true;
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        if (done) return;
+        done = true;
+        reject(error);
+      },
+    );
+  });
 }
 
 const EVENT_NAMES = [
@@ -87,6 +190,7 @@ const EVENT_NAMES = [
   "calendar:changed",
   "contacts:changed",
   "update:ready",
+  "assist:changed",
 ] as const;
 
 export class TauriBackend implements Backend {
@@ -480,12 +584,124 @@ export class TauriBackend implements Backend {
     return call<ImageTextResult>("image_text", { messageId, remote });
   }
 
-  assistFeatures(accountId: string) {
-    return call<AssistFeatures | null>("assist_features", { accountId });
+  async assistFeatures(accountId: string) {
+    return toAssistFeaturesOrNull(await call<unknown>("assist_features", { accountId }));
   }
 
-  extractEvents(messageId: string, includeImages: boolean) {
-    return call<AssistEventsResult>("assist_extract_events", { messageId, includeImages });
+  async extractEvents(messageId: string, includeImages: boolean): Promise<AssistEventsResult> {
+    const raw = await call<Raw | null>("assist_extract_events", { messageId, includeImages });
+    const answer = raw && typeof raw.answer === "object" && raw.answer !== null ? answerOf(raw.answer) : null;
+    return { events: toEvents(raw), answer };
+  }
+
+  async assistScopes() {
+    return toAssistScopes(await call<unknown>("assist_scopes"));
+  }
+
+  async assistProviders(scope: string) {
+    return toAssistProviders(await call<unknown>("assist_providers", { scope }));
+  }
+
+  async createAssistProvider(scope: string, input: AssistProviderInput) {
+    return toAssistProvider(await call<Raw>("assist_create_provider", { scope, input: providerCreate(input) }));
+  }
+
+  async updateAssistProvider(scope: string, id: string, patch: AssistProviderInput) {
+    await call<void>("assist_update_provider", { scope, providerId: id, patch: providerUpdate(patch) });
+  }
+
+  async deleteAssistProvider(scope: string, id: string) {
+    await call<void>("assist_delete_provider", { scope, providerId: id });
+  }
+
+  async assistModels(scope: string, providerId: string) {
+    return toAssistModels(await call<unknown>("assist_models", { scope, providerId }));
+  }
+
+  async chatgptLogin(scope: string, providerId: string) {
+    return toChatgptLogin(await call<unknown>("assist_chatgpt_login", { scope, providerId }));
+  }
+
+  async chatgptPoll(scope: string, providerId: string) {
+    return toChatgptPoll(await call<unknown>("assist_chatgpt_poll", { scope, providerId }));
+  }
+
+  async assistSettings(scope: string) {
+    return toAssistSettings(await call<unknown>("assist_settings", { scope }));
+  }
+
+  async updateAssistSettings(scope: string, patch: AssistSettingsPatch) {
+    await call<void>("assist_update_settings", { scope, patch: assistSettingsUpdate(patch) });
+  }
+
+  async assistUsage(scope: string, days?: number) {
+    return toUsage(await call<unknown>("assist_usage", { scope, days: days ?? null }));
+  }
+
+  async assistLabels(scope: string) {
+    return toAssistLabels(await call<unknown>("assist_labels", { scope }));
+  }
+
+  async createAssistLabel(scope: string, input: AssistLabelInput) {
+    return toAssistLabel(await call<Raw>("assist_create_label", { scope, input: labelCreate(input) }));
+  }
+
+  async updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>) {
+    await call<void>("assist_update_label", { scope, labelId: id, patch: labelUpdate(patch) });
+  }
+
+  async deleteAssistLabel(scope: string, id: string) {
+    await call<void>("assist_delete_label", { scope, labelId: id });
+  }
+
+  async assistLabelLog(scope: string, messageIds: string[] | null, limit?: number) {
+    return toLabelLog(await call<unknown>("assist_label_log", { scope, messageIds, limit: limit ?? null }));
+  }
+
+  async undoAssistLabels(scope: string, logIds: string[]) {
+    await call<void>("assist_undo_labels", { scope, logIds });
+  }
+
+  async applyAssistLabels(messageIds: string[]) {
+    return toAppliedLabels(await call<unknown>("assist_apply_labels", { messageIds }));
+  }
+
+  async recentInboxIds(scope: string, limit: number) {
+    const ids = await call<unknown>("assist_recent_inbox", { scope, limit });
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+  }
+
+  async assistCompose(
+    accountId: string,
+    request: AssistComposeRequest,
+    handlers?: AssistStreamHandlers,
+  ): Promise<AssistComposeResult> {
+    const raw = await streamCall("assist_compose", { accountId, request }, handlers);
+    return { ...answerOf(raw), ...toComposeText(raw) };
+  }
+
+  async assistSummarize(request: AssistSummarizeRequest, handlers?: AssistStreamHandlers): Promise<AssistSummary> {
+    const wanted = {
+      emailId: request.emailId ?? null,
+      threadId: request.threadId ?? null,
+      language: request.language ?? null,
+    };
+    const raw = await streamCall("assist_summarize", { request: wanted }, handlers);
+    const summary = toSummaryText(raw);
+    return {
+      ...answerOf(raw),
+      emailId: summary.emailId ?? wanted.emailId,
+      threadId: summary.threadId ?? wanted.threadId,
+      summary: summary.summary,
+    };
+  }
+
+  async assistSpamCheck(messageId: string, language?: string) {
+    return toSpamCheck(await call<unknown>("assist_spam_check", { messageId, language: language ?? null }), messageId);
+  }
+
+  setKeywords(messageIds: string[], keywords: Record<string, boolean>) {
+    return call<void>("set_keywords", { messageIds, keywords });
   }
 
   searchContacts(query: string) {
