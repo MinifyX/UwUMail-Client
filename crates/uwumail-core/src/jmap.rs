@@ -27,6 +27,9 @@ pub const CALENDARS: &str = "urn:ietf:params:jmap:calendars";
 pub const REMOTE: &str = "urn:uwumail:jmap:remote";
 /// Address books and contact cards (RFC 9610).
 pub const CONTACTS: &str = "urn:ietf:params:jmap:contacts";
+/// Our own: birthday events of other calendars moved into the contacts (`Birthdays/scan`,
+/// `Birthdays/import`), from UwUMail-Server 0.18 on. Its birthdays calendar comes with it.
+pub const BIRTHDAYS: &str = "urn:uwumail:jmap:birthdays";
 /// The key a server signs its Web Push messages with (VAPID, RFC 9749).
 pub const WEBPUSH_VAPID: &str = "urn:ietf:params:jmap:webpush-vapid";
 
@@ -96,6 +99,9 @@ pub struct Session {
     pub picture_url: Option<String>,
     /// The account whose address books this login sees, if the server has JMAP Contacts.
     pub contacts_account_id: Option<String>,
+    /// The account whose birthdays the server moves out of calendars into contacts
+    /// (`urn:uwumail:jmap:birthdays`); such a server also keeps the birthdays calendar and reminders.
+    pub birthdays_account_id: Option<String>,
     /// The server's VAPID public key (base64url, uncompressed P-256), if it signs its Web Push
     /// messages (RFC 9749).
     pub vapid_key: Option<String>,
@@ -133,6 +139,7 @@ impl Session {
         let remote = capabilities.get(REMOTE);
         let remote_url = |key: &str| remote.and_then(|r| r.get(key)).and_then(Value::as_str).map(|u| absolute(base, u));
         let contacts_account_id = extension_account(CONTACTS);
+        let birthdays_account_id = extension_account(BIRTHDAYS);
         let limit = |key: &str, fallback: usize| {
             core.and_then(|c| c.get(key)).and_then(Value::as_u64).map_or(fallback, |n| n.clamp(1, 10_000) as usize)
         };
@@ -156,6 +163,7 @@ impl Session {
             image_url: remote_url("imageUrl"),
             picture_url: remote_url("pictureUrl"),
             contacts_account_id,
+            birthdays_account_id,
             vapid_key: capabilities
                 .get(WEBPUSH_VAPID)
                 .and_then(|vapid| vapid.get("applicationServerKey"))
@@ -386,6 +394,9 @@ impl Client {
         }
         if self.session.contacts_account_id.is_some() {
             using.push(CONTACTS);
+        }
+        if self.session.birthdays_account_id.is_some() {
+            using.push(BIRTHDAYS);
         }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self

@@ -132,7 +132,7 @@ fn vcard_text(card: &Map<String, Value>) -> Result<String> {
 
 impl Inner {
     /// Where an account's contacts live, found once and remembered.
-    async fn contacts_source(&self, account_id: &str) -> Result<Source> {
+    pub(super) async fn contacts_source(&self, account_id: &str) -> Result<Source> {
         {
             let sources = self.contacts_sources.lock().await;
             match sources.get(account_id) {
@@ -169,7 +169,7 @@ impl Inner {
     /// answers, the account's own JMAP server, and sign-ins that can't have one. `None` when only
     /// that search could tell — it asks the mail domain's website, so it waits until someone opens
     /// the contacts.
-    async fn contacts_source_known(&self, account_id: &str) -> Option<Result<Source>> {
+    pub(super) async fn contacts_source_known(&self, account_id: &str) -> Option<Result<Source>> {
         match self.contacts_sources.lock().await.get(account_id) {
             Some(SourceState::Ready(source)) => return Some(Ok(source.clone())),
             Some(SourceState::Unavailable { problem, since }) if since.elapsed() < RETRY_UNAVAILABLE => {
@@ -236,7 +236,7 @@ impl Inner {
     }
 
     /// An account's address books, from memory while fresh.
-    async fn address_book_entries(&self, account_id: &str) -> Result<Vec<BookEntry>> {
+    pub(super) async fn address_book_entries(&self, account_id: &str) -> Result<Vec<BookEntry>> {
         if let Some((at, entries)) = self.address_book_lists.lock().unwrap().get(account_id)
             && at.elapsed() < LIST_FRESH
         {
@@ -313,7 +313,7 @@ impl Inner {
     }
 
     /// An account's cards, from memory while fresh.
-    async fn remote_cards(&self, account_id: &str) -> Result<Vec<RemoteCard>> {
+    pub(super) async fn remote_cards(&self, account_id: &str) -> Result<Vec<RemoteCard>> {
         if let Some((at, cards)) = self.contact_card_lists.lock().unwrap().get(account_id)
             && at.elapsed() < LIST_FRESH
         {

@@ -604,6 +604,16 @@ pub async fn objects_between(
     Ok(parse_objects(&root, &landed))
 }
 
+/// Every object of a calendar that holds an event, whenever it is (the size-limited listing
+/// and at most [`MAX_OBJECTS`] of them), to look for birthdays kept as events.
+pub async fn all_objects(client: &DavClient, calendar: &Url) -> Result<Vec<DavObject>> {
+    let body = r#"<?xml version="1.0" encoding="utf-8"?>
+<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data/></d:prop>
+<c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"/></c:comp-filter></c:filter></c:calendar-query>"#;
+    let (root, landed) = client.multistatus("REPORT", calendar, "1", body).await?;
+    Ok(parse_objects(&root, &landed))
+}
+
 pub fn parse_objects(root: &Element, base: &Url) -> Vec<DavObject> {
     responses(root, base)
         .into_iter()

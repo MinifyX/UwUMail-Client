@@ -34,11 +34,14 @@ pub struct JmapCalendar {
     pub is_default: bool,
     pub may_write: bool,
     pub may_delete: bool,
+    /// The server's birthdays calendar (`uwuBirthdays`), made from the contacts and read-only.
+    pub is_birthdays: bool,
 }
 
 pub fn parse_calendar(value: &Value) -> Option<JmapCalendar> {
     let rights = value.get("myRights");
     let right = |key: &str| rights.and_then(|r| r.get(key)).and_then(Value::as_bool);
+    let is_birthdays = value.get("uwuBirthdays").and_then(Value::as_bool).unwrap_or(false);
     Some(JmapCalendar {
         id: value.get("id")?.as_str()?.to_string(),
         name: value.get("name").and_then(Value::as_str).unwrap_or_default().to_string(),
@@ -47,8 +50,11 @@ pub fn parse_calendar(value: &Value) -> Option<JmapCalendar> {
         is_visible: value.get("isVisible").and_then(Value::as_bool).unwrap_or(true),
         is_default: value.get("isDefault").and_then(Value::as_bool).unwrap_or(false),
         // Without rights, the calendars are the login's own.
-        may_write: rights.is_none() || right("mayWriteAll").unwrap_or(false) || right("mayWriteOwn").unwrap_or(false),
-        may_delete: rights.is_none() || right("mayDelete").unwrap_or(false),
+        // Its events come from the contacts; the server refuses writes and deleting it.
+        may_write: !is_birthdays
+            && (rights.is_none() || right("mayWriteAll").unwrap_or(false) || right("mayWriteOwn").unwrap_or(false)),
+        may_delete: !is_birthdays && (rights.is_none() || right("mayDelete").unwrap_or(false)),
+        is_birthdays,
     })
 }
 
@@ -59,7 +65,7 @@ pub async fn calendars(client: &Client) -> Result<Vec<JmapCalendar>> {
             json!({
                 "accountId": account(client)?,
                 "ids": null,
-                "properties": ["id", "name", "color", "sortOrder", "isVisible", "isDefault", "myRights"],
+                "properties": ["id", "name", "color", "sortOrder", "isVisible", "isDefault", "myRights", "uwuBirthdays"],
             }),
         )])
         .await?;
@@ -136,7 +142,7 @@ pub struct JmapInstance {
     pub utc: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
 
-const INSTANCE_PROPERTIES: [&str; 17] = [
+const INSTANCE_PROPERTIES: [&str; 18] = [
     "id",
     "baseEventId",
     "calendarIds",
@@ -154,6 +160,8 @@ const INSTANCE_PROPERTIES: [&str; 17] = [
     "color",
     "utcStart",
     "utcEnd",
+    // Events of the birthdays calendar: whose date (UwUMail-Server docs/birthdays.md).
+    "uwuBirthday",
 ];
 
 fn utc(value: Option<&Value>) -> Option<DateTime<Utc>> {
@@ -307,5 +315,12 @@ mod tests {
         let shared = parse_calendar(&shared).unwrap();
         assert!(!shared.may_write && !shared.may_delete && !shared.is_visible);
         assert!(parse_calendar(&json!({ "name": "no id" })).is_none());
+
+        // The birthdays calendar is read-only and stays, whatever its rights say.
+        let birthdays = json!({ "id": "c3", "name": "Geburtstage", "uwuBirthdays": true,
+            "myRights": { "mayWriteAll": true, "mayDelete": true } });
+        let birthdays = parse_calendar(&birthdays).unwrap();
+        assert!(birthdays.is_birthdays && !birthdays.may_write && !birthdays.may_delete);
+        assert!(!own.is_birthdays);
     }
 }
