@@ -79,7 +79,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [ ] Send later + Snooze
 - [ ] Templates + snippets
 - [ ] PGP encryption
-- [ ] AI helper (off by default)
+- [x] AI helper (off by default): the UwUMail server's assistant, or own providers on this device (0.6)
 - [ ] Calendar (CalDAV, invitations)
 
 ## Later
