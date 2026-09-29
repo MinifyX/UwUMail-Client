@@ -16,6 +16,9 @@ use crate::assist::validate::{self, EventContext};
 use crate::assist::{Feature, Label, StreamEvent, StreamSink, server, signals};
 use crate::store::LabelLogRecord;
 
+/// At most this much picture text goes along when the assistant reads a mail's appointments.
+const IMAGE_TEXT_CHARS: usize = 8_000;
+
 /// The scope id of what is kept on this device.
 pub const DEVICE_SCOPE: &str = "device";
 /// How long `assist_scopes` waits for one account's server.
@@ -795,11 +798,10 @@ impl Engine {
 
     async fn events_on_device(&self, message_id: &str, include_images: bool) -> Result<Value> {
         let mail = self.stored_mail(message_id, mail::MAX_MAIL_CHARS).await?;
-        // 0.6-merge: image text — with `include_images`, the lead wires the OCR agent's
-        // `self.image_text(message_id, false)` here: its texts go into `image_text` (never the
-        // pictures themselves, and never remote pictures).
-        let image_text: Vec<String> = Vec::new();
-        let _ = include_images;
+        // The text read from the mail's own pictures (never the pictures themselves, and never
+        // remote ones), bounded like the mail's text; a mail whose pictures can't be read goes
+        // without.
+        let image_text = if include_images { self.picture_text_for_events(message_id).await } else { Vec::new() };
         let prompt = prompts::extract_events(&mail, &image_text);
         let (answer, effective) = self.device().ask(self.assist_http()?, Feature::ExtractEvents, &prompt, None).await?;
         let parsed = validate::json_answer(&answer.text)
@@ -823,6 +825,23 @@ impl Engine {
         let context = EventContext { source: &source, links: &mail.links, people: &people, mine: &mine };
         let events = validate::parse_events(&parsed, &context);
         Ok(json!({ "events": events, "answer": Value::Object(local::answer_json(&effective, &answer)) }))
+    }
+
+    /// The texts in a mail's embedded and attached pictures, at most `IMAGE_TEXT_CHARS` together.
+    async fn picture_text_for_events(&self, message_id: &str) -> Vec<String> {
+        let Ok(result) = self.image_text(message_id, false).await else { return Vec::new() };
+        let mut left = IMAGE_TEXT_CHARS;
+        let mut texts = Vec::new();
+        for image in result.images {
+            let text = image.text.trim();
+            if text.is_empty() || left == 0 {
+                continue;
+            }
+            let part: String = text.chars().take(left).collect();
+            left -= part.chars().count();
+            texts.push(part);
+        }
+        texts
     }
 
     // ---------------------------------------------------------- keywords

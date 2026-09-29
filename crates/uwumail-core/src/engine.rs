@@ -177,8 +177,8 @@ macro_rules! with_session {
     }};
 }
 
-mod birthday_ops;
 mod assist_ops;
+mod birthday_ops;
 mod calendar_ops;
 mod contacts_ops;
 mod folder_ops;

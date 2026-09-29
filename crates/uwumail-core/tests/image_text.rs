@@ -312,3 +312,51 @@ async fn without_a_recognizer_the_feature_is_off() {
     let missing = setup.engine.image_text("nope", false).await.unwrap_err();
     assert_eq!(missing.code, uwumail_core::ErrorCode::NotFound);
 }
+
+/// Asked to read a mail's appointments with its pictures, a provider on this device gets the
+/// pictures' text as quoted data, never the pictures, and without it when not asked.
+#[tokio::test]
+async fn the_assistant_on_this_device_reads_the_picture_text_along() {
+    let recognizer = Arc::new(FakeRecognizer::default());
+    let setup = setup(None, Some(recognizer.clone())).await;
+    let prompts: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen = Arc::clone(&prompts);
+    let provider = http_stub(move |request: &Request| {
+        seen.lock().unwrap().push(String::from_utf8_lossy(&request.body).into_owned());
+        Response::json(&json!({
+            "choices": [{ "message": { "role": "assistant", "content": "{\"events\":[]}" }, "finish_reason": "stop" }],
+        }))
+    })
+    .await;
+    let created = setup
+        .engine
+        .assist_create_provider(
+            "device",
+            json!({
+                "name": "Local",
+                "kind": "openaiCompatible",
+                "baseUrl": provider.url("127.0.0.1", "/v1").to_string(),
+                "model": "m-1",
+            }),
+        )
+        .await
+        .expect("a provider on this device");
+    let provider_id = created["id"].as_str().unwrap().to_string();
+    setup
+        .engine
+        .assist_update_settings("device", json!({ "default": { "providerId": provider_id, "model": null } }))
+        .await
+        .unwrap();
+
+    let found = setup.engine.assist_extract_events(&setup.message_id, true).await.expect("asked the model");
+    assert_eq!(found["events"], json!([]));
+    let sent = prompts.lock().unwrap().last().cloned().expect("the provider was asked");
+    assert!(sent.contains("Premiere: Freitag, 9. Oktober"), "{sent}");
+    assert!(sent.contains("Sale ends Sunday"), "{sent}");
+    assert!(!sent.contains("TEXT:") && !sent.contains("iVBOR"), "only text, never the pictures");
+    assert_eq!(recognizer.calls.load(Ordering::SeqCst), 2);
+
+    setup.engine.assist_extract_events(&setup.message_id, false).await.unwrap();
+    let sent = prompts.lock().unwrap().last().cloned().unwrap();
+    assert!(!sent.contains("Sale ends Sunday"), "{sent}");
+}

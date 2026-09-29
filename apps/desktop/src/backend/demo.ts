@@ -1146,7 +1146,7 @@ export class DemoBackend implements Backend {
   }
 
   async extractEvents(messageId: string, _includeImages: boolean): Promise<AssistEventsResult> {
-    // 0.6-merge: image text
+    // The demo assistant reads only the text; the poster mail's picture text is found by the rules.
     return this.assistForMessage(messageId).extractEvents(messageId);
   }
 
