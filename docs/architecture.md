@@ -223,7 +223,9 @@ React 19, Vite, Tailwind CSS 4, TypeScript.
 - `i18n/` — English and German strings in two i18next namespaces per
   language: `neutral` (complete) and `playful` (overrides). `useT()` picks the
   namespace for the active tone; missing playful keys fall back to neutral.
-- `features/` — mail list, reader, composer, onboarding, settings, addons.
+- `features/` — mail list, reader, composer, onboarding, settings, addons,
+  calendar, contacts, and `features/dates` (appointments in mail, see "Dates
+  in mail"; the finder itself is `lib/dates`).
   `features/mobile` is the phone layout below 700 px: list, reader, drawer,
   swipes, pull to refresh, app lock and the Android bridge hooks.
 - `addons/` — the addon host (sandbox frames, RPC, permission checks).
@@ -248,6 +250,46 @@ proxy under Settings → Reading (`socks5://…`, `http://…`) when one is set.
 same proxy carries sender-picture lookups and one-click unsubscribes; mail,
 calendars and updates never take it. Until the interface has said which proxy
 it wants, these requests wait rather than leave without it.
+
+### Dates in mail
+
+The reader offers the appointments a mail talks about for the calendar
+(`apps/desktop/src/lib/dates`, `features/dates`, ported from UwUMail on the
+web 0.18.0). It runs only for an open mail that isn't a draft or filed in
+junk, when some account has calendars and Settings → Reading → "Find
+appointments in mail" (`detectEvents`, on by default, synced as
+`mail.detectEvents`) is on.
+
+- **Rules, on this device.** The finder reads the same sanitized markup the
+  reader shows (`readableBody`) and knows German and English dates, ranges,
+  weekdays, times and zones, where a mail is quoted, forwarded or just its
+  footer, and a title and place near the date. Nothing leaves the device for
+  this. A bar above the mail lists what lies ahead ("3 appointments found",
+  put away per mail; the list lives in local storage), and the dates in the
+  text get a dotted underline with a card on click, Enter or Space.
+- **Picture text.** When the mail has pictures of its own (embedded or
+  attached, and remote ones only once they may load for this mail), the same
+  rules read the text in them: `backend.imageText(messageId, remote)` asks the
+  account's UwUMail server (`Email/imageText`) or the system's text
+  recognition; `unavailable` just means no picture finds.
+- **The AI assistant, opt-in.** Only where `assistFeatures(accountId)` offers
+  `extractEvents` for the mail's account the bar shows "Check with AI";
+  `extractEvents(messageId, includeImages)` is only called on that click, or
+  for every opened mail with the assistant's `assistRefineEvents` setting
+  (`assist.refineEvents`, off by default). Its finds merge with the rule finds
+  (`lib/dates/merge.ts`): the same appointment shows once, the assistant's
+  times, title and place win, a picture only adds what the text lacked. Its
+  links are kept only when they are `https`, its texts are bounded.
+- **Into the calendar.** "Add to calendar" opens the calendar's own event
+  editor (mounted for the whole app by `LazyCalendarDialogs`) filled in with
+  title, start and end on this device's clock, all-day, place and notes that
+  quote the mail with its subject and sender; the first calendar offered is
+  the default one of the mail's account. Nothing is saved until the person
+  saves it there.
+- **Security.** The marks are inserted while the frame's document is built,
+  after sanitizing, into a frame that still runs no scripts; the app listens
+  to clicks through the same-origin document. A mail's own `data-uwu-date`
+  attributes are removed first, so it can't bring clickable look-alikes.
 
 ### Drafts
 
@@ -343,6 +385,7 @@ the host too, limited to the hosts in the manifest.
 | Installed addons | `<app data>/addons/<addon id>/` |
 | Passwords, OAuth refresh tokens | OS keychain, service `UwUMail` |
 | UI settings | WebView local storage (`uwumail.settings`) |
+| Mails whose appointment bar was put away (newest 500) | WebView local storage (`uwumail.datesDismissed`) |
 
 `<app data>` is `%APPDATA%\app.uwumail.desktop` on Windows,
 `~/Library/Application Support/app.uwumail.desktop` on macOS and

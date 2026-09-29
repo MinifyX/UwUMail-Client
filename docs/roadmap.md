@@ -11,6 +11,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Onboarding: layout and tone choice, add a mailbox with autoconfig
 - [x] Mail engine: IMAP sync with local cache, IDLE push, SMTP sending
 - [x] Reading: sanitized HTML, remote content blocked by default, attachment list
+- [x] Appointments in mail: dates in the text and in pictures found by rules on the device, underlined and offered for the calendar's editor; the AI assistant only on request
 - [x] Attachments: open, save and preview (images, PDF, text, CSV, audio, video, invitations, contact cards), warning for files that run programs, local cache
 - [x] Nested folders as a collapsible tree
 - [x] Sender pictures from brand logos (BIMI) and website icons, once per domain, can be turned off
