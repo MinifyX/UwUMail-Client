@@ -11,6 +11,9 @@ use crate::error::{Error, Result};
 use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
 
+mod assist;
+pub use assist::{LabelLogRecord, ProviderRecord, UsageRecord};
+
 const MIGRATIONS: &[&str] = &[
     r#"
 CREATE TABLE accounts (
@@ -189,6 +192,7 @@ CREATE TABLE address_book_prefs (
 ALTER TABLE accounts ADD COLUMN caldav_none_at INTEGER;
 ALTER TABLE accounts ADD COLUMN carddav_none_at INTEGER;
 "#,
+    assist::MIGRATION,
 ];
 
 /// What this device remembers about one calendar.
@@ -1422,7 +1426,7 @@ impl Store {
     const MESSAGE_COLUMNS: &'static str =
         "m.id, m.thread_id, m.account_id, m.folder_id, m.from_json, m.to_json, m.cc_json,
         m.reply_to_json, m.subject, m.date, m.seen, m.flagged, m.answered, m.draft, m.snippet, m.body_html,
-        m.body_text, m.has_remote, m.attachments_json, m.message_id, m.unsubscribe_json, m.bcc_json";
+        m.body_text, m.has_remote, m.attachments_json, m.message_id, m.unsubscribe_json, m.bcc_json, m.keywords";
 
     fn message_from_row(row: &Row<'_>) -> rusqlite::Result<Message> {
         Ok(Message {
@@ -1450,6 +1454,7 @@ impl Store {
             has_remote_content: row.get(17)?,
             attachments: from_json(&row.get::<_, String>(18)?),
             unsubscribe: row.get::<_, Option<String>>(20)?.and_then(|text| serde_json::from_str(&text).ok()),
+            keywords: assist::keywords_list(&row.get::<_, String>(22)?),
         })
     }
 
@@ -1768,6 +1773,13 @@ fn summarize(id: &str, messages: &[Message]) -> Option<ThreadSummary> {
         flagged: messages.iter().any(|m| m.flags.flagged),
         has_attachments: messages.iter().any(|m| !m.attachments.is_empty()),
         has_draft: messages.iter().any(|m| m.flags.draft),
+        keywords: {
+            let mut keywords: Vec<String> = messages.iter().flat_map(|m| m.keywords.iter().cloned()).collect();
+            keywords.sort();
+            keywords.dedup();
+            keywords.truncate(30);
+            keywords
+        },
     })
 }
 

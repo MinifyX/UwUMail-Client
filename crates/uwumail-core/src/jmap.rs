@@ -28,6 +28,8 @@ pub const REMOTE: &str = "urn:uwumail:jmap:remote";
 /// Address books and contact cards (RFC 9610).
 pub const CONTACTS: &str = "urn:ietf:params:jmap:contacts";
 /// The key a server signs its Web Push messages with (VAPID, RFC 9749).
+/// UwUMail's AI assistant (the server's docs/jmap-assist.md).
+pub const ASSIST: &str = "urn:uwumail:jmap:assist";
 pub const WEBPUSH_VAPID: &str = "urn:ietf:params:jmap:webpush-vapid";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
@@ -102,6 +104,17 @@ pub struct Session {
     /// The session's `state`: API answers carry it as `sessionState`, and a different one there
     /// means the session changed (RFC 8620 §2).
     pub state: Option<String>,
+    /// The server's AI assistant for this login's own account, if it has one.
+    pub assist: Option<AssistSession>,
+}
+
+/// What a session says about UwUMail's AI assistant.
+#[derive(Debug, Clone)]
+pub struct AssistSession {
+    /// Where `Assist/compose` and `Assist/summarize` stream.
+    pub stream_url: Option<String>,
+    /// The own account's capability object: `features`, `mayAddProviders`, the limits.
+    pub options: Value,
 }
 
 impl Session {
@@ -136,6 +149,16 @@ impl Session {
         let limit = |key: &str, fallback: usize| {
             core.and_then(|c| c.get(key)).and_then(Value::as_u64).map_or(fallback, |n| n.clamp(1, 10_000) as usize)
         };
+        let assist = capabilities.get(ASSIST).map(|capability| AssistSession {
+            stream_url: capability.get("streamUrl").and_then(Value::as_str).map(|u| absolute(base, u)),
+            options: document
+                .get("accounts")
+                .and_then(|accounts| accounts.get(&account_id))
+                .and_then(|account| account.get("accountCapabilities"))
+                .and_then(|capabilities| capabilities.get(ASSIST))
+                .cloned()
+                .unwrap_or(Value::Null),
+        });
         Ok(Self {
             api_url: absolute(base, text("apiUrl").ok_or_else(invalid)?),
             download_url: absolute(base, text("downloadUrl").ok_or_else(invalid)?),
@@ -164,6 +187,7 @@ impl Session {
                 .filter(|key| !key.is_empty())
                 .map(String::from),
             state: text("state").map(String::from),
+            assist,
         })
     }
 
@@ -180,6 +204,10 @@ impl Session {
             event_source_url: self.event_source_url.as_deref().map(move_url),
             image_url: self.image_url.as_deref().map(move_url),
             picture_url: self.picture_url.as_deref().map(move_url),
+            assist: self.assist.as_ref().map(|assist| AssistSession {
+                stream_url: assist.stream_url.as_deref().map(move_url),
+                options: assist.options.clone(),
+            }),
             ..self.clone()
         }
     }
@@ -242,6 +270,12 @@ impl From<MethodError> for Error {
 pub struct Responses(Vec<(String, Value, String)>);
 
 impl Responses {
+    /// The whole arguments of an `error` answer to call `id`, for extra fields like `retryAfter`.
+    pub fn error_arguments(&self, id: usize) -> Option<&Value> {
+        let id = id.to_string();
+        self.0.iter().find(|(name, _, call)| *call == id && name == "error").map(|(_, arguments, _)| arguments)
+    }
+
     /// The arguments of the answer to call `id`. A call can have more than one
     /// answer (e.g. an implicit `Email/set`); this is the one named `method`.
     pub fn get(&self, id: usize, method: &str) -> std::result::Result<&Value, MethodError> {
@@ -387,6 +421,9 @@ impl Client {
         if self.session.contacts_account_id.is_some() {
             using.push(CONTACTS);
         }
+        if self.session.assist.is_some() {
+            using.push(ASSIST);
+        }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self
             .http
@@ -425,6 +462,32 @@ impl Client {
                 })
                 .collect(),
         ))
+    }
+
+    /// Posts a method to the assistant's stream endpoint with this login; the answer is
+    /// `text/event-stream` (docs/jmap-assist.md "Streaming").
+    pub async fn post_assist_stream(&self, url: &str, method: &str, arguments: Value) -> Result<reqwest::Response> {
+        let body = json!({ "using": [CORE, ASSIST], "method": method, "arguments": arguments });
+        let response = self
+            .http
+            .post(url)
+            .header(reqwest::header::AUTHORIZATION, self.auth.header())
+            .header(reqwest::header::ACCEPT, "text/event-stream")
+            .timeout(std::time::Duration::from_secs(200))
+            .json(&body)
+            .send()
+            .await?;
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return Err(Error::auth("The mail server didn't accept the login anymore."));
+        }
+        if status == reqwest::StatusCode::BAD_REQUEST {
+            return Err(Error::assist("invalidArguments", "The server didn't take the request."));
+        }
+        if !status.is_success() {
+            return Err(Error::connection(format!("The mail server answered {status}.")));
+        }
+        Ok(response)
     }
 
     /// Downloads a blob, e.g. a whole message.

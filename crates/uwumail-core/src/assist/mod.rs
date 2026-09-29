@@ -8,8 +8,14 @@
 //! fixed, checked shape, and nothing reaches a draft or a mail without a click, except the person's
 //! own labels when they switched auto-labels on.
 
+pub mod local;
+pub mod mail;
+pub mod prompts;
 pub mod provider;
+pub mod server;
+pub mod signals;
 pub mod sse;
+pub mod validate;
 
 use serde::{Deserialize, Serialize};
 
@@ -55,3 +61,16 @@ pub enum StreamEvent {
 
 /// Where streamed pieces go while the model writes.
 pub type StreamSink = std::sync::Arc<dyn Fn(StreamEvent) + Send + Sync>;
+
+/// The person's own word for a kind of mail, set on mail as the keyword `keyword`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Label {
+    pub id: String,
+    pub name: String,
+    /// What belongs there: what the model reads.
+    pub description: String,
+    pub keyword: String,
+    /// `#rrggbb`, or `None` for the default.
+    pub color: Option<String>,
+}

@@ -231,6 +231,9 @@ pub struct ThreadSummary {
     pub has_attachments: bool,
     /// Somewhere in the conversation is an unsent draft.
     pub has_draft: bool,
+    /// The own keywords of its messages (lower case, no `$` system ones), e.g. assistant labels.
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -308,6 +311,9 @@ pub struct Message {
     pub attachments: Vec<Attachment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unsubscribe: Option<Unsubscribe>,
+    /// Its own keywords (lower case, no `$` system ones), e.g. assistant labels.
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

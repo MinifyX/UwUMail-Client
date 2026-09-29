@@ -1682,6 +1682,7 @@ impl Inner {
                 tokens.insert(account.id.clone(), (fresh.access_token.clone(), Instant::now() + fresh.expires_in));
                 Ok(Credential::Token(fresh.access_token))
             }
+            Secret::ApiKey { .. } => Err(Error::auth("No saved password for this mailbox.")),
         }
     }
 

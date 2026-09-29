@@ -260,7 +260,10 @@ mod tests {
     #[test]
     fn ndjson_lines_are_events_too() {
         let events = all(&[b"{\"message\":{\"content\":\"Hi\"}}\n{\"done\":true}"]);
-        assert_eq!(events, vec![event("message", "{\"message\":{\"content\":\"Hi\"}}"), event("message", "{\"done\":true}")]);
+        assert_eq!(
+            events,
+            vec![event("message", "{\"message\":{\"content\":\"Hi\"}}"), event("message", "{\"done\":true}")]
+        );
     }
 
     #[test]
