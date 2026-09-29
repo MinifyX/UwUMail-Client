@@ -1,18 +1,33 @@
-import { BackendError, type Backend } from "./backend";
+import { AssistError, BackendError, type Backend } from "./backend";
+import { DemoAssist } from "./demo-assist";
+import { DEVICE_ASSIST_SCOPE } from "./types";
 import { isDangerous } from "@/lib/attachments";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
 import { DemoContacts } from "./demo-contacts";
-import { buildFolders, buildMessages, DEMO_ACCOUNTS, welcomeMessage } from "./demo-data";
-import { demoSenderPicture } from "./demo-pictures";
+import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMessage } from "./demo-data";
+import { DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
   BlockedSender,
   Account,
+  AssistComposeRequest,
+  AssistEventsResult,
+  AssistFeatures,
+  AssistLabelInput,
+  AssistProviderInput,
+  AssistScope,
+  AssistSettingsPatch,
+  AssistStreamHandlers,
+  AssistSummarizeRequest,
   AttachmentContent,
   Address,
   BackendEvent,
+  BirthdayFeatures,
+  BirthdayImportEntry,
+  BirthdayImportResult,
+  BirthdayScan,
   Contact,
   ContactInput,
   ContactsAccount,
@@ -24,6 +39,8 @@ import type {
   FlagChange,
   Folder,
   Identity,
+  ImageSizeProbe,
+  ImageTextResult,
   MailtoDraft,
   MovedMessage,
   Message,
@@ -419,7 +436,11 @@ export class DemoBackend implements Backend {
       });
   }
 
-  private calendar = new DemoCalendar(lang(), () => this.emit({ type: "calendar:changed" }));
+  private calendar = new DemoCalendar(
+    lang(),
+    () => this.emit({ type: "calendar:changed" }),
+    () => this.addressBook.contacts(),
+  );
 
   async calendars() {
     await wait(100);
@@ -480,6 +501,54 @@ export class DemoBackend implements Backend {
   async deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
     await wait(120);
     this.calendar.deleteEvent(occurrenceId, scope);
+  }
+
+  async birthdayFeatures(): Promise<BirthdayFeatures[]> {
+    await wait(40);
+    // The first mailbox plays a UwUMail server with the birthdays calendar and the import.
+    const first = DEMO_ACCOUNTS[0]!.id;
+    return this.accounts.map((account) => ({
+      accountId: account.id,
+      server: account.id === first,
+      import: account.id === first,
+    }));
+  }
+
+  async scanBirthdays(accountId: string): Promise<BirthdayScan> {
+    await wait(250);
+    if (accountId !== DEMO_ACCOUNTS[0]!.id) throw new BackendError("not_supported", "The demo has no calendar here.");
+    return { candidates: this.calendar.scanBirthdays(), truncated: false };
+  }
+
+  async importBirthdays(accountId: string, entries: BirthdayImportEntry[]): Promise<BirthdayImportResult> {
+    await wait(300);
+    if (accountId !== DEMO_ACCOUNTS[0]!.id) throw new BackendError("not_supported", "The demo has no calendar here.");
+    const found = new Map(this.calendar.scanBirthdays().map((candidate) => [candidate.eventId, candidate]));
+    const result: BirthdayImportResult = { imported: [], failed: [] };
+    for (const entry of entries) {
+      const candidate = found.get(entry.eventId);
+      if (!candidate) {
+        result.failed.push({ eventId: entry.eventId, reason: "notFound" });
+        continue;
+      }
+      try {
+        let contactId: string;
+        let created = false;
+        if ("contactId" in entry) {
+          this.addressBook.setBirthday(entry.contactId, candidate.birthday, entry.overwrite === true);
+          contactId = entry.contactId;
+        } else {
+          contactId = this.addressBook.createNamed(entry.newContactName, candidate.birthday);
+          created = true;
+        }
+        // Like the server: an event of a calendar that is only read stays where it is.
+        if (candidate.mayDeleteEvent) this.calendar.removeEvent(entry.eventId);
+        result.imported.push({ eventId: entry.eventId, contactId, created, eventDeleted: candidate.mayDeleteEvent });
+      } catch (error) {
+        result.failed.push({ eventId: entry.eventId, reason: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return result;
   }
 
   // Only the first demo mailbox plays a server with address books.
@@ -1008,6 +1077,215 @@ export class DemoBackend implements Backend {
     return null;
   }
 
+  async imageText(messageId: string): Promise<ImageTextResult> {
+    // Like reading a picture, which takes a moment. Only the poster mail has text in its picture.
+    await wait(500);
+    const text = DEMO_IMAGE_TEXT.get(messageId);
+    return {
+      emailId: messageId,
+      unavailable: false,
+      images: text ? [{ source: "cid:poster@kaffeekuchen.example", text, width: 420, height: 560 }] : [],
+      skipped: 0,
+    };
+  }
+
+  /**
+   * The AI assistant, played with made-up answers: the JMAP account's "server" and, for the IMAP
+   * account, "this device" with a local model.
+   */
+  private assistServer = new DemoAssist(
+    lang(),
+    () => this.messages.filter((message) => message.accountId === DEMO_ACCOUNTS[0]!.id),
+    (mail) => this.assistChanged(DEMO_ACCOUNTS[0]!.id, mail),
+  );
+  private assistDevice = new DemoAssist(
+    lang(),
+    () => this.messages.filter((message) => message.accountId !== DEMO_ACCOUNTS[0]!.id),
+    (mail) => this.assistChanged(null, mail),
+    true,
+  );
+
+  private assistChanged(accountId: string | null, mail: boolean) {
+    this.emit({ type: "assist:changed", accountId });
+    if (mail) for (const account of this.accounts) this.emit({ type: "mail:changed", accountId: account.id });
+  }
+
+  /** The demo assistant of a scope ("device" or the JMAP account). */
+  private assistOf(scope: string): DemoAssist {
+    return scope === DEVICE_ASSIST_SCOPE ? this.assistDevice : this.assistServer;
+  }
+
+  /** The demo assistant that serves a mailbox. */
+  private assistFor(accountId: string): DemoAssist {
+    return accountId === DEMO_ACCOUNTS[0]!.id ? this.assistServer : this.assistDevice;
+  }
+
+  private assistForMessage(messageId: string): DemoAssist {
+    const message = this.messages.find((entry) => entry.id === messageId);
+    if (!message) throw new AssistError("notFound", "That mail is gone.");
+    return this.assistFor(message.accountId);
+  }
+
+  async assistScopes(): Promise<AssistScope[]> {
+    const server = DEMO_ACCOUNTS[0]!.id;
+    const others = this.accounts.filter((account) => account.id !== server).map((account) => account.id);
+    return [
+      { id: server, kind: "server", accountId: server, accountIds: [server], options: this.assistServer.options() },
+      {
+        id: DEVICE_ASSIST_SCOPE,
+        kind: "device",
+        accountId: null,
+        accountIds: others,
+        options: this.assistDevice.options(),
+      },
+    ];
+  }
+
+  async assistFeatures(accountId: string): Promise<AssistFeatures | null> {
+    return this.assistFor(accountId).features();
+  }
+
+  async extractEvents(messageId: string, _includeImages: boolean): Promise<AssistEventsResult> {
+    // The demo assistant reads only the text; the poster mail's picture text is found by the rules.
+    return this.assistForMessage(messageId).extractEvents(messageId);
+  }
+
+  async assistProviders(scope: string) {
+    await wait(80);
+    return this.assistOf(scope).listProviders();
+  }
+
+  async createAssistProvider(scope: string, input: AssistProviderInput) {
+    await wait(150);
+    if (scope === DEVICE_ASSIST_SCOPE && input.kind === "chatgpt") {
+      throw new AssistError("invalidProperties", "ChatGPT sign-in is not available on this device.", {
+        properties: ["kind"],
+      });
+    }
+    return this.assistOf(scope).createProvider(input);
+  }
+
+  async updateAssistProvider(scope: string, id: string, patch: AssistProviderInput) {
+    await wait(120);
+    this.assistOf(scope).updateProvider(id, patch);
+  }
+
+  async deleteAssistProvider(scope: string, id: string) {
+    await wait(100);
+    this.assistOf(scope).deleteProvider(id);
+  }
+
+  async assistModels(scope: string, providerId: string) {
+    await wait(400);
+    return this.assistOf(scope).models(providerId);
+  }
+
+  async chatgptLogin(scope: string, providerId: string) {
+    await wait(300);
+    return this.assistOf(scope).chatgptLogin(providerId);
+  }
+
+  async chatgptPoll(scope: string, providerId: string) {
+    await wait(120);
+    return this.assistOf(scope).chatgptPoll(providerId);
+  }
+
+  async assistSettings(scope: string) {
+    await wait(60);
+    return this.assistOf(scope).getSettings();
+  }
+
+  async updateAssistSettings(scope: string, patch: AssistSettingsPatch) {
+    await wait(100);
+    this.assistOf(scope).updateSettings(patch);
+  }
+
+  async assistUsage(scope: string, days = 30) {
+    await wait(80);
+    return this.assistOf(scope).usageReport(Math.min(90, Math.max(1, days)));
+  }
+
+  async assistLabels(scope: string) {
+    await wait(60);
+    return this.assistOf(scope).listLabels();
+  }
+
+  async createAssistLabel(scope: string, input: AssistLabelInput) {
+    await wait(120);
+    return this.assistOf(scope).createLabel(input);
+  }
+
+  async updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>) {
+    await wait(100);
+    this.assistOf(scope).updateLabel(id, patch);
+  }
+
+  async deleteAssistLabel(scope: string, id: string) {
+    await wait(100);
+    this.assistOf(scope).deleteLabel(id);
+  }
+
+  async assistLabelLog(scope: string, messageIds: string[] | null, limit = 100) {
+    await wait(60);
+    return this.assistOf(scope).labelLog(messageIds, limit);
+  }
+
+  async undoAssistLabels(scope: string, logIds: string[]) {
+    await wait(100);
+    this.assistOf(scope).undo(logIds);
+  }
+
+  async applyAssistLabels(messageIds: string[]) {
+    const server = messageIds.filter(
+      (id) => this.messages.find((m) => m.id === id)?.accountId === DEMO_ACCOUNTS[0]!.id,
+    );
+    const device = messageIds.filter((id) => !server.includes(id));
+    return {
+      ...(server.length > 0 ? await this.assistServer.apply(server) : {}),
+      ...(device.length > 0 ? await this.assistDevice.apply(device) : {}),
+    };
+  }
+
+  async recentInboxIds(scope: string, limit: number) {
+    await wait(40);
+    const accounts = (await this.assistScopes()).find((entry) => entry.id === scope)?.accountIds ?? [];
+    return this.messages
+      .filter((message) => accounts.some((account) => message.folderId === `${account}:inbox`))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, Math.max(0, limit))
+      .map((message) => message.id);
+  }
+
+  async assistCompose(accountId: string, request: AssistComposeRequest, handlers?: AssistStreamHandlers) {
+    return this.assistFor(accountId).compose(request, handlers);
+  }
+
+  async assistSummarize(request: AssistSummarizeRequest, handlers?: AssistStreamHandlers) {
+    const messageId =
+      request.emailId ?? this.messages.find((message) => message.threadId === request.threadId)?.id ?? "";
+    return this.assistForMessage(messageId).summarize(request, handlers);
+  }
+
+  async assistSpamCheck(messageId: string) {
+    return this.assistForMessage(messageId).spamCheck(messageId);
+  }
+
+  async setKeywords(messageIds: string[], keywords: Record<string, boolean>) {
+    await wait(60);
+    for (const message of this.messages) {
+      if (!messageIds.includes(message.id)) continue;
+      const set = new Set(message.keywords ?? []);
+      for (const [keyword, on] of Object.entries(keywords)) {
+        if (on) set.add(keyword);
+        else set.delete(keyword);
+      }
+      message.keywords = [...set].sort();
+    }
+    this.assistServer.keywordsChanged(messageIds, keywords);
+    this.assistDevice.keywordsChanged(messageIds, keywords);
+    for (const account of this.accounts) this.emit({ type: "mail:changed", accountId: account.id });
+  }
+
   async companyDomain(email: string) {
     // Good enough for made-up addresses; the real engine uses the public suffix list.
     const labels = (email.split("@")[1] ?? "").toLowerCase().split(".").filter(Boolean);
@@ -1043,8 +1321,27 @@ export class DemoBackend implements Backend {
   async setUpdateChecks() {}
 
   imageProxy() {
-    // No app to fetch through; the demo's remote pictures point at hosts that never answer.
-    return null;
+    // The demo's stand-in for the app "fetches" the sample mail's pictures; every other address
+    // stays as it is and blocked, like one that can't be had.
+    return (url: string) => DEMO_REMOTE_PICTURES[url.trim()]?.url ?? url;
+  }
+
+  /** Sizes the way the app finds them out: each after its own moment, a dead host after a short wait. */
+  imageSizes(): ImageSizeProbe {
+    return async (urls, onSize, signal) => {
+      await Promise.all(
+        urls.map(async (url) => {
+          const known = DEMO_REMOTE_PICTURES[url];
+          await wait(known?.delay ?? 600);
+          if (signal.aborted) return;
+          onSize(
+            known?.url
+              ? { url, width: known.width, height: known.height, failed: false }
+              : { url, width: null, height: null, failed: true },
+          );
+        }),
+      );
+    };
   }
 
   async setPrivacyProxy() {}
@@ -1178,6 +1475,7 @@ export class DemoBackend implements Backend {
       flagged: sorted.some((m) => m.flags.flagged),
       hasAttachments: sorted.some((m) => m.attachments.length > 0),
       hasDraft: sorted.some((m) => m.flags.draft),
+      keywords: [...new Set(sorted.flatMap((m) => m.keywords ?? []))].sort(),
     };
   }
 }

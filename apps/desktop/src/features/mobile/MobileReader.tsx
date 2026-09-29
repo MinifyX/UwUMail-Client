@@ -22,6 +22,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
 import { useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
 import { useUi } from "@/state/ui";
+import { ThreadAssistButton, ThreadSummary } from "../assist/ReaderAssist";
+import { AssistForAccount } from "../assist/useAssist";
 import { MessageView } from "../mail/MessageView";
 import { requestMove } from "../mail/selection";
 
@@ -129,6 +131,15 @@ export function MobileReader({ threadId }: { threadId: string }) {
         <h1 className="min-w-0 flex-1 truncate px-1 text-[16px] font-bold">
           {data.thread.subject || t("reader.noSubject")}
         </h1>
+        <AssistForAccount accountId={latest.accountId}>
+          <ThreadAssistButton
+            threadId={latest.threadId}
+            messages={all}
+            own
+            mine={new Set(accounts.map((account) => account.email.toLowerCase()))}
+            align="end"
+          />
+        </AssistForAccount>
         <IconButton
           icon={Star}
           label={flagged ? t("reader.unflag") : t("reader.flag")}
@@ -199,6 +210,9 @@ export function MobileReader({ threadId }: { threadId: string }) {
           <h2 className="selectable px-1.5 pb-1 text-[20px] leading-tight font-extrabold tracking-[-0.01em]">
             {data.thread.subject || t("reader.noSubject")}
           </h2>
+          <AssistForAccount accountId={latest.accountId}>
+            <ThreadSummary threadId={latest.threadId} count={all.length} />
+          </AssistForAccount>
           {hiddenCount > 1 && (
             <button
               type="button"

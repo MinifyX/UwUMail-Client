@@ -78,6 +78,7 @@ async fn jmap_sync_send_push_flags_and_trash() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let mut events = engine.subscribe();
@@ -333,6 +334,7 @@ async fn jmap_drafts_are_saved_replaced_and_removed_on_send() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let no_server = ServerSettings { host: String::new(), port: 0, security: Security::Tls };
@@ -413,6 +415,7 @@ async fn jmap_blocks_senders_on_a_uwumail_server() {
         data_dir: data.path().to_path_buf(),
         secrets: Arc::new(MemorySecrets::default()),
         open_url: Arc::new(|_| {}),
+        recognizer: None,
     })
     .unwrap();
     let no_server = ServerSettings { host: String::new(), port: 0, security: Security::Tls };

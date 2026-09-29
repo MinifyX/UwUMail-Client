@@ -12,8 +12,6 @@ import { useUi } from "@/state/ui";
 import { useContactsAvailable } from "../contacts/useContactsData";
 import { AgendaView } from "./AgendaView";
 import { CalendarSidebar, startNewEvent } from "./CalendarSidebar";
-import { DeleteScopeQuestion } from "./DeleteScopeQuestion";
-import { EventEditor } from "./EventEditor";
 import { EventPopover, QuickCreate } from "./EventPopover";
 import { formatDayLong, formatMonthTitle, formatRangeTitle, weekStart } from "./format";
 import { MonthView } from "./MonthView";
@@ -122,8 +120,7 @@ export function CalendarShell() {
       {phone ? <PhoneCalendar /> : <DesktopCalendar />}
       <EventPopover />
       <QuickCreate />
-      <EventEditor />
-      <DeleteScopeQuestion />
+      {/* The editor and "only this one?" live with the whole app (LazyCalendarDialogs), for mail too. */}
     </>
   );
 }

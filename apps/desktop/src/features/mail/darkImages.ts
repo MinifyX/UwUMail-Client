@@ -7,6 +7,7 @@
 // permission (webmail); otherwise they stay as they are.
 
 import { contrast, DARK_SURFACE, IMAGE_BACKING, parseColor, type Rgba } from "./darkMode";
+import { FAILED_EVENT, LOADED_EVENT, PENDING, SOURCE_EVENT } from "./remotePictures";
 import {
   MAX_PIXELS,
   MIN_PIXELS,
@@ -261,21 +262,33 @@ export function darkenImages(root: HTMLElement, loadRemote?: RemoteImageLoader):
     running = false;
   };
 
+  const hide = (image: HTMLImageElement) => {
+    // Mails rarely set an inline opacity on images; one that does keeps its look while visible.
+    if (stopped || hidden.has(image) || image.style.getPropertyValue("opacity")) return;
+    image.style.setProperty("opacity", "0", "important");
+    hidden.set(
+      image,
+      setTimeout(() => reveal(image), REVEAL_AFTER_MS),
+    );
+  };
+  const whenLoaded = (image: HTMLImageElement, ok: boolean) => {
+    if (!ok || stopped) return reveal(image);
+    queue.push(image);
+    void pump();
+  };
+
   for (const image of Array.from(root.querySelectorAll("img"))) {
     if (sitsOnBackgroundImage(image)) continue;
-    // Mails rarely set an inline opacity on images; one that does keeps its look while visible.
-    if (!image.style.getPropertyValue("opacity")) {
-      image.style.setProperty("opacity", "0", "important");
-      hidden.set(
-        image,
-        setTimeout(() => reveal(image), REVEAL_AFTER_MS),
-      );
+    if (image.hasAttribute(PENDING)) {
+      // A remote picture still waiting (see remotePictures.ts): its placeholder shimmers until the
+      // real address is set, and only the real picture is looked at.
+      image.addEventListener(SOURCE_EVENT, () => hide(image), { once: true });
+      image.addEventListener(LOADED_EVENT, () => whenLoaded(image, true), { once: true });
+      image.addEventListener(FAILED_EVENT, () => whenLoaded(image, false), { once: true });
+      continue;
     }
-    void loaded(image).then((ok) => {
-      if (!ok || stopped) return reveal(image);
-      queue.push(image);
-      void pump();
-    });
+    hide(image);
+    void loaded(image).then((ok) => whenLoaded(image, ok));
   }
 
   return () => {

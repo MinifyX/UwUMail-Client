@@ -26,7 +26,7 @@ import { SettingsDialog } from "../settings/SettingsDialog";
 import { useWorkspaceGuard } from "../workspaces/workspaces";
 import { buildCommands } from "./commands";
 import { CommandPalette } from "./CommandPalette";
-import { LazyCalendar } from "./LazyCalendar";
+import { LazyCalendar, LazyCalendarDialogs } from "./LazyCalendar";
 import { LazyContactDialogs, LazyContacts } from "./LazyContacts";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 
@@ -238,6 +238,7 @@ export function MailShell() {
       <Composer />
       <SettingsDialog />
       <LazyContactDialogs />
+      <LazyCalendarDialogs />
       <AddAccountDialog />
       <CommandPalette commands={commands} />
       <ShortcutsDialog />

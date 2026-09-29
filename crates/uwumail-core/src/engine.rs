@@ -63,6 +63,9 @@ pub struct EngineOptions {
     pub data_dir: PathBuf,
     pub secrets: Arc<dyn SecretStore>,
     pub open_url: UrlOpener,
+    /// The system's OCR for the text in pictures of mailboxes whose server doesn't read them;
+    /// `None` where there is none (Linux).
+    pub recognizer: Option<Arc<dyn crate::ocr::TextRecognizer>>,
 }
 
 #[derive(Clone)]
@@ -134,6 +137,14 @@ struct Inner {
     push_lock: AsyncMutex<()>,
     /// When each account's session was last read again to look for a new push key.
     push_key_checked: Mutex<HashMap<String, Instant>>,
+    /// Reads the text in pictures on this device (see `ocr`).
+    recognizer: Option<Arc<dyn crate::ocr::TextRecognizer>>,
+    /// Pictures being read on this device right now, across all mails.
+    ocr_permits: Arc<tokio::sync::Semaphore>,
+    /// The text in the pictures of the mails read last.
+    image_texts: Mutex<crate::ocr::ResultCache>,
+    /// The AI assistant's streams and auto-label queue.
+    assist: assist_ops::AssistState,
 }
 
 enum Credential {
@@ -166,9 +177,12 @@ macro_rules! with_session {
     }};
 }
 
+mod assist_ops;
+mod birthday_ops;
 mod calendar_ops;
 mod contacts_ops;
 mod folder_ops;
+mod ocr_ops;
 mod push_ops;
 
 impl Engine {
@@ -211,6 +225,10 @@ impl Engine {
                 sync_locks: Mutex::new(HashMap::new()),
                 push_lock: AsyncMutex::new(()),
                 push_key_checked: Mutex::new(HashMap::new()),
+                recognizer: options.recognizer,
+                ocr_permits: Arc::new(tokio::sync::Semaphore::new(crate::ocr::PARALLEL)),
+                image_texts: Mutex::new(crate::ocr::ResultCache::default()),
+                assist: assist_ops::AssistState::new(),
             }),
         })
     }
@@ -243,6 +261,7 @@ impl Engine {
     /// Starts background sync for every saved account, and sends what was
     /// still waiting in the outbox when UwUMail last stopped.
     pub fn start(&self) -> Result<()> {
+        assist_ops::start_auto_labels(self.clone());
         for account in self.inner.store.accounts()? {
             self.inner.spawn_sync(&account.id);
         }
@@ -1500,7 +1519,27 @@ impl Engine {
                 "webp" => "image/webp",
                 _ => "application/octet-stream",
             });
-        Some((media_type.to_string(), bytes))
+        Some((media_type.to_string(), Arc::unwrap_or_clone(bytes)))
+    }
+
+    /// The sizes of a mail's remote pictures before they load, each passed to `on_size` as soon as
+    /// it is known. A UwUMail server tells them for its own accounts (`imageSizesUrl`); for every
+    /// other account they are read from the pictures fetched here, which then wait in memory for
+    /// the reader. An error when the account's server fetches its pictures but tells no sizes: the
+    /// reader then loads them without.
+    pub async fn image_sizes(
+        &self,
+        account_id: &str,
+        urls: &[String],
+        on_size: impl FnMut(crate::mail_images::RemoteImageSize),
+    ) -> Result<()> {
+        let account = self.inner.store.account(account_id)?;
+        if let Some(client) = self.inner.picture_server_for(&account).await {
+            // Its pictures come through the server, never from here.
+            return client.image_sizes(urls, on_size).await;
+        }
+        self.inner.mail_images.probe(urls, on_size).await;
+        Ok(())
     }
 
     /// The proxy for requests that tell a sender something about the reader: remote pictures, sender
@@ -1682,6 +1721,7 @@ impl Inner {
                 tokens.insert(account.id.clone(), (fresh.access_token.clone(), Instant::now() + fresh.expires_in));
                 Ok(Credential::Token(fresh.access_token))
             }
+            Secret::ApiKey { .. } => Err(Error::auth("No saved password for this mailbox.")),
         }
     }
 
@@ -1964,6 +2004,10 @@ impl Inner {
                 .filter(|m| Some(&m.folder_id) == inbox.as_ref())
                 .collect();
             let arrived = self.drop_blocked(arrived).await;
+            if result.had_messages {
+                let ids: Vec<String> = arrived.iter().map(|m| m.id.clone()).collect();
+                self.queue_auto_labels(account_id, &ids);
+            }
             let unseen: Vec<String> =
                 arrived.into_iter().filter(|m| !m.flags.seen && result.had_messages).map(|m| m.id).collect();
             if !unseen.is_empty() {
@@ -2037,6 +2081,10 @@ impl Inner {
         let result = imap::sync_folder(session, &self.store, folder, self.full_after()).await?;
         if folder.role == Some(FolderRole::Inbox) && !result.new_message_ids.is_empty() {
             let arrived = self.drop_blocked(self.store.messages_by_ids(&result.new_message_ids)?).await;
+            if result.had_messages {
+                let ids: Vec<String> = arrived.iter().map(|m| m.id.clone()).collect();
+                self.queue_auto_labels(&folder.account_id, &ids);
+            }
             let unseen: Vec<String> =
                 arrived.into_iter().filter(|m| !m.flags.seen && result.had_messages).map(|m| m.id).collect();
             if !unseen.is_empty() {
@@ -2306,6 +2354,7 @@ mod tests {
             data_dir: dir.path().to_path_buf(),
             secrets: Arc::new(crate::secrets::MemorySecrets::default()),
             open_url: Arc::new(|_| {}),
+            recognizer: None,
         })
         .unwrap();
         assert!(!engine.finish_sign_in("app.uwumail://oauth?code=1&state=2"), "no app link set up");
@@ -2334,6 +2383,7 @@ mod tests {
             data_dir: dir.path().to_path_buf(),
             secrets: secrets.clone(),
             open_url: Arc::new(move |url| seen.lock().unwrap().push(url.to_string())),
+            recognizer: None,
         })
         .unwrap();
         let lookalike = ServerSettings { host: "outlook.example.org".into(), port: 993, security: Security::Tls };

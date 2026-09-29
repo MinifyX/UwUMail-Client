@@ -84,6 +84,13 @@ export interface Settings {
   workspaceNames: Record<Workspace, string>;
   /** Mailboxes in the business workspace; all others are private. Kept while the feature is off. */
   businessAccounts: string[];
+  /**
+   * The AI assistant reads appointments out of every opened mail by itself (costs tokens per
+   * mail). Follows the account as `assist.refineEvents`.
+   */
+  assistRefineEvents: boolean;
+  /** Dates in mails are offered for the calendar, see lib/dates. Follows the account as `mail.detectEvents`. */
+  detectEvents: boolean;
 }
 
 interface SettingsActions {
@@ -134,6 +141,8 @@ export const DEFAULT_SETTINGS: Settings = {
   activeWorkspace: "private",
   workspaceNames: { private: "", business: "" },
   businessAccounts: [],
+  assistRefineEvents: false,
+  detectEvents: true,
 };
 
 export const useSettings = create<Settings & SettingsActions>()(

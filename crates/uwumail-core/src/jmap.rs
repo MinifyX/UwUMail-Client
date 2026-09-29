@@ -1,7 +1,7 @@
 //! JMAP (RFC 8620 core, RFC 8621 mail): finding the server, signing in,
 //! method calls, blobs and push over EventSource.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use base64::Engine as _;
@@ -10,6 +10,7 @@ use tokio::time::timeout;
 use url::Url;
 
 use crate::error::{Error, ErrorCode, Result};
+use crate::mail_images::RemoteImageSize;
 
 pub const CORE: &str = "urn:ietf:params:jmap:core";
 pub const MAIL: &str = "urn:ietf:params:jmap:mail";
@@ -27,11 +28,24 @@ pub const CALENDARS: &str = "urn:ietf:params:jmap:calendars";
 pub const REMOTE: &str = "urn:uwumail:jmap:remote";
 /// Address books and contact cards (RFC 9610).
 pub const CONTACTS: &str = "urn:ietf:params:jmap:contacts";
+/// A UwUMail server that reads the text in a mail's pictures (UwUMail-Server docs/jmap-image-text.md).
+pub const IMAGETEXT: &str = "urn:uwumail:jmap:imagetext";
+/// Our own: birthday events of other calendars moved into the contacts (`Birthdays/scan`,
+/// `Birthdays/import`), from UwUMail-Server 0.18 on. Its birthdays calendar comes with it.
+pub const BIRTHDAYS: &str = "urn:uwumail:jmap:birthdays";
 /// The key a server signs its Web Push messages with (VAPID, RFC 9749).
+/// UwUMail's AI assistant (the server's docs/jmap-assist.md).
+pub const ASSIST: &str = "urn:uwumail:jmap:assist";
 pub const WEBPUSH_VAPID: &str = "urn:ietf:params:jmap:webpush-vapid";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
+/// The server tells picture sizes as it fetches the pictures; the reader stops waiting sooner.
+const SIZES_TIMEOUT: Duration = Duration::from_secs(30);
+/// The most addresses one picture sizes request may ask about; the server refuses more.
+pub const MAX_SIZE_URLS: usize = 200;
+/// The longest line of the picture sizes answer taken.
+const MAX_SIZE_LINE: usize = 16 * 1024;
 const BLOB_TIMEOUT: Duration = Duration::from_secs(300);
 /// An EventSource connection lives this long before it's opened again.
 const PUSH_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
@@ -94,14 +108,32 @@ pub struct Session {
     /// (`{accountId}`, `{email}`) for us, if it does.
     pub image_url: Option<String>,
     pub picture_url: Option<String>,
+    /// Where the server tells the sizes of remote pictures before they load (`{accountId}`), if it does.
+    pub image_sizes_url: Option<String>,
     /// The account whose address books this login sees, if the server has JMAP Contacts.
     pub contacts_account_id: Option<String>,
+    /// The account whose birthdays the server moves out of calendars into contacts
+    /// (`urn:uwumail:jmap:birthdays`); such a server also keeps the birthdays calendar and reminders.
+    pub birthdays_account_id: Option<String>,
     /// The server's VAPID public key (base64url, uncompressed P-256), if it signs its Web Push
     /// messages (RFC 9749).
     pub vapid_key: Option<String>,
+    /// The server reads the text in a mail's pictures (`Email/imageText`, a UwUMail server).
+    pub image_text: bool,
     /// The session's `state`: API answers carry it as `sessionState`, and a different one there
     /// means the session changed (RFC 8620 §2).
     pub state: Option<String>,
+    /// The server's AI assistant for this login's own account, if it has one.
+    pub assist: Option<AssistSession>,
+}
+
+/// What a session says about UwUMail's AI assistant.
+#[derive(Debug, Clone)]
+pub struct AssistSession {
+    /// Where `Assist/compose` and `Assist/summarize` stream.
+    pub stream_url: Option<String>,
+    /// The own account's capability object: `features`, `mayAddProviders`, the limits.
+    pub options: Value,
 }
 
 impl Session {
@@ -133,9 +165,20 @@ impl Session {
         let remote = capabilities.get(REMOTE);
         let remote_url = |key: &str| remote.and_then(|r| r.get(key)).and_then(Value::as_str).map(|u| absolute(base, u));
         let contacts_account_id = extension_account(CONTACTS);
+        let birthdays_account_id = extension_account(BIRTHDAYS);
         let limit = |key: &str, fallback: usize| {
             core.and_then(|c| c.get(key)).and_then(Value::as_u64).map_or(fallback, |n| n.clamp(1, 10_000) as usize)
         };
+        let assist = capabilities.get(ASSIST).map(|capability| AssistSession {
+            stream_url: capability.get("streamUrl").and_then(Value::as_str).map(|u| absolute(base, u)),
+            options: document
+                .get("accounts")
+                .and_then(|accounts| accounts.get(&account_id))
+                .and_then(|account| account.get("accountCapabilities"))
+                .and_then(|capabilities| capabilities.get(ASSIST))
+                .cloned()
+                .unwrap_or(Value::Null),
+        });
         Ok(Self {
             api_url: absolute(base, text("apiUrl").ok_or_else(invalid)?),
             download_url: absolute(base, text("downloadUrl").ok_or_else(invalid)?),
@@ -155,7 +198,9 @@ impl Session {
             calendar_account_id,
             image_url: remote_url("imageUrl"),
             picture_url: remote_url("pictureUrl"),
+            image_sizes_url: remote_url("imageSizesUrl"),
             contacts_account_id,
+            birthdays_account_id,
             vapid_key: capabilities
                 .get(WEBPUSH_VAPID)
                 .and_then(|vapid| vapid.get("applicationServerKey"))
@@ -163,7 +208,9 @@ impl Session {
                 .map(str::trim)
                 .filter(|key| !key.is_empty())
                 .map(String::from),
+            image_text: capabilities.contains_key(IMAGETEXT),
             state: text("state").map(String::from),
+            assist,
         })
     }
 
@@ -180,6 +227,11 @@ impl Session {
             event_source_url: self.event_source_url.as_deref().map(move_url),
             image_url: self.image_url.as_deref().map(move_url),
             picture_url: self.picture_url.as_deref().map(move_url),
+            image_sizes_url: self.image_sizes_url.as_deref().map(move_url),
+            assist: self.assist.as_ref().map(|assist| AssistSession {
+                stream_url: assist.stream_url.as_deref().map(move_url),
+                options: assist.options.clone(),
+            }),
             ..self.clone()
         }
     }
@@ -242,6 +294,12 @@ impl From<MethodError> for Error {
 pub struct Responses(Vec<(String, Value, String)>);
 
 impl Responses {
+    /// The whole arguments of an `error` answer to call `id`, for extra fields like `retryAfter`.
+    pub fn error_arguments(&self, id: usize) -> Option<&Value> {
+        let id = id.to_string();
+        self.0.iter().find(|(name, _, call)| *call == id && name == "error").map(|(_, arguments, _)| arguments)
+    }
+
     /// The arguments of the answer to call `id`. A call can have more than one
     /// answer (e.g. an implicit `Email/set`); this is the one named `method`.
     pub fn get(&self, id: usize, method: &str) -> std::result::Result<&Value, MethodError> {
@@ -365,6 +423,11 @@ impl Client {
 
     /// Sends method calls in one request. Call ids are their positions.
     pub async fn call(&self, calls: Vec<(&str, Value)>) -> Result<Responses> {
+        self.call_within(calls, CALL_TIMEOUT).await
+    }
+
+    /// Like [`call`](Self::call), for methods the server may take longer for, e.g. reading pictures.
+    pub async fn call_within(&self, calls: Vec<(&str, Value)>, limit: Duration) -> Result<Responses> {
         let method_calls: Vec<Value> = calls
             .into_iter()
             .enumerate()
@@ -387,12 +450,21 @@ impl Client {
         if self.session.contacts_account_id.is_some() {
             using.push(CONTACTS);
         }
+        if self.session.image_text {
+            using.push(IMAGETEXT);
+        }
+        if self.session.birthdays_account_id.is_some() {
+            using.push(BIRTHDAYS);
+        }
+        if self.session.assist.is_some() {
+            using.push(ASSIST);
+        }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self
             .http
             .post(&self.session.api_url)
             .header(reqwest::header::AUTHORIZATION, self.auth.header())
-            .timeout(CALL_TIMEOUT)
+            .timeout(limit)
             .json(&body)
             .send()
             .await?;
@@ -425,6 +497,32 @@ impl Client {
                 })
                 .collect(),
         ))
+    }
+
+    /// Posts a method to the assistant's stream endpoint with this login; the answer is
+    /// `text/event-stream` (docs/jmap-assist.md "Streaming").
+    pub async fn post_assist_stream(&self, url: &str, method: &str, arguments: Value) -> Result<reqwest::Response> {
+        let body = json!({ "using": [CORE, ASSIST], "method": method, "arguments": arguments });
+        let response = self
+            .http
+            .post(url)
+            .header(reqwest::header::AUTHORIZATION, self.auth.header())
+            .header(reqwest::header::ACCEPT, "text/event-stream")
+            .timeout(std::time::Duration::from_secs(200))
+            .json(&body)
+            .send()
+            .await?;
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return Err(Error::auth("The mail server didn't accept the login anymore."));
+        }
+        if status == reqwest::StatusCode::BAD_REQUEST {
+            return Err(Error::assist("invalidArguments", "The server didn't take the request."));
+        }
+        if !status.is_success() {
+            return Err(Error::connection(format!("The mail server answered {status}.")));
+        }
+        Ok(response)
     }
 
     /// Downloads a blob, e.g. a whole message.
@@ -466,6 +564,52 @@ impl Client {
             .unwrap_or("application/octet-stream")
             .to_string();
         Ok(Some((media_type, bytes)))
+    }
+
+    /// The sizes of a mail's remote pictures, asked of the server before they load
+    /// (`imageSizesUrl`): `on_size` gets each asked address once, as soon as the server knows it.
+    /// At most [`MAX_SIZE_URLS`] addresses are asked; an error when the server can't be asked.
+    pub async fn image_sizes(&self, urls: &[String], mut on_size: impl FnMut(RemoteImageSize)) -> Result<()> {
+        let Some(template) = &self.session.image_sizes_url else {
+            return Err(Error::not_supported("This server tells no picture sizes."));
+        };
+        let target = fill(template, &[("accountId", &self.session.account_id)]);
+        let (Ok(api), Ok(to)) = (Url::parse(&self.session.api_url), Url::parse(&target)) else {
+            return Err(Error::invalid("The server announced an address that is not one."));
+        };
+        if !may_send_credentials(&api, &to) {
+            return Err(Error::invalid("The server announced an address on another site."));
+        }
+        let mut asked = Vec::new();
+        for url in urls {
+            if asked.len() == MAX_SIZE_URLS {
+                break;
+            }
+            if !asked.contains(url) {
+                asked.push(url.clone());
+            }
+        }
+        if asked.is_empty() {
+            return Ok(());
+        }
+        let mut response = self
+            .http
+            .post(to)
+            .header(reqwest::header::AUTHORIZATION, self.auth.header())
+            .header(reqwest::header::ACCEPT, "application/x-ndjson")
+            .json(&json!({ "urls": asked }))
+            .timeout(SIZES_TIMEOUT)
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(Error::connection(format!("The picture sizes answered {}.", response.status())));
+        }
+        let mut lines = SizeLines::new(asked);
+        while !lines.done() {
+            let Some(chunk) = response.chunk().await? else { break };
+            lines.feed(&chunk, &mut on_size)?;
+        }
+        Ok(())
     }
 
     /// The logo or website icon the server keeps for a company sender: whether it is a `logo` and its
@@ -559,6 +703,57 @@ fn short(text: &str) -> String {
 
 /// Whether credentials given for `from` may also go to `to`: same site (e.g.
 /// `fastmail.com` → `api.fastmail.com`) and never from HTTPS down to HTTP.
+/// The picture sizes answer (`application/x-ndjson`), read line by line as it comes: every asked
+/// address once, anything else left out.
+struct SizeLines {
+    pending: HashSet<String>,
+    buffer: Vec<u8>,
+}
+
+impl SizeLines {
+    fn new(asked: Vec<String>) -> Self {
+        Self { pending: asked.into_iter().collect(), buffer: Vec::new() }
+    }
+
+    fn done(&self) -> bool {
+        self.pending.is_empty()
+    }
+
+    fn feed(&mut self, chunk: &[u8], on_size: &mut impl FnMut(RemoteImageSize)) -> Result<()> {
+        self.buffer.extend_from_slice(chunk);
+        while let Some(end) = self.buffer.iter().position(|&b| b == b'\n') {
+            let line: Vec<u8> = self.buffer.drain(..=end).collect();
+            if let Some(size) = self.parse(&line) {
+                on_size(size);
+            }
+        }
+        if self.buffer.len() > MAX_SIZE_LINE {
+            return Err(Error::invalid("The server's picture sizes are not what they should be."));
+        }
+        Ok(())
+    }
+
+    fn parse(&mut self, line: &[u8]) -> Option<RemoteImageSize> {
+        if line.len() > MAX_SIZE_LINE {
+            return None;
+        }
+        let value: Value = serde_json::from_slice(line).ok()?;
+        let url = value.get("url")?.as_str()?;
+        let url = self.pending.take(url)?;
+        if value.get("failed").and_then(Value::as_bool) == Some(true) {
+            return Some(RemoteImageSize::failed(&url));
+        }
+        let side = |key: &str| value.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok());
+        Some(match (side("width"), side("height")) {
+            // Only both or neither: half a size says nothing about the shape.
+            (Some(width), Some(height)) => {
+                RemoteImageSize { url, width: Some(width), height: Some(height), failed: false }
+            }
+            _ => RemoteImageSize::unknown(&url),
+        })
+    }
+}
+
 fn may_send_credentials(from: &Url, to: &Url) -> bool {
     if from.scheme() == "https" && to.scheme() != "https" {
         return false;
@@ -783,6 +978,19 @@ pub fn flags_from_keywords(keywords: Option<&Value>) -> crate::model::MessageFla
     }
 }
 
+/// The own keywords among JMAP keywords (lower case, without the `$` system ones), e.g. labels.
+pub fn own_keywords(keywords: Option<&Value>) -> Vec<String> {
+    keywords
+        .and_then(Value::as_object)
+        .map(|map| {
+            map.iter()
+                .filter(|(key, value)| value.as_bool() == Some(true) && !key.starts_with('$') && key.len() <= 64)
+                .map(|(key, _)| key.to_lowercase())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// A folder role from a JMAP mailbox role.
 pub fn role_from_jmap(role: Option<&str>) -> Option<crate::model::FolderRole> {
     use crate::model::FolderRole;
@@ -931,6 +1139,53 @@ mod tests {
         assert_eq!(image, "https://mail.uwumail.test/jmap/image/a1?url=https%3A%2F%2Fcdn.example%2Fa.png%3Fw%3D1");
         let moved = session.rebased("https://mail.uwumail.test", "http://127.0.0.1:18080");
         assert!(moved.picture_url.unwrap().starts_with("http://127.0.0.1:18080/jmap/picture/"));
+        assert_eq!(session.image_sizes_url, None, "a server of before 0.18 tells no sizes");
+
+        let mut remote = document.clone();
+        remote["capabilities"][REMOTE]["imageSizesUrl"] = json!("/jmap/image/{accountId}/sizes");
+        let session = Session::parse(&remote, &base).unwrap();
+        let sizes = fill(session.image_sizes_url.as_deref().unwrap(), &[("accountId", "a1")]);
+        assert_eq!(sizes, "https://mail.uwumail.test/jmap/image/a1/sizes");
+    }
+
+    #[test]
+    fn picture_sizes_are_taken_line_by_line_and_once_each() {
+        let asked = vec![
+            "https://cdn.example/a.png".to_string(),
+            "https://t.example/p.gif".to_string(),
+            "https://cdn.example/c.svg".to_string(),
+        ];
+        let mut lines = SizeLines::new(asked);
+        let mut sizes = Vec::new();
+        let mut take = |size| sizes.push(size);
+        // Split anywhere, also inside a line and inside a multi-byte character.
+        let answer = "{\"url\":\"https://cdn.example/a.png\",\"width\":1200,\"height\":600}\n\
+            {\"url\":\"https://elsewhere.example/x.png\",\"width\":1,\"height\":1}\n\
+            not json\n\
+            {\"url\":\"https://cdn.example/a.png\",\"width\":1,\"height\":1,\"note\":\"ü\"}\n\
+            {\"url\":\"https://t.example/p.gif\",\"failed\":true}\n\
+            {\"url\":\"https://cdn.example/c.svg\",\"width\":300,\"height\":null}\n";
+        for chunk in answer.as_bytes().chunks(7) {
+            lines.feed(chunk, &mut take).unwrap();
+        }
+        assert!(lines.done());
+        assert_eq!(
+            sizes,
+            vec![
+                RemoteImageSize {
+                    url: "https://cdn.example/a.png".into(),
+                    width: Some(1200),
+                    height: Some(600),
+                    failed: false
+                },
+                RemoteImageSize::failed("https://t.example/p.gif"),
+                RemoteImageSize::unknown("https://cdn.example/c.svg"),
+            ]
+        );
+
+        let mut endless = SizeLines::new(vec!["https://cdn.example/a.png".into()]);
+        let long = vec![b'x'; MAX_SIZE_LINE + 1];
+        assert!(endless.feed(&long, &mut |_| {}).is_err(), "a line without end is no answer");
     }
 
     #[test]

@@ -220,6 +220,7 @@ mod tests {
             data_dir: dir.path().to_path_buf(),
             secrets: Arc::new(crate::secrets::MemorySecrets::default()),
             open_url: Arc::new(|_| {}),
+            recognizer: None,
         })
         .unwrap();
         let store = &engine.inner.store;

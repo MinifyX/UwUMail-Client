@@ -42,6 +42,10 @@ and reused (CLI, future sync server).
 | `threading` | Conversation grouping (Message-ID / In-Reply-To / References, Gmail thread IDs when present) |
 | `store` | SQLite (WAL) with migrations and an FTS5 index for instant search |
 | `contacts` | Address books over JMAP Contacts or CardDAV; recipient suggestions also learn from sent and received mail |
+| `mail_images`, `image_size` | Remote pictures of mail for the reader (`uwuimg:`): fair, quick fetching, a small memory cache, and their sizes before they show |
+| `ocr` | Text in a mail's pictures: limits, picture sizes, the UwUMail server's `Email/imageText` answer mapped to the app's ids, the `TextRecognizer` the platform hands in (see [Text in pictures](#text-in-pictures)) |
+| `birthdays` | Birthdays and anniversaries of the contacts: the server's birthdays calendar, a local one for other mailboxes, and moving birthday events into contacts |
+| `assist` | The AI assistant: the UwUMail server's (`server`), or providers called from this device (`provider`, `local`), with the prompts, answer checks, spam signals and stream parser they share (see [AI assistant](#ai-assistant)) |
 
 The mail server is always the source of truth. The local store is a cache that
 can be deleted at any time and rebuilt.
@@ -87,8 +91,9 @@ and reports `settings:changed` when a push names `UserSettings`, and once push
 is up. Everything else happens in the page, in two files that are identical in
 UwUMail-Webmail:
 
-- `lib/settingsSync.ts` maps settings onto keys (choices one key each, lists one
-  key per entry, signatures `signature:<id>`), checks values the way the server
+- `lib/settingsSync.ts` maps settings onto keys (choices one key each, some in a
+  feature's namespace such as `mail.detectEvents` and `assist.refineEvents`,
+  lists one key per entry, signatures `signature:<id>`), checks values the way the server
   does, and merges: the first time lists become the union of both sides and the
   server's choices win; after that the server wins unless a change made here is
   still waiting.
@@ -147,6 +152,37 @@ and over CardDAV the engine applies it to the card read just before and writes i
 back with `If-Match`. Recipient suggestions list the address books first, then
 the addresses learned from mail. `tests/carddav_hostile.rs` covers discovery,
 reading, writing and hostile answers against local stubs.
+
+### Birthdays
+
+Birthdays follow UwUMail-Server `docs/birthdays.md` (0.18.0) and look like the
+webmail's (`birthdays/`, `engine/birthday_ops.rs`, `features/calendar/BirthdayImport.tsx`).
+
+- **UwUMail server:** the server keeps a read-only calendar with a yearly event
+  per birthday and anniversary (`uwuBirthdays` on the calendar). Its events
+  carry `uwuBirthday` (contact, kind, label, year), from which the app works out
+  the age of each year and titles like "Mia Mood (27)" in the app's language.
+  With `urn:uwumail:jmap:birthdays`, `Birthdays/scan` finds birthday events in
+  the other calendars and `Birthdays/import` moves them into contacts; the
+  server deletes the event in the same transaction. Imports go out in parts of
+  200. Reminders per contact (`uwuReminders`) are sent by the server as mail, so
+  the editor offers them only for these accounts.
+- **Other mailboxes (CardDAV):** the app makes a read-only calendar
+  `account:uwu-birthdays` from the account's cards, only while one of them has a
+  date. Its colour and whether it's shown are kept on this device
+  (`calendar_prefs.color` and `hidden`); its name is the app's.
+  The scan reads the CalDAV calendars itself with the server's rules (all-day and
+  yearly or marked as a birthday; at most 20,000 events, 1,000 finds and 10
+  contacts per find). An import writes the card first and then deletes the event
+  with its ETag, so a failed delete leaves the event but never loses the date.
+  There are no reminders for these accounts: nothing would send them while the
+  app is closed.
+
+Dates come from JSContact `anniversaries` (birth and wedding) and from Apple's
+`X-ABDATE`; a year of 0 or 1604 or `X-APPLE-OMIT-YEAR` means "no year". A
+birthday on 29 February falls on 28 February in other years. Every place that
+shows a birthday shows the age: the calendar views with a cake, the event
+popover with a button to the contact, the contact list and the contact page.
 
 ### `apps/desktop/src-tauri` — the shell
 
@@ -223,7 +259,9 @@ React 19, Vite, Tailwind CSS 4, TypeScript.
 - `i18n/` — English and German strings in two i18next namespaces per
   language: `neutral` (complete) and `playful` (overrides). `useT()` picks the
   namespace for the active tone; missing playful keys fall back to neutral.
-- `features/` — mail list, reader, composer, onboarding, settings, addons.
+- `features/` — mail list, reader, composer, onboarding, settings, addons,
+  calendar, contacts, and `features/dates` (appointments in mail, see "Dates
+  in mail"; the finder itself is `lib/dates`).
   `features/mobile` is the phone layout below 700 px: list, reader, drawer,
   swipes, pull to refresh, app lock and the Android bridge hooks.
 - `addons/` — the addon host (sandbox frames, RPC, permission checks).
@@ -248,6 +286,68 @@ proxy under Settings → Reading (`socks5://…`, `http://…`) when one is set.
 same proxy carries sender-picture lookups and one-click unsubscribes; mail,
 calendars and updates never take it. Until the interface has said which proxy
 it wants, these requests wait rather than leave without it.
+
+A mail's text shows at once; its remote pictures follow. The reader document
+names none of them (`features/mail/remotePictures.ts`): each `<img>` starts as a
+transparent SVG placeholder of the size the mail gives it, with a shimmer, and
+keeps its `uwuimg:` address aside. The page then asks for the sizes
+(`Backend.imageSizes`, Tauri command `image_sizes` answering over a `Channel`,
+stopped by `cancel_image_sizes` when the mail closes or after 20 s;
+`Engine::image_sizes`). A UwUMail server that announces `imageSizesUrl` in
+`urn:uwumail:jmap:remote` tells them itself (streamed NDJSON, at most 200
+addresses; for IMAP accounts on such a server through the picture login). For
+every other account the app fetches the pictures (`MailImages::probe`, at most
+100 per mail) and reads each size from its header (`image_size`: PNG, GIF, JPEG,
+WebP, SVG `width`/`height`/`viewBox`), keeping the bytes in a memory cache (at
+most 32 MB and 2000 pictures, 5 minutes) that the following `uwuimg:` requests
+and dark mode read from. A picture gets its real address once its placeholder
+has the real size, so nothing moves when it arrives; one with both sides in the
+mail loads at once. What can't be had becomes a quiet box of its size, a
+tracking pixel (at most 2×2, or no size anywhere) stays an invisible speck. A
+thin bar over the mail counts them in. Own fetching is kept fair: 3.5 s to
+connect, 9 s per picture, at most 8 requests at once and 3 per host, so one slow
+host never holds up the rest, and a host that didn't answer is left alone for a
+minute. Dark mode recolors a picture only once its real one has loaded.
+
+### Dates in mail
+
+The reader offers the appointments a mail talks about for the calendar
+(`apps/desktop/src/lib/dates`, `features/dates`, ported from UwUMail on the
+web 0.18.0). It runs only for an open mail that isn't a draft or filed in
+junk, when some account has calendars and Settings → Reading → "Find
+appointments in mail" (`detectEvents`, on by default, synced as
+`mail.detectEvents`) is on.
+
+- **Rules, on this device.** The finder reads the same sanitized markup the
+  reader shows (`readableBody`) and knows German and English dates, ranges,
+  weekdays, times and zones, where a mail is quoted, forwarded or just its
+  footer, and a title and place near the date. Nothing leaves the device for
+  this. A bar above the mail lists what lies ahead ("3 appointments found",
+  put away per mail; the list lives in local storage), and the dates in the
+  text get a dotted underline with a card on click, Enter or Space.
+- **Picture text.** When the mail has pictures of its own (embedded or
+  attached, and remote ones only once they may load for this mail), the same
+  rules read the text in them: `backend.imageText(messageId, remote)` asks the
+  account's UwUMail server (`Email/imageText`) or the system's text
+  recognition; `unavailable` just means no picture finds.
+- **The AI assistant, opt-in.** Only where `assistFeatures(accountId)` offers
+  `extractEvents` for the mail's account the bar shows "Check with AI";
+  `extractEvents(messageId, includeImages)` is only called on that click, or
+  for every opened mail with the assistant's `assistRefineEvents` setting
+  (`assist.refineEvents`, off by default). Its finds merge with the rule finds
+  (`lib/dates/merge.ts`): the same appointment shows once, the assistant's
+  times, title and place win, a picture only adds what the text lacked. Its
+  links are kept only when they are `https`, its texts are bounded.
+- **Into the calendar.** "Add to calendar" opens the calendar's own event
+  editor (mounted for the whole app by `LazyCalendarDialogs`) filled in with
+  title, start and end on this device's clock, all-day, place and notes that
+  quote the mail with its subject and sender; the first calendar offered is
+  the default one of the mail's account. Nothing is saved until the person
+  saves it there.
+- **Security.** The marks are inserted while the frame's document is built,
+  after sanitizing, into a frame that still runs no scripts; the app listens
+  to clicks through the same-origin document. A mail's own `data-uwu-date`
+  attributes are removed first, so it can't bring clickable look-alikes.
 
 ### Drafts
 
@@ -325,6 +425,64 @@ programs don't show `data:` images. Received mail works the other way round:
 attachments keep their Content-ID, and the reader turns `cid:` links into blob
 URLs of the cached files, which the mail frame's policy already allows.
 
+### AI assistant
+
+Writing help (write, rewrite with presets, adjust, translate, with a subject
+proposal), summaries of a mail or a conversation, a second opinion on spam,
+appointments read out of a mail, and labels. It is off until someone sets it
+up, and it never acts on its own except for auto-labels, which are opt-in.
+
+**Where it runs.** Each mailbox gets its assistant from a *scope*:
+
+| Scope | For | What answers |
+| --- | --- | --- |
+| a UwUMail account's id | a JMAP account whose session has `urn:uwumail:jmap:assist` | the server (`assist::server`): every `Assist*` method with the login's own `accountId`, streamed through the session's `streamUrl` (SSE) |
+| `device` | every other mailbox (IMAP, other JMAP servers) | the providers set up on this device (`assist::local` + `assist::provider`), called straight from Rust |
+
+The page only sees scopes (`assist_scopes`) and per-mailbox features
+(`assist_features {accountId}`, null hides everything). Both kinds answer in
+the server's JMAP shapes with the app's own message ids; the page normalizes
+them in `src/backend/assistConvert.ts`. Streamed pieces reach the page through
+a Tauri channel; `assist_cancel` stops the request.
+
+**Local providers.** OpenAI, Anthropic (API key only), Gemini, Mistral,
+OpenRouter, Ollama and OpenAI-compatible servers. No ChatGPT sign-in on the
+device. Keys go into the OS keychain (`assist-provider:<id>`); the page only
+gets `hasKey` and the last four characters. Provider addresses must be
+`https`, except `http` for Ollama and OpenAI-compatible servers on loopback or
+private addresses; no logins, queries or fragments in them, and no redirects
+are followed. "Test" lists the provider's models.
+
+**Limits.** 60 s without a byte and 180 s per answer (20 s for the model
+list); 1 MiB per answer body, 4 MiB per stream, 200 000 characters of text.
+Mail goes to the model as quoted data, cut to 20 000 characters (4 000 for
+labels), with at most 20 links. 10 providers and 30 labels on the device.
+Every cut is by characters, never in the middle of one.
+
+**Prompt injection.** The same rules as on the server: the prompts are the
+server's, the mail is data between tags the mail can't close, JSON answers are
+checked against their schema, a label can only be one of the person's own, and
+written text is only a preview until the person clicks Insert or Replace.
+Nothing is ever sent by the assistant.
+
+**Spam check.** The model's verdict comes with local signals: the
+`Authentication-Results` added by the own server (SPF, DKIM, DMARC; only the
+one above the second `Received`), `X-Spam-Status`, how often the sender wrote
+before and ended in junk, whether they are in the contacts.
+
+**Labels.** A label is a keyword on the mail (`messages.keywords`), set with
+JMAP `Email/set` or IMAP `STORE +FLAGS`, the latter only where the folder's
+`PERMANENTFLAGS` has `\*`. Auto-labels (device scope, opt-in) look at new
+inbox mail after a sync: at most 20 mails at once and 200 per day, each with
+its reason in the label log, undoable there. Mail is never moved or deleted.
+
+**Events.** `assist_extract_events {messageId, includeImages}` asks the
+mailbox's assistant for appointments. With `includeImages` a UwUMail server
+reads the pictures itself; on the device the text of the mail's embedded and
+attached pictures (never remote ones) comes from `Engine::image_text` (see
+[Text in pictures](#text-in-pictures)), at most 8 000 characters, as data like
+the mail.
+
 ### Addons
 
 See [addons.md](addons.md). In short: each addon runs in its own sandboxed
@@ -342,7 +500,10 @@ the host too, limited to the hosts in the manifest.
 | Sender pictures (30 days per domain) | `<app data>/pictures/<domain>.<logo\|icon>.<ext>` |
 | Installed addons | `<app data>/addons/<addon id>/` |
 | Passwords, OAuth refresh tokens | OS keychain, service `UwUMail` |
+| AI providers, settings, labels, label log, usage (device scope) | `<app data>/uwumail.db` (`assist_*` tables) |
+| AI provider keys (device scope) | OS keychain, service `UwUMail`, entry `assist-provider:<id>` |
 | UI settings | WebView local storage (`uwumail.settings`) |
+| Mails whose appointment bar was put away (newest 500) | WebView local storage (`uwumail.datesDismissed`) |
 
 `<app data>` is `%APPDATA%\app.uwumail.desktop` on Windows,
 `~/Library/Application Support/app.uwumail.desktop` on macOS and
@@ -375,6 +536,40 @@ also sign in over JMAP, at the account's JMAP address or
 sign-in lives apart from the JMAP accounts' connections, so nothing else treats
 the account as a JMAP one, and one that fails is not tried again while the app
 runs; other providers never see a JMAP sign-in at all.
+
+## Text in pictures
+
+Some mails carry what matters only as a picture: a poster, an invitation, a
+flyer with the date on it. `Engine::image_text` (command `image_text`) reads the
+text in a mail's pictures so dates can be found there like in the text.
+
+- **UwUMail accounts** (a JMAP session with `urn:uwumail:jmap:imagetext`) ask
+  their server (`Email/imageText`, UwUMail-Server `docs/jmap-image-text.md`),
+  which reads the pictures with Tesseract. The same request asks `Email/get`
+  for the email's attachments, so the server's blob ids become the app's
+  attachment ids (by Content-ID, then name and size, then position). A server
+  whose OCR is off (`unavailable`) leaves the pictures to this device.
+- **Every other mailbox** (IMAP, other JMAP servers) is read on this device,
+  and its pictures never leave it for this. The engine takes the embedded
+  (`cid:`) and attached PNG, JPEG, GIF and WebP pictures from the attachment
+  cache or the message (downloaded once for all of them), and remote pictures
+  only when the reader let this mail load them, fetched through
+  `Engine::mail_image` like the reader's (the UwUMail server or the privacy
+  proxy). The server's limits apply: at most 20 pictures, none under 64 pixels
+  on a side (icons, spacers, tracking pixels), none over 10 MB or
+  40 megapixels, 20 seconds a picture, 90 a mail, two pictures at a time on
+  the device; the rest count in `skipped`. Results are kept in memory for the
+  last 64 mails, unless a picture couldn't be fetched or read.
+
+The recognizer is handed to the engine in `EngineOptions::recognizer` when the
+app starts:
+
+| Platform | Recognizer | Notes |
+| --- | --- | --- |
+| macOS, iOS | Vision `VNRecognizeTextRequest` (`crates/uwumail-ocr`, objc2) | Accurate level with language correction; the language is detected on macOS 13+ (iOS always, it needs 17); macOS 11–12 get a fixed list of Latin languages. iOS links `Vision` via `tauri.ios.conf.json`. |
+| Windows | `Windows.Media.Ocr` (`crates/uwumail-ocr`, `windows` crate) | The first of the user's languages with an installed recognizer; `unavailable` when none has one. Pictures over `OcrEngine::MaxImageDimension` are shrunk first. |
+| Android | ML Kit Latin text recognition from Google Play services (`PictureText.kt`, through `UwuBridge`) | The unbundled `play-services-mlkit-text-recognition`: the model comes with Play services (a few hundred KB in the APK instead of several MB per ABI for the bundled one). Without Play services the feature is `unavailable`. The picture crosses the bridge as a file in the app's cache, deleted right after. |
+| Linux | none | `unavailable`: the feature stays quietly off. |
 
 ## Installer and updates
 
@@ -536,7 +731,9 @@ and accepted risks, and [SECURITY.md](../SECURITY.md) for reporting issues. In
 short: mail content never runs in the app page; file access, the dangerous-file
 warning and save locations are decided in Rust, not by the page; links only
 open for `https`, `http` and `mailto`, with a warning when the text shows a
-different site than the target.
+different site than the target. The AI assistant's keys stay in the keychain
+and never reach the page or the log; what it sends and accepts is listed under
+[AI assistant](#ai-assistant).
 
 ## Build and release
 

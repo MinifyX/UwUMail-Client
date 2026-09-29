@@ -11,6 +11,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Onboarding: layout and tone choice, add a mailbox with autoconfig
 - [x] Mail engine: IMAP sync with local cache, IDLE push, SMTP sending
 - [x] Reading: sanitized HTML, remote content blocked by default, attachment list
+- [x] Appointments in mail: dates in the text and in pictures found by rules on the device, underlined and offered for the calendar's editor; the AI assistant only on request
 - [x] Attachments: open, save and preview (images, PDF, text, CSV, audio, video, invitations, contact cards), warning for files that run programs, local cache
 - [x] Nested folders as a collapsible tree
 - [x] Sender pictures from brand logos (BIMI) and website icons, once per domain, can be turned off
@@ -22,6 +23,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Several sender addresses per mailbox: aliases from the JMAP server or added by hand, replies from the address the mail went to
 - [x] Signatures per sender address: formatted with pictures, several per address, defaults for new mail and replies, switchable while writing
 - [x] Embedded images (cid:) in received mail; pictures in sent mail travel as inline parts
+- [x] Remote pictures load after the text: each waits in its final size with a shimmer, a bar counts them in, dead hosts and tracking pixels hold nothing up (sizes from the UwUMail server, or read here for other mailboxes)
 - [x] Move to folder (menu with search, v, drag and drop), multi-select (Ctrl/Shift+click, x), spam and not spam, blocked senders, undo for moves (toast and z), shortcuts g i / g s / g d / g f, ! and Ctrl+Shift+D
 - [x] Unsubscribe button for newsletters: one click (RFC 8058) or by mail, otherwise the sender's page; archive earlier issues with undo
 - [x] Print a mail (desktop) and save it as an .eml file
@@ -47,6 +49,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Security audit with fixes, `SECURITY.md`, dependency audit in CI ([report](security-audit.md))
 - [x] Warning for links whose text shows a different site than the target
 - [x] First beta: 0.2.0-beta.1
+- [x] Text in a mail's pictures for finding dates: the UwUMail server reads them for its accounts, the system's OCR (Vision, Windows.Media.Ocr, ML Kit) for other mailboxes; off on Linux
 
 ## Android
 
@@ -79,11 +82,12 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [ ] Send later + Snooze
 - [ ] Templates + snippets
 - [ ] PGP encryption
-- [ ] AI helper (off by default)
+- [x] AI helper (off by default): the UwUMail server's assistant, or own providers on this device (0.6)
 - [ ] Calendar (CalDAV, invitations)
 
 ## Later
 
 - [x] Contacts: JMAP Contacts on UwUMail servers, CardDAV for other mailboxes
+- [x] Birthdays: the server's birthdays calendar with ages, a local one from CardDAV cards, moving birthday events into contacts, anniversaries and reminders (reminders on UwUMail servers only)
 - [ ] Self-hostable sync server for settings, signatures and addons (AGPL-3.0)
 - [ ] Code signing for Windows and macOS

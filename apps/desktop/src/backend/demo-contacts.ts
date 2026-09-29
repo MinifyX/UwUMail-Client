@@ -1,6 +1,7 @@
 // Fictional address books and contacts for the demo, the same made-up people who write the demo
 // mail. No real people, addresses or numbers.
 
+import { parseDay } from "@/lib/birthdays";
 import { BackendError } from "./backend";
 import type { AddressBookInfo, Contact, ContactInput, ContactRecord } from "./types";
 
@@ -33,6 +34,8 @@ function sampleContacts(lang: Lang, accountId: string): ContactRecord[] {
     phones: [],
     addresses: [],
     birthday: null,
+    anniversary: null,
+    reminders: [],
     note: "",
     photo: null,
     isGroup: false,
@@ -57,6 +60,8 @@ function sampleContacts(lang: Lang, accountId: string): ContactRecord[] {
         },
       ],
       birthday: "1996-04-12",
+      anniversary: "2021-06-12",
+      reminders: [{ daysBefore: 1, time: "09:00" }],
       note: de ? "Mag Hafermilch und lange Spaziergänge." : "Likes oat milk and long walks.",
     }),
     person({
@@ -194,6 +199,8 @@ export class DemoContacts {
         .filter((postal) => [postal.street, postal.postcode, postal.locality, postal.country].some((v) => v.trim()))
         .map((postal, index) => ({ ...postal, id: postal.id || `a${index + 1}` })),
       birthday: input.birthdayChanged ? input.birthday : (before?.birthday ?? null),
+      anniversary: input.anniversaryChanged ? (input.anniversary ?? null) : (before?.anniversary ?? null),
+      reminders: input.reminders !== undefined ? [...input.reminders] : [...(before?.reminders ?? [])],
       note: input.note.trim(),
       photo: before?.photo ?? null,
       isGroup: false,
@@ -217,6 +224,51 @@ export class DemoContacts {
   deleteContact(id: string) {
     this.list = this.list.filter((contact) => contact.id !== id);
     this.changed();
+  }
+
+  /** A birthday moved in from a calendar; another one it had stays unless `overwrite`. */
+  setBirthday(id: string, birthday: string, overwrite: boolean) {
+    const contact = this.list.find((entry) => entry.id === id);
+    if (!contact) throw new BackendError("not_found", "This contact is gone.");
+    const had = parseDay(contact.birthday);
+    const found = parseDay(birthday);
+    if (!found) throw new BackendError("invalid_input", "That is no birthday.");
+    const sameDay = had !== null && had.month === found.month && had.day === found.day;
+    const clash = had !== null && (!sameDay || (had.year !== null && found.year !== null && had.year !== found.year));
+    if (clash && !overwrite) throw new BackendError("invalid_input", "The contact has another birthday.");
+    // A year the contact knows stays when the calendar knew none.
+    const keep = sameDay && !clash && found.year === null;
+    if (!keep) this.list = this.list.map((entry) => (entry.id === id ? { ...entry, birthday } : entry));
+    this.changed();
+  }
+
+  /** A new contact for a birthday nobody had yet. */
+  createNamed(name: string, birthday: string): string {
+    if (!name.trim()) throw new BackendError("invalid_input", "A new contact needs a name.");
+    const words = name.trim().split(/\s+/);
+    const surname = words.length > 1 ? words.pop()! : "";
+    const id = `contact-${nextId++}`;
+    this.list.push({
+      id,
+      accountId: this.accountId,
+      addressBookId: this.books.find((book) => book.isDefault)?.id ?? this.books[0]?.id ?? "",
+      displayName: name.trim(),
+      given: words.join(" "),
+      surname,
+      organization: "",
+      title: "",
+      emails: [],
+      phones: [],
+      addresses: [],
+      birthday,
+      anniversary: null,
+      reminders: [],
+      note: "",
+      photo: null,
+      isGroup: false,
+    });
+    this.changed();
+    return id;
   }
 
   /** Suggestions from the address books, one per address. */

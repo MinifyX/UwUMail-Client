@@ -1,5 +1,7 @@
 #[cfg(desktop)]
 mod background;
+#[cfg(not(target_os = "android"))]
+mod ocr;
 #[cfg(desktop)]
 mod updates;
 
@@ -14,6 +16,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::broadcast::error::RecvError;
 use uwumail_core::attachments::AttachmentFile;
+use uwumail_core::birthdays::scan::{BirthdayFeatures, BirthdayImportEntry, BirthdayImportResult, BirthdayScan};
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
 use uwumail_core::pictures::SenderPicture;
@@ -141,6 +144,28 @@ async fn calendar_events(
     time_zone: String,
 ) -> CommandResult<Vec<CalendarOccurrence>> {
     engine.calendar_events(&from, &to, &time_zone).await
+}
+
+/// Per account: whether its server keeps birthdays, and whether birthday events can be moved into contacts.
+#[tauri::command]
+async fn birthday_features(engine: State<'_, Engine>) -> CommandResult<Vec<BirthdayFeatures>> {
+    engine.birthday_features().await
+}
+
+/// The birthday events of an account's calendars, each with the contacts it may belong to.
+#[tauri::command]
+async fn scan_birthdays(engine: State<'_, Engine>, account_id: String) -> CommandResult<BirthdayScan> {
+    engine.scan_birthdays(&account_id).await
+}
+
+/// Moves found birthdays into contacts; the events go once their birthday is in the contact.
+#[tauri::command]
+async fn import_birthdays(
+    engine: State<'_, Engine>,
+    account_id: String,
+    entries: Vec<BirthdayImportEntry>,
+) -> CommandResult<BirthdayImportResult> {
+    engine.import_birthdays(&account_id, entries).await
 }
 
 #[tauri::command]
@@ -448,6 +473,189 @@ async fn open_draft(engine: State<'_, Engine>, message_id: String) -> CommandRes
     engine.open_draft(&message_id).await
 }
 
+// ------------------------------------------------------------------------------ AI assistant
+// Answers are in UwUMail Server's JMAP shapes (docs/jmap-assist.md) with the app's own ids; the
+// page normalizes them (src/backend/assistConvert.ts).
+
+type Json = serde_json::Value;
+
+#[tauri::command]
+async fn assist_scopes(engine: State<'_, Engine>) -> CommandResult<Json> {
+    engine.assist_scopes().await
+}
+
+#[tauri::command]
+async fn assist_features(engine: State<'_, Engine>, account_id: String) -> CommandResult<Option<Json>> {
+    engine.assist_features(&account_id).await
+}
+
+#[tauri::command]
+async fn assist_providers(engine: State<'_, Engine>, scope: String) -> CommandResult<Json> {
+    engine.assist_providers(&scope).await
+}
+
+#[tauri::command]
+async fn assist_create_provider(engine: State<'_, Engine>, scope: String, input: Json) -> CommandResult<Json> {
+    engine.assist_create_provider(&scope, input).await
+}
+
+#[tauri::command]
+async fn assist_update_provider(
+    engine: State<'_, Engine>,
+    scope: String,
+    provider_id: String,
+    patch: Json,
+) -> CommandResult<()> {
+    engine.assist_update_provider(&scope, &provider_id, patch).await
+}
+
+#[tauri::command]
+async fn assist_delete_provider(engine: State<'_, Engine>, scope: String, provider_id: String) -> CommandResult<()> {
+    engine.assist_delete_provider(&scope, &provider_id).await
+}
+
+#[tauri::command]
+async fn assist_models(engine: State<'_, Engine>, scope: String, provider_id: String) -> CommandResult<Json> {
+    engine.assist_models(&scope, &provider_id).await
+}
+
+#[tauri::command]
+async fn assist_chatgpt_login(engine: State<'_, Engine>, scope: String, provider_id: String) -> CommandResult<Json> {
+    engine.assist_chatgpt_login(&scope, &provider_id).await
+}
+
+#[tauri::command]
+async fn assist_chatgpt_poll(engine: State<'_, Engine>, scope: String, provider_id: String) -> CommandResult<Json> {
+    engine.assist_chatgpt_poll(&scope, &provider_id).await
+}
+
+#[tauri::command]
+async fn assist_settings(engine: State<'_, Engine>, scope: String) -> CommandResult<Json> {
+    engine.assist_settings(&scope).await
+}
+
+#[tauri::command]
+async fn assist_update_settings(engine: State<'_, Engine>, scope: String, patch: Json) -> CommandResult<()> {
+    engine.assist_update_settings(&scope, patch).await
+}
+
+#[tauri::command]
+async fn assist_usage(engine: State<'_, Engine>, scope: String, days: Option<u32>) -> CommandResult<Json> {
+    engine.assist_usage(&scope, days).await
+}
+
+#[tauri::command]
+async fn assist_labels(engine: State<'_, Engine>, scope: String) -> CommandResult<Json> {
+    engine.assist_labels(&scope).await
+}
+
+#[tauri::command]
+async fn assist_create_label(engine: State<'_, Engine>, scope: String, input: Json) -> CommandResult<Json> {
+    engine.assist_create_label(&scope, input).await
+}
+
+#[tauri::command]
+async fn assist_update_label(
+    engine: State<'_, Engine>,
+    scope: String,
+    label_id: String,
+    patch: Json,
+) -> CommandResult<()> {
+    engine.assist_update_label(&scope, &label_id, patch).await
+}
+
+#[tauri::command]
+async fn assist_delete_label(engine: State<'_, Engine>, scope: String, label_id: String) -> CommandResult<()> {
+    engine.assist_delete_label(&scope, &label_id).await
+}
+
+#[tauri::command]
+async fn assist_label_log(
+    engine: State<'_, Engine>,
+    scope: String,
+    message_ids: Option<Vec<String>>,
+    limit: Option<u32>,
+) -> CommandResult<Json> {
+    engine.assist_label_log(&scope, message_ids, limit).await
+}
+
+#[tauri::command]
+async fn assist_undo_labels(engine: State<'_, Engine>, scope: String, log_ids: Vec<String>) -> CommandResult<()> {
+    engine.assist_undo_labels(&scope, &log_ids).await
+}
+
+#[tauri::command]
+async fn assist_apply_labels(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<Json> {
+    engine.assist_apply_labels(&message_ids).await
+}
+
+#[tauri::command]
+async fn assist_recent_inbox(engine: State<'_, Engine>, scope: String, limit: u32) -> CommandResult<Vec<String>> {
+    engine.assist_recent_inbox(&scope, limit).await
+}
+
+/// Streamed pieces go to the page through `on_event` while the model writes.
+fn assist_sink(on_event: tauri::ipc::Channel<uwumail_core::assist::StreamEvent>) -> uwumail_core::assist::StreamSink {
+    std::sync::Arc::new(move |event| {
+        let _ = on_event.send(event);
+    })
+}
+
+#[tauri::command]
+async fn assist_compose(
+    engine: State<'_, Engine>,
+    account_id: String,
+    request: Json,
+    stream_id: Option<String>,
+    on_event: tauri::ipc::Channel<uwumail_core::assist::StreamEvent>,
+) -> CommandResult<Json> {
+    let sink = stream_id.as_ref().map(|_| assist_sink(on_event));
+    engine.assist_compose(&account_id, request, stream_id.as_deref(), sink).await
+}
+
+#[tauri::command]
+async fn assist_summarize(
+    engine: State<'_, Engine>,
+    request: Json,
+    stream_id: Option<String>,
+    on_event: tauri::ipc::Channel<uwumail_core::assist::StreamEvent>,
+) -> CommandResult<Json> {
+    let sink = stream_id.as_ref().map(|_| assist_sink(on_event));
+    engine.assist_summarize(request, stream_id.as_deref(), sink).await
+}
+
+#[tauri::command]
+fn assist_cancel(engine: State<'_, Engine>, stream_id: String) {
+    engine.assist_cancel(&stream_id);
+}
+
+#[tauri::command]
+async fn assist_spam_check(
+    engine: State<'_, Engine>,
+    message_id: String,
+    language: Option<String>,
+) -> CommandResult<Json> {
+    engine.assist_spam_check(&message_id, language.as_deref()).await
+}
+
+#[tauri::command]
+async fn assist_extract_events(
+    engine: State<'_, Engine>,
+    message_id: String,
+    include_images: bool,
+) -> CommandResult<Json> {
+    engine.assist_extract_events(&message_id, include_images).await
+}
+
+#[tauri::command]
+async fn set_keywords(
+    engine: State<'_, Engine>,
+    message_ids: Vec<String>,
+    keywords: std::collections::HashMap<String, bool>,
+) -> CommandResult<()> {
+    engine.set_keywords(&message_ids, &keywords).await
+}
+
 /// Recipient suggestions: the address books first, then addresses learned from mail.
 #[tauri::command]
 async fn search_contacts(engine: State<'_, Engine>, query: String) -> CommandResult<Vec<Contact>> {
@@ -561,6 +769,62 @@ async fn fetch_mail_image(
 ) -> CommandResult<tauri::ipc::Response> {
     let bytes = engine.mail_image(account_id.as_deref(), &url).await.map(|(_, bytes)| bytes);
     Ok(tauri::ipc::Response::new(bytes.unwrap_or_default()))
+}
+
+/// The page's picture size probes that are still running, by its number for each, so it can stop
+/// one: when the mail closes, or it has waited long enough.
+#[derive(Default)]
+struct ImageProbes(std::sync::Mutex<std::collections::HashMap<u32, std::sync::Arc<tokio::sync::Notify>>>);
+
+impl ImageProbes {
+    /// The signal that stops that probe. A stop may come before the probe itself; it waits here.
+    fn stopper(&self, probe: u32) -> std::sync::Arc<tokio::sync::Notify> {
+        let mut probes = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        // Stops for probes that had already ended are forgotten.
+        if probes.len() >= 64 {
+            probes.retain(|_, stop| std::sync::Arc::strong_count(stop) > 1);
+        }
+        std::sync::Arc::clone(probes.entry(probe).or_default())
+    }
+
+    fn done(&self, probe: u32) {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).remove(&probe);
+    }
+}
+
+/// The sizes of a mail's remote pictures before they load, sent to `on_size` one by one as they
+/// become known (see `Engine::image_sizes`). Ends when all are told, or `cancel_image_sizes` stops it.
+#[tauri::command]
+async fn image_sizes(
+    engine: State<'_, Engine>,
+    probes: State<'_, ImageProbes>,
+    account_id: String,
+    mut urls: Vec<String>,
+    probe: u32,
+    on_size: tauri::ipc::Channel<uwumail_core::mail_images::RemoteImageSize>,
+) -> CommandResult<()> {
+    urls.truncate(uwumail_core::jmap::MAX_SIZE_URLS);
+    let stop = probes.stopper(probe);
+    let result = tokio::select! {
+        result = engine.image_sizes(&account_id, &urls, |size| {
+            let _ = on_size.send(size);
+        }) => result,
+        () = stop.notified() => Ok(()),
+    };
+    probes.done(probe);
+    result
+}
+
+#[tauri::command]
+fn cancel_image_sizes(probes: State<'_, ImageProbes>, probe: u32) {
+    probes.stopper(probe).notify_one();
+}
+
+/// The text in a mail's pictures, e.g. for the dates on a poster. Remote pictures only with `remote`,
+/// which the reader passes once they may load for this mail.
+#[tauri::command]
+async fn image_text(engine: State<'_, Engine>, message_id: String, remote: bool) -> CommandResult<ImageTextResult> {
+    engine.image_text(&message_id, remote).await
 }
 
 /// The proxy remote pictures, sender pictures and one-click unsubscribes take; empty for none.
@@ -715,6 +979,7 @@ pub fn run() {
             });
 
             app.manage(engine);
+            app.manage(ImageProbes::default());
             platform::after_start(app)?;
             Ok(())
         })
@@ -740,6 +1005,9 @@ pub fn run() {
             delete_calendar,
             set_default_calendar,
             calendar_events,
+            birthday_features,
+            scan_birthdays,
+            import_birthdays,
             create_event,
             update_event,
             delete_event,
@@ -791,12 +1059,41 @@ pub fn run() {
             delete_draft,
             open_draft,
             search_contacts,
+            assist_scopes,
+            assist_features,
+            assist_providers,
+            assist_create_provider,
+            assist_update_provider,
+            assist_delete_provider,
+            assist_models,
+            assist_chatgpt_login,
+            assist_chatgpt_poll,
+            assist_settings,
+            assist_update_settings,
+            assist_usage,
+            assist_labels,
+            assist_create_label,
+            assist_update_label,
+            assist_delete_label,
+            assist_label_log,
+            assist_undo_labels,
+            assist_apply_labels,
+            assist_recent_inbox,
+            assist_compose,
+            assist_summarize,
+            assist_cancel,
+            assist_spam_check,
+            assist_extract_events,
+            set_keywords,
             get_attachment,
             open_attachment,
             save_attachment,
             save_message,
             get_sender_picture,
             fetch_mail_image,
+            image_sizes,
+            cancel_image_sizes,
+            image_text,
             clear_sender_pictures,
             set_privacy_proxy,
             get_company_domain,

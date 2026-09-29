@@ -87,7 +87,12 @@ pub(crate) fn start_engine(data_dir: PathBuf, cache_dir: PathBuf) -> Result<()> 
         }
     });
     let _entered = runtime().enter();
-    let engine = Engine::new(EngineOptions { data_dir, secrets: Arc::new(KeystoreSecrets), open_url })?;
+    let engine = Engine::new(EngineOptions {
+        data_dir,
+        secrets: Arc::new(KeystoreSecrets),
+        open_url,
+        recognizer: Some(Arc::new(crate::ocr::MlKit)),
+    })?;
     // Signing in with Microsoft or Google comes back through this link (see AndroidManifest.xml),
     // because a phone browser can't reach a listener on the phone's localhost.
     engine.use_oauth_app_link(OAUTH_REDIRECT);

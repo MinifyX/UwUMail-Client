@@ -20,6 +20,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
 import { inTrash, useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
 import { useUi } from "@/state/ui";
+import { ThreadAssistButton, ThreadSummary } from "../assist/ReaderAssist";
+import { AssistForAccount } from "../assist/useAssist";
 import { MessageView } from "./MessageView";
 import { requestMove } from "./selection";
 
@@ -172,6 +174,14 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
           label={t("reader.markUnread")}
           onClick={() => void actions.setFlags([latest.id], { seen: false }).then(() => selectThread(null))}
         />
+        <AssistForAccount accountId={latest.accountId}>
+          <ThreadAssistButton
+            threadId={latest.threadId}
+            messages={all}
+            own
+            mine={new Set(accounts.map((account) => account.email.toLowerCase()))}
+          />
+        </AssistForAccount>
       </header>
 
       <div data-reader-scroll className="min-h-0 flex-1 overflow-y-auto">
@@ -179,6 +189,9 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
           <h2 className="selectable px-1 pt-1 pb-2 text-[22px] leading-tight font-extrabold tracking-[-0.01em]">
             {data.thread.subject || t("reader.noSubject")}
           </h2>
+          <AssistForAccount accountId={latest.accountId}>
+            <ThreadSummary threadId={latest.threadId} count={all.length} />
+          </AssistForAccount>
           {hiddenCount > 1 && (
             <button
               type="button"

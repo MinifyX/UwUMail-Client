@@ -2,8 +2,32 @@ import type {
   BlockedSender,
   Account,
   AddressBookInfo,
+  AssistComposeRequest,
+  AssistComposeResult,
+  AssistEventsResult,
+  AssistFeatures,
+  AssistLabel,
+  AssistLabelInput,
+  AssistLabelLogEntry,
+  AssistModels,
+  AssistProvider,
+  AssistProviderInput,
+  AssistScope,
+  AssistSettings,
+  AssistSettingsPatch,
+  AssistSpamCheck,
+  AssistStreamHandlers,
+  AssistSummarizeRequest,
+  AssistSummary,
+  AssistUsage,
   AttachmentContent,
+  ChatgptLogin,
+  ChatgptPoll,
   BackendEvent,
+  BirthdayFeatures,
+  BirthdayImportEntry,
+  BirthdayImportResult,
+  BirthdayScan,
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
@@ -19,6 +43,8 @@ import type {
   FlagChange,
   Folder,
   Identity,
+  ImageSizeProbe,
+  ImageTextResult,
   MailtoDraft,
   MovedMessage,
   NewAccount,
@@ -59,6 +85,56 @@ export class BackendError extends Error {
     super(message);
     this.name = "BackendError";
     this.code = code;
+  }
+}
+
+/**
+ * A refusal of the AI assistant, with the type its server (or this device) gave it:
+ * `assistUnavailable` (switched off, or no provider may do it), `overQuota` (the day's limit is
+ * used up), `providerFailed` (the model didn't give a usable answer; `retryAfter` seconds when it
+ * named them), `notFound`, `forbidden`, `invalidArguments` or, for a refused create or update,
+ * `invalidProperties`.
+ */
+export class AssistError extends BackendError {
+  readonly type: string;
+  /** The server's own words, for administrators more than for people. */
+  readonly description: string | null;
+  readonly retryAfter: number | null;
+  /** For `invalidProperties`: the fields it names. */
+  readonly properties: string[];
+
+  constructor(
+    type: string,
+    description: string | null = null,
+    extra: { retryAfter?: number | null; properties?: string[]; code?: BackendErrorCode } = {},
+  ) {
+    super(extra.code ?? assistErrorCode(type), description ?? type);
+    this.name = "AssistError";
+    this.type = type;
+    this.description = description;
+    this.retryAfter = extra.retryAfter ?? null;
+    this.properties = extra.properties ?? [];
+  }
+}
+
+function assistErrorCode(type: string): BackendErrorCode {
+  switch (type) {
+    case "assistUnavailable":
+    case "unknownMethod":
+    case "unknownCapability":
+    case "accountNotSupportedByMethod":
+      return "not_supported";
+    case "notFound":
+      return "not_found";
+    case "providerFailed":
+      return "connection_failed";
+    case "forbidden":
+    case "overQuota":
+    case "invalidArguments":
+    case "invalidProperties":
+      return "invalid_input";
+    default:
+      return "internal";
   }
 }
 
@@ -126,6 +202,18 @@ export interface Backend {
    */
   updateEvent(eventId: string, input: EventInput, occurrenceStart?: string): Promise<void>;
   deleteEvent(occurrenceId: string, scope: EventDeleteScope): Promise<void>;
+  /**
+   * Per account: whether its server keeps birthdays (calendar and reminders), and whether birthday
+   * events of its calendars can be moved into its contacts. Never searches for DAV servers.
+   */
+  birthdayFeatures(): Promise<BirthdayFeatures[]>;
+  /** The birthday events of an account's calendars, each with the contacts it may belong to. */
+  scanBirthdays(accountId: string): Promise<BirthdayScan>;
+  /**
+   * Moves found birthdays into the account's contacts; each event is deleted once its birthday is
+   * in the contact, never when that failed. Events left out stay as they are.
+   */
+  importBirthdays(accountId: string, entries: BirthdayImportEntry[]): Promise<BirthdayImportResult>;
 
   /** Whether any account has address books (see contactsAccounts); without one the contacts stay hidden. */
   contactsAvailable(): Promise<boolean>;
@@ -216,8 +304,87 @@ export interface Backend {
    * no app to do that (the demo); the pictures then load directly.
    */
   imageProxy(accountId: string): ImageProxy | null;
+  /**
+   * Finds out the sizes of a mail's remote pictures before they load, so each waits in its place
+   * (see remotePictures.ts): the account's UwUMail server tells them, for other mailboxes the app
+   * reads them from the pictures it fetches, and keeps those for the reader. Null where there is
+   * nothing to ask; the pictures then load as they come.
+   */
+  imageSizes(accountId: string): ImageSizeProbe | null;
   /** The proxy remote pictures, sender pictures and one-click unsubscribes take; empty for none. */
   setPrivacyProxy(proxy: string): Promise<void>;
+  /**
+   * The text in a mail's pictures, e.g. for dates on a poster: a UwUMail account's server reads
+   * them (`Email/imageText`), other mailboxes the system's OCR (macOS, iOS, Windows, Android;
+   * `unavailable` on Linux). Remote pictures are only read when `remote` is true, which the reader
+   * passes only once they may load.
+   */
+  imageText(messageId: string, remote: boolean): Promise<ImageTextResult>;
+  /**
+   * Per feature whether the AI assistant can do it now for this mailbox: its UwUMail server's
+   * (`urn:uwumail:jmap:assist`) or the providers set up on this device. Null without an assistant,
+   * and everything about it stays hidden.
+   */
+  assistFeatures(accountId: string): Promise<AssistFeatures | null>;
+  /**
+   * Appointments, deadlines and trips the assistant reads out of a mail, for "add to calendar".
+   * With `includeImages` the text in its pictures is read too (where that works).
+   */
+  extractEvents(messageId: string, includeImages: boolean): Promise<AssistEventsResult>;
+  /**
+   * Where the assistant's settings live: one scope per UwUMail account whose server has the
+   * assistant, and `"device"` (the providers set up on this device) for every other mailbox, when
+   * there is one. Empty without mailboxes.
+   */
+  assistScopes(): Promise<AssistScope[]>;
+  /** A server scope: the server's providers the person may use, then their own. The device: its own. */
+  assistProviders(scope: string): Promise<AssistProvider[]>;
+  /** Adds an own provider. Throws an `AssistError` (`forbidden`, `overQuota`, `invalidProperties`). */
+  createAssistProvider(scope: string, input: AssistProviderInput): Promise<AssistProvider>;
+  updateAssistProvider(scope: string, id: string, patch: AssistProviderInput): Promise<void>;
+  deleteAssistProvider(scope: string, id: string): Promise<void>;
+  /** Asks the provider for its models; doubles as a test of the key. */
+  assistModels(scope: string, providerId: string): Promise<AssistModels>;
+  /** Starts the device-code sign-in of a server scope's `chatgpt` provider (experimental; not on this device). */
+  chatgptLogin(scope: string, providerId: string): Promise<ChatgptLogin>;
+  /** Whether that sign-in went through; ask every `interval` seconds while `pending`. */
+  chatgptPoll(scope: string, providerId: string): Promise<ChatgptPoll>;
+  assistSettings(scope: string): Promise<AssistSettings>;
+  updateAssistSettings(scope: string, patch: AssistSettingsPatch): Promise<void>;
+  /** What was used: per day (UTC) and feature, and today per provider with its limits. */
+  assistUsage(scope: string, days?: number): Promise<AssistUsage>;
+  assistLabels(scope: string): Promise<AssistLabel[]>;
+  createAssistLabel(scope: string, input: AssistLabelInput): Promise<AssistLabel>;
+  updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>): Promise<void>;
+  /** Also takes its keyword off every mail (on the server; on this device off the mail it labelled). */
+  deleteAssistLabel(scope: string, id: string): Promise<void>;
+  /** Labels the model set, newest first: for these mails (message ids), or the latest. */
+  assistLabelLog(scope: string, messageIds: string[] | null, limit?: number): Promise<AssistLabelLogEntry[]>;
+  /** Takes labels the model set off again, by log entry. */
+  undoAssistLabels(scope: string, logIds: string[]): Promise<void>;
+  /** Asks the model now for these mails (at most 20); label ids per message id. */
+  applyAssistLabels(messageIds: string[]): Promise<Record<string, string[]>>;
+  /** The newest mails of the scope's inboxes (for labelling mail that came before auto-labels). */
+  recentInboxIds(scope: string, limit: number): Promise<string[]>;
+  /**
+   * Writes or rewrites a text for a draft of `accountId`; nothing goes into the draft. With
+   * handlers the text arrives in pieces while the model writes it; the whole answer at the end.
+   * `request.replyToEmailId` is a message id.
+   */
+  assistCompose(
+    accountId: string,
+    request: AssistComposeRequest,
+    handlers?: AssistStreamHandlers,
+  ): Promise<AssistComposeResult>;
+  /** Summarizes a mail or a conversation (message or thread id), streaming like `assistCompose`. */
+  assistSummarize(request: AssistSummarizeRequest, handlers?: AssistStreamHandlers): Promise<AssistSummary>;
+  /** A second opinion on a mail, with what is known about it and its sender. */
+  assistSpamCheck(messageId: string, language?: string): Promise<AssistSpamCheck>;
+  /**
+   * Sets (true) or takes off (false) own keywords, e.g. labels by hand. IMAP servers that don't
+   * keep own keywords refuse with `not_supported`.
+   */
+  setKeywords(messageIds: string[], keywords: Record<string, boolean>): Promise<void>;
   /** Main domain of a company address (`news.shop.example` → `shop.example`); null for mail providers. */
   companyDomain(email: string): Promise<string | null>;
 

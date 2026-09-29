@@ -92,6 +92,8 @@ object UwuBridge {
                 Notifications.openWatchSettings(app)
                 null
             }
+            "pictureTextAvailable" -> PictureText.available(app).toString()
+            "pictureText" -> PictureText.read(args.getString("path"))
             "confirm" -> {
                 val window = activity.get() ?: return "false"
                 window.confirm(args.getString("title"), args.getString("message"), args.getString("ok"), args.getString("cancel"))

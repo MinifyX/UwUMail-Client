@@ -52,7 +52,12 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
         let _ = opener.opener().open_url(url, None::<&str>);
     });
     let engine = tauri::async_runtime::block_on(async move {
-        Engine::new(EngineOptions { data_dir, secrets: Arc::new(KeyringSecrets), open_url })
+        Engine::new(EngineOptions {
+            data_dir,
+            secrets: Arc::new(KeyringSecrets),
+            open_url,
+            recognizer: crate::ocr::recognizer(),
+        })
     })?;
     engine.start()?;
     // Shows up in Xcode's console when the app is run from there.

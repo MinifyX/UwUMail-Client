@@ -2,7 +2,7 @@
 //! server has them, CalDAV for other password accounts, nothing for Microsoft and Google
 //! sign-ins (their calendars need other APIs).
 
-use chrono::{NaiveDateTime, Utc};
+use chrono::{Datelike, NaiveDateTime, Utc};
 use chrono_tz::Tz;
 use serde_json::{Map, Value, json};
 use url::Url;
@@ -39,7 +39,7 @@ fn parse_range(from: &str, to: &str, zone: &str) -> Result<(NaiveDateTime, Naive
 
 impl Inner {
     /// Where an account's calendars live, found once and remembered.
-    async fn calendar_source(&self, account_id: &str) -> Result<Source> {
+    pub(super) async fn calendar_source(&self, account_id: &str) -> Result<Source> {
         {
             let sources = self.calendar_sources.lock().await;
             match sources.get(account_id) {
@@ -76,7 +76,7 @@ impl Inner {
     /// answers, the account's own JMAP server, and sign-ins that can't have one. `None` when only
     /// that search could tell — it asks the mail domain's website, so it waits until someone opens
     /// the calendar.
-    async fn calendar_source_known(&self, account_id: &str) -> Option<Result<Source>> {
+    pub(super) async fn calendar_source_known(&self, account_id: &str) -> Option<Result<Source>> {
         match self.calendar_sources.lock().await.get(account_id) {
             Some(SourceState::Ready(source)) => return Some(Ok(source.clone())),
             Some(SourceState::Unavailable { problem, since }) if since.elapsed() < RETRY_UNAVAILABLE => {
@@ -135,7 +135,7 @@ impl Inner {
     }
 
     /// An account's calendars, from memory while fresh.
-    async fn calendar_entries(&self, account_id: &str) -> Result<Vec<CalendarEntry>> {
+    pub(super) async fn calendar_entries(&self, account_id: &str) -> Result<Vec<CalendarEntry>> {
         if let Some((at, entries)) = self.calendar_lists.lock().unwrap().get(account_id)
             && at.elapsed() < LIST_FRESH
         {
@@ -158,6 +158,8 @@ impl Inner {
                             sort_order: calendar.sort_order,
                             may_write: calendar.may_write,
                             may_delete: calendar.may_delete,
+                            is_birthdays: calendar.is_birthdays,
+                            is_local: false,
                         },
                         remote: calendar.id,
                     })
@@ -186,6 +188,8 @@ impl Inner {
                                 sort_order: calendar.order.unwrap_or(index as i64),
                                 may_write: calendar.writable,
                                 may_delete: calendar.writable,
+                                is_birthdays: false,
+                                is_local: false,
                             },
                             remote: path,
                         }
@@ -216,7 +220,7 @@ impl Inner {
         Ok((source, entry))
     }
 
-    fn calendar_changed(&self, account_id: Option<&str>) {
+    pub(super) fn calendar_changed(&self, account_id: Option<&str>) {
         if let Some(account_id) = account_id {
             self.forget_calendars(account_id);
         }
@@ -250,7 +254,7 @@ impl Inner {
                         let entry = entries.iter().find(|entry| entry.remote == remote_calendar);
                         let origin = instance.event.get("isOrigin").and_then(Value::as_bool).unwrap_or(true);
                         let start = text("start").and_then(jscal::parse_local)?;
-                        Some(jscal::occurrence(
+                        let mut occurrence = jscal::occurrence(
                             OccurrenceIds {
                                 id: calendar::app_id(account_id, &id),
                                 event_id: calendar::app_id(account_id, &base),
@@ -262,7 +266,11 @@ impl Inner {
                             instance.base.as_ref(),
                             &OccurrenceTime { start, utc: instance.utc },
                             viewer,
-                        ))
+                        );
+                        // An event of the server's birthdays calendar: whose date, and the age this year.
+                        occurrence.birthday =
+                            crate::birthdays::from_jmap(instance.event.get("uwuBirthday"), start.year(), account_id);
+                        Some(occurrence)
                     })
                     .collect())
             }
@@ -394,9 +402,16 @@ impl Engine {
     /// Every calendar of every account that has some. Accounts that can't be reached are left out.
     pub async fn calendars(&self) -> Result<Vec<CalendarInfo>> {
         let accounts = self.inner.store.accounts()?;
-        let lists = accounts.iter().map(|account| self.inner.calendar_entries(&account.id));
+        // Opening the calendar may look for the address book server too: its birthdays show here.
+        let lists = accounts.iter().map(|account| async move {
+            let (entries, birthdays) = futures::join!(
+                self.inner.calendar_entries(&account.id),
+                self.inner.local_birthdays_calendar(&account.id, true)
+            );
+            (entries, birthdays)
+        });
         let mut calendars = Vec::new();
-        for (account, list) in accounts.iter().zip(futures::future::join_all(lists).await) {
+        for (account, (list, birthdays)) in accounts.iter().zip(futures::future::join_all(lists).await) {
             match list {
                 Ok(entries) => {
                     let mut infos: Vec<CalendarInfo> = entries.into_iter().map(|entry| entry.info).collect();
@@ -405,6 +420,7 @@ impl Engine {
                 }
                 Err(error) => tracing::debug!("No calendars for {}: {error}", account.id),
             }
+            calendars.extend(birthdays);
         }
         Ok(calendars)
     }
@@ -503,6 +519,9 @@ impl Engine {
     }
 
     pub async fn update_calendar(&self, calendar_id: &str, patch: CalendarPatch) -> Result<()> {
+        if birthday_ops::is_local(calendar_id) {
+            return self.update_local_calendar(calendar_id, patch);
+        }
         let (source, entry) = self.inner.calendar_entry(calendar_id).await?;
         let account_id = entry.info.account_id.clone();
         let name = patch.name.as_deref().map(str::trim);
@@ -547,8 +566,35 @@ impl Engine {
         Ok(())
     }
 
+    /// The app's own birthdays calendar keeps its colour and visibility on this device; its name
+    /// is the one the app gives it.
+    fn update_local_calendar(&self, calendar_id: &str, patch: CalendarPatch) -> Result<()> {
+        let (account_id, _) = calendar::split_id(calendar_id)?;
+        self.inner.store.account(account_id)?;
+        if patch.name.is_some() {
+            return Err(Error::invalid("The birthdays calendar keeps its name."));
+        }
+        match &patch.color {
+            Some(Some(color)) => {
+                let color =
+                    jscal::clean_color(Some(color)).ok_or_else(|| Error::invalid("That color isn't #rrggbb."))?;
+                self.inner.store.set_calendar_color(account_id, calendar_id, Some(&color))?;
+            }
+            Some(None) => self.inner.store.set_calendar_color(account_id, calendar_id, None)?,
+            None => {}
+        }
+        if let Some(visible) = patch.is_visible {
+            self.inner.store.set_calendar_hidden(account_id, calendar_id, !visible)?;
+        }
+        self.inner.calendar_changed(Some(account_id));
+        Ok(())
+    }
+
     /// Deletes a calendar with its events.
     pub async fn delete_calendar(&self, calendar_id: &str) -> Result<()> {
+        if birthday_ops::is_local(calendar_id) {
+            return Err(Error::invalid("The birthdays calendar comes from your contacts and stays."));
+        }
         let (source, entry) = self.inner.calendar_entry(calendar_id).await?;
         if !entry.info.may_delete {
             return Err(Error::invalid("This calendar can't be deleted."));
@@ -568,6 +614,9 @@ impl Engine {
     }
 
     pub async fn set_default_calendar(&self, calendar_id: &str) -> Result<()> {
+        if birthday_ops::is_local(calendar_id) {
+            return Err(birthday_ops::read_only());
+        }
         let (source, entry) = self.inner.calendar_entry(calendar_id).await?;
         match source {
             Source::Jmap => {
@@ -585,14 +634,20 @@ impl Engine {
     pub async fn calendar_events(&self, from: &str, to: &str, zone: &str) -> Result<Vec<CalendarOccurrence>> {
         let (from, to, viewer) = parse_range(from, to, zone)?;
         let accounts = self.inner.store.accounts()?;
-        let reads = accounts.iter().map(|account| self.inner.account_occurrences(&account.id, from, to, viewer));
+        let reads = accounts.iter().map(|account| async move {
+            futures::join!(
+                self.inner.account_occurrences(&account.id, from, to, viewer),
+                self.inner.local_birthday_occurrences(&account.id, from, to)
+            )
+        });
         let mut found = Vec::new();
-        for (account, read) in accounts.iter().zip(futures::future::join_all(reads).await) {
+        for (account, (read, birthdays)) in accounts.iter().zip(futures::future::join_all(reads).await) {
             match read {
                 Ok(occurrences) => found.extend(occurrences),
                 Err(error) if error.code == ErrorCode::NotSupported => {}
                 Err(error) => tracing::warn!("Events of {} couldn't be read: {error}", account.id),
             }
+            found.extend(birthdays);
         }
         let (from, to) = (jscal::format_local(from), jscal::format_local(to));
         // What overlaps the range; an event of no length right at its start counts too.
@@ -603,6 +658,9 @@ impl Engine {
 
     /// Creates an event and returns its id.
     pub async fn create_event(&self, input: EventInput) -> Result<String> {
+        if birthday_ops::is_local(&input.calendar_id) {
+            return Err(birthday_ops::read_only());
+        }
         let (source, entry) = self.inner.calendar_entry(&input.calendar_id).await?;
         if !entry.info.may_write {
             return Err(Error::invalid("This calendar is read-only."));
@@ -637,6 +695,9 @@ impl Engine {
     /// `occurrence_start` is where the occurrence the edit began from was shown: a series then
     /// moves by as much as that occurrence was moved, instead of jumping to its date.
     pub async fn update_event(&self, event_id: &str, input: EventInput, occurrence_start: Option<&str>) -> Result<()> {
+        if birthday_ops::is_local(event_id) || birthday_ops::is_local(&input.calendar_id) {
+            return Err(birthday_ops::read_only());
+        }
         let (account_id, remote) = calendar::split_id(event_id)?;
         let (target_account, _) = calendar::split_id(&input.calendar_id)?;
         if target_account != account_id {
@@ -694,6 +755,9 @@ impl Engine {
 
     /// Deletes one occurrence of a series (or a single event), or the whole series.
     pub async fn delete_event(&self, occurrence_id: &str, scope: EventDeleteScope) -> Result<()> {
+        if birthday_ops::is_local(occurrence_id) {
+            return Err(birthday_ops::read_only());
+        }
         let (account_id, remote) = calendar::split_id(occurrence_id)?;
         match self.inner.calendar_source(account_id).await? {
             Source::Jmap => {
@@ -853,6 +917,7 @@ END:VCALENDAR
             data_dir: dir.path().to_path_buf(),
             secrets: secrets.clone(),
             open_url: Arc::new(|_| {}),
+            recognizer: None,
         })
         .unwrap();
         engine

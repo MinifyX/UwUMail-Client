@@ -231,6 +231,9 @@ pub struct ThreadSummary {
     pub has_attachments: bool,
     /// Somewhere in the conversation is an unsent draft.
     pub has_draft: bool,
+    /// The own keywords of its messages (lower case, no `$` system ones), e.g. assistant labels.
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -260,6 +263,31 @@ pub struct Attachment {
     /// For images the HTML shows through `cid:`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_id: Option<String>,
+}
+
+/// The text in a mail's pictures (UwUMail Server's `Email/imageText`, or this device's OCR).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageTextResult {
+    /// The app's message id.
+    pub email_id: String,
+    /// Nothing can read pictures here (no OCR on the server or this system); `images` is then empty.
+    pub unavailable: bool,
+    /// Pictures in which text was found, in the order they come in the mail.
+    pub images: Vec<ImageText>,
+    /// Pictures that were not read: too small, too big, too many, unreadable or not fetched.
+    pub skipped: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageText {
+    /// `cid:<content-id>` for an embedded picture, `blob:<attachment id>` for an attached one,
+    /// else the picture's `http(s)` address.
+    pub source: String,
+    pub text: String,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// How a mailing list says to unsubscribe (List-Unsubscribe, RFC 2369 and 8058).
@@ -308,6 +336,9 @@ pub struct Message {
     pub attachments: Vec<Attachment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unsubscribe: Option<Unsubscribe>,
+    /// Its own keywords (lower case, no `$` system ones), e.g. assistant labels.
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -448,6 +479,13 @@ pub struct CalendarInfo {
     pub sort_order: i64,
     pub may_write: bool,
     pub may_delete: bool,
+    /// A birthdays calendar made from the contacts: read-only, its events open their contact.
+    #[serde(default)]
+    pub is_birthdays: bool,
+    /// Kept only on this device (the birthdays calendar of a CardDAV mailbox): its colour and
+    /// visibility are this device's; it can't be renamed, shared or deleted.
+    #[serde(default)]
+    pub is_local: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -510,6 +548,9 @@ pub struct CalendarOccurrence {
     pub recurrence_id: Option<String>,
     pub read_only: bool,
     pub color: Option<String>,
+    /// An event of a birthdays calendar: whose date it is, and how old or how many years.
+    #[serde(default)]
+    pub birthday: Option<crate::birthdays::OccurrenceBirthday>,
 }
 
 /// An event as the editor fills it in.
@@ -831,6 +872,12 @@ pub enum EngineEvent {
     /// its push service again; otherwise a subscription was confirmed or lost.
     #[serde(rename = "push:changed")]
     PushChanged { reregister: bool },
+    /// The AI assistant's providers, settings or labels changed, or it labelled new mail.
+    #[serde(rename = "assist:changed", rename_all = "camelCase")]
+    AssistChanged {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        account_id: Option<String>,
+    },
 }
 
 impl EngineEvent {
@@ -845,6 +892,7 @@ impl EngineEvent {
             Self::CalendarChanged {} => "calendar:changed",
             Self::ContactsChanged {} => "contacts:changed",
             Self::PushChanged { .. } => "push:changed",
+            Self::AssistChanged { .. } => "assist:changed",
         }
     }
 }

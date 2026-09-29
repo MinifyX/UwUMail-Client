@@ -85,3 +85,65 @@ export function demoBanner(title: string, line: string): string {
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200" width="480" height="200">${body}</svg>`,
   )}`;
 }
+
+/** A made-up product photo: a row of keycaps on a colored desk. */
+function keycapsPhoto(width: number, height: number, desk: string, caps: string[]): string {
+  const size = Math.round(Math.min(height * 0.42, (width * 0.8) / (caps.length * 1.25 - 0.25)));
+  const gap = Math.round(size * 0.25);
+  const row = caps.length * size + (caps.length - 1) * gap;
+  const left = Math.round((width - row) / 2);
+  const top = Math.round((height - size) / 2);
+  const keys = caps
+    .map((fill, index) => {
+      const x = left + index * (size + gap);
+      return (
+        `<rect x="${x}" y="${top + 6}" width="${size}" height="${size}" rx="${size / 6}" fill="#000" opacity=".18"/>` +
+        `<rect x="${x}" y="${top}" width="${size}" height="${size}" rx="${size / 6}" fill="${fill}"/>` +
+        `<rect x="${x + size * 0.14}" y="${top + size * 0.1}" width="${size * 0.72}" height="${size * 0.62}" rx="${size / 9}" fill="#fff" opacity=".22"/>`
+      );
+    })
+    .join("");
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">` +
+      `<rect width="${width}" height="${height}" fill="${desk}"/>${keys}</svg>`,
+  )}`;
+}
+
+/** How the demo's stand-in for the server answers for a remote picture of the sample mail. */
+export interface DemoRemotePicture {
+  /** What the "server" hands out; null for a host that never answers. */
+  url: string | null;
+  width: number;
+  height: number;
+  /** How long the "server" takes to know. */
+  delay: number;
+}
+
+/** The remote pictures of the sample mail, by the address the mail names. */
+export const DEMO_REMOTE_PICTURES: Record<string, DemoRemotePicture> = {
+  "https://tracking.pixelparts.example/open.gif": { url: null, width: 1, height: 1, delay: 700 },
+  "https://cdn.pixelparts.example/keycaps.jpg": {
+    url: keycapsPhoto(960, 540, "#f3e6ee", ["#ff4d8d", "#7c5cff", "#ff4d8d", "#ffc94d"]),
+    width: 960,
+    height: 540,
+    delay: 1400,
+  },
+  "https://cdn.pixelparts.example/mint.jpg": {
+    url: keycapsPhoto(300, 300, "#dff5ec", ["#3fbf93", "#2a8f6d"]),
+    width: 300,
+    height: 300,
+    delay: 900,
+  },
+  "https://cdn.pixelparts.example/lilac.jpg": {
+    url: keycapsPhoto(300, 300, "#ece6fb", ["#9c7cff", "#6b4fd8"]),
+    width: 300,
+    height: 300,
+    delay: 2100,
+  },
+  "https://cdn.pixelparts.example/sunset.jpg": {
+    url: keycapsPhoto(300, 300, "#fde8dc", ["#ff8a5c", "#e0506e"]),
+    width: 300,
+    height: 300,
+    delay: 2800,
+  },
+};

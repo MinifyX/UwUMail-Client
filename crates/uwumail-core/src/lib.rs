@@ -4,13 +4,16 @@
 //! server discovery, IMAP sync into a local SQLite store, SMTP sending and
 //! full-text search.
 
+pub mod assist;
 pub mod attachments;
 pub mod autoconfig;
+pub mod birthdays;
 pub mod calendar;
 pub mod contacts;
 pub mod engine;
 pub mod error;
 pub mod folders;
+pub mod image_size;
 pub mod imap;
 pub mod jmap;
 pub mod jmap_push;
@@ -23,6 +26,7 @@ pub mod mailto;
 pub mod mime;
 pub mod model;
 pub mod oauth;
+pub mod ocr;
 pub mod pictures;
 pub mod secrets;
 pub mod smtp;
@@ -31,3 +35,4 @@ pub mod tls;
 
 pub use engine::{Engine, EngineOptions};
 pub use error::{Error, ErrorCode, Result};
+pub use ocr::TextRecognizer;

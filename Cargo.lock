@@ -3466,6 +3466,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-vision"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfc194758a2d5d7540b1ad283bfb9ca318ec608991892326e95b428230b2689b"
+dependencies = [
+ "objc2",
+ "objc2-foundation",
+]
+
+[[package]]
 name = "objc2-web-kit"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6085,7 +6095,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-android"
-version = "0.5.0-beta.4"
+version = "0.6.0-beta.1"
 dependencies = [
  "base64 0.23.1",
  "jni 0.21.1",
@@ -6102,7 +6112,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-core"
-version = "0.5.0-beta.4"
+version = "0.6.0-beta.1"
 dependencies = [
  "ammonia",
  "async-imap",
@@ -6139,7 +6149,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-desktop"
-version = "0.5.0-beta.4"
+version = "0.6.0-beta.1"
 dependencies = [
  "base64 0.23.1",
  "libc",
@@ -6161,11 +6171,22 @@ dependencies = [
  "tracing",
  "uwumail-android",
  "uwumail-core",
+ "uwumail-ocr",
+]
+
+[[package]]
+name = "uwumail-ocr"
+version = "0.6.0-beta.1"
+dependencies = [
+ "objc2",
+ "objc2-foundation",
+ "objc2-vision",
+ "windows",
 ]
 
 [[package]]
 name = "uwumail-setup"
-version = "0.5.0-beta.4"
+version = "0.6.0-beta.1"
 dependencies = [
  "libc",
  "semver",

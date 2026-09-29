@@ -107,6 +107,17 @@ describe("reading cards", () => {
     );
   });
 
+  it("reads Apple's year 1604 and a year 0 as no year", () => {
+    const apple = card({
+      anniversaries: { k: { kind: "birth", date: { "@type": "PartialDate", year: 1604, month: 4, day: 12 } } },
+    });
+    expect(toContactRecord(apple, "a").birthday).toBe("--04-12");
+    const zero = card({
+      anniversaries: { k: { kind: "birth", date: { "@type": "PartialDate", year: 0, month: 4, day: 12 } } },
+    });
+    expect(toContactRecord(zero, "a").birthday).toBe("--04-12");
+  });
+
   it("reads a birthday without a year", () => {
     const record = toContactRecord(
       card({ anniversaries: { x: { kind: "birth", date: { "@type": "PartialDate", month: 9, day: 30 } } } }),
@@ -210,6 +221,60 @@ describe("writing cards", () => {
     expect(patchFromInput(born, { ...from, birthday: null, birthdayChanged: true })).toEqual({
       "anniversaries/x": null,
     });
+  });
+
+  it("reads and writes the wedding anniversary next to the birthday", () => {
+    const wed = card({
+      anniversaries: {
+        b: { kind: "birth", date: { "@type": "PartialDate", month: 2, day: 29 } },
+        w: { kind: "wedding", date: { "@type": "Timestamp", utc: "2021-06-12T00:00:00Z" } },
+      },
+    });
+    const record = toContactRecord(wed, "a");
+    expect(record.birthday).toBe("--02-29");
+    expect(record.anniversary).toBe("2021-06-12");
+    const from = { ...inputOf(wed), anniversary: record.anniversary };
+    expect(patchFromInput(wed, { ...from, anniversary: "2022-06-12" })).toEqual({});
+    expect(patchFromInput(wed, { ...from, anniversary: "--06-12", anniversaryChanged: true })).toEqual({
+      "anniversaries/w/date": { "@type": "PartialDate", month: 6, day: 12 },
+    });
+    expect(patchFromInput(wed, { ...from, anniversary: null, anniversaryChanged: true })).toEqual({
+      "anniversaries/w": null,
+    });
+    // Both new on a card without dates: one new map, no overlapping paths.
+    expect(
+      patchFromInput(card(), {
+        ...input(),
+        birthday: "--04-12",
+        birthdayChanged: true,
+        anniversary: "2021-06-12",
+        anniversaryChanged: true,
+      }),
+    ).toEqual({
+      anniversaries: {
+        b1: { kind: "birth", date: { "@type": "PartialDate", month: 4, day: 12 } },
+        w1: { kind: "wedding", date: { "@type": "PartialDate", year: 2021, month: 6, day: 12 } },
+      },
+    });
+    expect(cardFromInput(input({ birthday: "1996-04-12", anniversary: "--06-12" })).anniversaries).toEqual({
+      b1: { kind: "birth", date: { "@type": "PartialDate", year: 1996, month: 4, day: 12 } },
+      w1: { kind: "wedding", date: { "@type": "PartialDate", month: 6, day: 12 } },
+    });
+  });
+
+  it("keeps birthday reminders in uwuReminders, off by default", () => {
+    expect(toContactRecord(card(), "a").reminders).toEqual([]);
+    expect(cardFromInput(input()).uwuReminders).toBeUndefined();
+    const week = { daysBefore: 7, time: "09:00" };
+    const day = { daysBefore: 0, time: "09:00" };
+    const reminded = card({ uwuReminders: [week, day, { daysBefore: 99, time: "25:00" }, "kaputt"] });
+    expect(toContactRecord(reminded, "a").reminders).toEqual([day, week]);
+    const from = { ...inputOf(reminded), reminders: [day, week] };
+    expect(patchFromInput(reminded, { ...from, reminders: [week, day] })).toEqual({});
+    expect(patchFromInput(reminded, { ...from, reminders: [day] })).toEqual({ uwuReminders: [day] });
+    expect(patchFromInput(reminded, { ...from, reminders: [] })).toEqual({ uwuReminders: null });
+    expect(patchFromInput(reminded, { ...from, reminders: undefined })).toEqual({});
+    expect(cardFromInput(input({ reminders: [week, day] })).uwuReminders).toEqual([day, week]);
   });
 
   it("moves a card to another address book", () => {

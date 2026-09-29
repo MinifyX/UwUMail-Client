@@ -1,10 +1,12 @@
 import clsx from "clsx";
-import { Search, X } from "lucide-react";
+import { Cake, Search, X } from "lucide-react";
 import { Fragment, useMemo, type ReactNode } from "react";
 import type { ContactRecord } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
+import { ageOn, nextTime, parseDay } from "@/lib/birthdays";
+import { todayKey } from "@/lib/calendarDates";
 import { ContactAvatar } from "./ContactAvatar";
 import { letterOf, matchesSearch, sortContacts, subtitleOf } from "./format";
 import { startNewContact, useContactsUi } from "./state";
@@ -32,6 +34,7 @@ export function useVisibleContacts(): { contacts: ContactRecord[]; loading: bool
 /** Search and the contacts by letter; a click opens one. */
 export function ContactList({ className, header }: { className?: string; header?: ReactNode }) {
   const { t } = useT();
+  const today = todayKey();
   const search = useContactsUi((s) => s.search);
   const setSearch = useContactsUi((s) => s.setSearch);
   const selectedId = useContactsUi((s) => s.selectedId);
@@ -109,6 +112,9 @@ export function ContactList({ className, header }: { className?: string; header?
               const letter = letterOf(contact);
               const newLetter = index === 0 || letterOf(contacts[index - 1]!) !== letter;
               const subtitle = subtitleOf(contact);
+              const born = parseDay(contact.birthday);
+              const age = born ? ageOn(born, today) : null;
+              const birthdayToday = born !== null && nextTime(born, today).inDays === 0;
               return (
                 <Fragment key={contact.id}>
                   {newLetter && !search && (
@@ -136,6 +142,18 @@ export function ContactList({ className, header }: { className?: string; header?
                         </span>
                         {subtitle && <span className="truncate text-[12.5px] text-muted">{subtitle}</span>}
                       </span>
+                      {(age !== null || birthdayToday) && (
+                        <span
+                          className={clsx(
+                            "flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold tabular-nums",
+                            birthdayToday ? "bg-pink-tint text-pink-ink" : "bg-canvas text-muted",
+                          )}
+                          title={age !== null ? t("contacts.yearsOld", { count: age }) : t("contacts.isToday")}
+                        >
+                          {birthdayToday && <Cake className="size-3" aria-hidden />}
+                          {age !== null && <span aria-label={t("contacts.yearsOld", { count: age })}>{age}</span>}
+                        </span>
+                      )}
                     </button>
                   </li>
                 </Fragment>

@@ -1,7 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { backend } from "@/backend/backend";
-import type { CalendarOccurrence, EventInput } from "@/backend/types";
-import { translate } from "@/i18n";
+import type { CalendarInfo, CalendarOccurrence, EventInput } from "@/backend/types";
+import { useCallback } from "react";
+import { translate, useT } from "@/i18n";
+import { localizeBirthdays } from "@/lib/birthdays";
 import {
   addDays,
   atMidnight,
@@ -25,16 +27,30 @@ export function useCalendarsAvailable() {
 
 export function useCalendars() {
   const client = useQueryClient();
+  const { t } = useT();
+  // The birthdays calendar the app makes itself is named in the UI's language.
+  const select = useCallback(
+    (list: CalendarInfo[]) =>
+      list.map((calendar) =>
+        calendar.isBirthdays && calendar.isLocal
+          ? { ...calendar, name: t("calendar.birthdays.calendarName") }
+          : calendar,
+      ),
+    [t],
+  );
   return useQuery({
     queryKey: queryKeys.calendars,
     queryFn: async () => {
       try {
         return await backend().calendars();
       } finally {
-        // Listing them is what searches for CalDAV servers; now it is known whether there are any.
+        // Listing them is what searches for CalDAV and CardDAV servers; now it is known whether
+        // there are any, and whether birthdays can be taken over.
         void client.invalidateQueries({ queryKey: ["calendarsAvailable"] });
+        void client.invalidateQueries({ queryKey: ["birthdayFeatures"] });
       }
     },
+    select,
   });
 }
 
@@ -58,10 +74,15 @@ export function useOccurrences(days: DateKey[]) {
   const zone = deviceTimeZone();
   const from: WallTime = atMidnight(days[0] ?? "1970-01-01");
   const to: WallTime = atMidnight(addDays(days[days.length - 1] ?? "1970-01-01", 1));
+  const { i18n } = useT();
+  const language = i18n.language;
+  // Birthdays with the age, titled in the UI's language.
+  const select = useCallback((list: CalendarOccurrence[]) => localizeBirthdays(list, language), [language]);
   return useQuery({
     queryKey: [...queryKeys.calendarEvents, from, to, zone],
     queryFn: () => backend().calendarEvents(from, to, zone),
     placeholderData: (previous) => previous,
+    select,
   });
 }
 

@@ -340,6 +340,7 @@ pub fn occurrence(
         recurrence_id: text(instance, "recurrenceId").map(String::from),
         read_only: ids.read_only,
         color: clean_color(text(instance, "color")),
+        birthday: None,
     }
 }
 

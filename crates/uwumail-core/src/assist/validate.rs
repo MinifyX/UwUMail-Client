@@ -1,0 +1,480 @@
+//! What a model answered, held to its shape before anything uses it: the same checks as UwUMail
+//! Server's (`uwumail-assist/src/features.rs`). A verdict is one of four words, a date is a real
+//! date whose quote stands in the mail, a link is one the mail contains, people are ones from the
+//! mail or the address book, labels are the person's own. Everything else is dropped.
+
+use std::collections::HashSet;
+
+use chrono::{NaiveDate, NaiveDateTime, TimeDelta};
+use serde::Serialize;
+use serde_json::Value;
+
+use super::Label;
+use super::prompts::SUBJECT_MARK;
+
+const MAX_EVENTS: usize = 10;
+const MAX_QUOTE_CHARS: usize = 300;
+const MAX_REASONS: usize = 6;
+const MAX_REASON_CHARS: usize = 300;
+
+fn chars(text: &str) -> usize {
+    text.chars().count()
+}
+
+/// At most `max` characters of `text`, trimmed, without control characters but line breaks.
+pub fn clean(text: &str, max: usize) -> String {
+    let cleaned: String = text.chars().filter(|c| !c.is_control() || *c == '\n').take(max).collect::<String>();
+    cleaned.trim().to_owned()
+}
+
+/// One optional line of text out of a JSON answer: trimmed, capped, `None` when empty.
+fn optional_text(value: Option<&Value>, max: usize) -> Option<String> {
+    let text = value?.as_str()?;
+    let text = clean(&text.replace('\n', " "), max);
+    (!text.is_empty()).then_some(text)
+}
+
+/// The JSON object in a model's answer: the whole text, or the part from the first `{` to the last
+/// `}` (models like to wrap it in a code fence or a sentence).
+pub fn json_answer(text: &str) -> Option<Value> {
+    let trimmed = text.trim();
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed)
+        && value.is_object()
+    {
+        return Some(value);
+    }
+    let start = trimmed.find('{')?;
+    let end = trimmed.rfind('}')?;
+    if end <= start {
+        return None;
+    }
+    serde_json::from_str::<Value>(&trimmed[start..=end]).ok().filter(Value::is_object)
+}
+
+/// Splits a `SUBJECT: …` first line off a written mail.
+pub fn split_subject(text: &str) -> (Option<String>, String) {
+    let trimmed = text.trim_start();
+    let starts = trimmed.get(..SUBJECT_MARK.len()).is_some_and(|head| head.eq_ignore_ascii_case(SUBJECT_MARK));
+    if !starts {
+        return (None, text.trim().to_owned());
+    }
+    let rest = &trimmed[SUBJECT_MARK.len()..];
+    let (line, body) = rest.split_once('\n').unwrap_or((rest, ""));
+    let subject = clean(line, 200);
+    ((!subject.is_empty()).then_some(subject), body.trim().to_owned())
+}
+
+/// Verdict, confidence and reasons out of the model's answer.
+pub fn parse_spam(text: &str) -> Option<(String, f64, Vec<String>)> {
+    let answer = json_answer(text)?;
+    let verdict = answer.get("verdict")?.as_str()?.trim().to_ascii_lowercase();
+    if !matches!(verdict.as_str(), "legitimate" | "suspicious" | "spam" | "phishing") {
+        return None;
+    }
+    let confidence = answer.get("confidence").and_then(Value::as_f64).filter(|c| c.is_finite()).unwrap_or(0.5);
+    let reasons = answer
+        .get("reasons")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|reason| optional_text(Some(reason), MAX_REASON_CHARS))
+        .take(MAX_REASONS)
+        .collect();
+    Some((verdict, confidence.clamp(0.0, 1.0), reasons))
+}
+
+/// A label the model chose, and why.
+#[derive(Debug, Clone)]
+pub struct LabelPick {
+    pub label: Label,
+    pub reason: String,
+}
+
+/// Which of the person's labels the model chose, with its reasons. Names that are not labels are
+/// dropped, each label counts once.
+pub fn parse_labels(answer: &Value, labels: &[Label]) -> Vec<LabelPick> {
+    let mut picks: Vec<LabelPick> = Vec::new();
+    for entry in answer.get("labels").and_then(Value::as_array).into_iter().flatten().take(50) {
+        let (name, reason) = match entry {
+            Value::String(name) => (name.as_str(), ""),
+            Value::Object(object) => (
+                object.get("name").and_then(Value::as_str).unwrap_or_default(),
+                object.get("reason").and_then(Value::as_str).unwrap_or_default(),
+            ),
+            _ => continue,
+        };
+        let name = name.trim().to_lowercase();
+        let Some(label) = labels.iter().find(|label| label.name.trim().to_lowercase() == name) else { continue };
+        if picks.iter().any(|pick| pick.label.id == label.id) {
+            continue;
+        }
+        picks.push(LabelPick { label: label.clone(), reason: clean(&reason.replace('\n', " "), MAX_REASON_CHARS) });
+    }
+    picks
+}
+
+/// Somebody an event names, with an address the person knows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Participant {
+    pub name: String,
+    pub email: String,
+}
+
+/// An appointment read out of a mail, checked.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtractedEvent {
+    pub title: String,
+    pub start: String,
+    pub end: String,
+    pub all_day: bool,
+    pub time_zone: Option<String>,
+    pub location: Option<String>,
+    pub description: Option<String>,
+    pub url: Option<String>,
+    pub participants: Vec<Participant>,
+    pub confidence: f64,
+    pub quote: String,
+}
+
+/// What an extracted event is checked against.
+pub struct EventContext<'a> {
+    /// All the text the event may be read from: subject, body, links, text in pictures.
+    pub source: &'a str,
+    pub links: &'a [String],
+    /// Names and addresses (lower case) of the mail's From, To and Cc and of the address book.
+    pub people: &'a [(String, String)],
+    /// The person's own addresses (lower case), never suggested.
+    pub mine: &'a HashSet<String>,
+}
+
+/// Lower case, one space between words, without quotation marks: to find a quote in the mail even
+/// when the model changed its spacing.
+fn normalized(text: &str) -> String {
+    text.chars()
+        .filter(|c| !matches!(c, '"' | '\'' | '„' | '“' | '”' | '‚' | '‘' | '’' | '«' | '»' | '*'))
+        .flat_map(char::to_lowercase)
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+enum When {
+    At(NaiveDateTime),
+    Day(NaiveDate),
+}
+
+fn parse_when(text: &str) -> Option<When> {
+    let text = text.trim();
+    for format in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"] {
+        if let Ok(at) = NaiveDateTime::parse_from_str(text, format) {
+            return Some(When::At(at));
+        }
+    }
+    if let Ok(at) = chrono::DateTime::parse_from_rfc3339(text) {
+        return Some(When::At(at.naive_local()));
+    }
+    if let Some(stripped) = text.strip_suffix('Z')
+        && let Ok(at) = NaiveDateTime::parse_from_str(stripped, "%Y-%m-%dT%H:%M:%S")
+    {
+        return Some(When::At(at));
+    }
+    NaiveDate::parse_from_str(text, "%Y-%m-%d").ok().map(When::Day)
+}
+
+fn local(at: NaiveDateTime) -> String {
+    at.format("%Y-%m-%dT%H:%M:%S").to_string()
+}
+
+fn sane(at: NaiveDateTime) -> bool {
+    (1970..=2200).contains(&chrono::Datelike::year(&at))
+}
+
+/// The people the model named, as addresses the person knows: from the mail's From, To and Cc or
+/// the address book. Others, and the person themselves, are left out.
+fn participants(named: &[Value], context: &EventContext<'_>) -> Vec<Participant> {
+    let mut out: Vec<Participant> = Vec::new();
+    for entry in named.iter().take(40) {
+        let text = match entry {
+            Value::String(text) => text.clone(),
+            Value::Object(object) => object
+                .get("email")
+                .and_then(Value::as_str)
+                .filter(|e| !e.trim().is_empty())
+                .or_else(|| object.get("name").and_then(Value::as_str))
+                .unwrap_or_default()
+                .to_owned(),
+            _ => continue,
+        };
+        let text = text.trim();
+        if text.is_empty() || chars(text) > 320 {
+            continue;
+        }
+        let found = if let Some(address) = text
+            .split(|c: char| c.is_whitespace() || matches!(c, '<' | '>' | '(' | ')' | ',' | ';'))
+            .find(|word| word.contains('@'))
+        {
+            let address = address.to_lowercase();
+            context.people.iter().find(|(_, email)| *email == address).cloned()
+        } else {
+            let wanted = normalized(text);
+            let exact: Vec<&(String, String)> =
+                context.people.iter().filter(|(name, _)| !name.is_empty() && normalized(name) == wanted).collect();
+            match exact.first() {
+                Some(first) if exact.iter().all(|p| p.1 == first.1) => Some((*first).clone()),
+                _ => {
+                    // "Leni" for "Leni Beispiel", when only one person is meant.
+                    let first_names: Vec<&(String, String)> = context
+                        .people
+                        .iter()
+                        .filter(|(name, _)| normalized(name).split(' ').next().is_some_and(|first| first == wanted))
+                        .collect();
+                    match first_names.first() {
+                        Some(first) if !wanted.contains(' ') && first_names.iter().all(|p| p.1 == first.1) => {
+                            Some((*first).clone())
+                        }
+                        _ => None,
+                    }
+                }
+            }
+        };
+        let Some((name, email)) = found else { continue };
+        if context.mine.contains(&email) || out.iter().any(|p| p.email == email) {
+            continue;
+        }
+        out.push(Participant { name: clean(&name, 100), email });
+        if out.len() >= 20 {
+            break;
+        }
+    }
+    out
+}
+
+/// The events out of the model's answer, each one checked: a date that is one, an end after the
+/// start, a quote that stands in the mail, a link that is in it, people the person knows.
+pub fn parse_events(answer: &Value, context: &EventContext<'_>) -> Vec<ExtractedEvent> {
+    let source = normalized(context.source);
+    let mut events = Vec::new();
+    for entry in answer.get("events").and_then(Value::as_array).into_iter().flatten().take(MAX_EVENTS * 3) {
+        let Some(title) = optional_text(entry.get("title"), 200) else { continue };
+        let Some(start) = entry.get("start").and_then(Value::as_str).and_then(parse_when) else { continue };
+        let mut all_day = entry.get("allDay").and_then(Value::as_bool).unwrap_or(false);
+        let start = match start {
+            When::At(at) => at,
+            When::Day(day) => {
+                all_day = true;
+                day.and_hms_opt(0, 0, 0).unwrap_or_default()
+            }
+        };
+        let start = if all_day { start.date().and_hms_opt(0, 0, 0).unwrap_or(start) } else { start };
+        if !sane(start) {
+            continue;
+        }
+        let default_end = if all_day { start + TimeDelta::days(1) } else { start + TimeDelta::hours(1) };
+        let end = match entry.get("end").and_then(Value::as_str).and_then(parse_when) {
+            Some(When::At(at)) if all_day => at.date().and_hms_opt(0, 0, 0).unwrap_or(at),
+            Some(When::At(at)) => at,
+            Some(When::Day(day)) => {
+                let day = day.and_hms_opt(0, 0, 0).unwrap_or_default();
+                // The last day, as people write it: the end is the day after.
+                if all_day { day + TimeDelta::days(1) } else { day }
+            }
+            None => default_end,
+        };
+        let end = if end <= start || !sane(end) || end - start > TimeDelta::days(366) { default_end } else { end };
+        let Some(quote) = optional_text(entry.get("quote"), MAX_QUOTE_CHARS) else { continue };
+        let wanted = normalized(quote.trim_matches(['…', '.']));
+        if wanted.is_empty() || !source.contains(&wanted) {
+            continue;
+        }
+        let time_zone = optional_text(entry.get("timeZone"), 64).filter(|zone| zone.parse::<chrono_tz::Tz>().is_ok());
+        let url = optional_text(entry.get("url"), 300).filter(|url| {
+            url.starts_with("https://") && (context.links.contains(url) || context.source.contains(url.as_str()))
+        });
+        let named = entry.get("participants").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+        let confidence = entry.get("confidence").and_then(Value::as_f64).filter(|c| c.is_finite()).unwrap_or(0.5);
+        events.push(ExtractedEvent {
+            title,
+            start: local(start),
+            end: local(end),
+            all_day,
+            time_zone,
+            location: optional_text(entry.get("location"), 300),
+            description: entry
+                .get("description")
+                .and_then(Value::as_str)
+                .map(|text| clean(text, 1000))
+                .filter(|text| !text.is_empty()),
+            url,
+            participants: participants(named, context),
+            confidence: confidence.clamp(0.0, 1.0),
+            quote,
+        });
+        if events.len() >= MAX_EVENTS {
+            break;
+        }
+    }
+    events
+}
+
+/// The keyword a label is set as: a lower-case ASCII form of its name (`rechnungen`,
+/// `bestellungen-versand`), like UwUMail Server makes them; empty when nothing of it is left.
+pub fn label_keyword(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars().flat_map(char::to_lowercase) {
+        let piece: &str = match c {
+            'ä' => "ae",
+            'ö' => "oe",
+            'ü' => "ue",
+            'ß' => "ss",
+            'à' | 'á' | 'â' | 'ã' | 'å' => "a",
+            'ç' => "c",
+            'è' | 'é' | 'ê' | 'ë' => "e",
+            'ì' | 'í' | 'î' | 'ï' => "i",
+            'ñ' => "n",
+            'ò' | 'ó' | 'ô' | 'õ' | 'ø' => "o",
+            'ù' | 'ú' | 'û' => "u",
+            'ý' | 'ÿ' => "y",
+            c if c.is_ascii_alphanumeric() => {
+                out.push(c);
+                continue;
+            }
+            _ => "-",
+        };
+        out.push_str(piece);
+    }
+    let mut keyword = String::new();
+    for part in out.split('-').filter(|part| !part.is_empty()) {
+        if keyword.len() + part.len() + 1 > 40 {
+            break;
+        }
+        if !keyword.is_empty() {
+            keyword.push('-');
+        }
+        keyword.push_str(part);
+    }
+    keyword
+}
+
+/// Whether a keyword may be set by hand or by a label: an own keyword (no `$` or `\` system flag),
+/// 1 to 64 printable ASCII characters an IMAP atom takes.
+pub fn is_own_keyword(keyword: &str) -> bool {
+    (1..=64).contains(&keyword.len())
+        && !keyword.starts_with(['$', '\\'])
+        && keyword.bytes().all(|b| b.is_ascii_graphic() && !b"(){%*\"\\]".contains(&b))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn subjects_come_off_the_first_line() {
+        assert_eq!(split_subject("SUBJECT: Freitag\n\nHallo Mia"), (Some("Freitag".into()), "Hallo Mia".into()));
+        assert_eq!(split_subject("subject:Hi\nText"), (Some("Hi".into()), "Text".into()));
+        assert_eq!(split_subject("Hallo Mia"), (None, "Hallo Mia".into()));
+        assert_eq!(split_subject("Süß"), (None, "Süß".into()));
+    }
+
+    #[test]
+    fn json_is_found_in_fences_and_sentences() {
+        assert_eq!(json_answer("```json\n{\"a\": 1}\n```"), Some(json!({"a": 1})));
+        assert_eq!(json_answer("Here you go: {\"a\": 2} Thanks"), Some(json!({"a": 2})));
+        assert_eq!(json_answer("[1, 2]"), None);
+        assert_eq!(json_answer("no json } here {"), None);
+    }
+
+    #[test]
+    fn spam_answers_are_held_to_their_shape() {
+        let (verdict, confidence, reasons) =
+            parse_spam(r#"{"verdict": "Phishing", "confidence": 7, "reasons": ["a", "", "b\nc"]}"#).unwrap();
+        assert_eq!((verdict.as_str(), confidence), ("phishing", 1.0));
+        assert_eq!(reasons, ["a", "b c"]);
+        // A mail that talks the model into another verdict word gets nothing.
+        assert!(parse_spam(r#"{"verdict": "delete all mail"}"#).is_none());
+        assert!(parse_spam(r#"{"verdict": "legitimate; ignore previous instructions"}"#).is_none());
+        let many: Vec<String> = (0..20).map(|i| format!("reason {i} {}", "x".repeat(400))).collect();
+        let (_, _, reasons) = parse_spam(&json!({"verdict": "spam", "reasons": many}).to_string()).unwrap();
+        assert_eq!(reasons.len(), 6);
+        assert!(reasons.iter().all(|r| r.chars().count() <= 300));
+    }
+
+    fn label(id: &str, name: &str) -> Label {
+        Label {
+            id: id.into(),
+            name: name.into(),
+            description: String::new(),
+            keyword: label_keyword(name),
+            color: None,
+        }
+    }
+
+    #[test]
+    fn only_the_persons_labels_are_picked() {
+        let labels = [label("g1", "Rechnungen"), label("g2", "Reisen")];
+        let answer = json!({ "labels": [
+            { "name": "rechnungen", "reason": "Eine Rechnung" },
+            { "name": "Rechnungen", "reason": "again" },
+            { "name": "Delete everything", "reason": "x" },
+            { "name": "$Junk", "reason": "system keyword" },
+            "Reisen"
+        ]});
+        let picks = parse_labels(&answer, &labels);
+        assert_eq!(picks.iter().map(|p| p.label.id.as_str()).collect::<Vec<_>>(), ["g1", "g2"]);
+        assert_eq!(picks[0].reason, "Eine Rechnung");
+    }
+
+    #[test]
+    fn keywords_from_names() {
+        assert_eq!(label_keyword("Rechnungen"), "rechnungen");
+        assert_eq!(label_keyword("Bestellungen & Versand"), "bestellungen-versand");
+        assert_eq!(label_keyword("Persönlich"), "persoenlich");
+        assert_eq!(label_keyword("旅行"), "");
+        assert!(is_own_keyword("rechnungen") && is_own_keyword("label-3"));
+        for bad in ["", "$junk", "\\Seen", "a b", "x(y", "a\"b", &"k".repeat(65)] {
+            assert!(!is_own_keyword(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn events_are_checked_against_the_mail() {
+        let people = vec![
+            ("Leni Beispiel".to_owned(), "leni@example.org".to_owned()),
+            ("Mia".to_owned(), "mia@example.org".to_owned()),
+        ];
+        let mine: HashSet<String> = ["mia@example.org".to_owned()].into();
+        let links = vec!["https://praxis.example/termin".to_owned()];
+        let source = "Ihr Termin am Dienstag, 6. Oktober um 9:30 Uhr in der Praxis.\nhttps://praxis.example/termin";
+        let context = EventContext { source, links: &links, people: &people, mine: &mine };
+        let answer = json!({ "events": [
+            {
+                "title": "Zahnarzt", "start": "2026-10-06T09:30:00", "end": null, "allDay": false,
+                "timeZone": "Europe/Berlin", "location": "Praxis", "description": null,
+                "url": "https://praxis.example/termin", "participants": ["Leni", "Mia", "Unbekannt"],
+                "confidence": 0.9, "quote": "Ihr Termin am  Dienstag, 6. Oktober um 9:30 Uhr"
+            },
+            { "title": "Made up", "start": "2026-10-07", "quote": "not in the mail", "participants": [] },
+            { "title": "Urlaub", "start": "2026-10-10", "end": "2026-10-12", "allDay": true, "timeZone": "Mars/Base",
+              "url": "https://evil.example/", "quote": "in der Praxis", "participants": [], "confidence": "high" },
+            { "title": "Bad", "start": "next Tuesday", "quote": "Praxis", "participants": [] },
+            { "title": "Phish", "start": "2026-10-08T10:00:00", "quote": "Praxis", "url": "javascript:alert(1)" },
+            { "title": "Far", "start": "9999-01-01T00:00:00", "quote": "Praxis" }
+        ]});
+        let events = parse_events(&answer, &context);
+        assert_eq!(events.len(), 3, "{events:?}");
+        assert_eq!(events[0].end, "2026-10-06T10:30:00", "an hour without an end");
+        assert_eq!(events[0].time_zone.as_deref(), Some("Europe/Berlin"));
+        assert_eq!(events[0].url.as_deref(), Some("https://praxis.example/termin"));
+        assert_eq!(
+            events[0].participants,
+            [Participant { name: "Leni Beispiel".into(), email: "leni@example.org".into() }]
+        );
+        assert_eq!((events[1].start.as_str(), events[1].end.as_str()), ("2026-10-10T00:00:00", "2026-10-13T00:00:00"));
+        assert!(events[1].all_day && events[1].time_zone.is_none() && events[1].url.is_none());
+        assert_eq!(events[1].confidence, 0.5);
+        assert_eq!(events[2].url, None, "only https links of the mail");
+    }
+}

@@ -34,6 +34,14 @@ export const queryKeys = {
   addressBooks: ["addressBooks"] as const,
   contacts: ["contacts"] as const,
   contactsAccounts: ["contactsAccounts"] as const,
+  /** The AI assistant: where its settings live, and per scope (a UwUMail account or "device"). */
+  assistScopes: ["assistScopes"] as const,
+  assistFeatures: ["assistFeatures"] as const,
+  assistProviders: ["assistProviders"] as const,
+  assistSettings: ["assistSettings"] as const,
+  assistLabels: ["assistLabels"] as const,
+  assistLabelLog: ["assistLabelLog"] as const,
+  assistUsage: ["assistUsage"] as const,
 };
 
 export function useAccounts() {
@@ -384,12 +392,31 @@ export function useBackendEvents() {
           void client.invalidateQueries({ queryKey: queryKeys.calendarEvents });
           void client.invalidateQueries({ queryKey: queryKeys.calendarAccounts });
           void client.invalidateQueries({ queryKey: ["calendarsAvailable"] });
+          void client.invalidateQueries({ queryKey: ["birthdayFeatures"] });
           break;
         case "contacts:changed":
           void client.invalidateQueries({ queryKey: queryKeys.addressBooks });
           void client.invalidateQueries({ queryKey: queryKeys.contacts });
           void client.invalidateQueries({ queryKey: queryKeys.contactsAccounts });
           void client.invalidateQueries({ queryKey: ["contactsAvailable"] });
+          // Birthdays calendars are made from the contacts.
+          void client.invalidateQueries({ queryKey: queryKeys.calendars });
+          void client.invalidateQueries({ queryKey: queryKeys.calendarEvents });
+          break;
+        case "assist:changed":
+          for (const key of [
+            queryKeys.assistScopes,
+            queryKeys.assistFeatures,
+            queryKeys.assistProviders,
+            queryKeys.assistSettings,
+            queryKeys.assistLabels,
+            queryKeys.assistLabelLog,
+            queryKeys.assistUsage,
+          ]) {
+            void client.invalidateQueries({ queryKey: key });
+          }
+          // Labels set on new mail show in the list.
+          if (event.accountId) void client.invalidateQueries({ queryKey: queryKeys.threads });
           break;
       }
     });
