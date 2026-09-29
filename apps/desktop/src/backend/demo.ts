@@ -4,7 +4,7 @@ import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
 import { DemoContacts } from "./demo-contacts";
-import { buildFolders, buildMessages, DEMO_ACCOUNTS, welcomeMessage } from "./demo-data";
+import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMessage } from "./demo-data";
 import { demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
@@ -1012,8 +1012,15 @@ export class DemoBackend implements Backend {
   }
 
   async imageText(messageId: string): Promise<ImageTextResult> {
-    await wait(120);
-    return { emailId: messageId, unavailable: true, images: [], skipped: 0 };
+    // Like reading a picture, which takes a moment. Only the poster mail has text in its picture.
+    await wait(500);
+    const text = DEMO_IMAGE_TEXT.get(messageId);
+    return {
+      emailId: messageId,
+      unavailable: false,
+      images: text ? [{ source: "cid:poster@kaffeekuchen.example", text, width: 420, height: 560 }] : [],
+      skipped: 0,
+    };
   }
 
   async assistFeatures(): Promise<AssistFeatures | null> {
