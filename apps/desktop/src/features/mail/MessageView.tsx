@@ -43,6 +43,7 @@ import { backend } from "@/backend/backend";
 import { blockSender } from "./selection";
 import { UnsubscribeButton } from "./Unsubscribe";
 import { buildPrintDocument, MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
+import { useMailDates } from "../dates/useMailDates";
 
 interface AppearanceToggleProps {
   message: Message;
@@ -207,6 +208,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const appearance = resolveAppearance(message, theme === "dark", preference);
   const decisionKey = `${message.id}|${allowRemote}`;
   const autoDark = autoDecision?.key === decisionKey ? autoDecision.dark : undefined;
+  const dates = useMailDates(message, { open: !collapsed, allowRemote, inJunk });
 
   if (collapsed) {
     return (
@@ -308,6 +310,8 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
         <TrustedImagesNote entries={trustedBy} onUntrust={() => setLoadRemote(false)} />
       )}
 
+      {dates.bar}
+
       <div className="selectable">
         <MessageBody
           message={message}
@@ -318,8 +322,10 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           darkImages={darkImages}
           loadRemoteImage={loadMailImage}
           imageProxy={imageProxy}
+          {...dates.body}
         />
       </div>
+      {dates.popover}
 
       <AttachmentTiles
         attachments={message.attachments.filter((attachment) => !inlineImages.shown.has(attachment.id))}

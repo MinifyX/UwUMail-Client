@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "@/backend/types";
+import { markMail, type Mark } from "@/lib/dates";
 import { textToHtml } from "@/lib/format";
 import { replaceContentIds } from "@/lib/inlineImages";
 import { proxyRemoteImages, type ImageProxy } from "@/lib/remoteImages";
@@ -9,6 +10,7 @@ import { hideLinkStatus, watchLinks } from "./linkEvents";
 import { darkenImages, type RemoteImageLoader } from "./darkImages";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
 import { forwardFrameKeys } from "./readerKeys";
+import { DATE_STYLE, watchDates, type DateReport } from "../dates/frameDates";
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)"'\]]/g;
 
@@ -45,6 +47,22 @@ function sanitize(html: string) {
 }
 
 export const ROOT_ID = "uwu-mail-root";
+
+const readable = new WeakMap<Message, string>();
+
+/**
+ * The mail's body as the reader shows it, before pictures and colors: sanitized HTML, or the plain
+ * text as paragraphs with its web addresses as links. The date finder reads this very markup, so
+ * the places it reports fit when they are marked in it (see lib/dates).
+ */
+export function readableBody(message: Message): string {
+  let html = readable.get(message);
+  if (html === undefined) {
+    html = message.bodyHtml !== null ? sanitize(message.bodyHtml) : linkify(textToHtml(message.bodyText ?? ""));
+    readable.set(message, html);
+  }
+  return html;
+}
 
 /** The frame height UwUMail pretends to have when a mail sizes things by the viewport. */
 const NOMINAL_VIEWPORT_HEIGHT = 900;
@@ -83,16 +101,20 @@ export function buildDocument(
   variant: "light" | "dark",
   inlineImages: ReadonlyMap<string, string> = new Map(),
   imageProxy?: ImageProxy | null,
+  dateMarks: readonly Mark[] = [],
 ) {
   const isHtml = message.bodyHtml !== null;
   const dark = variant === "dark";
-  const pictures = withRemoteImages(isHtml ? sanitize(message.bodyHtml!) : "", allowRemote, imageProxy);
+  // Found dates are wrapped first, in the same markup they were found in.
+  const marked =
+    dateMarks.length > 0 ? markMail(readableBody(message), message.subject, dateMarks) : readableBody(message);
+  const pictures = withRemoteImages(isHtml ? marked : "", allowRemote, imageProxy);
   const body = isHtml
     ? fixViewportHeightUnits(
         // cid: links survive the sanitizer, our own blob URLs wouldn't: swap them afterwards.
         forceColorSchemeQueries(replaceContentIds(pictures.html, inlineImages), dark),
       )
-    : linkify(textToHtml(message.bodyText ?? ""));
+    : marked;
   const imageSources = `data: cid: blob:${pictures.remote}`;
   const csp = `default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:; media-src data:`;
   // The frame never scrolls itself (the reader around it does), so html/body
@@ -101,7 +123,7 @@ export function buildDocument(
   // or the engine paints an opaque white canvas behind dark content.
   const frame = `:root{color-scheme:${dark ? "dark" : "light"}}
 html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:hidden!important}
-#${ROOT_ID}{display:flow-root;overflow-x:auto}`;
+#${ROOT_ID}{display:flow-root;overflow-x:auto}${dateMarks.length > 0 ? `\n${DATE_STYLE}` : ""}`;
   // HTML mail brings its own design: keep the sender's typography and only
   // give it paper and some breathing room.
   const html = `body{background:${dark ? "#1c171f" : "#ffffff"};color:${dark ? "#f8f2f6" : "#1c1420"}}
@@ -226,7 +248,13 @@ interface MessageBodyProps {
   loadRemoteImage?: RemoteImageLoader;
   /** Sends allowed remote pictures through the app, so their senders never see this device. */
   imageProxy?: ImageProxy | null;
+  /** Dates found in the text, underlined and clickable (see features/dates). */
+  dateMarks?: readonly Mark[];
+  /** A found date was clicked or pressed, or somewhere else in the mail. */
+  onDate?: DateReport;
 }
+
+const NO_MARKS: readonly Mark[] = [];
 
 export function MessageBody({
   message,
@@ -237,12 +265,14 @@ export function MessageBody({
   darkImages = false,
   loadRemoteImage,
   imageProxy,
+  dateMarks = NO_MARKS,
+  onDate,
 }: MessageBodyProps) {
   const [height, setHeight] = useState(120);
   const variant = appearance.kind === "dark" ? "dark" : "light";
   const html = useMemo(
-    () => buildDocument(message, allowRemote, variant, inlineImages, imageProxy),
-    [message, allowRemote, variant, inlineImages, imageProxy],
+    () => buildDocument(message, allowRemote, variant, inlineImages, imageProxy, dateMarks),
+    [message, allowRemote, variant, inlineImages, imageProxy, dateMarks],
   );
   // Remount the frame whenever the look changes: recoloring happens in the
   // loaded document, so an unchanged srcdoc alone wouldn't undo it. Embedded
@@ -252,8 +282,10 @@ export function MessageBody({
   const [finished, setFinished] = useState<{ signature: string; dark: boolean } | null>(null);
   const done = finished?.signature === signature ? finished : null;
   const onAutoDecisionRef = useRef(onAutoDecision);
+  const onDateRef = useRef(onDate);
   useEffect(() => {
     onAutoDecisionRef.current = onAutoDecision;
+    onDateRef.current = onDate;
   });
   // A mail that goes away under the pointer never reports the pointer leaving its link.
   useEffect(() => hideLinkStatus, [signature]);
@@ -314,6 +346,8 @@ export function MessageBody({
     observer.observe(root);
     // Images load after the document; their size changes the height too.
     doc.addEventListener("load", updateHeight, true);
+    // Before the shortcuts: Enter and Space on a date are the date's.
+    if (dateMarks.length > 0) watchDates(frame, doc, (index, anchor) => onDateRef.current?.(index, anchor));
     // ↑/↓ and the other shortcuts keep working while the focus is inside the mail.
     forwardFrameKeys(frame, doc);
     watchLinks(frame, doc);
