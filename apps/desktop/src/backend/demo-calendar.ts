@@ -2,11 +2,15 @@
 // Microsoft one has none (like the real engine). Everything is relative to today and kept in
 // memory. Demo events are floating: their wall times are the same in every zone.
 
+import { formatDay, partialDay } from "@/lib/birthdays";
 import { BackendError } from "./backend";
+import { birthdayOccurrences, candidateFor, nameFromTitle } from "./demo-birthdays";
 import type {
+  BirthdayCandidate,
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
+  ContactRecord,
   EventDeleteScope,
   EventInput,
   Recurrence,
@@ -125,8 +129,10 @@ export class DemoCalendar {
   private nextId = 1;
 
   constructor(
-    lang: Lang,
+    private readonly lang: Lang,
     private readonly changed: () => void,
+    /** The contacts whose dates fill the birthdays calendar, as a UwUMail server does it. */
+    private readonly contacts: () => ContactRecord[] = () => [],
   ) {
     const de = lang === "de";
     const calendar = (id: string, name: string, color: string, extra: Partial<CalendarInfo> = {}): CalendarInfo => ({
@@ -148,6 +154,12 @@ export class DemoCalendar {
         sortOrder: 2,
         mayWrite: false,
         mayDelete: false,
+      }),
+      calendar("birthdays", de ? "Geburtstage" : "Birthdays", "#f5a623", {
+        sortOrder: 3,
+        mayWrite: false,
+        mayDelete: false,
+        isBirthdays: true,
       }),
     ];
     const day = today();
@@ -211,6 +223,26 @@ export class DemoCalendar {
         timeZone: null,
         recurrence: { frequency: "yearly", interval: 1, byDay: null, until: null, count: null },
       }),
+      // Birthdays kept as events, for the import into the contacts: Mia has none yet, Oma Hilde is
+      // no contact (Noah's above is known already, without a year).
+      event({
+        calendarId: "acc-private:personal",
+        title: de ? "Geburtstag von Mia Mood (*1999)" : "Mia Mood's birthday (1999)",
+        allDay: true,
+        start: at(20),
+        end: at(21),
+        timeZone: null,
+        recurrence: { frequency: "yearly", interval: 1, byDay: null, until: null, count: null },
+      }),
+      event({
+        calendarId: "acc-private:personal",
+        title: "🎂 Oma Hilde",
+        allDay: true,
+        start: at(40),
+        end: at(41),
+        timeZone: null,
+        recurrence: { frequency: "yearly", interval: 1, byDay: null, until: null, count: null },
+      }),
       event({
         calendarId: "acc-private:personal",
         title: de ? "Wochenende am See" : "Weekend at the lake",
@@ -230,6 +262,28 @@ export class DemoCalendar {
         recurrence: null,
       }),
     ];
+  }
+
+  /** The yearly all-day events of the other calendars that are birthdays, like the server's scan. */
+  scanBirthdays(): BirthdayCandidate[] {
+    const contacts = this.contacts();
+    return this.events.flatMap((event) => {
+      const calendar = this.calendarList.find((candidate) => candidate.id === event.calendarId);
+      if (!calendar || calendar.isBirthdays || !event.allDay || event.recurrence?.frequency !== "yearly") return [];
+      const found = nameFromTitle(event.title);
+      if (!found) return [];
+      const month = Number(event.start.slice(5, 7));
+      const day = Number(event.start.slice(8, 10));
+      const date = partialDay(found.year, month, day) ?? partialDay(null, month, day);
+      if (!date) return [];
+      return [candidateFor(event, formatDay(date), found.name, contacts, calendar.mayWrite)];
+    });
+  }
+
+  /** Takes an event away for good (a birthday that went into a contact). */
+  removeEvent(eventId: string) {
+    this.events = this.events.filter((event) => event.id !== eventId);
+    this.changed();
   }
 
   accounts(accountIds: string[]): CalendarAccount[] {
@@ -303,6 +357,8 @@ export class DemoCalendar {
 
   deleteCalendar(id: string) {
     const calendar = this.calendar(id);
+    if (calendar.isBirthdays)
+      throw new BackendError("invalid_input", "The birthdays calendar comes from the contacts.");
     if (!calendar.mayDelete) throw new BackendError("invalid_input", "This calendar can't be deleted.");
     this.calendarList = this.calendarList.filter((c) => c.id !== id);
     this.events = this.events.filter((event) => event.calendarId !== id);
@@ -356,6 +412,14 @@ export class DemoCalendar {
           color: null,
         });
       }
+    }
+    const birthdays = this.calendarList.find((calendar) => calendar.isBirthdays);
+    if (birthdays) {
+      found.push(
+        ...birthdayOccurrences(this.contacts(), from, to, birthdays.accountId, birthdays.id, this.lang).filter(
+          (occurrence) => occurrence.start < to && occurrence.end > from,
+        ),
+      );
     }
     return found.sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
   }

@@ -9,7 +9,16 @@
  * so a card a phone made over CardDAV comes back with everything it had.
  */
 
-import type { ContactEmail, ContactInput, ContactKind, ContactPhone, ContactPostal, ContactRecord } from "./types";
+import { normalizeReminders, sameReminders } from "@/lib/birthdays";
+import type {
+  BirthdayReminder,
+  ContactEmail,
+  ContactInput,
+  ContactKind,
+  ContactPhone,
+  ContactPostal,
+  ContactRecord,
+} from "./types";
 
 type Json = Record<string, unknown>;
 
@@ -91,16 +100,44 @@ function two(value: unknown): string {
   return typeof value === "number" ? String(value).padStart(2, "0") : "";
 }
 
-function birthdayOf(card: Json): { key: string; date: string } | null {
+/**
+ * The card's date of a kind (birth, wedding) and its key; one without a year is "--MM-DD" (also
+ * Apple's year 1604 and a year 0, which say "no year").
+ */
+function dateOf(card: Json, kind: "birth" | "wedding"): { key: string; date: string } | null {
   for (const [key, entry] of entries(card.anniversaries)) {
-    if (entry.kind !== "birth" || !isObject(entry.date)) continue;
+    if (entry.kind !== kind || !isObject(entry.date)) continue;
     const date = entry.date;
     if (typeof date.utc === "string") return { key, date: date.utc.slice(0, 10) };
     if (typeof date.month !== "number" || typeof date.day !== "number") continue;
-    const year = typeof date.year === "number" ? String(date.year).padStart(4, "0") : "-";
+    const known = typeof date.year === "number" && date.year !== 0 && date.year !== 1604;
+    const year = known ? String(date.year).padStart(4, "0") : "-";
     return { key, date: `${year}-${two(date.month)}-${two(date.day)}` };
   }
   return null;
+}
+
+function birthdayOf(card: Json): { key: string; date: string } | null {
+  return dateOf(card, "birth");
+}
+
+/** The card's birthday reminders (a UwUMail server's `uwuReminders`), the ones that make sense. */
+function remindersOf(card: Json): BirthdayReminder[] {
+  if (!Array.isArray(card.uwuReminders)) return [];
+  return normalizeReminders(
+    card.uwuReminders
+      .filter(isObject)
+      .map((entry) => ({ daysBefore: entry.daysBefore, time: entry.time }))
+      .filter(
+        (entry): entry is BirthdayReminder =>
+          typeof entry.daysBefore === "number" &&
+          Number.isInteger(entry.daysBefore) &&
+          entry.daysBefore >= 0 &&
+          entry.daysBefore <= 28 &&
+          typeof entry.time === "string" &&
+          /^([01]\d|2[0-3]):[0-5]\d$/.test(entry.time),
+      ),
+  );
 }
 
 function firstText(map: unknown, field: string): { key: string; value: string } | null {
@@ -158,6 +195,8 @@ export function toContactRecord(card: JmapCard, accountId: string): ContactRecor
     phones: entries(card.phones).map(([id, entry]) => ({ id, number: text(entry.number), kind: phoneKindOf(entry) })),
     addresses: entries(card.addresses).map(([id, entry]) => toPostal(id, entry)),
     birthday: birthdayOf(card)?.date ?? null,
+    anniversary: dateOf(card, "wedding")?.date ?? null,
+    reminders: remindersOf(card),
     note: firstText(card.notes, "note")?.value ?? "",
     photo: photoOf(card),
     isGroup: card.kind === "group",
@@ -370,7 +409,14 @@ export function cardFromInput(input: ContactInput): Json {
   if (phones) card.phones = phones;
   if (addresses) card.addresses = addresses;
   const birthday = input.birthday ? birthdayDate(input.birthday) : null;
-  if (birthday) card.anniversaries = { b1: { kind: "birth", date: birthday } };
+  const anniversary = input.anniversary ? birthdayDate(input.anniversary) : null;
+  if (birthday || anniversary) {
+    card.anniversaries = {
+      ...(birthday ? { b1: { kind: "birth", date: birthday } } : {}),
+      ...(anniversary ? { w1: { kind: "wedding", date: anniversary } } : {}),
+    };
+  }
+  if (input.reminders?.length) card.uwuReminders = normalizeReminders(input.reminders);
   return card;
 }
 
@@ -397,15 +443,30 @@ export function patchFromInput(card: JmapCard, input: ContactInput): Json {
       patch[property] = next;
     }
   }
-  if (input.birthdayChanged && input.birthday !== before.birthday) {
-    const current = birthdayOf(card);
-    const date = input.birthday ? birthdayDate(input.birthday) : null;
+  const taken = new Set(isObject(card.anniversaries) ? Object.keys(card.anniversaries) : []);
+  const hadDates = taken.size > 0;
+  const datePatch = (kind: "birth" | "wedding", wanted: string | null, prefix: string) => {
+    const current = dateOf(card, kind);
+    const date = wanted ? birthdayDate(wanted) : null;
     if (current && date) patch[`anniversaries/${current.key}/date`] = date;
     else if (current) patch[`anniversaries/${current.key}`] = null;
-    else if (date && isObject(card.anniversaries)) {
-      const key = freeKey(new Set(Object.keys(card.anniversaries)), "b");
-      patch[`anniversaries/${key}`] = { kind: "birth", date };
-    } else if (date) patch.anniversaries = { b1: { kind: "birth", date } };
+    else if (date && hadDates) {
+      const key = freeKey(taken, prefix);
+      patch[`anniversaries/${key}`] = { kind, date };
+    } else if (date) {
+      // Both new at once go into one new map.
+      const whole = (patch.anniversaries as Json | undefined) ?? {};
+      const key = freeKey(taken, prefix);
+      whole[key] = { kind, date };
+      patch.anniversaries = whole;
+    }
+  };
+  if (input.birthdayChanged && input.birthday !== before.birthday) datePatch("birth", input.birthday, "b");
+  if (input.anniversaryChanged && (input.anniversary ?? null) !== (before.anniversary ?? null)) {
+    datePatch("wedding", input.anniversary ?? null, "w");
+  }
+  if (input.reminders !== undefined && !sameReminders(input.reminders, before.reminders ?? [])) {
+    patch.uwuReminders = input.reminders.length > 0 ? normalizeReminders(input.reminders) : null;
   }
   if (input.addressBookId && input.addressBookId !== before.addressBookId) {
     patch.addressBookIds = { [input.addressBookId]: true };

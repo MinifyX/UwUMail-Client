@@ -6,6 +6,10 @@ import type {
   AssistFeatures,
   AttachmentContent,
   BackendEvent,
+  BirthdayFeatures,
+  BirthdayImportEntry,
+  BirthdayImportResult,
+  BirthdayScan,
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
@@ -130,6 +134,18 @@ export interface Backend {
    */
   updateEvent(eventId: string, input: EventInput, occurrenceStart?: string): Promise<void>;
   deleteEvent(occurrenceId: string, scope: EventDeleteScope): Promise<void>;
+  /**
+   * Per account: whether its server keeps birthdays (calendar and reminders), and whether birthday
+   * events of its calendars can be moved into its contacts. Never searches for DAV servers.
+   */
+  birthdayFeatures(): Promise<BirthdayFeatures[]>;
+  /** The birthday events of an account's calendars, each with the contacts it may belong to. */
+  scanBirthdays(accountId: string): Promise<BirthdayScan>;
+  /**
+   * Moves found birthdays into the account's contacts; each event is deleted once its birthday is
+   * in the contact, never when that failed. Events left out stay as they are.
+   */
+  importBirthdays(accountId: string, entries: BirthdayImportEntry[]): Promise<BirthdayImportResult>;
 
   /** Whether any account has address books (see contactsAccounts); without one the contacts stay hidden. */
   contactsAvailable(): Promise<boolean>;

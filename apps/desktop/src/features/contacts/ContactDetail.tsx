@@ -1,6 +1,18 @@
 import clsx from "clsx";
 import type { LucideIcon } from "lucide-react";
-import { BookUser, Cake, ChevronLeft, Mail, MapPin, NotebookPen, Pencil, Phone, Trash } from "lucide-react";
+import {
+  Bell,
+  BookUser,
+  Cake,
+  ChevronLeft,
+  Heart,
+  Mail,
+  MapPin,
+  NotebookPen,
+  Pencil,
+  Phone,
+  Trash,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import type { ContactRecord } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -8,6 +20,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { useT } from "@/i18n";
 import { useUi } from "@/state/ui";
 import { ContactAvatar } from "./ContactAvatar";
+import { describeDay, reminderLabel } from "./DateFields";
 import { addressLines, formatBirthday } from "./format";
 import { useContactsUi } from "./state";
 import { useAddressBooks, useContacts } from "./useContactsData";
@@ -150,6 +163,22 @@ export function ContactDetail({
           {contact.birthday && (
             <Row icon={Cake} label={t("contacts.birthday")} kind={t("contacts.birthday")}>
               {formatBirthday(contact.birthday, i18n.language)}
+              <span className="block text-[12.5px] text-muted">
+                {describeDay(contact.birthday, "birth", i18n.language, t)}
+              </span>
+            </Row>
+          )}
+          {contact.anniversary && (
+            <Row icon={Heart} label={t("contacts.anniversary")} kind={t("contacts.anniversary")}>
+              {formatBirthday(contact.anniversary, i18n.language)}
+              <span className="block text-[12.5px] text-muted">
+                {describeDay(contact.anniversary, "wedding", i18n.language, t)}
+              </span>
+            </Row>
+          )}
+          {(contact.reminders?.length ?? 0) > 0 && (contact.birthday || contact.anniversary) && (
+            <Row icon={Bell} label={t("contacts.reminders")} kind={t("contacts.reminders")}>
+              {contact.reminders!.map((reminder) => reminderLabel(reminder, t)).join(", ")}
             </Row>
           )}
           {contact.note && (

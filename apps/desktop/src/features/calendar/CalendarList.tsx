@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Check, Ellipsis, Plus } from "lucide-react";
+import { Cake, Check, Ellipsis, Plus } from "lucide-react";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { CalendarInfo } from "@/backend/types";
@@ -13,6 +13,7 @@ import { useT } from "@/i18n";
 import { queryKeys, useAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { defaultCalendarAccount, groupByAccount, useCalendarAccounts } from "./accounts";
+import { BirthdayHint, BirthdayImportDialog, useBirthdayImportAccounts } from "./BirthdayImport";
 import { CALENDAR_COLORS, DEFAULT_COLOR } from "./format";
 import { useCalendars } from "./useCalendarData";
 
@@ -27,6 +28,8 @@ export function CalendarList() {
   const { data: sources = [] } = useCalendarAccounts();
   const [editing, setEditing] = useState<CalendarInfo | "new" | null>(null);
   const [deleting, setDeleting] = useState<CalendarInfo | null>(null);
+  const [importing, setImporting] = useState<string | null>(null);
+  const importable = useBirthdayImportAccounts();
   const groups = groupByAccount(calendars, accounts);
   // New calendars can go to every account with a calendar source.
   const creatable = accounts
@@ -59,9 +62,19 @@ export function CalendarList() {
     void run(() => backend().updateCalendar(calendar.id, { isVisible: !calendar.isVisible }));
   };
 
+  // Where birthdays are taken over: from the account's birthdays calendar, or any of its calendars
+  // while it has none yet.
+  const offersImport = (calendar: CalendarInfo) =>
+    importable.includes(calendar.accountId) &&
+    (calendar.isBirthdays || !calendars.some((c) => c.accountId === calendar.accountId && c.isBirthdays));
   const menuItems = (calendar: CalendarInfo): MenuItem[] => [
-    ...(calendar.mayWrite ? [{ label: t("calendar.editCalendar"), onSelect: () => setEditing(calendar) }] : []),
-    ...(!calendar.isDefault && calendar.mayWrite
+    ...(calendar.mayWrite || calendar.isBirthdays
+      ? [{ label: t("calendar.editCalendar"), onSelect: () => setEditing(calendar) }]
+      : []),
+    ...(offersImport(calendar)
+      ? [{ label: t("calendar.birthdays.import"), onSelect: () => setImporting(calendar.accountId) }]
+      : []),
+    ...(!calendar.isDefault && calendar.mayWrite && !calendar.isBirthdays
       ? [
           {
             label: t("calendar.makeDefault"),
@@ -74,7 +87,9 @@ export function CalendarList() {
         ]
       : []),
     // Every account keeps at least one calendar.
-    ...(calendar.mayDelete && calendars.filter((c) => c.accountId === calendar.accountId).length > 1
+    ...(calendar.mayDelete &&
+    !calendar.isBirthdays &&
+    calendars.filter((c) => c.accountId === calendar.accountId).length > 1
       ? [{ label: t("calendar.deleteCalendar"), danger: true, onSelect: () => setDeleting(calendar) }]
       : []),
   ];
@@ -93,6 +108,9 @@ export function CalendarList() {
           <IconButton icon={Plus} size="sm" label={t("calendar.newCalendar")} onClick={() => setEditing("new")} />
         )}
       </div>
+      {importable.map((accountId) => (
+        <BirthdayHint key={accountId} accountId={accountId} onOpen={() => setImporting(accountId)} />
+      ))}
       {groups.length > 1 ? (
         <ul className="flex flex-col gap-3">
           {groups.map((group) => (
@@ -128,7 +146,7 @@ export function CalendarList() {
                 () =>
                   editing === "new"
                     ? backend().createCalendar({ accountId, name, color })
-                    : backend().updateCalendar(editing.id, { name, color }),
+                    : backend().updateCalendar(editing.id, editing.isLocal ? { color } : { name, color }),
                 editing === "new" ? t("calendar.toast.calendarCreated", { name }) : undefined,
               );
               if (ok) setEditing(null);
@@ -137,6 +155,8 @@ export function CalendarList() {
           />
         )}
       </Dialog>
+
+      <BirthdayImportDialog accountId={importing} onClose={() => setImporting(null)} />
 
       <Dialog open={deleting !== null} onClose={() => setDeleting(null)} width="sm">
         {deleting && (
@@ -207,6 +227,7 @@ function CalendarRow({
         >
           {calendar.isVisible && <Check className="size-3 text-white" strokeWidth={3.5} />}
         </span>
+        {calendar.isBirthdays && <Cake className="size-3.5 shrink-0 text-muted" aria-hidden />}
         <span className={clsx("min-w-0 flex-1 truncate", !calendar.isVisible && "text-muted")}>{calendar.name}</span>
         {calendar.isDefault && (
           <span className="shrink-0 text-[11px] font-semibold text-muted">{t("calendar.default")}</span>
@@ -269,11 +290,20 @@ function CalendarForm({
       }}
     >
       <h2 className="text-lg font-bold">{calendar ? t("calendar.editCalendar") : t("calendar.newCalendar")}</h2>
-      <Field label={t("calendar.calendarName")} error={tried && empty ? t("calendar.problem.name") : undefined}>
-        {(id) => (
-          <TextInput id={id} autoFocus value={name} maxLength={255} onChange={(event) => setName(event.target.value)} />
-        )}
-      </Field>
+      {/* The app's own birthdays calendar keeps its name; its colour is this device's. */}
+      {!calendar?.isLocal && (
+        <Field label={t("calendar.calendarName")} error={tried && empty ? t("calendar.problem.name") : undefined}>
+          {(id) => (
+            <TextInput
+              id={id}
+              autoFocus
+              value={name}
+              maxLength={255}
+              onChange={(event) => setName(event.target.value)}
+            />
+          )}
+        </Field>
+      )}
       {!calendar && accounts.length > 1 && (
         <Field label={t("calendar.account")}>
           {(id) => (

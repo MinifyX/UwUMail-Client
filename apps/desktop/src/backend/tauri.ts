@@ -9,6 +9,10 @@ import type {
   AssistFeatures,
   AttachmentContent,
   BackendEvent,
+  BirthdayFeatures,
+  BirthdayImportEntry,
+  BirthdayImportResult,
+  BirthdayScan,
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
@@ -250,6 +254,18 @@ export class TauriBackend implements Backend {
 
   deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
     return call<void>("delete_event", { occurrenceId, scope });
+  }
+
+  birthdayFeatures() {
+    return call<BirthdayFeatures[]>("birthday_features");
+  }
+
+  scanBirthdays(accountId: string) {
+    return call<BirthdayScan>("scan_birthdays", { accountId });
+  }
+
+  importBirthdays(accountId: string, entries: BirthdayImportEntry[]) {
+    return call<BirthdayImportResult>("import_birthdays", { accountId, entries });
   }
 
   /**

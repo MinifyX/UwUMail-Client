@@ -473,6 +473,13 @@ pub struct CalendarInfo {
     pub sort_order: i64,
     pub may_write: bool,
     pub may_delete: bool,
+    /// A birthdays calendar made from the contacts: read-only, its events open their contact.
+    #[serde(default)]
+    pub is_birthdays: bool,
+    /// Kept only on this device (the birthdays calendar of a CardDAV mailbox): its colour and
+    /// visibility are this device's; it can't be renamed, shared or deleted.
+    #[serde(default)]
+    pub is_local: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -535,6 +542,9 @@ pub struct CalendarOccurrence {
     pub recurrence_id: Option<String>,
     pub read_only: bool,
     pub color: Option<String>,
+    /// An event of a birthdays calendar: whose date it is, and how old or how many years.
+    #[serde(default)]
+    pub birthday: Option<crate::birthdays::OccurrenceBirthday>,
 }
 
 /// An event as the editor fills it in.

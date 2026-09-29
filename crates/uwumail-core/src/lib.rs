@@ -6,6 +6,7 @@
 
 pub mod attachments;
 pub mod autoconfig;
+pub mod birthdays;
 pub mod calendar;
 pub mod contacts;
 pub mod engine;

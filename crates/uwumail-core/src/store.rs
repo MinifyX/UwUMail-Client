@@ -189,6 +189,11 @@ CREATE TABLE address_book_prefs (
 ALTER TABLE accounts ADD COLUMN caldav_none_at INTEGER;
 ALTER TABLE accounts ADD COLUMN carddav_none_at INTEGER;
 "#,
+    r#"
+-- Birthdays: the colour this device gives a calendar it keeps the settings of (the birthdays
+-- calendar the app makes from a CardDAV mailbox's contacts).
+ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
+"#,
 ];
 
 /// What this device remembers about one calendar.
@@ -519,6 +524,24 @@ impl Store {
             "INSERT INTO calendar_prefs (calendar_id, account_id, is_default) VALUES (?1, ?2, 1)
              ON CONFLICT (calendar_id) DO UPDATE SET is_default = 1",
             params![calendar_id, account_id],
+        )?;
+        Ok(())
+    }
+
+    /// The colour this device gives a calendar, if it gives one.
+    pub fn calendar_color(&self, calendar_id: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn()
+            .query_row("SELECT color FROM calendar_prefs WHERE calendar_id = ?1", [calendar_id], |row| row.get(0))
+            .optional()?
+            .flatten())
+    }
+
+    pub fn set_calendar_color(&self, account_id: &str, calendar_id: &str, color: Option<&str>) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO calendar_prefs (calendar_id, account_id, color) VALUES (?1, ?2, ?3)
+             ON CONFLICT (calendar_id) DO UPDATE SET color = excluded.color",
+            params![calendar_id, account_id, color],
         )?;
         Ok(())
     }

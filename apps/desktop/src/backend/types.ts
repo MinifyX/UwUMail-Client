@@ -323,6 +323,13 @@ export interface CalendarInfo {
   sortOrder: number;
   mayWrite: boolean;
   mayDelete: boolean;
+  /** A birthdays calendar made from the contacts: read-only, its events open their contact. */
+  isBirthdays?: boolean;
+  /**
+   * Kept only on this device (the birthdays calendar the app makes for a mailbox whose server has
+   * none): its colour and visibility are this device's; it can't be renamed or deleted.
+   */
+  isLocal?: boolean;
 }
 
 export type Weekday = "mo" | "tu" | "we" | "th" | "fr" | "sa" | "su";
@@ -352,6 +359,70 @@ export interface CalendarOccurrence {
   recurrenceId: string | null;
   readOnly: boolean; // no write right or not the origin
   color: string | null;
+  /** An event of a birthdays calendar: whose date it is, and how old or how many years. */
+  birthday?: OccurrenceBirthday | null;
+}
+
+/** What a birthdays calendar event is for (the server's `uwuBirthday`, or the app's own). */
+export interface OccurrenceBirthday {
+  contactId: string;
+  kind: "birth" | "wedding" | "other";
+  /** The label of an "other" date ("Kennenlerntag"). */
+  label: string | null;
+  name: string;
+  /** The year it happened; null when the card doesn't say. */
+  year: number | null;
+  /** The age (or years) on this occurrence; null without a year or in the year itself. */
+  age: number | null;
+}
+
+/** A contact's reminder of their birthday and anniversary: days before, at a time of day ("09:00"). */
+export interface BirthdayReminder {
+  daysBefore: number;
+  time: string;
+}
+
+/** What birthdays can do for an account. */
+export interface BirthdayFeatures {
+  accountId: string;
+  /** Its server keeps the birthdays calendar and per-contact reminders (a UwUMail server). */
+  server: boolean;
+  /** Birthday events of its calendars can be moved into its contacts. */
+  import: boolean;
+}
+
+/** How a birthday event of another calendar fits the contacts (see Backend.scanBirthdays). */
+export type BirthdayMatch = "matched" | "known" | "conflict" | "ambiguous" | "unmatched";
+
+/** A birthday found as an event in one of the calendars, with the contacts it may belong to. */
+export interface BirthdayCandidate {
+  eventId: string;
+  calendarId: string;
+  title: string;
+  /** The name read from the title. */
+  name: string;
+  /** "YYYY-MM-DD", or "--MM-DD" without a year. */
+  birthday: string;
+  /** The event can be deleted afterwards (not in a subscribed or read-only calendar). */
+  mayDeleteEvent: boolean;
+  match: BirthdayMatch;
+  /** The contacts it may belong to, the match first. */
+  contacts: { contactId: string; name: string; birthday: string | null }[];
+}
+
+export interface BirthdayScan {
+  candidates: BirthdayCandidate[];
+  /** There were more than one scan looks at. */
+  truncated: boolean;
+}
+
+/** What to do with one found birthday: into a contact, or into a new one with this name. */
+export type BirthdayImportEntry =
+  { eventId: string; contactId: string; overwrite?: boolean } | { eventId: string; newContactName: string };
+
+export interface BirthdayImportResult {
+  imported: { eventId: string; contactId: string; created: boolean; eventDeleted: boolean }[];
+  failed: { eventId: string; reason: string }[];
 }
 
 export interface EventInput {
@@ -435,6 +506,10 @@ export interface ContactRecord {
   addresses: ContactPostal[];
   /** "YYYY-MM-DD", or "--MM-DD" when the year isn't known. */
   birthday: string | null;
+  /** The wedding anniversary, the same way. */
+  anniversary?: string | null;
+  /** Reminders of the birthday and anniversary (a UwUMail server rings them); none by default. */
+  reminders?: BirthdayReminder[];
   note: string;
   /** A picture to show (a data: or https: URL); pictures can't be changed here yet. */
   photo: string | null;
@@ -455,6 +530,11 @@ export interface ContactInput {
   /** Left as it was when `birthdayChanged` is false. */
   birthday: string | null;
   birthdayChanged: boolean;
+  /** Left as it was when `anniversaryChanged` isn't true. */
+  anniversary?: string | null;
+  anniversaryChanged?: boolean;
+  /** Left as they were when undefined. */
+  reminders?: BirthdayReminder[];
   note: string;
 }
 

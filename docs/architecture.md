@@ -44,6 +44,7 @@ and reused (CLI, future sync server).
 | `contacts` | Address books over JMAP Contacts or CardDAV; recipient suggestions also learn from sent and received mail |
 | `mail_images`, `image_size` | Remote pictures of mail for the reader (`uwuimg:`): fair, quick fetching, a small memory cache, and their sizes before they show |
 | `ocr` | Text in a mail's pictures: limits, picture sizes, the UwUMail server's `Email/imageText` answer mapped to the app's ids, the `TextRecognizer` the platform hands in (see [Text in pictures](#text-in-pictures)) |
+| `birthdays` | Birthdays and anniversaries of the contacts: the server's birthdays calendar, a local one for other mailboxes, and moving birthday events into contacts |
 
 The mail server is always the source of truth. The local store is a cache that
 can be deleted at any time and rebuilt.
@@ -149,6 +150,37 @@ and over CardDAV the engine applies it to the card read just before and writes i
 back with `If-Match`. Recipient suggestions list the address books first, then
 the addresses learned from mail. `tests/carddav_hostile.rs` covers discovery,
 reading, writing and hostile answers against local stubs.
+
+### Birthdays
+
+Birthdays follow UwUMail-Server `docs/birthdays.md` (0.18.0) and look like the
+webmail's (`birthdays/`, `engine/birthday_ops.rs`, `features/calendar/BirthdayImport.tsx`).
+
+- **UwUMail server:** the server keeps a read-only calendar with a yearly event
+  per birthday and anniversary (`uwuBirthdays` on the calendar). Its events
+  carry `uwuBirthday` (contact, kind, label, year), from which the app works out
+  the age of each year and titles like "Mia Mood (27)" in the app's language.
+  With `urn:uwumail:jmap:birthdays`, `Birthdays/scan` finds birthday events in
+  the other calendars and `Birthdays/import` moves them into contacts; the
+  server deletes the event in the same transaction. Imports go out in parts of
+  200. Reminders per contact (`uwuReminders`) are sent by the server as mail, so
+  the editor offers them only for these accounts.
+- **Other mailboxes (CardDAV):** the app makes a read-only calendar
+  `account:uwu-birthdays` from the account's cards, only while one of them has a
+  date. Its colour and whether it's shown are kept on this device
+  (`calendar_prefs.color` and `hidden`); its name is the app's.
+  The scan reads the CalDAV calendars itself with the server's rules (all-day and
+  yearly or marked as a birthday; at most 20,000 events, 1,000 finds and 10
+  contacts per find). An import writes the card first and then deletes the event
+  with its ETag, so a failed delete leaves the event but never loses the date.
+  There are no reminders for these accounts: nothing would send them while the
+  app is closed.
+
+Dates come from JSContact `anniversaries` (birth and wedding) and from Apple's
+`X-ABDATE`; a year of 0 or 1604 or `X-APPLE-OMIT-YEAR` means "no year". A
+birthday on 29 February falls on 28 February in other years. Every place that
+shows a birthday shows the age: the calendar views with a cake, the event
+popover with a button to the contact, the contact list and the contact page.
 
 ### `apps/desktop/src-tauri` — the shell
 

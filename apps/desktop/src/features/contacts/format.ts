@@ -46,7 +46,9 @@ export function formatBirthday(birthday: string, locale: string): string {
   if (!match) return birthday;
   const [, year, month, day] = match;
   const withYear = year !== "-";
-  const date = new Date(Date.UTC(withYear ? Number(year) : 2000, Number(month) - 1, Number(day)));
+  // setUTCFullYear, since Date.UTC takes the years 0 to 99 for 1900 to 1999.
+  const date = new Date(0);
+  date.setUTCFullYear(withYear ? Number(year) : 2000, Number(month) - 1, Number(day));
   return date.toLocaleDateString(locale, {
     day: "numeric",
     month: "long",
@@ -79,6 +81,8 @@ export function inputFrom(contact: ContactRecord | null, bookId: string, draft?:
       addresses: contact.addresses.map((postal) => ({ ...postal })),
       birthday: contact.birthday,
       birthdayChanged: false,
+      anniversary: contact.anniversary ?? null,
+      anniversaryChanged: false,
       note: contact.note,
     };
   }
@@ -93,6 +97,8 @@ export function inputFrom(contact: ContactRecord | null, bookId: string, draft?:
     addresses: [],
     birthday: null,
     birthdayChanged: false,
+    anniversary: null,
+    anniversaryChanged: false,
     note: draft?.note ?? "",
   };
 }

@@ -16,6 +16,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::broadcast::error::RecvError;
 use uwumail_core::attachments::AttachmentFile;
+use uwumail_core::birthdays::scan::{BirthdayFeatures, BirthdayImportEntry, BirthdayImportResult, BirthdayScan};
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
 use uwumail_core::pictures::SenderPicture;
@@ -143,6 +144,28 @@ async fn calendar_events(
     time_zone: String,
 ) -> CommandResult<Vec<CalendarOccurrence>> {
     engine.calendar_events(&from, &to, &time_zone).await
+}
+
+/// Per account: whether its server keeps birthdays, and whether birthday events can be moved into contacts.
+#[tauri::command]
+async fn birthday_features(engine: State<'_, Engine>) -> CommandResult<Vec<BirthdayFeatures>> {
+    engine.birthday_features().await
+}
+
+/// The birthday events of an account's calendars, each with the contacts it may belong to.
+#[tauri::command]
+async fn scan_birthdays(engine: State<'_, Engine>, account_id: String) -> CommandResult<BirthdayScan> {
+    engine.scan_birthdays(&account_id).await
+}
+
+/// Moves found birthdays into contacts; the events go once their birthday is in the contact.
+#[tauri::command]
+async fn import_birthdays(
+    engine: State<'_, Engine>,
+    account_id: String,
+    entries: Vec<BirthdayImportEntry>,
+) -> CommandResult<BirthdayImportResult> {
+    engine.import_birthdays(&account_id, entries).await
 }
 
 #[tauri::command]
@@ -799,6 +822,9 @@ pub fn run() {
             delete_calendar,
             set_default_calendar,
             calendar_events,
+            birthday_features,
+            scan_birthdays,
+            import_birthdays,
             create_event,
             update_event,
             delete_event,
