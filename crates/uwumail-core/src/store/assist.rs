@@ -72,6 +72,33 @@ ALTER TABLE assist_providers ADD COLUMN output_price REAL;
 ALTER TABLE assist_usage ADD COLUMN cost_usd REAL;
 "#;
 
+/// What AI requests on this device really take: reasoning (apart from the answer), prompt tokens
+/// read from the provider's cache (part of the input) and the calls made; and the last 50 calls per
+/// provider, model and feature with what was expected, so estimates learn from them. No mail
+/// content in there.
+pub(super) const COST_MIGRATION: &str = r#"
+ALTER TABLE assist_usage ADD COLUMN reasoning_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE assist_usage ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE assist_usage ADD COLUMN calls INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE assist_calibration (
+    id INTEGER PRIMARY KEY,
+    provider_id TEXT NOT NULL,
+    model TEXT NOT NULL,
+    feature TEXT NOT NULL,
+    estimated_input INTEGER NOT NULL,
+    estimated_output INTEGER NOT NULL,
+    estimated_reasoning INTEGER NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    reasoning_tokens INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX assist_calibration_key ON assist_calibration (provider_id, model, feature, id);
+"#;
+
+/// Calls kept per provider, model and feature for calibration.
+const CALIBRATION_KEPT: i64 = 50;
+
 /// Keywords as the messages table keeps them.
 pub(super) fn keywords_text(keywords: &[String]) -> String {
     let mut list: Vec<String> = keywords.iter().map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).collect();
@@ -131,8 +158,24 @@ pub struct UsageRecord {
     pub requests: u64,
     pub input_tokens: u64,
     pub output_tokens: u64,
+    /// Thinking, apart from `output_tokens`.
+    pub reasoning_tokens: u64,
+    /// Of `input_tokens`, read from the provider's cache.
+    pub cached_tokens: u64,
+    /// Requests sent to the provider.
+    pub calls: u64,
     /// What it cost in USD at the time; `None` where the price was unknown.
     pub cost_usd: Option<f64>,
+}
+
+/// One real call for calibration: what was expected and what the provider reported.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CalibrationRecord {
+    pub provider_id: String,
+    pub model: String,
+    pub feature: String,
+    pub sample: crate::assist::estimate::Sample,
+    pub created_at: i64,
 }
 
 const LOG_COLUMNS: &str =
@@ -481,11 +524,15 @@ impl Store {
     pub fn add_assist_usage(&self, row: &UsageRecord) -> Result<()> {
         self.conn().execute(
             "INSERT INTO assist_usage
-                (day, provider_id, provider_name, feature, requests, input_tokens, output_tokens, cost_usd)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                (day, provider_id, provider_name, feature, requests, input_tokens, output_tokens, cost_usd,
+                 reasoning_tokens, cached_tokens, calls)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT (day, provider_id, feature) DO UPDATE SET requests = requests + excluded.requests,
                 input_tokens = input_tokens + excluded.input_tokens,
                 output_tokens = output_tokens + excluded.output_tokens, provider_name = excluded.provider_name,
+                reasoning_tokens = reasoning_tokens + excluded.reasoning_tokens,
+                cached_tokens = cached_tokens + excluded.cached_tokens,
+                calls = calls + excluded.calls,
                 cost_usd = CASE WHEN excluded.cost_usd IS NULL THEN cost_usd
                                 ELSE COALESCE(cost_usd, 0) + excluded.cost_usd END",
             params![
@@ -496,7 +543,10 @@ impl Store {
                 row.requests as i64,
                 row.input_tokens as i64,
                 row.output_tokens as i64,
-                row.cost_usd
+                row.cost_usd,
+                row.reasoning_tokens as i64,
+                row.cached_tokens as i64,
+                row.calls as i64
             ],
         )?;
         Ok(())
@@ -506,22 +556,90 @@ impl Store {
     pub fn assist_usage(&self, since: &str) -> Result<Vec<UsageRecord>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT day, provider_id, provider_name, feature, requests, input_tokens, output_tokens, cost_usd
+            "SELECT day, provider_id, provider_name, feature, requests, input_tokens, output_tokens, cost_usd,
+                    reasoning_tokens, cached_tokens, calls
              FROM assist_usage WHERE day >= ?1 ORDER BY day DESC, provider_name, feature",
         )?;
+        let count = |row: &rusqlite::Row<'_>, index: usize| row.get::<_, i64>(index).map(|n| n.max(0) as u64);
         let rows = stmt.query_map([since], |row| {
             Ok(UsageRecord {
                 day: row.get(0)?,
                 provider_id: row.get(1)?,
                 provider_name: row.get(2)?,
                 feature: row.get(3)?,
-                requests: row.get::<_, i64>(4)?.max(0) as u64,
-                input_tokens: row.get::<_, i64>(5)?.max(0) as u64,
-                output_tokens: row.get::<_, i64>(6)?.max(0) as u64,
+                requests: count(row, 4)?,
+                input_tokens: count(row, 5)?,
+                output_tokens: count(row, 6)?,
                 cost_usd: row.get(7)?,
+                reasoning_tokens: count(row, 8)?,
+                cached_tokens: count(row, 9)?,
+                calls: count(row, 10)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Keeps a real call for calibration; only the latest 50 per provider, model and feature stay.
+    pub fn add_assist_calibration(&self, record: &CalibrationRecord) -> Result<()> {
+        let conn = self.conn();
+        let sample = &record.sample;
+        conn.execute(
+            "INSERT INTO assist_calibration (provider_id, model, feature, estimated_input, estimated_output,
+                estimated_reasoning, input_tokens, output_tokens, reasoning_tokens, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                record.provider_id,
+                record.model,
+                record.feature,
+                sample.estimated_input as i64,
+                sample.estimated_output as i64,
+                sample.estimated_reasoning as i64,
+                sample.input as i64,
+                sample.output as i64,
+                sample.reasoning as i64,
+                record.created_at
+            ],
+        )?;
+        conn.execute(
+            "DELETE FROM assist_calibration WHERE provider_id = ?1 AND model = ?2 AND feature = ?3 AND id NOT IN
+                (SELECT id FROM assist_calibration WHERE provider_id = ?1 AND model = ?2 AND feature = ?3
+                 ORDER BY id DESC LIMIT ?4)",
+            params![record.provider_id, record.model, record.feature, CALIBRATION_KEPT],
+        )?;
+        Ok(())
+    }
+
+    /// The latest calls of a provider, model and feature, newest first.
+    pub fn assist_calibration(
+        &self,
+        provider_id: &str,
+        model: &str,
+        feature: &str,
+    ) -> Result<Vec<crate::assist::estimate::Sample>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT estimated_input, estimated_output, estimated_reasoning, input_tokens, output_tokens,
+                    reasoning_tokens
+             FROM assist_calibration WHERE provider_id = ?1 AND model = ?2 AND feature = ?3
+             ORDER BY id DESC LIMIT ?4",
+        )?;
+        let count = |row: &rusqlite::Row<'_>, index: usize| row.get::<_, i64>(index).map(|n| n.max(0) as u64);
+        let rows = stmt.query_map(params![provider_id, model, feature, CALIBRATION_KEPT], |row| {
+            Ok(crate::assist::estimate::Sample {
+                estimated_input: count(row, 0)?,
+                estimated_output: count(row, 1)?,
+                estimated_reasoning: count(row, 2)?,
+                input: count(row, 3)?,
+                output: count(row, 4)?,
+                reasoning: count(row, 5)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Calibration of a provider that is gone.
+    pub fn forget_assist_calibration(&self, provider_id: &str) -> Result<usize> {
+        Ok(self.conn().execute("DELETE FROM assist_calibration WHERE provider_id = ?1", [provider_id])?)
     }
 
     /// Usage older than `before` (a UTC day) goes.
@@ -629,6 +747,9 @@ mod tests {
             requests: 1,
             input_tokens: 10,
             output_tokens: 5,
+            reasoning_tokens: 7,
+            cached_tokens: 2,
+            calls: 1,
             cost_usd: Some(0.25),
         };
         store.add_assist_usage(&row).unwrap();
@@ -637,11 +758,35 @@ mod tests {
         store.add_assist_usage(&UsageRecord { cost_usd: None, ..row.clone() }).unwrap();
         let rows = store.assist_usage("2026-09-01").unwrap();
         assert_eq!((rows[0].requests, rows[0].input_tokens), (3, 30));
+        assert_eq!((rows[0].reasoning_tokens, rows[0].cached_tokens, rows[0].calls), (21, 6, 3));
         assert_eq!(rows[0].cost_usd, Some(0.5));
         store.add_assist_usage(&UsageRecord { feature: "compose".into(), cost_usd: None, ..row.clone() }).unwrap();
         let unknown = store.assist_usage("2026-09-01").unwrap().into_iter().find(|r| r.feature == "compose").unwrap();
         assert_eq!(unknown.cost_usd, None);
         assert!(store.assist_usage("2026-09-30").unwrap().is_empty());
+    }
+
+    #[test]
+    fn calibration_keeps_the_latest_fifty() {
+        let (store, _) = store();
+        let record = |n: u64, model: &str| CalibrationRecord {
+            provider_id: "p1".into(),
+            model: model.into(),
+            feature: "spamCheck".into(),
+            sample: crate::assist::estimate::Sample { estimated_input: 100, input: n, ..Default::default() },
+            created_at: n as i64,
+        };
+        for n in 1..=60 {
+            store.add_assist_calibration(&record(n, "small")).unwrap();
+        }
+        store.add_assist_calibration(&record(7, "big")).unwrap();
+        let samples = store.assist_calibration("p1", "small", "spamCheck").unwrap();
+        assert_eq!(samples.len(), 50);
+        assert_eq!((samples[0].input, samples[49].input), (60, 11), "newest first");
+        assert_eq!(store.assist_calibration("p1", "big", "spamCheck").unwrap().len(), 1);
+        assert!(store.assist_calibration("p1", "small", "summarize").unwrap().is_empty());
+        store.forget_assist_calibration("p1").unwrap();
+        assert!(store.assist_calibration("p1", "big", "spamCheck").unwrap().is_empty());
     }
 
     #[test]

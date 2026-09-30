@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 
+use super::estimate::{self, Call, Estimate, Sample};
 use super::prices::{self, Price, PriceTable};
 use super::prompts::Prompt;
 use super::provider::{self, ChatAnswer, ChatMessage, ChatRequest, Endpoint, JsonSchema, ProviderKind, Role};
@@ -17,7 +18,7 @@ use super::validate::label_keyword;
 use super::{Feature, Label};
 use crate::error::{Error, Result};
 use crate::secrets::{Secret, SecretStore};
-use crate::store::{ProviderRecord, Store, UsageRecord};
+use crate::store::{CalibrationRecord, ProviderRecord, Store, UsageRecord};
 
 pub const MAX_PROVIDERS: usize = 10;
 pub const MAX_LABELS: usize = 30;
@@ -283,6 +284,7 @@ impl Device<'_> {
     pub fn delete_provider(&self, id: &str) -> Result<()> {
         self.provider(id)?;
         self.store.delete_assist_provider(id)?;
+        self.store.forget_assist_calibration(id)?;
         self.secrets.delete(&secret_id(id))?;
         for key in std::iter::once("default".to_string())
             .chain(Feature::ALL.iter().map(|f| format!("features/{}", f.as_str())))
@@ -546,16 +548,56 @@ impl Device<'_> {
 
     // ------------------------------------------------------------------ usage
 
-    pub fn record_usage(&self, effective: &Effective, feature: Feature, answer: Option<&ChatAnswer>) -> Result<()> {
+    /// The main call of a request as the heuristic expects it: the prompt with the API's framing,
+    /// a typical answer of `output` tokens, and thinking for a model that thinks.
+    pub fn heuristic(&self, effective: &Effective, prompt: &Prompt, output: u64) -> Call {
+        let price = self.price_of(&effective.provider, &effective.model);
+        let sheet = price.as_ref().map(|price| &price.sheet);
+        let listed = sheet.is_some_and(|sheet| sheet.supports_reasoning);
+        let reasons = estimate::thinks(effective.kind, &effective.model, listed);
+        estimate::heuristic_call(effective.kind, prompt, output, reasons, sheet.and_then(|s| s.max_output_tokens))
+    }
+
+    /// What recent real calls teach about this provider, model and feature; `None` with too few.
+    pub fn calibration(&self, effective: &Effective, feature: Feature) -> Result<Option<estimate::Calibration>> {
+        let samples = self.store.assist_calibration(&effective.provider.id, &effective.model, feature.as_str())?;
+        Ok(estimate::calibration(&samples))
+    }
+
+    /// Every call a request of `feature` with this prompt makes, calibrated where possible. On this
+    /// device that is one: pictures are read here (for free), a thread is summarized in one go,
+    /// and an answer that isn't usable is not asked for again. A request refused for its answer
+    /// format is asked once more, but refused requests cost nothing.
+    pub fn estimate(&self, effective: &Effective, feature: Feature, prompt: &Prompt, output: u64) -> Result<Estimate> {
+        let call = self.heuristic(effective, prompt, output);
+        Ok(match self.calibration(effective, feature)? {
+            Some(calibration) => Estimate { calls: vec![call.calibrated(&calibration)], calibrated: true },
+            None => Estimate { calls: vec![call], calibrated: false },
+        })
+    }
+
+    /// Counts a request: its tokens and what it really cost; with `expected` (the heuristic's
+    /// call), also for calibration.
+    pub fn record_usage(
+        &self,
+        effective: &Effective,
+        feature: Feature,
+        answer: Option<&ChatAnswer>,
+        expected: Option<&Call>,
+    ) -> Result<()> {
         let usage = answer.and_then(|a| a.usage);
         let estimate = answer.map_or(0, |a| a.text.chars().count() as u64 / 4);
         let input_tokens = usage.map_or(0, |u| u.input_tokens);
         let output_tokens = usage.map_or(estimate, |u| u.output_tokens);
-        // What it cost, at today's price; unknown when the provider didn't say how much it read.
-        let cost_usd = self
-            .price_of(&effective.provider, &effective.model)
-            .filter(|price| usage.is_some() || price.source == prices::PriceSource::Free)
-            .map(|price| price.usd(input_tokens, output_tokens));
+        // What it cost: the provider's own figure, else today's price of what it reported; unknown
+        // when the provider didn't say how much it read.
+        let price = self.price_of(&effective.provider, &effective.model);
+        let cost_usd = match (usage, price) {
+            (Some(usage), _) if usage.cost_usd.is_some() => usage.cost_usd,
+            (Some(usage), Some(price)) => Some(price.actual_usd(&usage)),
+            (None, Some(price)) if price.source == prices::PriceSource::Free => Some(0.0),
+            _ => None,
+        };
         let day = utc_day(now());
         self.store.add_assist_usage(&UsageRecord {
             day,
@@ -565,8 +607,29 @@ impl Device<'_> {
             requests: 1,
             input_tokens,
             output_tokens,
+            reasoning_tokens: usage.map_or(0, |u| u.reasoning_tokens),
+            cached_tokens: usage.map_or(0, |u| u.cached_tokens),
+            calls: answer.map_or(1, |a| a.calls.max(1)),
             cost_usd,
         })?;
+        if let (Some(usage), Some(expected)) = (usage, expected)
+            && usage.input_tokens > 0
+        {
+            self.store.add_assist_calibration(&CalibrationRecord {
+                provider_id: effective.provider.id.clone(),
+                model: effective.model.clone(),
+                feature: feature.as_str().into(),
+                sample: Sample {
+                    estimated_input: expected.input,
+                    estimated_output: expected.output,
+                    estimated_reasoning: expected.reasoning,
+                    input: usage.input_tokens,
+                    output: usage.output_tokens,
+                    reasoning: usage.reasoning_tokens,
+                },
+                created_at: now(),
+            })?;
+        }
         let _ = self.store.forget_assist_usage_before(&utc_day(now() - USAGE_DAYS * 86_400));
         Ok(())
     }
@@ -597,7 +660,7 @@ impl Device<'_> {
         for row in rows.iter().filter(|row| row.day == today) {
             let entry = per_provider.entry(row.provider_id.clone()).or_insert((row.provider_name.clone(), 0, 0, None));
             entry.1 += row.requests;
-            entry.2 += row.input_tokens + row.output_tokens;
+            entry.2 += row.input_tokens + row.output_tokens + row.reasoning_tokens;
             if let Some(usd) = row.cost_usd {
                 entry.3 = Some(entry.3.unwrap_or(0.0) + usd);
             }
@@ -615,7 +678,8 @@ impl Device<'_> {
             .map(|row| {
                 json!({ "day": row.day, "providerId": row.provider_id, "providerName": row.provider_name,
                         "feature": row.feature, "requests": row.requests, "inputTokens": row.input_tokens,
-                        "outputTokens": row.output_tokens, "cost": cost(row.cost_usd) })
+                        "outputTokens": row.output_tokens, "reasoningTokens": row.reasoning_tokens,
+                        "cost": cost(row.cost_usd) })
             })
             .collect();
         Ok(json!({ "days": days, "today": today_list }))
@@ -624,11 +688,14 @@ impl Device<'_> {
     // ---------------------------------------------------------------- asking
 
     /// Asks the model a feature uses, counts the request and answers with who answered.
+    /// `typical_output` is the answer's expected size (see `estimate::output_tokens`), which the
+    /// real call is compared with to calibrate later estimates.
     pub async fn ask(
         &self,
         http: &reqwest::Client,
         feature: Feature,
         prompt: &Prompt,
+        typical_output: u64,
         on_delta: Option<&mut (dyn FnMut(&str) + Send)>,
     ) -> Result<(ChatAnswer, Effective)> {
         let effective = self
@@ -643,8 +710,9 @@ impl Device<'_> {
             json_schema: prompt.schema.as_ref().map(|(name, schema)| JsonSchema { name, schema: schema.clone() }),
             temperature: None,
         };
+        let expected = self.heuristic(&effective, prompt, typical_output);
         let answer = provider::chat(http, &endpoint, &request, on_delta).await;
-        self.record_usage(&effective, feature, answer.as_ref().ok())?;
+        self.record_usage(&effective, feature, answer.as_ref().ok(), Some(&expected))?;
         Ok((answer?, effective))
     }
 }

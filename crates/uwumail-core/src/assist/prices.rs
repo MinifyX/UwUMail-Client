@@ -40,8 +40,102 @@ const FETCH_WAIT: Duration = Duration::from_secs(20);
 /// LiteLLM's list is a few megabytes; nothing bigger is read.
 const MAX_BYTES: usize = 24 * 1024 * 1024;
 
-/// USD per token, input and output.
-pub type TokenPrice = (f64, f64);
+/// A price above a prompt size: LiteLLM's `input_cost_per_token_above_128k_tokens` and the like.
+/// USD per token; `None` keeps the base price.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Tier {
+    /// Prompt tokens above which this price applies.
+    pub above: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<f64>,
+}
+
+fn is_zero(value: &f64) -> bool {
+    *value == 0.0
+}
+
+/// Everything a model's call can cost, USD per token unless named otherwise. Missing fields cost
+/// nothing, and reasoning costs what output does.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PriceSheet {
+    pub input: f64,
+    pub output: f64,
+    /// Thinking tokens, where priced apart from the answer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<f64>,
+    /// Prompt tokens read from the provider's cache; `None`: like input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_read: Option<f64>,
+    /// Prompt tokens written to the provider's cache; `None`: like input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_write: Option<f64>,
+    /// USD per request.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub per_request: f64,
+    /// USD per picture sent along.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub per_image: f64,
+    /// USD per web search the model makes.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub web_search_per_query: f64,
+    /// Prices above a prompt size, smallest threshold first.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tiers: Vec<Tier>,
+    /// The model thinks before it answers (and bills that).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub supports_reasoning: bool,
+    /// The most the model writes in one answer, reasoning included.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u64>,
+}
+
+impl PriceSheet {
+    /// Input and output per token for a prompt of this size: the highest tier it crosses.
+    pub fn rates(&self, prompt_tokens: u64) -> (f64, f64) {
+        let tier = self.tiers.iter().rev().find(|tier| prompt_tokens > tier.above);
+        (tier.and_then(|t| t.input).unwrap_or(self.input), tier.and_then(|t| t.output).unwrap_or(self.output))
+    }
+
+    /// Reasoning per token for a prompt of this size.
+    pub fn reasoning_rate(&self, prompt_tokens: u64) -> f64 {
+        self.reasoning.unwrap_or_else(|| self.rates(prompt_tokens).1)
+    }
+
+    pub fn is_free(&self) -> bool {
+        self.input == 0.0
+            && self.output == 0.0
+            && self.reasoning.unwrap_or(0.0) == 0.0
+            && self.per_request == 0.0
+            && self.per_image == 0.0
+    }
+}
+
+/// A price list's entry as stored before 0.6.0-beta.4 (input and output per token), or now.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum StoredSheet {
+    Pair(f64, f64),
+    Full(Box<PriceSheet>),
+}
+
+/// Reads the price sheets of a stored table, old pairs included.
+fn stored_sheets<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<HashMap<String, PriceSheet>, D::Error> {
+    let stored = HashMap::<String, StoredSheet>::deserialize(deserializer)?;
+    Ok(stored
+        .into_iter()
+        .map(|(name, sheet)| {
+            let sheet = match sheet {
+                StoredSheet::Pair(input, output) => PriceSheet { input, output, ..PriceSheet::default() },
+                StoredSheet::Full(sheet) => *sheet,
+            };
+            (name, sheet)
+        })
+        .collect())
+}
 
 /// The prices and rates as last fetched.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -53,23 +147,26 @@ pub struct PriceTable {
     #[serde(default)]
     pub attempted_at: i64,
     /// LiteLLM's models by lower-case name.
-    #[serde(default)]
-    pub models: HashMap<String, TokenPrice>,
+    #[serde(default, deserialize_with = "stored_sheets")]
+    pub models: HashMap<String, PriceSheet>,
     /// OpenRouter's models by lower-case id.
-    #[serde(default)]
-    pub openrouter: HashMap<String, TokenPrice>,
+    #[serde(default, deserialize_with = "stored_sheets")]
+    pub openrouter: HashMap<String, PriceSheet>,
     /// Units of a currency per euro (ECB), `EUR` itself included.
     #[serde(default)]
     pub rates: HashMap<String, f64>,
 }
 
-/// A model's price as the page shows it: USD per million tokens, and where it comes from.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+/// A model's price as the page shows it: USD per million tokens, and where it comes from. The
+/// whole sheet stays on this side.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Price {
     pub input_per_million: f64,
     pub output_per_million: f64,
     pub source: PriceSource,
+    #[serde(skip)]
+    pub sheet: PriceSheet,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -81,9 +178,101 @@ pub enum PriceSource {
 }
 
 impl Price {
-    /// USD for so many tokens.
+    /// USD for so many tokens in and out (one request, no reasoning, nothing cached).
     pub fn usd(&self, input_tokens: u64, output_tokens: u64) -> f64 {
-        (input_tokens as f64 * self.input_per_million + output_tokens as f64 * self.output_per_million) / 1_000_000.0
+        self.parts(&Tokens { input: input_tokens, output: output_tokens, requests: 1, ..Tokens::default() }).total()
+    }
+
+    /// What a call really cost by the provider's report: its own figure when it gives one
+    /// (OpenRouter), else the tokens (cached ones at the cache's price, reasoning apart) and the
+    /// request's fee. Requests the provider refused for a request field cost nothing.
+    pub fn actual_usd(&self, usage: &super::provider::TokenUsage) -> f64 {
+        if let Some(cost) = usage.cost_usd {
+            return cost;
+        }
+        let tokens = Tokens {
+            input: usage.input_tokens,
+            output: usage.output_tokens,
+            reasoning: usage.reasoning_tokens,
+            cache_read: usage.cached_tokens,
+            cache_write: usage.cache_write_tokens,
+            requests: 1,
+            prompt_size: usage.input_tokens,
+            ..Tokens::default()
+        };
+        self.parts(&tokens).total()
+    }
+
+    /// What so many tokens cost, part by part.
+    pub fn parts(&self, tokens: &Tokens) -> CostParts {
+        let sheet = &self.sheet;
+        let (input_rate, output_rate) = sheet.rates(tokens.prompt_size.max(tokens.input / tokens.requests.max(1)));
+        let cached = tokens.cache_read.min(tokens.input);
+        let written = tokens.cache_write.min(tokens.input - cached);
+        let plain = tokens.input - cached - written;
+        CostParts {
+            input: plain as f64 * input_rate + cached as f64 * sheet.cache_read.unwrap_or(input_rate),
+            output: tokens.output as f64 * output_rate,
+            reasoning: tokens.reasoning as f64 * sheet.reasoning.unwrap_or(output_rate),
+            images: tokens.images as f64 * sheet.per_image,
+            requests: tokens.requests as f64 * sheet.per_request,
+            other: written as f64 * sheet.cache_write.unwrap_or(input_rate),
+        }
+    }
+}
+
+/// Tokens (and requests, pictures) to be priced.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Tokens {
+    /// Every prompt token, cached ones included.
+    pub input: u64,
+    pub output: u64,
+    pub reasoning: u64,
+    /// Of `input`, read from the provider's cache.
+    pub cache_read: u64,
+    /// Of `input`, written to the provider's cache.
+    pub cache_write: u64,
+    pub images: u64,
+    pub requests: u64,
+    /// The largest single prompt, for tiered prices; 0: `input` per request.
+    pub prompt_size: u64,
+}
+
+/// A cost split the way the tooltip shows it, USD.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct CostParts {
+    pub input: f64,
+    pub output: f64,
+    pub reasoning: f64,
+    pub images: f64,
+    pub requests: f64,
+    /// Cache writes, web searches.
+    pub other: f64,
+}
+
+impl CostParts {
+    pub fn total(&self) -> f64 {
+        self.input + self.output + self.reasoning + self.images + self.requests + self.other
+    }
+
+    pub fn add(&mut self, other: &CostParts) {
+        self.input += other.input;
+        self.output += other.output;
+        self.reasoning += other.reasoning;
+        self.images += other.images;
+        self.requests += other.requests;
+        self.other += other.other;
+    }
+
+    pub fn scaled(&self, factor: f64) -> CostParts {
+        CostParts {
+            input: self.input * factor,
+            output: self.output * factor,
+            reasoning: self.reasoning * factor,
+            images: self.images * factor,
+            requests: self.requests * factor,
+            other: self.other * factor,
+        }
     }
 }
 
@@ -97,31 +286,125 @@ fn finite(value: &Value) -> Option<f64> {
     (number.is_finite() && number >= 0.0).then_some(number)
 }
 
+/// A price that is set and not zero: a list's "0" for reasoning means "like output".
+fn positive(value: Option<&Value>) -> Option<f64> {
+    value.and_then(finite).filter(|price| *price > 0.0)
+}
+
+/// LiteLLM's `search_context_cost_per_query`: a number, or one per context size (medium taken).
+fn search_price(value: Option<&Value>) -> f64 {
+    match value {
+        Some(Value::Object(sizes)) => {
+            ["search_context_size_medium", "search_context_size_low", "search_context_size_high"]
+                .iter()
+                .find_map(|size| sizes.get(*size).and_then(finite))
+                .unwrap_or(0.0)
+        }
+        Some(value) => finite(value).unwrap_or(0.0),
+        None => 0.0,
+    }
+}
+
+/// `input_cost_per_token_above_128k_tokens` → (input, 128,000).
+fn tier_key(key: &str) -> Option<(bool, u64)> {
+    let (input, rest) = if let Some(rest) = key.strip_prefix("input_cost_per_token_above_") {
+        (true, rest)
+    } else {
+        (false, key.strip_prefix("output_cost_per_token_above_")?)
+    };
+    let size = rest.strip_suffix("_tokens")?;
+    let (number, unit) = match size.strip_suffix('k') {
+        Some(number) => (number, 1_000),
+        None => (size.strip_suffix('m').unwrap_or(size), if size.ends_with('m') { 1_000_000 } else { 1 }),
+    };
+    Some((input, number.parse::<u64>().ok()? * unit))
+}
+
+/// One entry of LiteLLM's list; `None` without both prices per token.
+pub fn litellm_sheet(entry: &Value) -> Option<PriceSheet> {
+    let fields = entry.as_object()?;
+    let input = finite(fields.get("input_cost_per_token")?)?;
+    let output = finite(fields.get("output_cost_per_token")?)?;
+    let mut tiers: Vec<Tier> = Vec::new();
+    for (key, value) in fields {
+        let (Some((is_input, above)), Some(price)) = (tier_key(key), finite(value)) else { continue };
+        let index = match tiers.iter().position(|tier| tier.above == above) {
+            Some(index) => index,
+            None => {
+                tiers.push(Tier { above, ..Tier::default() });
+                tiers.len() - 1
+            }
+        };
+        if is_input {
+            tiers[index].input = Some(price);
+        } else {
+            tiers[index].output = Some(price);
+        }
+    }
+    tiers.sort_by_key(|tier| tier.above);
+    Some(PriceSheet {
+        input,
+        output,
+        reasoning: positive(fields.get("output_cost_per_reasoning_token")),
+        cache_read: fields.get("cache_read_input_token_cost").and_then(finite),
+        cache_write: fields.get("cache_creation_input_token_cost").and_then(finite),
+        per_request: fields
+            .get("input_cost_per_request")
+            .or_else(|| fields.get("input_cost_per_query"))
+            .and_then(finite)
+            .unwrap_or(0.0),
+        per_image: fields.get("input_cost_per_image").and_then(finite).unwrap_or(0.0),
+        web_search_per_query: search_price(fields.get("search_context_cost_per_query")),
+        tiers,
+        supports_reasoning: fields.get("supports_reasoning").and_then(Value::as_bool) == Some(true),
+        max_output_tokens: fields
+            .get("max_output_tokens")
+            .or_else(|| fields.get("max_tokens"))
+            .and_then(Value::as_u64)
+            .filter(|n| *n > 0),
+    })
+}
+
 /// LiteLLM's `model_prices_and_context_window.json`: every entry with both prices per token.
-pub fn parse_litellm(value: &Value) -> HashMap<String, TokenPrice> {
+pub fn parse_litellm(value: &Value) -> HashMap<String, PriceSheet> {
     let Some(entries) = value.as_object() else { return HashMap::new() };
-    entries
-        .iter()
-        .filter_map(|(name, entry)| {
-            let input = finite(entry.get("input_cost_per_token")?)?;
-            let output = finite(entry.get("output_cost_per_token")?)?;
-            Some((name.trim().to_lowercase(), (input, output)))
-        })
-        .collect()
+    entries.iter().filter_map(|(name, entry)| Some((name.trim().to_lowercase(), litellm_sheet(entry)?))).collect()
+}
+
+/// One model of OpenRouter's list; `None` without prompt and completion prices.
+pub fn openrouter_sheet(entry: &Value) -> Option<PriceSheet> {
+    let pricing = entry.get("pricing")?;
+    let price = |name: &str| pricing.get(name).and_then(finite);
+    let reasoning_parameter = entry
+        .get("supported_parameters")
+        .and_then(Value::as_array)
+        .is_some_and(|list| list.iter().any(|p| matches!(p.as_str(), Some("reasoning" | "include_reasoning"))));
+    Some(PriceSheet {
+        input: price("prompt")?,
+        output: price("completion")?,
+        reasoning: positive(pricing.get("internal_reasoning")),
+        cache_read: price("input_cache_read"),
+        cache_write: price("input_cache_write"),
+        per_request: price("request").unwrap_or(0.0),
+        per_image: price("image").unwrap_or(0.0),
+        web_search_per_query: price("web_search").unwrap_or(0.0),
+        tiers: Vec::new(),
+        supports_reasoning: reasoning_parameter,
+        max_output_tokens: entry
+            .pointer("/top_provider/max_completion_tokens")
+            .and_then(Value::as_u64)
+            .filter(|n| *n > 0),
+    })
 }
 
 /// OpenRouter's `/api/v1/models`: `data[].id` with `pricing.prompt` and `pricing.completion` per token.
-pub fn parse_openrouter(value: &Value) -> HashMap<String, TokenPrice> {
+pub fn parse_openrouter(value: &Value) -> HashMap<String, PriceSheet> {
     value
         .get("data")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|entry| {
-            let id = entry.get("id")?.as_str()?.trim().to_lowercase();
-            let pricing = entry.get("pricing")?;
-            Some((id, (finite(pricing.get("prompt")?)?, finite(pricing.get("completion")?)?)))
-        })
+        .filter_map(|entry| Some((entry.get("id")?.as_str()?.trim().to_lowercase(), openrouter_sheet(entry)?)))
         .collect()
 }
 
@@ -173,7 +456,7 @@ impl PriceTable {
 
     /// The price per token of a model, found tolerantly: with or without the provider's prefix
     /// (`mistral/…`, `openai/…`) and a date at the end.
-    pub fn lookup(&self, kind: ProviderKind, model: &str) -> Option<TokenPrice> {
+    pub fn lookup(&self, kind: ProviderKind, model: &str) -> Option<&PriceSheet> {
         let model = model.trim().to_lowercase();
         if model.is_empty() {
             return None;
@@ -190,7 +473,7 @@ impl PriceTable {
         if kind == ProviderKind::OpenRouter
             && let Some(price) = self.openrouter.get(&model)
         {
-            return Some(*price);
+            return Some(price);
         }
         let mut names = vec![model.clone()];
         if let Some(prefix) = prefix {
@@ -208,7 +491,7 @@ impl PriceTable {
                 }
             }
         }
-        names.iter().find_map(|name| self.models.get(name).copied())
+        names.iter().find_map(|name| self.models.get(name))
     }
 
     /// USD in another currency by the ECB's rates; `None` for a currency they don't have.
@@ -276,29 +559,46 @@ pub fn price_for(
     model: &str,
     table: Option<&PriceTable>,
 ) -> Option<Price> {
+    let known = table.and_then(|table| table.lookup(kind, model));
+    // What the model does (thinking, its longest answer) holds whoever sets the price.
+    let traits = |input: f64, output: f64| PriceSheet {
+        input,
+        output,
+        supports_reasoning: known.is_some_and(|k| k.supports_reasoning),
+        max_output_tokens: known.and_then(|k| k.max_output_tokens),
+        ..PriceSheet::default()
+    };
     if manual.0.is_some() || manual.1.is_some() {
+        let (input, output) = (manual.0.unwrap_or(0.0), manual.1.unwrap_or(0.0));
         return Some(Price {
-            input_per_million: manual.0.unwrap_or(0.0),
-            output_per_million: manual.1.unwrap_or(0.0),
+            input_per_million: input,
+            output_per_million: output,
             source: PriceSource::Manual,
+            sheet: traits(input / 1_000_000.0, output / 1_000_000.0),
         });
     }
     if kind == ProviderKind::Ollama || (kind == ProviderKind::OpenAiCompatible && is_local_address(base_url)) {
-        return Some(Price { input_per_million: 0.0, output_per_million: 0.0, source: PriceSource::Free });
+        return Some(Price {
+            input_per_million: 0.0,
+            output_per_million: 0.0,
+            source: PriceSource::Free,
+            sheet: traits(0.0, 0.0),
+        });
     }
-    let (input, output) = table?.lookup(kind, model)?;
+    let sheet = known?.clone();
     Some(Price {
-        input_per_million: input * 1_000_000.0,
-        output_per_million: output * 1_000_000.0,
+        input_per_million: sheet.input * 1_000_000.0,
+        output_per_million: sheet.output * 1_000_000.0,
         source: PriceSource::Auto,
+        sheet,
     })
 }
 
 /// What one fetch brought; `None` for a source that failed.
 #[derive(Debug, Default)]
 pub struct Fetched {
-    pub models: Option<HashMap<String, TokenPrice>>,
-    pub openrouter: Option<HashMap<String, TokenPrice>>,
+    pub models: Option<HashMap<String, PriceSheet>>,
+    pub openrouter: Option<HashMap<String, PriceSheet>>,
     pub rates: Option<HashMap<String, f64>>,
 }
 
@@ -325,7 +625,7 @@ pub async fn fetch(http: &reqwest::Client, sources: &Sources) -> Fetched {
     let json = |bytes: Option<Vec<u8>>| bytes.and_then(|b| serde_json::from_slice::<Value>(&b).ok());
     let (litellm, openrouter, ecb) =
         tokio::join!(body(http, &sources.litellm), body(http, &sources.openrouter), body(http, &sources.ecb));
-    let non_empty = |map: HashMap<String, TokenPrice>| (!map.is_empty()).then_some(map);
+    let non_empty = |map: HashMap<String, PriceSheet>| (!map.is_empty()).then_some(map);
     Fetched {
         models: json(litellm).map(|v| parse_litellm(&v)).and_then(non_empty),
         openrouter: json(openrouter).map(|v| parse_openrouter(&v)).and_then(non_empty),
@@ -376,11 +676,97 @@ pub(crate) mod tests {
         }
     }
 
+    fn pair(sheet: Option<&PriceSheet>) -> Option<(f64, f64)> {
+        sheet.map(|sheet| (sheet.input, sheet.output))
+    }
+
+    #[test]
+    fn reads_the_whole_price_sheet() {
+        let litellm = json!({
+            "gemini/gemini-2.5-pro": {
+                "input_cost_per_token": 1.25e-6, "output_cost_per_token": 1e-5,
+                "input_cost_per_token_above_200k_tokens": 2.5e-6, "output_cost_per_token_above_200k_tokens": 1.5e-5,
+                "cache_read_input_token_cost": 3.1e-7, "input_cost_per_image": 0.001,
+                "supports_reasoning": true, "max_output_tokens": 65535,
+                "search_context_cost_per_query": { "search_context_size_low": 0.03, "search_context_size_medium": 0.035 }
+            },
+            "o3-mini": {
+                "input_cost_per_token": 1.1e-6, "output_cost_per_token": 4.4e-6, "output_cost_per_reasoning_token": 5e-6,
+                "cache_creation_input_token_cost": 1.4e-6, "input_cost_per_request": 0.002, "max_tokens": 100000
+            },
+            "rerank": { "input_cost_per_token": 0, "output_cost_per_token": 0, "input_cost_per_query": 0.002 }
+        });
+        let models = parse_litellm(&litellm);
+        let pro = &models["gemini/gemini-2.5-pro"];
+        assert_eq!(pro.tiers, vec![Tier { above: 200_000, input: Some(2.5e-6), output: Some(1.5e-5) }]);
+        assert_eq!((pro.cache_read, pro.per_image, pro.web_search_per_query), (Some(3.1e-7), 0.001, 0.035));
+        assert!(pro.supports_reasoning);
+        assert_eq!(pro.max_output_tokens, Some(65535));
+        assert_eq!(pro.rates(1_000), (1.25e-6, 1e-5));
+        assert_eq!(pro.rates(200_001), (2.5e-6, 1.5e-5), "above the threshold, both prices change");
+        assert_eq!(pro.reasoning_rate(10), 1e-5, "reasoning costs what output does");
+        let mini = &models["o3-mini"];
+        assert_eq!((mini.reasoning, mini.cache_write, mini.per_request), (Some(5e-6), Some(1.4e-6), 0.002));
+        assert_eq!(mini.max_output_tokens, Some(100_000));
+        assert!(!mini.supports_reasoning);
+        assert_eq!(models["rerank"].per_request, 0.002);
+
+        let openrouter = json!({ "data": [{
+            "id": "openai/o4-mini",
+            "pricing": { "prompt": "0.0000011", "completion": "0.0000044", "request": "0.001", "image": "0.0008",
+                         "internal_reasoning": "0", "input_cache_read": "0.000000275", "web_search": "0.004" },
+            "supported_parameters": ["max_tokens", "reasoning"],
+            "top_provider": { "max_completion_tokens": 100000 }
+        }] });
+        let sheet = &parse_openrouter(&openrouter)["openai/o4-mini"];
+        assert_eq!((sheet.per_request, sheet.per_image, sheet.web_search_per_query), (0.001, 0.0008, 0.004));
+        assert_eq!(sheet.reasoning, None, "a listed 0 for reasoning means: like output");
+        assert_eq!(sheet.cache_read, Some(2.75e-7));
+        assert!(sheet.supports_reasoning);
+        assert_eq!(sheet.max_output_tokens, Some(100_000));
+    }
+
+    #[test]
+    fn a_stored_table_from_before_keeps_its_prices() {
+        let old = r#"{ "fetchedAt": 5, "models": { "gpt-5-mini": [2.5e-7, 2e-6] }, "openrouter": {}, "rates": {} }"#;
+        let table: PriceTable = serde_json::from_str(old).unwrap();
+        assert_eq!(pair(table.models.get("gpt-5-mini")), Some((2.5e-7, 2e-6)));
+        let again: PriceTable = serde_json::from_str(&serde_json::to_string(&table).unwrap()).unwrap();
+        assert_eq!(again, table);
+    }
+
+    #[test]
+    fn actual_costs_follow_the_providers_report() {
+        let sheet = PriceSheet {
+            input: 1e-6,
+            output: 4e-6,
+            reasoning: Some(8e-6),
+            cache_read: Some(1e-7),
+            cache_write: Some(2e-6),
+            per_request: 0.01,
+            ..PriceSheet::default()
+        };
+        let price = Price { input_per_million: 1.0, output_per_million: 4.0, source: PriceSource::Auto, sheet };
+        let usage = super::super::provider::TokenUsage {
+            input_tokens: 1_000,
+            output_tokens: 100,
+            reasoning_tokens: 50,
+            cached_tokens: 400,
+            cache_write_tokens: 100,
+            cost_usd: None,
+        };
+        // 500 plain, 400 cached, 100 written; 100 out, 50 thinking; one request.
+        let expected = 500.0 * 1e-6 + 400.0 * 1e-7 + 100.0 * 2e-6 + 100.0 * 4e-6 + 50.0 * 8e-6 + 0.01;
+        assert!((price.actual_usd(&usage) - expected).abs() < 1e-12);
+        let reported = super::super::provider::TokenUsage { cost_usd: Some(0.5), ..usage };
+        assert_eq!(price.actual_usd(&reported), 0.5, "OpenRouter's own figure is the truth");
+    }
+
     #[test]
     fn reads_the_sources() {
         let table = table();
         assert_eq!(table.models.len(), 4, "entries without both prices are left out: {:?}", table.models.keys());
-        assert_eq!(table.models["gpt-5-mini"], (2.5e-7, 2e-6));
+        assert_eq!(pair(table.models.get("gpt-5-mini")), Some((2.5e-7, 2e-6)));
         assert_eq!(table.openrouter.len(), 2);
         assert_eq!(table.rates.get("USD"), Some(&1.17));
         assert_eq!(table.rates.get("CNY"), Some(&8.4));
@@ -392,15 +778,22 @@ pub(crate) mod tests {
     #[test]
     fn finds_models_tolerantly() {
         let table = table();
-        assert_eq!(table.lookup(ProviderKind::OpenAi, "GPT-5-mini"), Some((2.5e-7, 2e-6)));
-        assert_eq!(table.lookup(ProviderKind::Mistral, "mistral-small-latest"), Some((1e-7, 3e-7)), "with the prefix");
-        assert_eq!(table.lookup(ProviderKind::Gemini, "models/gemini-2.5-flash"), Some((3e-7, 2.5e-6)));
-        assert_eq!(table.lookup(ProviderKind::Anthropic, "claude-sonnet-4-5-20250929"), Some((3e-6, 1.5e-5)));
-        assert_eq!(table.lookup(ProviderKind::OpenAi, "gpt-5-mini-2025-08-07"), Some((2.5e-7, 2e-6)));
-        assert_eq!(table.lookup(ProviderKind::OpenRouter, "meta-llama/llama-3.3-70b-instruct:free"), Some((0.0, 0.0)));
-        assert_eq!(table.lookup(ProviderKind::OpenAiCompatible, "openai/gpt-5-mini"), Some((2.5e-7, 2e-6)));
-        assert_eq!(table.lookup(ProviderKind::OpenAi, "gpt-9-imaginary"), None);
-        assert_eq!(table.lookup(ProviderKind::OpenAi, ""), None);
+        assert_eq!(pair(table.lookup(ProviderKind::OpenAi, "GPT-5-mini")), Some((2.5e-7, 2e-6)));
+        assert_eq!(
+            pair(table.lookup(ProviderKind::Mistral, "mistral-small-latest")),
+            Some((1e-7, 3e-7)),
+            "with the prefix"
+        );
+        assert_eq!(pair(table.lookup(ProviderKind::Gemini, "models/gemini-2.5-flash")), Some((3e-7, 2.5e-6)));
+        assert_eq!(pair(table.lookup(ProviderKind::Anthropic, "claude-sonnet-4-5-20250929")), Some((3e-6, 1.5e-5)));
+        assert_eq!(pair(table.lookup(ProviderKind::OpenAi, "gpt-5-mini-2025-08-07")), Some((2.5e-7, 2e-6)));
+        assert_eq!(
+            pair(table.lookup(ProviderKind::OpenRouter, "meta-llama/llama-3.3-70b-instruct:free")),
+            Some((0.0, 0.0))
+        );
+        assert_eq!(pair(table.lookup(ProviderKind::OpenAiCompatible, "openai/gpt-5-mini")), Some((2.5e-7, 2e-6)));
+        assert_eq!(pair(table.lookup(ProviderKind::OpenAi, "gpt-9-imaginary")), None);
+        assert_eq!(pair(table.lookup(ProviderKind::OpenAi, "")), None);
     }
 
     #[test]
