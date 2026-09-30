@@ -411,12 +411,12 @@ mod tests {
     }
 
     const SAMPLE: &str = "From: Leni Wanders <leni@wanders.example>\r\n\
-To: Mini <mini@uwumail.dev>, noah@zockt.example\r\n\
+To: Mini <mini@uwumail.example>, noah@zockt.example\r\n\
 Subject: =?UTF-8?Q?Sonnenuntergang_=F0=9F=8C=85?=\r\n\
 Date: Mon, 14 Sep 2026 09:41:00 +0200\r\n\
 Message-ID: <abc@wanders.example>\r\n\
-In-Reply-To: <parent@uwumail.dev>\r\n\
-References: <root@uwumail.dev> <parent@uwumail.dev>\r\n\
+In-Reply-To: <parent@uwumail.example>\r\n\
+References: <root@uwumail.example> <parent@uwumail.example>\r\n\
 MIME-Version: 1.0\r\n\
 Content-Type: multipart/alternative; boundary=\"b\"\r\n\
 \r\n\
@@ -437,8 +437,8 @@ Content-Type: text/html; charset=utf-8\r\n\
         assert_eq!(parsed.from.unwrap().name.as_deref(), Some("Leni Wanders"));
         assert_eq!(parsed.to.len(), 2);
         assert_eq!(parsed.message_id.as_deref(), Some("abc@wanders.example"));
-        assert_eq!(parsed.in_reply_to.as_deref(), Some("parent@uwumail.dev"));
-        assert_eq!(parsed.references, vec!["root@uwumail.dev", "parent@uwumail.dev"]);
+        assert_eq!(parsed.in_reply_to.as_deref(), Some("parent@uwumail.example"));
+        assert_eq!(parsed.references, vec!["root@uwumail.example", "parent@uwumail.example"]);
         assert_eq!(parsed.snippet, "Hey! Schau mal rein.");
         assert!(parsed.has_remote_content);
         assert_eq!(parsed.date, Some(1_789_371_660));

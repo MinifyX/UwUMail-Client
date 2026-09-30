@@ -1817,11 +1817,11 @@ mod tests {
         let account = AccountRecord {
             id: "acc".into(),
             name: "Test".into(),
-            email: "mini@uwumail.dev".into(),
+            email: "mini@uwumail.example".into(),
             display_name: "Mini".into(),
             color: AccountColor::Pink,
             auth: AuthKind::Password,
-            username: "mini@uwumail.dev".into(),
+            username: "mini@uwumail.example".into(),
             imap: ServerSettings { host: "imap.example".into(), port: 993, security: Security::Tls },
             smtp: ServerSettings { host: "smtp.example".into(), port: 465, security: Security::Tls },
             protocol: Protocol::Imap,
@@ -1969,7 +1969,7 @@ mod tests {
 
     fn raw(id: &str, subject: &str, from: &str, reply_to: Option<&str>, body: &str, date: &str) -> Vec<u8> {
         let mut raw = format!(
-            "From: {from}\r\nTo: mini@uwumail.dev\r\nSubject: {subject}\r\nDate: {date}\r\nMessage-ID: <{id}>\r\n"
+            "From: {from}\r\nTo: mini@uwumail.example\r\nSubject: {subject}\r\nDate: {date}\r\nMessage-ID: <{id}>\r\n"
         );
         if let Some(parent) = reply_to {
             raw.push_str(&format!("In-Reply-To: <{parent}>\r\nReferences: <{parent}>\r\n"));
@@ -2001,7 +2001,7 @@ mod tests {
             &raw(
                 "a@x",
                 "Clip",
-                "Mini <mini@uwumail.dev>",
+                "Mini <mini@uwumail.example>",
                 None,
                 "Hast du den Clip gesehen?",
                 "Mon, 14 Sep 2026 09:00:00 +0000",
@@ -2033,8 +2033,8 @@ mod tests {
     fn keeps_the_blind_copies_of_sent_mail() {
         let (store, _, _, sent) = store_with_account();
         let bytes =
-            b"From: Mini <mini@uwumail.dev>\r\nTo: leni@x.example\r\nBcc: Ben <ben@y.example>, chef@z.example\r\n\
-Reply-To: antwort@uwumail.dev\r\nSubject: Geheim\r\nDate: Mon, 14 Sep 2026 09:00:00 +0000\r\nMessage-ID: <bcc@x>\r\n\
+            b"From: Mini <mini@uwumail.example>\r\nTo: leni@x.example\r\nBcc: Ben <ben@y.example>, chef@z.example\r\n\
+Reply-To: antwort@uwumail.example\r\nSubject: Geheim\r\nDate: Mon, 14 Sep 2026 09:00:00 +0000\r\nMessage-ID: <bcc@x>\r\n\
 Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         insert(&store, &sent, 1, bytes);
         let page = store
@@ -2052,7 +2052,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         let message = &detail.messages[0];
         let bcc: Vec<_> = message.bcc.iter().map(|a| (a.name.as_deref(), a.email.as_str())).collect();
         assert_eq!(bcc, vec![(Some("Ben"), "ben@y.example"), (None, "chef@z.example")]);
-        assert_eq!(message.reply_to[0].email, "antwort@uwumail.dev");
+        assert_eq!(message.reply_to[0].email, "antwort@uwumail.example");
         let json = serde_json::to_value(message).unwrap();
         assert_eq!(json["bcc"][0]["email"], "ben@y.example");
     }
@@ -2068,7 +2068,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
             &raw(
                 "a@x",
                 "Clip",
-                "Mini <mini@uwumail.dev>",
+                "Mini <mini@uwumail.example>",
                 None,
                 "Hast du ihn gesehen?",
                 "Mon, 14 Sep 2026 09:00:00 +0000",
@@ -2302,7 +2302,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
             1,
             &raw("a@x", "Hi", "Leni Wanders <leni@x.example>", None, "Hallo", "Mon, 14 Sep 2026 09:00:00 +0000"),
         );
-        let contacts = store.search_contacts("len", &["mini@uwumail.dev".into()]).unwrap();
+        let contacts = store.search_contacts("len", &["mini@uwumail.example".into()]).unwrap();
         assert_eq!(contacts.len(), 1);
         assert_eq!(contacts[0].name.as_deref(), Some("Leni Wanders"));
     }
@@ -2310,10 +2310,10 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
     #[test]
     fn keeps_hand_made_and_server_identities_apart() {
         let (store, account, _, _) = store_with_account();
-        assert!(store.insert_identity(&account, "hallo@uwumail.dev", "Mini vom Studio").unwrap().is_some());
-        assert!(store.insert_identity(&account, "HALLO@uwumail.dev", "doppelt").unwrap().is_none());
+        assert!(store.insert_identity(&account, "hallo@uwumail.example", "Mini vom Studio").unwrap().is_some());
+        assert!(store.insert_identity(&account, "HALLO@uwumail.example", "doppelt").unwrap().is_none());
         // The own address never shows up twice.
-        store.insert_identity(&account, "mini@uwumail.dev", "Mini").unwrap();
+        store.insert_identity(&account, "mini@uwumail.example", "Mini").unwrap();
         assert_eq!(store.identities().unwrap().len(), 1);
 
         let server = |list: &[(&str, &str, &str)]| -> Vec<(String, String, String)> {
@@ -2322,17 +2322,17 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         store
             .replace_server_identities(
                 &account,
-                &server(&[("s1", "hallo@uwumail.dev", "Server"), ("s2", "news@uwumail.dev", "News")]),
+                &server(&[("s1", "hallo@uwumail.example", "Server"), ("s2", "news@uwumail.example", "News")]),
             )
             .unwrap();
         let identities = store.identities().unwrap();
-        let hallo = identities.iter().find(|i| i.email == "hallo@uwumail.dev").unwrap();
+        let hallo = identities.iter().find(|i| i.email == "hallo@uwumail.example").unwrap();
         assert!(hallo.from_server, "the server now manages the address typed in before");
         assert_eq!(hallo.name, "Mini vom Studio", "but the name typed here stays");
         assert!(!store.delete_identity(&hallo.id).unwrap(), "server identities can't be removed here");
 
-        store.replace_server_identities(&account, &server(&[("s1", "hallo@uwumail.dev", "Server")])).unwrap();
-        assert!(store.identities().unwrap().iter().all(|i| i.email != "news@uwumail.dev"));
+        store.replace_server_identities(&account, &server(&[("s1", "hallo@uwumail.example", "Server")])).unwrap();
+        assert!(store.identities().unwrap().iter().all(|i| i.email != "news@uwumail.example"));
     }
 
     #[test]
@@ -2346,9 +2346,9 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
             for_new,
             for_replies,
         };
-        store.save_signature(&signature("lang", "mini@uwumail.dev", true, true)).unwrap();
-        store.save_signature(&signature("studio", "hallo@uwumail.dev", true, false)).unwrap();
-        store.save_signature(&signature("kurz", "MINI@uwumail.dev", false, true)).unwrap();
+        store.save_signature(&signature("lang", "mini@uwumail.example", true, true)).unwrap();
+        store.save_signature(&signature("studio", "hallo@uwumail.example", true, false)).unwrap();
+        store.save_signature(&signature("kurz", "MINI@uwumail.example", false, true)).unwrap();
         let all = store.signatures().unwrap();
         let get = |id: &str| all.iter().find(|s| s.id == id).unwrap().clone();
         assert!(get("lang").for_new && !get("lang").for_replies, "replies moved to the short one");

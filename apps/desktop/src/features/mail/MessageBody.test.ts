@@ -65,8 +65,8 @@ describe("buildDocument", () => {
   });
 
   it("turns links in plain text into anchors", () => {
-    const doc = buildDocument(message({ bodyText: "Look at https://uwumail.dev/docs." }), false, "dark");
-    expect(doc).toContain('<a href="https://uwumail.dev/docs">https://uwumail.dev/docs</a>.');
+    const doc = buildDocument(message({ bodyText: "Look at https://uwumail.example/docs." }), false, "dark");
+    expect(doc).toContain('<a href="https://uwumail.example/docs">https://uwumail.example/docs</a>.');
   });
 
   // Regression: a frame whose document says "light" inside a dark app gets an
@@ -213,7 +213,7 @@ describe("buildPrintDocument", () => {
     const doc = buildPrintDocument(
       message({
         subject: "Rechnung <2026>",
-        to: [{ name: "Mini", email: "mini@uwumail.dev" }],
+        to: [{ name: "Mini", email: "mini@uwumail.example" }],
         bodyHtml: '<p>Hallo</p><script>alert(1)</script><img src="cid:logo@shop">',
       }),
       false,
@@ -222,7 +222,7 @@ describe("buildPrintDocument", () => {
       "14. September 2026",
     );
     expect(doc).toContain("<title>Rechnung &#60;2026&#62;</title>");
-    expect(doc).toContain("Mini &#60;mini@uwumail.dev&#62;");
+    expect(doc).toContain("Mini &#60;mini@uwumail.example&#62;");
     expect(doc).toContain('src="blob:logo"');
     expect(doc).not.toContain("<script>");
     expect(doc).toContain("img-src data: blob:;");
@@ -232,7 +232,7 @@ describe("buildPrintDocument", () => {
     const doc = buildPrintDocument(
       message({
         subject: "Echt",
-        to: [{ name: "Mini", email: "mini@uwumail.dev" }],
+        to: [{ name: "Mini", email: "mini@uwumail.example" }],
         bodyHtml: "<style>table.head,h1{display:none}</style><h1>Gefälscht</h1><p>Text</p>",
       }),
       false,

@@ -289,9 +289,9 @@ mod tests {
 
     #[test]
     fn builds_a_threaded_reply_with_attachment() {
-        let from = Address { name: Some("Mini".into()), email: "mini@uwumail.dev".into() };
+        let from = Address { name: Some("Mini".into()), email: "mini@uwumail.example".into() };
         let to = [Address { name: Some("Leni Wanders".into()), email: "leni@wanders.example".into() }];
-        let bcc = [Address { name: None, email: "secret@uwumail.dev".into() }];
+        let bcc = [Address { name: None, email: "secret@uwumail.example".into() }];
         let threading = Threading { parent_message_id: "b@x".into(), references: "a@x".into() };
         let attachment = [OutgoingAttachment {
             filename: "notiz.txt".into(),
@@ -310,14 +310,15 @@ mod tests {
         assert!(raw.contains("In-Reply-To: <b@x>"));
         assert!(raw.contains("References: <a@x> <b@x>"));
         assert!(raw.contains("notiz.txt"));
-        assert!(raw.contains("@uwumail.dev>"), "Message-ID uses the sender domain");
-        assert!(!raw.contains("secret@uwumail.dev"), "Bcc must not appear in the headers");
+        assert!(raw.contains("@uwumail.example>"), "Message-ID uses the sender domain");
+        assert!(!raw.contains("secret@uwumail.example"), "Bcc must not appear in the headers");
         assert_eq!(message.envelope().to().len(), 2);
     }
 
     #[test]
     fn line_breaks_cannot_add_headers() {
-        let from = Address { name: Some("Mini\r\nBcc: sneaky@evil.example".into()), email: "mini@uwumail.dev".into() };
+        let from =
+            Address { name: Some("Mini\r\nBcc: sneaky@evil.example".into()), email: "mini@uwumail.example".into() };
         let to = [Address { name: None, email: "leni@wanders.example".into() }];
         let message = build(&mail(&from, &to, "Hallo\r\nBcc: sneaky@evil.example")).unwrap();
         let raw = String::from_utf8(message.formatted()).unwrap();
@@ -337,26 +338,26 @@ mod tests {
 
     #[test]
     fn refuses_messages_without_recipients() {
-        let from = Address { name: None, email: "mini@uwumail.dev".into() };
+        let from = Address { name: None, email: "mini@uwumail.example".into() };
         assert!(build(&mail(&from, &[], "Hi")).is_err());
     }
 
     #[test]
     fn drafts_keep_their_id_and_bcc_and_may_be_empty() {
-        let from = Address { name: None, email: "mini@uwumail.dev".into() };
-        let bcc = [Address { name: None, email: "secret@uwumail.dev".into() }];
+        let from = Address { name: None, email: "mini@uwumail.example".into() };
+        let bcc = [Address { name: None, email: "secret@uwumail.example".into() }];
         let draft =
-            build(&Mail { bcc: &bcc, message_id: Some("abc@uwumail.dev"), draft: true, ..mail(&from, &[], "") })
+            build(&Mail { bcc: &bcc, message_id: Some("abc@uwumail.example"), draft: true, ..mail(&from, &[], "") })
                 .unwrap();
         let raw = String::from_utf8(draft.formatted()).unwrap();
-        assert!(raw.contains("Message-ID: <abc@uwumail.dev>"));
-        assert!(raw.contains("secret@uwumail.dev"), "a draft remembers Bcc");
+        assert!(raw.contains("Message-ID: <abc@uwumail.example>"));
+        assert!(raw.contains("secret@uwumail.example"), "a draft remembers Bcc");
         assert!(build(&Mail { draft: true, ..mail(&from, &[], "") }).is_ok(), "an empty draft can be saved");
     }
 
     #[test]
     fn embeds_pasted_images() {
-        let from = Address { name: None, email: "mini@uwumail.dev".into() };
+        let from = Address { name: None, email: "mini@uwumail.example".into() };
         let to = [Address { name: None, email: "leni@wanders.example".into() }];
         let html = r#"<p>Liebe Grüße</p><img src="data:image/png;base64,iVBORw0KGgo=" alt="Logo"><img src='https://x.example/a.png'>"#;
         let message = build(&Mail { html, ..mail(&from, &to, "Hi") }).unwrap();
@@ -387,7 +388,7 @@ mod tests {
 
     #[test]
     fn recognizes_draft_keys() {
-        assert!(is_draft_key(&new_message_id("mini@uwumail.dev")));
+        assert!(is_draft_key(&new_message_id("mini@uwumail.example")));
         assert!(!is_draft_key("abc"));
         assert!(!is_draft_key("a@b\" OR ALL"));
         assert!(!is_draft_key("<a@b>"));
