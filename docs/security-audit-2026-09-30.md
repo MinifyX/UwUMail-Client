@@ -17,7 +17,7 @@ To report something new see [SECURITY.md](../SECURITY.md).
 | Critical | 0 | 0 | 0 |
 | High | 0 | 0 | 0 |
 | Medium | 8 | 8 | 0 |
-| Low | 53 | 52 | 1 (CC-10, by design) |
+| Low | 54 | 53 | 1 (CC-10, by design) |
 | Info | 21 | 8 | 13 (see table) |
 
 ## Findings
@@ -68,6 +68,7 @@ To report something new see [SECURITY.md](../SECURITY.md).
 | C-NET-15 | Low | Local DB | store.rs:377 | Data dir/DB with default umask (0755/0644). | 0700 dir, 0600 DB + journals on Unix. | b9690e2 |
 | CC-10 | Low | DAV/JMAP | dav::site | Password may go to any host on the mail server's registrable domain. | — | not fixed (by design, listed before) |
 | C-D-2 | Low | TNEF | crates/uwumail-tnef/src/meeting.rs:555 | Addresses from the mail went unchecked into ORGANIZER/ATTENDEE (new iCal properties). | `internet_address()` filter. Server informed. | abdcfff |
+| C-D-14 (server TNEF-2) | Low | TNEF | crates/uwumail-tnef/src/lib.rs, rtf.rs | Output of one winmail.dat (PR_HTML, RTF, nested messages, attachment copies) was bounded per part, not in total; a small stream could expand to many times its size. | Server's crate at 47f9417 copied: one output budget per stream, RTF limits, attachment data copied once. | 84483ba |
 | C-D-4 | Low | Labels | crates/uwumail-labels/src/classifier.rs:115 | Count overflow / negative counts → panic in debug / NaN. | From the server's fixed crate. | 8ad68c5 |
 | C-D-6 | Low | Calendar | calendar/jscal.rs:28,32,108,324 | Panics near chrono limits. | Years 1–9999, safe shifting. | aa4d0f7 |
 | C-D-7 | Low | Calendar | calendar/ical.rs:188 | O(occurrences × events) uid lookup. | Index map. | aa4d0f7 |
