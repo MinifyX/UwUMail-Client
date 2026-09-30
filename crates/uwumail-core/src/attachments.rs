@@ -139,6 +139,49 @@ const DANGEROUS: &[&str] = &[
     "xlsb",
     "ppsm",
     "msu",
+    // Further formats Outlook blocks: scripts of installed interpreters, certificates (they
+    // install a trusted root), shell scraps and old macro formats.
+    "bas",
+    "cer",
+    "crt",
+    "der",
+    "csh",
+    "ksh",
+    "pl",
+    "py",
+    "pyc",
+    "pyo",
+    "pyw",
+    "pyz",
+    "pyzw",
+    "vb",
+    "vbp",
+    "msh",
+    "msh1",
+    "msh2",
+    "mshxml",
+    "msh1xml",
+    "msh2xml",
+    "ps2xml",
+    "psc2",
+    "psdm1",
+    "shb",
+    "shs",
+    "xnk",
+    "htc",
+    "hpj",
+    "grp",
+    "mcf",
+    "mda",
+    "mdt",
+    "mdw",
+    "mdz",
+    "prf",
+    "printerexport",
+    "vsmacros",
+    "xla",
+    "xlm",
+    "ppa",
 ];
 
 /// Android app packages. On Android UwUMail never hands these to the installer.
@@ -150,7 +193,7 @@ const IOS_INSTALLABLE: &[&str] = &["mobileconfig", "ipa", "shortcut", "wf"];
 
 /// Characters that reverse how text is displayed, e.g. to show `rechnung\u{202E}fdp.exe` as "rechnungexe.pdf".
 fn is_bidi_control(c: char) -> bool {
-    matches!(c, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+    matches!(c, '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
 /// An attachment name as it should be shown and stored: no invisible direction tricks, and no line
@@ -194,26 +237,54 @@ pub fn is_dangerous(filename: &str) -> bool {
 
 /// A file name that is safe on every OS: no paths, no reserved names, not too long.
 pub fn safe_filename(name: &str) -> String {
+    // Windows drops dots and spaces at the end of a name, so they go here already, however they
+    // alternate: "a.exe. ." would otherwise be written as "a.exe. " and land as a.exe.
+    let edge = |c: char| c == '.' || c.is_whitespace();
     let cleaned: String = name
         .chars()
         .map(|c| if c.is_control() || "<>:\"/\\|?*".contains(c) { '_' } else { c })
         .collect::<String>()
-        .trim()
-        .trim_matches('.')
+        .trim_start_matches(edge)
+        .trim_end_matches(edge)
         .to_string();
     let cleaned = if cleaned.is_empty() { "attachment".to_string() } else { cleaned };
-    let stem = cleaned.split('.').next().unwrap_or_default().to_ascii_uppercase();
-    let reserved = ["CON", "PRN", "AUX", "NUL"].contains(&stem.as_str())
-        || ((stem.starts_with("COM") || stem.starts_with("LPT")) && stem.len() == 4);
-    let cleaned = if reserved { format!("_{cleaned}") } else { cleaned };
-    if cleaned.chars().count() <= 150 {
+    let cleaned = if is_reserved_name(&cleaned) { format!("_{cleaned}") } else { cleaned };
+    if cleaned.chars().count() <= MAX_NAME_CHARS && cleaned.len() <= MAX_NAME_BYTES {
         return cleaned;
     }
     let (stem, ext) = match cleaned.rsplit_once('.') {
         Some((stem, ext)) if ext.len() <= 10 => (stem.to_string(), format!(".{ext}")),
         _ => (cleaned.clone(), String::new()),
     };
-    format!("{}{ext}", stem.chars().take(150 - ext.chars().count()).collect::<String>())
+    // At most so many characters and bytes (a file system takes 255 bytes, and the cache puts the
+    // attachment's number in front), cut between characters.
+    let mut short = String::new();
+    for c in stem.chars().take(MAX_NAME_CHARS - ext.chars().count()) {
+        if short.len() + c.len_utf8() + ext.len() > MAX_NAME_BYTES {
+            break;
+        }
+        short.push(c);
+    }
+    let short = short.trim_end_matches(edge);
+    let short = if short.is_empty() { "attachment" } else { short };
+    format!("{short}{ext}")
+}
+
+/// Longest file name, in characters and in UTF-8 bytes.
+const MAX_NAME_CHARS: usize = 150;
+const MAX_NAME_BYTES: usize = 200;
+
+/// Names Windows keeps for devices, also with an extension or with spaces after them
+/// (`CON.txt`, `nul .tar.gz`), including `COM¹`–`COM³`, `LPT¹`–`LPT³`, `CONIN$` and `CONOUT$`.
+fn is_reserved_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or_default().trim_end().to_uppercase();
+    let numbered = |prefix: &str| {
+        stem.strip_prefix(prefix).is_some_and(|n| {
+            let mut chars = n.chars();
+            matches!((chars.next(), chars.next()), (Some('0'..='9' | '¹' | '²' | '³'), None))
+        })
+    };
+    ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"].contains(&stem.as_str()) || numbered("COM") || numbered("LPT")
 }
 
 /// Marks a file as downloaded from the internet, like a browser or Outlook does. On Windows that is
@@ -477,6 +548,29 @@ mod tests {
         let long = format!("{}.pdf", "x".repeat(300));
         let safe = safe_filename(&long);
         assert!(safe.ends_with(".pdf") && safe.chars().count() == 150);
+    }
+
+    #[test]
+    fn file_names_windows_would_change_or_refuse() {
+        for (name, safe) in [
+            ("nul .txt", "_nul .txt"),
+            ("COM¹.log", "_COM¹.log"),
+            ("lpt9", "_lpt9"),
+            ("conout$.txt", "_conout$.txt"),
+            ("COM10.txt", "COM10.txt"),
+            ("tool.exe. .", "tool.exe"),
+            (". .hidden. ", "hidden"),
+        ] {
+            assert_eq!(safe_filename(name), safe, "{name:?}");
+        }
+        // Four bytes a character: the name still fits a file system's 255 bytes with its number.
+        let wide = safe_filename(&format!("{}.pdf", "😀".repeat(150)));
+        assert!(wide.ends_with(".pdf") && wide.len() <= MAX_NAME_BYTES, "{}", wide.len());
+        let unicode = safe_filename(&"ä".repeat(160));
+        assert!(unicode.len() <= MAX_NAME_BYTES && unicode.chars().all(|c| c == 'ä'));
+        for name in ["setup.py", "root.cer", "macro.xla", "run.pyw", "\u{061C}.exe"] {
+            assert!(is_dangerous(name), "{name}");
+        }
     }
 
     #[test]

@@ -241,6 +241,9 @@ fn apple_dates(card: &Value) -> Vec<(DateKind, Option<String>, PartialDate)> {
         .filter(|entry| named(entry, "x-abdate"))
         // Words like "circa 1800" are no date.
         .filter(|entry| !entry.get(2).and_then(Value::as_str).is_some_and(|kind| kind.eq_ignore_ascii_case("text")))
+        // Each looks through all properties for its label: a card with thousands of dates would
+        // take quadratic time, and only a few of them are kept anyway.
+        .take(4 * MAX_DATES_PER_CARD)
         .filter_map(|entry| {
             let date = parse_date(entry.get(3)?.as_str()?)?;
             let label = group(entry).and_then(|wanted| {
@@ -323,7 +326,8 @@ pub fn from_jmap(mark: Option<&Value>, shown_year: i32, account_id: &str) -> Opt
         label: text(mark, "label").map(clean).filter(|label| !label.is_empty()),
         name: text(mark, "name").map(clean).unwrap_or_default(),
         year,
-        age: year.map(|year| shown_year - year).filter(|age| *age > 0),
+        // The year is the server's word: one far off must not overflow.
+        age: year.and_then(|year| shown_year.checked_sub(year)).filter(|age| *age > 0),
     })
 }
 
@@ -559,6 +563,8 @@ mod tests {
         assert_eq!(from_jmap(Some(&mark), 1990, "acc").unwrap().age, None);
         let odd = json!({ "contactId": "k1", "kind": "anything", "name": "X\u{0}Y", "year": "1990" });
         let odd = from_jmap(Some(&odd), 2026, "acc").unwrap();
+        let far = json!({ "contactId": "k1", "kind": "birth", "year": i64::from(i32::MIN), "name": "Far" });
+        assert_eq!(from_jmap(Some(&far), 2026, "acc").unwrap().age, None);
         assert_eq!((odd.kind, odd.name.as_str(), odd.year), (DateKind::Other, "XY", None));
         assert!(from_jmap(Some(&json!({ "kind": "birth" })), 2026, "acc").is_none());
         assert!(from_jmap(None, 2026, "acc").is_none());

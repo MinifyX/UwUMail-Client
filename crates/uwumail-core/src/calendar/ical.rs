@@ -183,6 +183,12 @@ pub fn instances(
     budget.expanded = budget.expanded.saturating_sub(expanded.events.len().max(1));
     let series: Vec<&Value> = events(group).collect();
     let shown: Vec<Arc<Value>> = series.iter().map(|event| Arc::new(shown_part(event))).collect();
+    // The first event of each uid (and the first without one), looked up once per occurrence: an
+    // object with thousands of overrides would otherwise be searched thousands of times over.
+    let mut by_uid: std::collections::HashMap<Option<&str>, usize> = std::collections::HashMap::new();
+    for (index, event) in series.iter().enumerate() {
+        by_uid.entry(event.get("uid").and_then(Value::as_str)).or_insert(index);
+    }
     for occurrence in expanded.events {
         let Some(component) = ical.components.get(occurrence.comp_id as usize) else { continue };
         if component.component_type != ICalendarComponentType::VEvent {
@@ -191,18 +197,15 @@ pub fn instances(
         let start = occurrence.start.with_timezone(&Utc);
         let end = match occurrence.end {
             calcard::icalendar::dates::TimeOrDelta::Time(end) => end.with_timezone(&Utc),
-            calcard::icalendar::dates::TimeOrDelta::Delta(delta) => start + delta,
+            // A duration that runs off the calendar (`P99999999W`) would panic: such an event ends where it starts.
+            calcard::icalendar::dates::TimeOrDelta::Delta(delta) => start.checked_add_signed(delta).unwrap_or(start),
         };
         // A moment-long event on the edge still shows; everything else must overlap.
         if start >= to || (end <= from && !(end == start && start == from)) {
             continue;
         }
         let uid = component.uid();
-        let Some(index) = series
-            .iter()
-            .position(|event| event.get("uid").and_then(Value::as_str) == uid)
-            .or_else(|| (series.len() == 1).then_some(0))
-        else {
+        let Some(index) = by_uid.get(&uid).copied().or_else(|| (series.len() == 1).then_some(0)) else {
             continue;
         };
         let base = series[index];
@@ -283,6 +286,32 @@ END:VCALENDAR\r\n";
 
     fn utc(text: &str) -> DateTime<Utc> {
         DateTime::parse_from_rfc3339(text).unwrap().with_timezone(&Utc)
+    }
+
+    #[test]
+    fn huge_durations_and_far_dates_never_panic() {
+        let berlin: Tz = "Europe/Berlin".parse().unwrap();
+        for (start, duration) in [
+            ("20260903T180000Z", "P99999999W"),
+            ("20260903T180000Z", "P9999999999999D"),
+            ("99991231T235959Z", "P3000D"),
+            ("00010101T000000Z", "-P3000D"),
+        ] {
+            let text = format!(
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\nBEGIN:VEVENT\r\nUID:far\r\n\
+DTSTAMP:20260901T100000Z\r\nDTSTART:{start}\r\nDURATION:{duration}\r\nSUMMARY:Far\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+            );
+            let Ok(ical) = parse(&text) else { continue };
+            let group = to_jscalendar(&ical).unwrap();
+            let _ = instances(
+                &ical,
+                &group,
+                utc("0001-01-01T00:00:00Z"),
+                utc("9999-12-31T00:00:00Z"),
+                berlin,
+                &mut Budget::default(),
+            );
+        }
     }
 
     #[test]
