@@ -9,6 +9,7 @@ import { emptyRuleSet, newRule, type MailRule, type RuleSet } from "@/lib/sieveR
 import { useFolders } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
+import { useAccountLabels } from "../labels/useLabels";
 import { folderDisplayPath } from "./folderPath";
 import { RuleEditor } from "./RuleEditor";
 import { useMailRules, useMailRulesAccounts } from "./useMailRules";
@@ -156,7 +157,7 @@ function AccountRules({ accountId }: { accountId: string }) {
                 className={clsx("min-w-0 flex-1 py-1 text-left", !rule.enabled && "opacity-60")}
               >
                 <span className="block truncate text-[13.5px] font-semibold">{rule.name}</span>
-                <RuleSummary rule={rule} />
+                <RuleSummary accountId={accountId} rule={rule} />
               </button>
               <IconButton
                 icon={ArrowUp}
@@ -232,14 +233,21 @@ function RuleSwitch({
 }
 
 /** "From contains … → Move to Receipts", in plain text. */
-function RuleSummary({ rule }: { rule: MailRule }) {
+function RuleSummary({ accountId, rule }: { accountId: string; rule: MailRule }) {
   const { t } = useT();
   const { data: folders = [] } = useFolders();
+  const { data: labels = [] } = useAccountLabels(accountId);
+  const labelName = (keyword: string, fallback = keyword) =>
+    labels.find((label) => label.keyword === keyword)?.name ?? fallback;
   const conditions =
     rule.conditions.length === 0
       ? t("rules.everyMessage")
       : rule.conditions
-          .map((c) => `${t(`rules.field.${c.field}`)} ${t(`rules.op.${c.op}`)} „${c.value}“`)
+          .map((c) =>
+            c.field === "label"
+              ? t(`rules.summary.label.${c.op === "isNot" ? "isNot" : "is"}`, { name: labelName(c.value) })
+              : `${t(`rules.field.${c.field}`)} ${t(`rules.op.${c.op}`)} „${c.value}“`,
+          )
           .join(rule.match === "any" ? ` ${t("rules.or")} ` : ` ${t("rules.and")} `);
   const actions = rule.actions
     .map((action) => {
@@ -251,6 +259,7 @@ function RuleSummary({ rule }: { rule: MailRule }) {
         return t("rules.summary.move", { folder: name });
       }
       if (action.type === "forward") return t("rules.summary.forward", { address: action.address });
+      if (action.type === "label") return t("rules.summary.setLabel", { name: labelName(action.keyword, action.name) });
       return t(`rules.action.${action.type}`);
     })
     .join(", ");

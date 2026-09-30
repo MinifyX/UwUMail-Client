@@ -21,6 +21,61 @@ function body(script: string): string {
   return script.split("\n").slice(2).join("\n");
 }
 
+describe("labels in rules", () => {
+  const labelled = rule({
+    name: "Shop",
+    match: "any",
+    conditions: [
+      { field: "label", op: "is", value: "rechnungen" },
+      { field: "label", op: "isNot", value: "newsletter" },
+    ],
+    actions: [
+      { type: "label", keyword: "orders-shipping", name: "Orders & shipping" },
+      { type: "label", keyword: "travel", name: "Travel" },
+    ],
+  });
+
+  it("sets labels as keyword flags and asks for them as header or flag", () => {
+    expect(body(rulesToSieve(set(labelled)))).toBe(
+      [
+        'require ["imap4flags"];',
+        "",
+        "# Shop",
+        'if anyof (anyof (header :is "X-UwUMail-Label" "rechnungen", hasflag "rechnungen"), not anyof (header :is "X-UwUMail-Label" "newsletter", hasflag "newsletter")) {',
+        '    addflag "orders-shipping";',
+        '    addflag "travel";',
+        "}",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("needs imap4flags for a label condition alone", () => {
+    const script = rulesToSieve(
+      set(
+        rule({
+          conditions: [{ field: "label", op: "is", value: "travel" }],
+          actions: [{ type: "forward", address: "a@b.example", keepCopy: false }],
+        }),
+      ),
+    );
+    expect(body(script)).toMatch(/^require \["imap4flags"\];/);
+  });
+
+  it("reads them back", () => {
+    expect(parseRulesScript(rulesToSieve(set(labelled)))).toEqual({ kind: "rules", set: set(labelled) });
+  });
+
+  it("wants a label that can be a keyword, and only has or hasn't as the comparison", () => {
+    const kinds = (candidate: MailRule) => validateRule(candidate).map((problem) => problem.kind);
+    expect(kinds(labelled)).toEqual([]);
+    expect(kinds(rule({ conditions: [], actions: [{ type: "label", keyword: "", name: "" }] }))).toEqual(["noLabel"]);
+    expect(kinds(rule({ conditions: [{ field: "label", op: "is", value: "Not A Keyword" }] }))).toEqual(["emptyValue"]);
+    const script = rulesToSieve(set(labelled)).replace('"op":"isNot"', '"op":"contains"');
+    expect(parseRulesScript(script).kind).toBe("foreign");
+  });
+});
+
 describe("rulesToSieve", () => {
   it("writes the documented layout for a rule with every kind of action", () => {
     const script = rulesToSieve(

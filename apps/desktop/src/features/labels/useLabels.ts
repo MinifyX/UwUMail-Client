@@ -49,3 +49,15 @@ export function useLabelCounts(entries: readonly LabelEntry[]) {
     placeholderData: (previous) => previous,
   });
 }
+
+/** The labels a UwUMail account's server keeps, for its mail rules; none for other mailboxes. */
+export function useAccountLabels(accountId: string) {
+  const { data: scopes = [] } = useAssistScopes();
+  const scope = scopes.find((each) => each.kind === "server" && each.accountIds.includes(accountId));
+  return useQuery({
+    queryKey: [...queryKeys.assistLabels, scope?.id],
+    queryFn: () => backend().assistLabels(scope!.id),
+    enabled: Boolean(scope),
+    staleTime: 5 * 60_000,
+  });
+}

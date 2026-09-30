@@ -16,6 +16,8 @@ export function demoRulesScript(lang: Lang): string {
       conditions: [{ field: "from", op: "is", value: "orders@pixelparts.example" }],
       actions: [
         { type: "markRead" },
+        // The demo server's first label, as the rule editor writes it.
+        { type: "label", keyword: de ? "rechnungen" : "invoices", name: de ? "Rechnungen" : "Invoices" },
         { type: "move", mailboxId: "acc-private:receipts", mailboxName: de ? "Rechnungen" : "Receipts" },
       ],
       stop: true,

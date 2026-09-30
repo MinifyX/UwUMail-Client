@@ -1017,7 +1017,8 @@
       "cc": "Cc",
       "toOrCc": "An oder Cc",
       "subject": "Betreff",
-      "listId": "Mailingliste"
+      "listId": "Mailingliste",
+      "hasLabel": "Label"
     },
     "op": {
       "label": "Vergleich",
@@ -1033,12 +1034,18 @@
       "trash": "In den Papierkorb",
       "markRead": "Als gelesen markieren",
       "flag": "Markieren",
-      "forward": "Weiterleiten"
+      "forward": "Weiterleiten",
+      "label": "Label setzen"
     },
     "summary": {
       "move": "nach {{folder}}",
       "forward": "an {{address}} weiterleiten",
-      "stop": "hört auf"
+      "stop": "hört auf",
+      "label": {
+        "is": "Label {{name}} gesetzt",
+        "isNot": "Label {{name}} nicht gesetzt"
+      },
+      "setLabel": "Label {{name}}"
     },
     "problem": {
       "noName": "Gib der Regel einen Namen.",
@@ -1046,7 +1053,8 @@
       "noActions": "Füg mindestens eine Aktion hinzu.",
       "noFolder": "Wähl einen Ordner.",
       "badAddress": "Gib eine vollständige Adresse ein, z. B. name@example.org.",
-      "tooMany": "Pro Regel ein Ordner und eine Weiterleitung."
+      "tooMany": "Pro Regel ein Ordner und eine Weiterleitung.",
+      "noLabel": "Wähle ein Label."
     },
     "foreignTitle": "Diese Regeln wurden woanders bearbeitet",
     "foreignBody": "Ein anderes Programm hat das Regel-Skript geändert, deshalb zeigt UwUMail es als Text. Du kannst es hier bearbeiten oder durch Regeln ersetzen, die du in UwUMail verwaltest.",
@@ -1055,7 +1063,13 @@
     "check": "Prüfen",
     "replace": "Durch UwUMail-Regeln ersetzen",
     "replaceConfirm": "Skript ersetzen",
-    "replaceBody": "Das Skript oben wird gelöscht und du fängst mit einer leeren Regelliste an."
+    "replaceBody": "Das Skript oben wird gelöscht und du fängst mit einer leeren Regelliste an.",
+    "labelOp": {
+      "is": "ist gesetzt",
+      "isNot": "ist nicht gesetzt"
+    },
+    "labelValue": "Label",
+    "chooseLabel": "Label wählen"
   },
   "accountCalendar": {
     "title": "Kalender",

@@ -1017,7 +1017,8 @@
       "cc": "Cc",
       "toOrCc": "To or Cc",
       "subject": "Subject",
-      "listId": "Mailing list"
+      "listId": "Mailing list",
+      "hasLabel": "Label"
     },
     "op": {
       "label": "Comparison",
@@ -1033,12 +1034,18 @@
       "trash": "Move to trash",
       "markRead": "Mark as read",
       "flag": "Flag",
-      "forward": "Forward"
+      "forward": "Forward",
+      "label": "Set label"
     },
     "summary": {
       "move": "into {{folder}}",
       "forward": "forward to {{address}}",
-      "stop": "stops"
+      "stop": "stops",
+      "label": {
+        "is": "label {{name}} is set",
+        "isNot": "label {{name}} isn't set"
+      },
+      "setLabel": "label {{name}}"
     },
     "problem": {
       "noName": "Give the rule a name.",
@@ -1046,7 +1053,8 @@
       "noActions": "Add at least one action.",
       "noFolder": "Choose a folder.",
       "badAddress": "Enter one complete address, like name@example.com.",
-      "tooMany": "One folder and one forward per rule."
+      "tooMany": "One folder and one forward per rule.",
+      "noLabel": "Choose a label."
     },
     "foreignTitle": "These rules were edited elsewhere",
     "foreignBody": "Another program changed the rules script, so UwUMail shows it as text. You can edit it here, or replace it with rules you manage in UwUMail.",
@@ -1055,7 +1063,13 @@
     "check": "Check",
     "replace": "Replace with UwUMail rules",
     "replaceConfirm": "Replace the script",
-    "replaceBody": "The script above will be deleted and you start with an empty list of rules."
+    "replaceBody": "The script above will be deleted and you start with an empty list of rules.",
+    "labelOp": {
+      "is": "is set",
+      "isNot": "is not set"
+    },
+    "labelValue": "Label",
+    "chooseLabel": "Choose label"
   },
   "accountCalendar": {
     "title": "Calendar",
