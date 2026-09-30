@@ -1,0 +1,4 @@
+{
+  "de": "- Behoben: Die Anmeldung mit Microsoft (Microsoft 365, Outlook.com) scheiterte unter Windows mit „Keychain error: … longer than platform limit of 2560 chars“. Die Anmeldung von Microsoft ist länger, als Windows in einem Eintrag speichert; UwUMail teilt sie jetzt auf mehrere Einträge auf",
+  "en": "- Fixed: signing in with Microsoft (Microsoft 365, Outlook.com) failed on Windows with \"Keychain error: … longer than platform limit of 2560 chars\". Microsoft's sign-in is longer than Windows keeps in one entry; UwUMail now splits it over several entries"
+}
