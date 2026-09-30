@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use tauri::{App, AppHandle, Manager, RunEvent, Wry};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 use uwumail_core::attachments::AttachmentFile;
@@ -57,8 +57,12 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
     }
     let data_dir = app.path().app_data_dir()?;
     let opener = app.handle().clone();
-    let open_url = Arc::new(move |url: &str| {
-        let _ = opener.opener().open_url(url, None::<&str>);
+    // Only ever sign-in pages; anything but a web address stays unopened.
+    let open_url = Arc::new(move |url: &str| match uwumail_core::links::external_url(url) {
+        Ok(url) => {
+            let _ = opener.opener().open_url(url, None::<&str>);
+        }
+        Err(_) => tracing::warn!("Refused to open an address that isn't a web address"),
     });
     let engine = tauri::async_runtime::block_on(async move {
         Engine::new(EngineOptions {
@@ -126,16 +130,34 @@ pub fn open_file(app: &AppHandle, file: &AttachmentFile) -> Result<(), Error> {
 }
 
 /// A native warning dialog, answered by the person, not by the web page.
+///
+/// The safe answer (`cancel`) is the first button, so it is the one Enter picks, and only a click
+/// on `ok` counts as yes: closing the dialog or Escape never does. This goes to rfd directly:
+/// tauri-plugin-dialog reports a closed dialog as a click on the second custom button, which
+/// would be `ok` once the safe answer comes first.
 pub async fn confirm(app: &AppHandle, title: &str, text: String, ok: &str, cancel: &str) -> Result<bool, Error> {
-    let dialog = app
-        .dialog()
-        .message(text)
-        .title(title)
-        .kind(MessageDialogKind::Warning)
-        .buttons(MessageDialogButtons::OkCancelCustom(ok.into(), cancel.into()));
-    tauri::async_runtime::spawn_blocking(move || dialog.blocking_show())
-        .await
-        .map_err(|e| Error::internal(format!("The dialog failed: {e}")))
+    let (answer, answered) = tokio::sync::oneshot::channel();
+    let (title, ok, cancel) = (title.to_owned(), ok.to_owned(), cancel.to_owned());
+    // Like the plugin: the dialog is made on the main thread and waited for on another one.
+    app.run_on_main_thread(move || {
+        let shown = rfd::AsyncMessageDialog::new()
+            .set_title(title)
+            .set_description(text)
+            .set_level(rfd::MessageLevel::Warning)
+            .set_buttons(rfd::MessageButtons::OkCancelCustom(cancel, ok.clone()))
+            .show();
+        std::thread::spawn(move || {
+            let result = tauri::async_runtime::block_on(shown);
+            let _ = answer.send(is_yes(&result, &ok));
+        });
+    })
+    .map_err(|e| Error::internal(format!("The dialog failed: {e}")))?;
+    answered.await.map_err(|_| Error::internal("The dialog failed."))
+}
+
+/// Only the button that says yes: never `Ok`/`Cancel`, which is how a closed dialog comes back.
+fn is_yes(result: &rfd::MessageDialogResult, ok: &str) -> bool {
+    matches!(result, rfd::MessageDialogResult::Custom(label) if label == ok)
 }
 
 /// Asks where to save in the native save dialog and copies the attachment there.
@@ -210,4 +232,20 @@ pub async fn check_for_updates(app: &AppHandle) -> Result<Option<ReadyUpdate>, E
 
 pub async fn install_update(app: &AppHandle) -> Result<(), Error> {
     updates::install_now(app).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_yes_button_counts_as_yes() {
+        use rfd::MessageDialogResult as Answer;
+        assert!(is_yes(&Answer::Custom("Open anyway".into()), "Open anyway"));
+        assert!(!is_yes(&Answer::Custom("Don't open".into()), "Open anyway"));
+        // A closed dialog or Escape.
+        for closed in [Answer::Cancel, Answer::Ok, Answer::Yes, Answer::No] {
+            assert!(!is_yes(&closed, "Open anyway"));
+        }
+    }
 }

@@ -34,6 +34,9 @@ const FEED: &str = "https://raw.githubusercontent.com/MinifyX/UwUMail-Client/upd
 const FIRST_CHECK_AFTER: Duration = Duration::from_secs(20);
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 const PENDING: &str = "pending.json";
+/// `TMPDIR` as it was before the setup got the updates folder instead; the setup restores it.
+#[cfg(target_os = "linux")]
+const OUTER_TMPDIR: &str = "UWUMAIL_OUTER_TMPDIR";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -338,6 +341,9 @@ fn hand_over(update: &ReadyUpdate, relaunch: bool) -> Result<(), Error> {
         }
         command.env("APPIMAGE_EXTRACT_AND_RUN", "1");
         if let Some(dir) = update.file.parent() {
+            // The UwUMail the setup starts again gets the real one back (the setup's
+            // `system_unix::command`): this folder goes away on its next start. Empty when unset.
+            command.env(OUTER_TMPDIR, std::env::var_os("TMPDIR").unwrap_or_default());
             command.env("TMPDIR", dir);
         }
     }
@@ -355,8 +361,14 @@ fn install_package(file: &Path, install: Install) -> Result<(), Error> {
     // update is newer, UwUMail has checked itself.
     let (program, args): (&str, &[&str]) =
         if install == Install::Deb { ("dpkg", &["-i"]) } else { ("rpm", &["-U", "--oldpackage"]) };
-    let status = std::process::Command::new("pkexec")
-        .arg(program)
+    // By their full paths, not whatever `PATH` finds first; pkexec only takes a program it can
+    // name exactly anyway, and it resolves a bare name with the caller's `PATH`.
+    let pkexec = system_program("pkexec")
+        .ok_or_else(|| Error::internal("Couldn't ask for the administrator password: pkexec isn't installed."))?;
+    let installer = system_program(program)
+        .ok_or_else(|| Error::internal(format!("Couldn't install the update: {program} isn't installed.")))?;
+    let status = std::process::Command::new(pkexec)
+        .arg(installer)
         .args(args)
         .arg(file)
         .stdin(std::process::Stdio::null())
@@ -370,6 +382,12 @@ fn install_package(file: &Path, install: Install) -> Result<(), Error> {
         args.join(" "),
         file.display()
     )))
+}
+
+/// A system program in the folders only root can write to.
+#[cfg(target_os = "linux")]
+fn system_program(name: &str) -> Option<PathBuf> {
+    ["/usr/bin", "/bin", "/usr/sbin", "/sbin"].iter().map(|dir| Path::new(dir).join(name)).find(|path| path.is_file())
 }
 
 #[cfg(not(target_os = "linux"))]

@@ -48,8 +48,11 @@ pub fn plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
 pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>> {
     let data_dir = app.path().app_data_dir()?;
     let opener = app.handle().clone();
+    // Only ever sign-in pages; anything but a web address stays unopened.
     let open_url = Arc::new(move |url: &str| {
-        let _ = opener.opener().open_url(url, None::<&str>);
+        if let Ok(url) = uwumail_core::links::external_url(url) {
+            let _ = opener.opener().open_url(url, None::<&str>);
+        }
     });
     let engine = tauri::async_runtime::block_on(async move {
         Engine::new(EngineOptions {
@@ -125,7 +128,7 @@ pub fn open_file(_app: &AppHandle, _file: &AttachmentFile) -> Result<(), Error> 
     ))
 }
 
-/// An iOS dialog, answered by the person, not by the web page.
+/// An iOS dialog, answered by the person, not by the web page. Only a tap on `ok` counts as yes.
 pub async fn confirm(app: &AppHandle, title: &str, text: String, ok: &str, cancel: &str) -> Result<bool, Error> {
     let dialog = app
         .dialog()
@@ -133,9 +136,10 @@ pub async fn confirm(app: &AppHandle, title: &str, text: String, ok: &str, cance
         .title(title)
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::OkCancelCustom(ok.into(), cancel.into()));
-    tauri::async_runtime::spawn_blocking(move || dialog.blocking_show())
+    let result = tauri::async_runtime::spawn_blocking(move || dialog.blocking_show_with_result())
         .await
-        .map_err(|e| Error::internal(format!("The dialog failed: {e}")))
+        .map_err(|e| Error::internal(format!("The dialog failed: {e}")))?;
+    Ok(matches!(result, tauri_plugin_dialog::MessageDialogResult::Custom(label) if label == ok))
 }
 
 /// Saves into UwUMail's folder in the Files app; iOS has no save dialog that

@@ -6170,6 +6170,7 @@ dependencies = [
  "base64 0.23.1",
  "libc",
  "minisign-verify",
+ "rfd",
  "semver",
  "serde",
  "serde_json",

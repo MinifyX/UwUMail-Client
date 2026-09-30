@@ -30,7 +30,13 @@ const APPIMAGE_ENV: &[&str] = &[
     "PYTHONHOME",
     "PERLLIB",
     "QT_PLUGIN_PATH",
+    // Set by UwUMail's updater for this setup only (updates.rs `hand_over`).
+    "APPIMAGE_EXTRACT_AND_RUN",
 ];
+
+/// `TMPDIR` from before UwUMail's updater pointed it at its updates folder; empty when it was unset.
+#[cfg(target_os = "linux")]
+const OUTER_TMPDIR: &str = "UWUMAIL_OUTER_TMPDIR";
 
 /// The user's home folder from `HOME`, which must be an absolute path.
 pub fn home() -> Option<PathBuf> {
@@ -134,8 +140,20 @@ pub fn command(program: &Path) -> Command {
     let mut command = Command::new(program);
     command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(target_os = "linux")]
-    for name in APPIMAGE_ENV {
-        command.env_remove(name);
+    {
+        for name in APPIMAGE_ENV {
+            command.env_remove(name);
+        }
+        // Started by an update: what runs from here gets the user's own temporary folder back,
+        // not the updates folder that UwUMail deletes on its next start.
+        if let Some(outer) = std::env::var_os(OUTER_TMPDIR) {
+            command.env_remove(OUTER_TMPDIR);
+            if outer.is_empty() {
+                command.env_remove("TMPDIR");
+            } else {
+                command.env("TMPDIR", outer);
+            }
+        }
     }
     if let Some(home) = home() {
         command.current_dir(home);

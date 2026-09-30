@@ -81,7 +81,12 @@ pub(crate) fn start_engine(data_dir: PathBuf, cache_dir: PathBuf) -> Result<()> 
         return Ok(());
     }
     let _ = CACHE_DIR.set(cache_dir);
+    // Only ever sign-in pages; anything but a web address stays unopened (Files.openUrl checks too).
     let open_url = Arc::new(|url: &str| {
+        let Ok(url) = uwumail_core::links::external_url(url) else {
+            tracing::warn!("Refused to open an address that isn't a web address");
+            return;
+        };
         if let Err(error) = bridge::call("openUrl", &json!({ "url": url })) {
             tracing::warn!("{error}");
         }
