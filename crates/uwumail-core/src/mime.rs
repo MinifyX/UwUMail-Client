@@ -83,7 +83,15 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
     // A bare header block still parses with an empty text part; that isn't a body.
     let header_end = find(raw, b"\r\n\r\n").map(|i| i + 4).or_else(|| find(raw, b"\n\n").map(|i| i + 2));
     let body_present = header_end.is_some_and(|end| raw[end..].iter().any(|b| !b.is_ascii_whitespace()));
-    let text = message.body_text(0).map(|t| t.into_owned()).filter(|_| body_present);
+    // winmail.dat: its body where the MIME has none, its attachments instead of itself.
+    let decoded = crate::tnef::decode(&message);
+    let tnef_body = decoded.iter().map(|d| &d.message.body).find(|b| b.text.is_some() || b.html.is_some());
+    let tnef_text = tnef_body.filter(|_| !crate::tnef::mime_has_text(&message));
+
+    let text = match tnef_text {
+        Some(body) => body.text.clone().or_else(|| body.html.as_deref().map(html_to_text)),
+        None => message.body_text(0).map(|t| t.into_owned()).filter(|_| body_present),
+    };
     let raw_html = message.body_html(0).map(|h| h.into_owned()).filter(|_| body_present);
     // mail-parser synthesizes HTML from text parts; only keep real HTML.
     let has_html_part = message.html_body_count() > 0
@@ -91,7 +99,11 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
             .html_part(0)
             .and_then(|part| part.content_type())
             .is_some_and(|ct| ct.subtype().is_some_and(|s| s.eq_ignore_ascii_case("html")));
-    let (html, has_remote_content) = match raw_html.filter(|_| has_html_part) {
+    let raw_html = match raw_html.filter(|_| has_html_part) {
+        Some(html) => Some(html),
+        None => tnef_body.and_then(|body| body.html.clone()),
+    };
+    let (html, has_remote_content) = match raw_html {
         Some(html) => {
             let remote = has_remote_references(&html);
             (Some(sanitize_html(&html)), remote)
@@ -100,27 +112,17 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
     };
 
     let snippet_source = text.clone().or_else(|| html.as_deref().map(html_to_text)).unwrap_or_default();
+    // The preview reads Microsoft Safe Links as the links they wrap.
+    let snippet_source = uwumail_tnef::safelinks::unwrap_in_text(&snippet_source).into_owned();
 
-    let attachments = message
-        .attachments()
-        .map(|part| {
-            let mime_type = part
-                .content_type()
-                .map(|ct| match ct.subtype() {
-                    Some(sub) => format!("{}/{}", ct.ctype(), sub),
-                    None => ct.ctype().to_string(),
-                })
-                .unwrap_or_else(|| "application/octet-stream".into());
-            let content_id = part.content_id().map(|id| id.trim().trim_matches(['<', '>']).to_string());
-            // Parts with a Content-ID belong into the HTML unless they say they're attachments.
-            let inline = content_id.is_some() && !part.content_disposition().is_some_and(|d| d.is_attachment());
-            ParsedAttachment {
-                filename: crate::attachments::clean_display_name(part.attachment_name().unwrap_or("attachment")),
-                mime_type,
-                size: part.contents().len() as u64,
-                inline,
-                content_id,
-            }
+    let attachments = crate::tnef::attachment_parts(&message, &decoded)
+        .into_iter()
+        .map(|part| ParsedAttachment {
+            size: part.data.len() as u64,
+            filename: part.filename,
+            mime_type: part.mime_type,
+            inline: part.inline,
+            content_id: part.content_id,
         })
         .collect();
 
@@ -464,6 +466,37 @@ Content-Type: text/html; charset=utf-8\r\n\
         assert!(clean.contains("colspan=\"2\""));
         assert!(clean.starts_with("<div style=\"background-color:#f4f4f4;margin:0\">"), "{clean}");
         assert!(!clean.contains("onload"));
+    }
+
+    #[test]
+    fn winmail_dat_gives_its_body_and_attachments() {
+        use crate::tnef::tests::{HEADERS, note, request};
+        use uwumail_tnef::builder::mime_with_winmail;
+        let parsed = parse(&mime_with_winmail(HEADERS, Some(""), &note()));
+        let html = parsed.html.as_deref().unwrap();
+        assert!(html.contains("Hallo Mia, anbei der Bericht über den Umzug."), "{html}");
+        assert!(html.contains("cid:logo@example.com"), "the picture shows from inside: {html}");
+        assert!(parsed.text.as_deref().unwrap().contains("Bericht über den Umzug"));
+        assert!(parsed.snippet.starts_with("Hallo Mia"));
+        let names: Vec<&str> = parsed.attachments.iter().map(|a| a.filename.as_str()).collect();
+        assert_eq!(names, ["Quartalsbericht 2026.pdf", "image001.png", "Weitergeleitet.eml"]);
+        assert_eq!(parsed.attachments[0].size, 13);
+        assert!(parsed.attachments[1].inline);
+
+        // The mail's own text wins; the meeting is an invitation.
+        let parsed =
+            parse(&mime_with_winmail(HEADERS, Some("Siehe Einladung"), &request("IPM.Schedule.Meeting.Request")));
+        assert_eq!(parsed.text.as_deref().map(str::trim), Some("Siehe Einladung"));
+        assert_eq!(parsed.attachments[0].filename, "invite.ics");
+        assert_eq!(parsed.attachments[0].mime_type, "text/calendar");
+    }
+
+    #[test]
+    fn previews_read_safe_links_as_the_links_they_wrap() {
+        let raw = "From: a@example.com\r\nSubject: x\r\n\r\nSiehe https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwanders.example%2Fclip&data=05%7C02&reserved=0 bis bald";
+        let parsed = parse(raw.as_bytes());
+        assert_eq!(parsed.snippet, "Siehe https://wanders.example/clip bis bald");
+        assert!(parsed.text.unwrap().contains("safelinks"), "the mail itself stays as it came");
     }
 
     #[test]

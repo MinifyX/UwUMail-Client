@@ -18,6 +18,7 @@ futures.workspace = true
 hickory-resolver.workspace = true
 keyring.workspace = true
 lettre.workspace = true
+mail-builder.workspace = true
 mail-parser.workspace = true
 percent-encoding.workspace = true
 quick-xml.workspace = true
@@ -35,6 +36,7 @@ tokio-rustls.workspace = true
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
+uwumail-tnef.workspace = true
 
 # Desktop systems check certificates themselves. On Android that needs Java
 # classes loaded before the first connection, so IMAP, SMTP and HTTPS check
@@ -49,4 +51,6 @@ webpki-roots.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true
+# Its TNEF writer, for winmail.dat fixtures.
+uwumail-tnef = { workspace = true, features = ["builder"] }
 tempfile.workspace = true
