@@ -10,11 +10,12 @@ import {
   type AssistSettings,
   type AssistSettingsPatch,
 } from "@/backend/types";
-import { Select, Toggle } from "@/components/ui/Field";
+import { Field, Select, Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
-import { useSettings } from "@/state/settings";
+import { CURRENCY_CHOICES, useSettings, type CurrencyChoice } from "@/state/settings";
 import { toast } from "@/state/toasts";
+import { mayChooseCurrency } from "../cost";
 import { nextChoice, providersFor } from "../providerForm";
 import {
   AssistScopeProvider,
@@ -63,6 +64,7 @@ export function AssistantSettings() {
         </AssistScopeProvider>
       ))}
       <EventSettings enabled={events} />
+      <CurrencySetting />
     </div>
   );
 }
@@ -257,6 +259,33 @@ function EventSettings({ enabled }: { enabled: boolean }) {
         label={t("assist.settings.refineEvents")}
         description={t("assist.settings.refineEventsDesc")}
       />
+    </Section>
+  );
+}
+
+/** In English the person picks euros or dollars for the costs; other languages have their own. */
+export function CurrencySetting() {
+  const { t, i18n } = useT();
+  const currency = useSettings((s) => s.assistCurrency);
+  const update = useSettings((s) => s.update);
+  if (!mayChooseCurrency(i18n.language)) return null;
+  return (
+    <Section title={t("assist.settings.costsTitle")}>
+      <Field label={t("assist.settings.currency")} hint={t("assist.settings.currencyHint")}>
+        {(id) => (
+          <Select
+            id={id}
+            value={currency}
+            onChange={(event) => update({ assistCurrency: event.target.value as CurrencyChoice })}
+          >
+            {CURRENCY_CHOICES.map((choice) => (
+              <option key={choice} value={choice}>
+                {t(`assist.settings.currencies.${choice}`)}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
     </Section>
   );
 }

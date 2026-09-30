@@ -1,5 +1,5 @@
 /**
- * "≈ 1,200 tokens · 48,000 left today" on the assistant's buttons: what a call would take, asked
+ * "≈ 1,200 tokens · ≈ 0.02 € · 48,000 left today" on the assistant's buttons: what a call would take, asked
  * for the first time the pointer rests on the button (or a finger holds it), then kept per call
  * and arguments. A UwUMail server answers with `Assist/estimate`; other mailboxes count on this
  * device. An older server, or any error, simply means no tooltip.
@@ -22,6 +22,7 @@ import { backend } from "@/backend/backend";
 import type { AssistEstimate, AssistEstimateMethod } from "@/backend/types";
 import { useT } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
+import { formatCost, useAssistCurrency } from "./cost";
 
 /** One call as the estimate needs it: whose assistant, which method and its arguments. */
 export interface EstimateRequest {
@@ -52,14 +53,31 @@ function stable(value: unknown): unknown {
   return value;
 }
 
-export function estimateKey(request: EstimateRequest): unknown[] {
-  return [...queryKeys.assistEstimate, request.accountId, request.method, JSON.stringify(stable(request.args))];
+export function estimateKey(request: EstimateRequest, currency = "EUR"): unknown[] {
+  return [
+    ...queryKeys.assistEstimate,
+    request.accountId,
+    request.method,
+    JSON.stringify(stable(request.args)),
+    currency,
+  ];
 }
 
-/** The tooltip's text: "≈ 1,200 tokens", with what is left today when the provider has a limit. */
+/** A count as rough as the estimate is: to tens below 1,000, to hundreds above. */
+export function roughly(tokens: number): number {
+  return tokens < 1000 ? Math.round(tokens / 10) * 10 : Math.round(tokens / 100) * 100;
+}
+
+/**
+ * The tooltip's text: "≈ 1,200 tokens · ≈ 0.02 € · 48,000 left today", the cost where it is known,
+ * what is left where the provider has a limit.
+ */
 export function estimateText(estimate: AssistEstimate, t: TFunction, locale: string): string {
   const number = new Intl.NumberFormat(locale);
-  const parts = [t("assist.estimate.tokens", { formatted: number.format(estimate.totalTokens) })];
+  const total = roughly(estimate.totalTokens);
+  const parts = [t("assist.estimate.tokens", { formatted: number.format(total) })];
+  // A server from before prices has no cost, and one whose admin keeps them to themselves says null.
+  if (estimate.cost) parts.push(formatCost(estimate.cost, locale, t, true));
   if (estimate.tokensLeftToday !== null) {
     parts.push(t("assist.estimate.tokensLeft", { formatted: number.format(estimate.tokensLeftToday) }));
   } else if (estimate.requestsLeftToday !== null) {
@@ -75,9 +93,10 @@ export function estimateText(estimate: AssistEstimate, t: TFunction, locale: str
 
 /** The estimate of one call, asked for only once `wanted`. */
 export function useAssistEstimate(request: EstimateRequest | null, wanted: boolean) {
+  const currency = useAssistCurrency();
   return useQuery({
-    queryKey: request ? estimateKey(request) : [...queryKeys.assistEstimate, null],
-    queryFn: () => backend().assistEstimate(request!.accountId, request!.method, request!.args),
+    queryKey: request ? estimateKey(request, currency) : [...queryKeys.assistEstimate, null],
+    queryFn: () => backend().assistEstimate(request!.accountId, request!.method, request!.args, currency),
     enabled: wanted && request !== null,
     // What is left today changes with every call; the prompt only with the mail or the draft.
     staleTime: 60_000,

@@ -697,6 +697,26 @@ export interface AssistProvider {
   experimental: boolean;
   /** `chatgpt`: signed in; others: a key is stored or none is needed. */
   connected: boolean;
+  /** Own providers: the price set by hand, USD per million tokens; null follows the known prices. */
+  inputPricePerMillion: number | null;
+  outputPricePerMillion: number | null;
+  /** What the default model costs as far as known; null when it isn't (or an older server). */
+  price: AssistPrice | null;
+}
+
+/** A model's price in USD per million tokens, and where it comes from. */
+export interface AssistPrice {
+  inputPerMillion: number;
+  outputPerMillion: number;
+  source: "auto" | "manual" | "free";
+}
+
+/** What something costs, in the currency asked for and in USD. */
+export interface AssistCost {
+  amount: number;
+  /** ISO 4217, e.g. `EUR`. */
+  currency: string;
+  usd: number | null;
 }
 
 /** What may be set on an own provider. `apiKey` left out keeps the stored key, `""` removes it. */
@@ -708,6 +728,9 @@ export interface AssistProviderInput {
   apiKey?: string;
   model?: string | null;
   fastModel?: string | null;
+  /** USD per million tokens; null goes back to the known prices. */
+  inputPricePerMillion?: number | null;
+  outputPricePerMillion?: number | null;
 }
 
 export interface AssistModel {
@@ -758,6 +781,8 @@ export interface AssistEstimate {
   model: string | null;
   tokensLeftToday: number | null;
   requestsLeftToday: number | null;
+  /** About what it costs; null where the price is unknown or hidden (or an older server). */
+  cost: AssistCost | null;
 }
 
 /** OpenAI's device-code login for a `chatgpt` provider (experimental). */
@@ -991,6 +1016,8 @@ export interface AssistUsageDay {
   requests: number;
   inputTokens: number;
   outputTokens: number;
+  /** Null where the price was unknown or is hidden (or an older server). */
+  cost: AssistCost | null;
 }
 
 export interface AssistUsageToday {
@@ -1000,6 +1027,7 @@ export interface AssistUsageToday {
   tokens: number;
   requestsPerDay: number | null;
   tokensPerDay: number | null;
+  cost: AssistCost | null;
 }
 
 export interface AssistUsage {

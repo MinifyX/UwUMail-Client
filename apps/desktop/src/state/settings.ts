@@ -24,6 +24,9 @@ export type SwipeAction = "read" | "archive" | "spam" | "trash" | "flag" | "none
 export type LockAfter = 0 | 1 | 5 | 15;
 /** Android: days of mail kept complete on the phone; 0 keeps everything. */
 export type OfflineDays = 30 | 90 | 365 | 0;
+/** The money AI costs are shown in where the person may choose (English): euros or dollars. */
+export const CURRENCY_CHOICES = ["EUR", "USD"] as const;
+export type CurrencyChoice = (typeof CURRENCY_CHOICES)[number];
 /** Mailboxes shown apart, see lib/workspaces. */
 export type Workspace = "private" | "business";
 
@@ -91,6 +94,8 @@ export interface Settings {
   assistRefineEvents: boolean;
   /** Dates in mails are offered for the calendar, see lib/dates. Follows the account as `mail.detectEvents`. */
   detectEvents: boolean;
+  /** AI costs in English: euros or dollars (other languages have their own currency). This device only. */
+  assistCurrency: CurrencyChoice;
 }
 
 interface SettingsActions {
@@ -143,6 +148,7 @@ export const DEFAULT_SETTINGS: Settings = {
   businessAccounts: [],
   assistRefineEvents: false,
   detectEvents: true,
+  assistCurrency: "EUR",
 };
 
 export const useSettings = create<Settings & SettingsActions>()(

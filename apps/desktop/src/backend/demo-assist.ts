@@ -8,6 +8,7 @@ import {
   type AssistAnswer,
   type AssistComposeRequest,
   type AssistComposeResult,
+  type AssistCost,
   type AssistEffective,
   type AssistEstimate,
   type AssistEstimateMethod,
@@ -19,6 +20,7 @@ import {
   type AssistLabelLogEntry,
   type AssistModels,
   type AssistOptions,
+  type AssistPrice,
   type AssistProvider,
   type AssistProviderInput,
   type AssistSettings,
@@ -66,6 +68,9 @@ const SERVER_PROVIDER: AssistProvider = {
   quota: { requestsPerDay: 200, tokensPerDay: 400_000 },
   experimental: false,
   connected: true,
+  inputPricePerMillion: null,
+  outputPricePerMillion: null,
+  price: null,
 };
 
 /** The made-up local model "this device" starts with in the demo. */
@@ -83,7 +88,67 @@ const DEVICE_PROVIDER: AssistProvider = {
   quota: null,
   experimental: false,
   connected: true,
+  inputPricePerMillion: null,
+  outputPricePerMillion: null,
+  price: null,
 };
+
+/** Made-up but realistic prices, USD per million tokens (input, output). */
+const DEMO_PRICES: Record<string, [number, number]> = {
+  "mistral-medium-latest": [0.4, 2],
+  "mistral-small-latest": [0.1, 0.3],
+  "mistral-large-latest": [2, 6],
+  "gpt-5": [1.25, 10],
+  "gpt-5-mini": [0.25, 2],
+  "gpt-5-nano": [0.05, 0.4],
+  "claude-haiku-4-5": [1, 5],
+  "claude-sonnet-4-5": [3, 15],
+  "gemini-2.5-flash": [0.3, 2.5],
+  "gemini-2.5-flash-lite": [0.1, 0.4],
+  "gemini-2.5-pro": [1.25, 10],
+};
+
+/** What a US dollar is worth, as the ECB's reference rates might say. */
+const DEMO_RATES: Record<string, number> = { USD: 1, EUR: 0.86, JPY: 148, CNY: 7.1 };
+
+/** A sum of costs in `currency`, from what each cost in USD; what has no cost adds nothing. */
+function addCost(
+  sum: AssistCost | null | undefined,
+  usd: number | null | undefined,
+  currency: string,
+): AssistCost | null {
+  const rate = DEMO_RATES[currency];
+  if (usd === null || usd === undefined || rate === undefined) return sum ?? null;
+  const total = (sum?.usd ?? 0) + usd;
+  return { amount: total * rate, currency, usd: total };
+}
+
+/** Largest price a person may set by hand, per million tokens. */
+const MAX_PRICE = 10_000;
+
+function checkPrice(value: number | null | undefined, property: string) {
+  if (value === undefined || value === null) return;
+  if (!Number.isFinite(value) || value < 0 || value > MAX_PRICE) {
+    throw new AssistError("invalidProperties", "A price of 0 to 10,000 USD per million tokens.", {
+      properties: [property],
+    });
+  }
+}
+
+/** Whether an address is on this computer or in the local network, where models cost nothing. */
+function isLocal(baseUrl: string | null): boolean {
+  try {
+    const host = new URL(baseUrl ?? "").hostname.replace(/^\[|\]$/g, "");
+    return (
+      host === "localhost" ||
+      host === "::1" ||
+      /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) ||
+      /\.(localhost|local|lan)$/.test(host)
+    );
+  } catch {
+    return false;
+  }
+}
 
 const DEMO_MODELS: Record<string, string[]> = {
   openai: ["gpt-5", "gpt-5-mini", "gpt-5-nano"],
@@ -239,7 +304,12 @@ export class DemoAssist {
         requests,
         inputTokens: requests * 1450,
         outputTokens: requests * (feature === "compose" ? 260 : 90),
+        cost: null,
       });
+      const row = this.usage[this.usage.length - 1]!;
+      const provider = this.providers[0]!;
+      const model = feature === "compose" ? provider.model : provider.fastModel;
+      row.cost = this.costOf(provider.id, model, row.inputTokens, row.outputTokens, "USD");
     }
   }
 
@@ -299,7 +369,48 @@ export class DemoAssist {
   }
 
   listProviders(): AssistProvider[] {
-    return structuredClone(this.providers);
+    return this.providers.map((provider) => this.shown(provider));
+  }
+
+  /** A provider as the person sees it: own ones with the price of their default model. */
+  private shown(provider: AssistProvider): AssistProvider {
+    const copy = structuredClone(provider);
+    if (provider.scope === "personal") copy.price = this.priceOf(provider, provider.model);
+    return copy;
+  }
+
+  /** What a model of a provider costs: set by hand, free locally, or known. */
+  private priceOf(provider: AssistProvider, model: string | null): AssistPrice | null {
+    const manual = provider.inputPricePerMillion !== null || provider.outputPricePerMillion !== null;
+    if (manual) {
+      return {
+        inputPerMillion: provider.inputPricePerMillion ?? 0,
+        outputPerMillion: provider.outputPricePerMillion ?? 0,
+        source: "manual",
+      };
+    }
+    if (provider.kind === "ollama" || (provider.kind === "openaiCompatible" && isLocal(provider.baseUrl))) {
+      return { inputPerMillion: 0, outputPerMillion: 0, source: "free" };
+    }
+    const known = model ? DEMO_PRICES[model] : undefined;
+    return known ? { inputPerMillion: known[0], outputPerMillion: known[1], source: "auto" } : null;
+  }
+
+  /** What tokens cost with a provider's model, in `currency`; null where the price is unknown. */
+  private costOf(
+    providerId: string,
+    model: string | null,
+    inputTokens: number,
+    outputTokens: number,
+    currency: string,
+  ): AssistCost | null {
+    const provider = this.providers.find((entry) => entry.id === providerId);
+    const rate = DEMO_RATES[currency];
+    if (!provider || rate === undefined) return null;
+    const price = this.priceOf(provider, model);
+    if (!price) return null;
+    const usd = (inputTokens * price.inputPerMillion + outputTokens * price.outputPerMillion) / 1_000_000;
+    return { amount: usd * rate, currency, usd };
   }
 
   private provider(id: string): AssistProvider {
@@ -333,6 +444,8 @@ export class DemoAssist {
     if (this.providers.filter((provider) => provider.scope === "personal").length >= OPTIONS.maxProviders) {
       throw new AssistError("overQuota", "No more providers of your own.");
     }
+    checkPrice(input.inputPricePerMillion, "inputPricePerMillion");
+    checkPrice(input.outputPricePerMillion, "outputPricePerMillion");
     const key = input.apiKey?.trim() ?? "";
     const provider: AssistProvider = {
       id: `q${100 + this.nextId++}`,
@@ -348,10 +461,13 @@ export class DemoAssist {
       quota: null,
       experimental: kind === "chatgpt",
       connected: kind === "chatgpt" ? false : key !== "" || assistKind(kind).key !== "required",
+      inputPricePerMillion: input.inputPricePerMillion ?? null,
+      outputPricePerMillion: input.outputPricePerMillion ?? null,
+      price: null,
     };
     this.providers.push(provider);
     this.changed(false);
-    return structuredClone(provider);
+    return this.shown(provider);
   }
 
   updateProvider(id: string, patch: AssistProviderInput) {
@@ -375,6 +491,10 @@ export class DemoAssist {
     }
     if (patch.model !== undefined) provider.model = patch.model?.trim() || null;
     if (patch.fastModel !== undefined) provider.fastModel = patch.fastModel?.trim() || null;
+    checkPrice(patch.inputPricePerMillion, "inputPricePerMillion");
+    checkPrice(patch.outputPricePerMillion, "outputPricePerMillion");
+    if (patch.inputPricePerMillion !== undefined) provider.inputPricePerMillion = patch.inputPricePerMillion;
+    if (patch.outputPricePerMillion !== undefined) provider.outputPricePerMillion = patch.outputPricePerMillion;
     this.changed(false);
   }
 
@@ -487,6 +607,8 @@ export class DemoAssist {
       requests: 1,
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
+      // Kept in USD as it was at the time, like the server does.
+      cost: this.costOf(effective.providerId, effective.model, usage.inputTokens, usage.outputTokens, "USD"),
     });
     return {
       providerId: effective.providerId,
@@ -757,7 +879,7 @@ export class DemoAssist {
    * What a call would take, like the server's `Assist/estimate`: the text it would read, the fixed
    * instructions and a typical answer; nothing is counted. The server's provider has daily limits.
    */
-  estimate(method: AssistEstimateMethod, args: Record<string, unknown>): AssistEstimate {
+  estimate(method: AssistEstimateMethod, args: Record<string, unknown>, currency = "EUR"): AssistEstimate {
     const feature: AssistFeature =
       method === "Assist/compose"
         ? "compose"
@@ -809,6 +931,7 @@ export class DemoAssist {
         quota?.requestsPerDay,
         used.reduce((sum, entry) => sum + entry.requests, 0),
       ),
+      cost: this.costOf(effective.providerId, effective.model, input, output, currency),
     };
   }
 
@@ -824,13 +947,14 @@ export class DemoAssist {
     return this.providers.some((provider) => plain(provider.baseUrl) === plain(baseUrl));
   }
 
-  usageReport(days: number): AssistUsage {
+  usageReport(days: number, currency = "EUR"): AssistUsage {
     const since = new Date(Date.now() - (days - 1) * DAY).toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
     const grouped = new Map<string, AssistUsage["days"][number]>();
     for (const entry of this.usage.filter((item) => item.day >= since)) {
       const key = `${entry.day}|${entry.providerId}|${entry.feature}`;
-      const sum = grouped.get(key) ?? { ...entry, requests: 0, inputTokens: 0, outputTokens: 0 };
+      const sum = grouped.get(key) ?? { ...entry, requests: 0, inputTokens: 0, outputTokens: 0, cost: null };
+      sum.cost = addCost(sum.cost, entry.cost?.usd, currency);
       sum.requests += entry.requests;
       sum.inputTokens += entry.inputTokens;
       sum.outputTokens += entry.outputTokens;
@@ -846,7 +970,9 @@ export class DemoAssist {
         tokens: 0,
         requestsPerDay: provider?.quota?.requestsPerDay ?? null,
         tokensPerDay: provider?.quota?.tokensPerDay ?? null,
+        cost: null,
       };
+      sum.cost = addCost(sum.cost, entry.cost?.usd, currency);
       sum.requests += entry.requests;
       sum.tokens += entry.inputTokens + entry.outputTokens;
       perProvider.set(entry.providerId, sum);

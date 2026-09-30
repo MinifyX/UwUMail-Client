@@ -1436,7 +1436,14 @@
       "deviceDescription": "Die hier eingerichteten Anbieter, für jedes Postfach ohne Assistent auf seinem Server. Schlüssel bleiben im Schlüsselbund des Systems; Mails gehen direkt von diesem Gerät zum Anbieter.",
       "serverDescription": "Der Assistent des Servers dieses UwUMail-Kontos.",
       "deviceNoneTitle": "Noch kein Anbieter eingerichtet",
-      "deviceNoneBody": "Füge unten einen Anbieter hinzu, etwa deinen eigenen Schlüssel für OpenAI, Anthropic, Gemini oder Mistral, oder ein lokales Modell mit Ollama."
+      "deviceNoneBody": "Füge unten einen Anbieter hinzu, etwa deinen eigenen Schlüssel für OpenAI, Anthropic, Gemini oder Mistral, oder ein lokales Modell mit Ollama.",
+      "costsTitle": "Kosten",
+      "currency": "Währung",
+      "currencyHint": "KI-Kosten werden in dieser Währung gezeigt, umgerechnet mit den EZB-Referenzkursen.",
+      "currencies": {
+        "EUR": "Euro (€)",
+        "USD": "US-Dollar ($)"
+      }
     },
     "providers": {
       "title": "Anbieter",
@@ -1498,12 +1505,18 @@
         "urlMissing": "Für diesen Anbieter wird die Adresse gebraucht.",
         "urlScheme": "Die Adresse muss mit http:// oder https:// beginnen.",
         "urlLogin": "Lass Benutzername und Passwort aus der Adresse weg.",
-        "keyMissing": "Dieser Anbieter braucht einen API-Schlüssel."
+        "keyMissing": "Dieser Anbieter braucht einen API-Schlüssel.",
+        "priceInvalid": "Ein Preis von 0 bis 10.000, z. B. 0,40."
       },
       "pickModel": "Aus der Liste wählen: {{field}}",
       "modelsLoading": "Lade Modelle …",
       "modelsFailed": "Der Anbieter hat keine Modelle genannt. Du kannst eins eintippen.",
-      "modelsNone": "Keine Modelle gefunden. Du kannst eins eintippen."
+      "modelsNone": "Keine Modelle gefunden. Du kannst eins eintippen.",
+      "inputPrice": "Preis Eingabe (USD pro Million Tokens)",
+      "outputPrice": "Preis Ausgabe (USD pro Million Tokens)",
+      "priceHint": "Leer nimmt den bekannten Preis des Modells.",
+      "priceAuto": "automatisch: {{price}}",
+      "priceUnknown": "unbekannt"
     },
     "chatgpt": {
       "warningTitle": "Experimentell und inoffiziell",
@@ -1551,6 +1564,11 @@
       "model": "Modell für {{name}}",
       "noModels": "Noch keine Modelle installiert",
       "add": "Hinzufügen"
+    },
+    "cost": {
+      "free": "kostenlos",
+      "below": "< {{amount}}",
+      "about": "≈ {{amount}}"
     }
   }
 }

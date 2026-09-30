@@ -23,13 +23,43 @@ export interface ProviderForm {
   removeKey: boolean;
   model: string;
   fastModel: string;
+  /** USD per million tokens as typed; empty follows the known prices. */
+  inputPrice: string;
+  outputPrice: string;
 }
 
 export const PROVIDER_NAME_MAX = 60;
+/** The most a price set by hand may be, USD per million tokens. */
+export const PRICE_MAX = 10_000;
+
+/** Kinds that cost nothing per token: run locally, or paid by subscription. */
+export function isFreeKind(kind: AssistProviderKind): boolean {
+  return kind === "ollama" || kind === "chatgpt";
+}
+
+/** A typed price: empty is none (null), `0,40` and `0.40` both work, anything else is NaN. */
+export function parsePrice(text: string): number | null {
+  const trimmed = text.trim().replace(",", ".");
+  if (trimmed === "") return null;
+  if (!/^\d+(\.\d+)?$|^\.\d+$/.test(trimmed)) return Number.NaN;
+  return Number(trimmed);
+}
+
+const priceText = (value: number | null | undefined) => (value === null || value === undefined ? "" : String(value));
 
 export function emptyProviderForm(kind: AssistProviderKind): ProviderForm {
   const info = assistKind(kind);
-  return { name: info.label, kind, baseUrl: "", apiKey: "", removeKey: false, model: "", fastModel: "" };
+  return {
+    name: info.label,
+    kind,
+    baseUrl: "",
+    apiKey: "",
+    removeKey: false,
+    model: "",
+    fastModel: "",
+    inputPrice: "",
+    outputPrice: "",
+  };
 }
 
 export function providerFormFrom(provider: AssistProvider): ProviderForm {
@@ -41,10 +71,15 @@ export function providerFormFrom(provider: AssistProvider): ProviderForm {
     removeKey: false,
     model: provider.model ?? "",
     fastModel: provider.fastModel ?? "",
+    inputPrice: priceText(provider.inputPricePerMillion),
+    outputPrice: priceText(provider.outputPricePerMillion),
   };
 }
 
-export type ProviderProblem = "nameMissing" | "nameTooLong" | "urlMissing" | "urlScheme" | "urlLogin" | "keyMissing";
+export type ProviderProblem =
+  "nameMissing" | "nameTooLong" | "urlMissing" | "urlScheme" | "urlLogin" | "keyMissing" | "priceInvalid";
+
+export type ProblemField = "name" | "baseUrl" | "apiKey" | "inputPrice" | "outputPrice";
 
 /** Whether a host is on this machine or in a private network, where `http://` is fine. */
 export function isPrivateHost(host: string): boolean {
@@ -71,8 +106,8 @@ export function isPrivateHost(host: string): boolean {
 export function providerProblems(
   form: ProviderForm,
   stored: Pick<AssistProvider, "hasKey"> | null,
-): Partial<Record<"name" | "baseUrl" | "apiKey", ProviderProblem>> {
-  const problems: Partial<Record<"name" | "baseUrl" | "apiKey", ProviderProblem>> = {};
+): Partial<Record<ProblemField, ProviderProblem>> {
+  const problems: Partial<Record<ProblemField, ProviderProblem>> = {};
   const info = assistKind(form.kind);
   const name = form.name.trim();
   if (!name) problems.name = "nameMissing";
@@ -90,6 +125,12 @@ export function providerProblems(
   if (info.key === "required") {
     const keeps = stored?.hasKey === true && !form.removeKey;
     if (!form.apiKey.trim() && !keeps) problems.apiKey = "keyMissing";
+  }
+  if (!isFreeKind(form.kind)) {
+    for (const field of ["inputPrice", "outputPrice"] as const) {
+      const price = parsePrice(form[field]);
+      if (price !== null && !(price >= 0 && price <= PRICE_MAX)) problems[field] = "priceInvalid";
+    }
   }
   return problems;
 }
@@ -113,6 +154,12 @@ export function providerCreateInput(form: ProviderForm): AssistProviderInput {
   if (info.key !== "none" && form.apiKey.trim()) input.apiKey = form.apiKey.trim();
   if (form.model.trim()) input.model = form.model.trim();
   if (form.fastModel.trim()) input.fastModel = form.fastModel.trim();
+  if (!isFreeKind(form.kind)) {
+    const inputPrice = parsePrice(form.inputPrice);
+    const outputPrice = parsePrice(form.outputPrice);
+    if (inputPrice !== null) input.inputPricePerMillion = inputPrice;
+    if (outputPrice !== null) input.outputPricePerMillion = outputPrice;
+  }
   return input;
 }
 
@@ -128,6 +175,12 @@ export function providerUpdateInput(provider: AssistProvider, form: ProviderForm
   }
   if (form.model.trim() !== (provider.model ?? "")) patch.model = form.model.trim() || null;
   if (form.fastModel.trim() !== (provider.fastModel ?? "")) patch.fastModel = form.fastModel.trim() || null;
+  if (!isFreeKind(provider.kind)) {
+    const inputPrice = parsePrice(form.inputPrice);
+    const outputPrice = parsePrice(form.outputPrice);
+    if (inputPrice !== (provider.inputPricePerMillion ?? null)) patch.inputPricePerMillion = inputPrice;
+    if (outputPrice !== (provider.outputPricePerMillion ?? null)) patch.outputPricePerMillion = outputPrice;
+  }
   return patch;
 }
 

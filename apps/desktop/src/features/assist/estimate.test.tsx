@@ -44,6 +44,7 @@ const ESTIMATE: AssistEstimate = {
   model: "mistral-small-latest",
   tokensLeftToday: 48000,
   requestsLeftToday: 190,
+  cost: null,
 };
 
 let local: LocalModelServer[] = [];
@@ -98,16 +99,27 @@ describe("the estimate's words", () => {
   const t = i18n.getFixedT("en", "neutral");
 
   it("says the tokens and what is left today in the reader's number format", () => {
-    expect(estimateText(ESTIMATE, t, "en")).toBe("≈ 1,250 tokens · 48,000 left today");
+    expect(estimateText(ESTIMATE, t, "en")).toBe("≈ 1,300 tokens · 48,000 left today");
     expect(estimateText(ESTIMATE, i18n.getFixedT("de", "neutral"), "de")).toBe(
-      "≈ 1.250 Tokens · heute noch 48.000 übrig",
+      "≈ 1.300 Tokens · heute noch 48.000 übrig",
     );
     expect(estimateText({ ...ESTIMATE, tokensLeftToday: null, requestsLeftToday: 1 }, t, "en")).toBe(
-      "≈ 1,250 tokens · 1 request left today",
+      "≈ 1,300 tokens · 1 request left today",
     );
     expect(estimateText({ ...ESTIMATE, tokensLeftToday: null, requestsLeftToday: null }, t, "en")).toBe(
-      "≈ 1,250 tokens",
+      "≈ 1,300 tokens",
     );
+    // Rough like the estimate: tens below 1,000, hundreds above.
+    expect(estimateText({ ...ESTIMATE, totalTokens: 347, tokensLeftToday: null }, t, "en")).toBe(
+      "≈ 350 tokens · 190 requests left today",
+    );
+    const cost = { amount: 0.0214, currency: "EUR", usd: 0.025 };
+    expect(estimateText({ ...ESTIMATE, cost, totalTokens: 1200 }, t, "en")).toBe(
+      "≈ 1,200 tokens · ≈ €0.021 · 48,000 left today",
+    );
+    const german = estimateText({ ...ESTIMATE, cost, totalTokens: 1200 }, i18n.getFixedT("de", "neutral"), "de");
+    // Intl puts a non-breaking space before the euro sign.
+    expect(german.replace(/\u00a0/g, " ")).toBe("≈ 1.200 Tokens · ≈ 0,021 € · heute noch 48.000 übrig");
   });
 
   it("keeps one cache entry per call, whatever the order of its arguments", () => {
@@ -184,9 +196,14 @@ describe("the tooltip", () => {
     const button = screen.getByRole("button", { name: "Summarize" });
     fireEvent.pointerEnter(button.parentElement!, { pointerType: "mouse" });
     const tip = await screen.findByRole("tooltip");
-    await waitFor(() => expect(tip.textContent).toContain("≈ 1,250 tokens · 48,000 left today"));
+    await waitFor(() => expect(tip.textContent).toContain("≈ 1,300 tokens · 48,000 left today"));
     expect(tip.textContent).toContain("Reads the mail");
-    expect(fake.assistEstimate).toHaveBeenCalledWith("acc", "Assist/summarize", { emailId: "e1", language: "en" });
+    expect(fake.assistEstimate).toHaveBeenCalledWith(
+      "acc",
+      "Assist/summarize",
+      { emailId: "e1", language: "en" },
+      "EUR",
+    );
     expect(button.parentElement!.getAttribute("aria-describedby")).toBe(tip.id);
     fireEvent.pointerLeave(button.parentElement!, { pointerType: "mouse" });
     expect(screen.queryByRole("tooltip")).toBeNull();
@@ -242,7 +259,7 @@ describe("the tooltip", () => {
     fireEvent.pointerUp(button, { pointerType: "touch" });
     fireEvent.click(button);
     expect(click).toHaveBeenCalledOnce();
-    await waitFor(() => expect(screen.getByRole("tooltip").textContent).toContain("≈ 1,250 tokens"));
+    await waitFor(() => expect(screen.getByRole("tooltip").textContent).toContain("≈ 1,300 tokens"));
     act(() => vi.advanceTimersByTime(3000));
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
@@ -264,7 +281,7 @@ describe("the tooltip", () => {
     const item = screen.getByRole("menuitem", { name: "Shorter" });
     expect(source).not.toHaveBeenCalled();
     fireEvent.pointerEnter(item, { pointerType: "mouse" });
-    await waitFor(() => expect(screen.getByRole("tooltip").textContent).toContain("≈ 1,250 tokens"));
+    await waitFor(() => expect(screen.getByRole("tooltip").textContent).toContain("≈ 1,300 tokens"));
     expect(source).toHaveBeenCalledOnce();
     expect(item.getAttribute("aria-describedby")).toBe(screen.getByRole("tooltip").id);
     fireEvent.click(item);
@@ -381,10 +398,15 @@ describe("Find appointment", () => {
     const item = await screen.findByRole("menuitem", { name: "Find appointment" });
     fireEvent.pointerEnter(item, { pointerType: "mouse" });
     await waitFor(() =>
-      expect(fake.assistEstimate).toHaveBeenCalledWith("acc", "Assist/extractEvents", {
-        emailId: "m1",
-        includeImages: false,
-      }),
+      expect(fake.assistEstimate).toHaveBeenCalledWith(
+        "acc",
+        "Assist/extractEvents",
+        {
+          emailId: "m1",
+          includeImages: false,
+        },
+        "EUR",
+      ),
     );
     fireEvent.click(item);
     expect(useEventSearch.getState().asked).toEqual({ m1: true });

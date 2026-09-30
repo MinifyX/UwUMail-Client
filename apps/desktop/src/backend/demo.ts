@@ -1203,11 +1203,16 @@ export class DemoBackend implements Backend {
     ];
   }
 
-  async assistEstimate(accountId: string, method: AssistEstimateMethod, args: Record<string, unknown>) {
+  async assistEstimate(
+    accountId: string,
+    method: AssistEstimateMethod,
+    args: Record<string, unknown>,
+    currency?: string,
+  ) {
     await wait(60);
     const emailId = typeof args.emailId === "string" ? args.emailId : null;
     const assist = method === "Assist/compose" || !emailId ? this.assistFor(accountId) : this.assistForMessage(emailId);
-    return assist.estimate(method, args);
+    return assist.estimate(method, args, currency);
   }
 
   async chatgptLogin(scope: string, providerId: string) {
@@ -1230,9 +1235,9 @@ export class DemoBackend implements Backend {
     this.assistOf(scope).updateSettings(patch);
   }
 
-  async assistUsage(scope: string, days = 30) {
+  async assistUsage(scope: string, days = 30, currency?: string) {
     await wait(80);
-    return this.assistOf(scope).usageReport(Math.min(90, Math.max(1, days)));
+    return this.assistOf(scope).usageReport(Math.min(90, Math.max(1, days)), currency);
   }
 
   async assistLabels(scope: string) {

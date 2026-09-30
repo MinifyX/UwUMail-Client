@@ -1,5 +1,7 @@
 import clsx from "clsx";
+import type { AssistCost } from "@/backend/types";
 import { useT } from "@/i18n";
+import { formatCost, sumCosts } from "../cost";
 import { useAssistUsage } from "../useAssist";
 import { dailyTotals, featureTotals, todayShare } from "../usage";
 import { Section } from "./common";
@@ -22,6 +24,9 @@ export function UsageSettings() {
       tokens: 0,
     },
   );
+  const totalCost = sumCosts(days.map((day) => day.cost));
+  // Only where known: an older server, or an admin who keeps prices to themselves, says nothing.
+  const cost = (value: AssistCost | null | undefined) => (value ? formatCost(value, i18n.language, t) : null);
   const dayName = new Intl.DateTimeFormat(i18n.language, { day: "numeric", month: "short", timeZone: "UTC" });
 
   return (
@@ -58,7 +63,10 @@ export function UsageSettings() {
                                 limit: compact.format(entry.tokensPerDay),
                               })
                             : t("assist.usage.tokens", { formatted: compact.format(entry.tokens) }),
-                        ].join(" · ")}
+                          cost(entry.cost),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </span>
                     </p>
                     {share.max !== null && (
@@ -96,6 +104,7 @@ export function UsageSettings() {
               <span className="text-[12px] text-muted">
                 {t("assist.usage.requests", { count: total.requests, formatted: number.format(total.requests) })} ·{" "}
                 {t("assist.usage.tokens", { formatted: compact.format(total.tokens) })}
+                {totalCost && ` · ${cost(totalCost)}`}
               </span>
             </p>
             <div className="flex h-16 items-end gap-[3px] rounded-2xl bg-canvas px-3 pt-3 pb-2" aria-hidden>
@@ -124,6 +133,7 @@ export function UsageSettings() {
                     <span className="text-muted">
                       {t("assist.usage.requests", { count: entry.requests, formatted: number.format(entry.requests) })}{" "}
                       · {t("assist.usage.tokens", { formatted: compact.format(entry.tokens) })}
+                      {entry.cost && ` · ${cost(entry.cost)}`}
                     </span>
                   </li>
                 ))}

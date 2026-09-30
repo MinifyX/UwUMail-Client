@@ -634,8 +634,16 @@ export class TauriBackend implements Backend {
     return toLocalModelServers(await call<unknown>("assist_local_models"));
   }
 
-  async assistEstimate(accountId: string, method: AssistEstimateMethod, args: Record<string, unknown>) {
-    return toAssistEstimate(await call<unknown>("assist_estimate", { accountId, method, arguments: args }), method);
+  async assistEstimate(
+    accountId: string,
+    method: AssistEstimateMethod,
+    args: Record<string, unknown>,
+    currency?: string,
+  ) {
+    return toAssistEstimate(
+      await call<unknown>("assist_estimate", { accountId, method, arguments: args, currency: currency ?? null }),
+      method,
+    );
   }
 
   async chatgptLogin(scope: string, providerId: string) {
@@ -654,8 +662,8 @@ export class TauriBackend implements Backend {
     await call<void>("assist_update_settings", { scope, patch: assistSettingsUpdate(patch) });
   }
 
-  async assistUsage(scope: string, days?: number) {
-    return toUsage(await call<unknown>("assist_usage", { scope, days: days ?? null }));
+  async assistUsage(scope: string, days?: number, currency?: string) {
+    return toUsage(await call<unknown>("assist_usage", { scope, days: days ?? null, currency: currency ?? null }));
   }
 
   async assistLabels(scope: string) {

@@ -29,6 +29,8 @@ import {
   type AssistSettings,
   type AssistSettingsPatch,
   type AssistSpamCheck,
+  type AssistCost,
+  type AssistPrice,
   type AssistUsage,
   type AssistVerdict,
   type ChatgptLogin,
@@ -127,7 +129,39 @@ export function toAssistProvider(raw: Raw): AssistProvider {
       : null,
     experimental: raw.experimental === true || kind === "chatgpt",
     connected: raw.connected === true,
+    inputPricePerMillion: asPrice(raw.inputPricePerMillion),
+    outputPricePerMillion: asPrice(raw.outputPricePerMillion),
+    price: toAssistPrice(raw.price),
   };
+}
+
+/** A price per million tokens: a finite number of at least 0, else null. */
+const asPrice = (value: unknown): number | null => {
+  const number = asNumber(value);
+  return number !== null && number >= 0 ? number : null;
+};
+
+const PRICE_SOURCES: readonly AssistPrice["source"][] = ["auto", "manual", "free"];
+
+export function toAssistPrice(value: unknown): AssistPrice | null {
+  const raw = asObject(value);
+  if (!raw) return null;
+  const input = asPrice(raw.inputPerMillion);
+  const output = asPrice(raw.outputPerMillion);
+  const source = PRICE_SOURCES.find((known) => known === raw.source);
+  return input === null || output === null || !source
+    ? null
+    : { inputPerMillion: input, outputPerMillion: output, source };
+}
+
+/** A cost as the server (or this device) answers it; null when missing or odd. */
+export function toAssistCost(value: unknown): AssistCost | null {
+  const raw = asObject(value);
+  if (!raw) return null;
+  const amount = asNumber(raw.amount);
+  const currency = asString(raw.currency);
+  if (amount === null || amount < 0 || !currency || !/^[A-Z]{3}$/.test(currency)) return null;
+  return { amount, currency, usd: asPrice(raw.usd) };
 }
 
 export function toAssistProviders(value: unknown): AssistProvider[] {
@@ -154,6 +188,8 @@ function providerPatch(input: AssistProviderInput, creating: boolean): Raw {
   if (input.apiKey !== undefined && (input.apiKey !== "" || !creating)) out.apiKey = input.apiKey.trim();
   if (input.model !== undefined) out.model = input.model?.trim() || null;
   if (input.fastModel !== undefined) out.fastModel = input.fastModel?.trim() || null;
+  if (input.inputPricePerMillion !== undefined) out.inputPricePerMillion = input.inputPricePerMillion;
+  if (input.outputPricePerMillion !== undefined) out.outputPricePerMillion = input.outputPricePerMillion;
   return out;
 }
 
@@ -202,6 +238,7 @@ export function toAssistEstimate(value: unknown, method: AssistEstimateMethod): 
     model: asString(raw.model),
     tokensLeftToday: asAmount(raw.tokensLeftToday),
     requestsLeftToday: asAmount(raw.requestsLeftToday),
+    cost: toAssistCost(raw.cost),
   };
 }
 
@@ -456,6 +493,7 @@ export function toUsage(value: unknown): AssistUsage {
       requests: asCount(entry.requests),
       inputTokens: asCount(entry.inputTokens),
       outputTokens: asCount(entry.outputTokens),
+      cost: toAssistCost(entry.cost),
     })),
     today: asObjects(raw.today).map((entry) => ({
       providerId: asString(entry.providerId) ?? "",
@@ -464,6 +502,7 @@ export function toUsage(value: unknown): AssistUsage {
       tokens: asCount(entry.tokens),
       requestsPerDay: asNumber(entry.requestsPerDay),
       tokensPerDay: asNumber(entry.tokensPerDay),
+      cost: toAssistCost(entry.cost),
     })),
   };
 }

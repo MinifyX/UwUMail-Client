@@ -356,12 +356,14 @@ export interface Backend {
   /**
    * What a call to the assistant would take, for the tooltip on its button. `args` are what the
    * call itself gets (the app's ids); `accountId` the draft's or the mail's mailbox. Null when the
-   * mailbox's UwUMail server is too old to say.
+   * mailbox's UwUMail server is too old to say. `currency` (ISO 4217, EUR when left out) is what the
+   * cost is given in.
    */
   assistEstimate(
     accountId: string,
     method: AssistEstimateMethod,
     args: Record<string, unknown>,
+    currency?: string,
   ): Promise<AssistEstimate | null>;
   /** Starts the device-code sign-in of a server scope's `chatgpt` provider (experimental; not on this device). */
   chatgptLogin(scope: string, providerId: string): Promise<ChatgptLogin>;
@@ -369,8 +371,8 @@ export interface Backend {
   chatgptPoll(scope: string, providerId: string): Promise<ChatgptPoll>;
   assistSettings(scope: string): Promise<AssistSettings>;
   updateAssistSettings(scope: string, patch: AssistSettingsPatch): Promise<void>;
-  /** What was used: per day (UTC) and feature, and today per provider with its limits. */
-  assistUsage(scope: string, days?: number): Promise<AssistUsage>;
+  /** What was used: per day (UTC) and feature, and today per provider with its limits; costs in `currency`. */
+  assistUsage(scope: string, days?: number, currency?: string): Promise<AssistUsage>;
   assistLabels(scope: string): Promise<AssistLabel[]>;
   createAssistLabel(scope: string, input: AssistLabelInput): Promise<AssistLabel>;
   updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>): Promise<void>;
