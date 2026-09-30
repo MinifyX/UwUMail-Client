@@ -1,0 +1,478 @@
+/* Nyu's cameos (Cameos.tsx), loaded with them. Every part runs for the cameo's whole time
+   (--nyu-cameo-ms) so they stay in step; percentages are moments of the cameo. */
+
+.nyu-stage {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 45;
+  width: 168px;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 10px rgb(194 48 111 / 0.14));
+  animation: nyu-stage var(--nyu-cameo-ms, 1500ms) ease-out both;
+}
+
+.nyu-stage svg,
+.nyu-stage svg * {
+  pointer-events: none;
+}
+
+.nyu-stage svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Phones: smaller, clear of the bottom bar; the toasts are at the top there. */
+@media (max-width: 699px) {
+  .nyu-stage {
+    right: 12px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+    width: 116px;
+  }
+}
+
+.nyu-stage-still,
+.nyu-stage-still * {
+  animation: none !important;
+}
+
+:where(.nyu-stage [class^="nyu-c-"]) {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation-duration: var(--nyu-cameo-ms, 1500ms);
+  animation-fill-mode: both;
+  animation-timing-function: ease-out;
+}
+
+.nyu-c-rise {
+  animation-name: nyu-c-rise;
+}
+.nyu-c-read .nyu-eyes {
+  animation: nyu-c-read var(--nyu-cameo-ms, 1300ms) ease-in-out both;
+}
+.nyu-c-trail {
+  animation: nyu-c-trail var(--nyu-cameo-ms, 1800ms) linear both;
+}
+.nyu-stage .nyu-c-fly {
+  animation-name: nyu-c-fly;
+  animation-timing-function: cubic-bezier(0.5, 0, 0.8, 0.6);
+}
+.nyu-c-twinkle {
+  animation-name: nyu-c-twinkle;
+}
+.nyu-c-drop-in {
+  animation-name: nyu-c-drop-in;
+  animation-timing-function: ease-in;
+}
+.nyu-stage .nyu-c-flap-l {
+  transform-origin: 100% 100%;
+  animation-name: nyu-c-flap;
+}
+.nyu-stage .nyu-c-flap-r {
+  transform-origin: 0% 100%;
+  animation-name: nyu-c-flap;
+}
+.nyu-c-stamp {
+  animation-name: nyu-c-pop-late;
+}
+.nyu-stage .nyu-c-hop {
+  transform-origin: 50% 100%;
+  animation-name: nyu-c-hop;
+}
+.nyu-stage .nyu-c-lid-open {
+  transform-origin: 0% 100%;
+  animation-name: nyu-c-lid-open;
+}
+.nyu-stage .nyu-c-lid-slam {
+  transform-origin: 0% 100%;
+  animation-name: nyu-c-lid-slam;
+}
+.nyu-c-puff {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: nyu-c-puff var(--nyu-cameo-ms, 1700ms) ease-out both;
+}
+.nyu-c-confetti > g {
+  animation: nyu-c-confetti var(--nyu-cameo-ms, 2000ms) cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.nyu-stage .nyu-c-heart {
+  animation-name: nyu-c-heart;
+  animation-duration: calc(var(--nyu-cameo-ms, 1600ms) - 400ms);
+}
+.nyu-stage .nyu-c-squish {
+  transform-origin: 50% 100%;
+  animation-name: nyu-c-squish;
+}
+.nyu-c-polaroid {
+  animation-name: nyu-c-polaroid;
+}
+.nyu-c-flash {
+  animation-name: nyu-c-flash;
+}
+.nyu-stage .nyu-c-sway {
+  transform-origin: 50% 100%;
+  animation-name: nyu-c-sway;
+  animation-timing-function: ease-in-out;
+}
+.nyu-c-zzz {
+  animation-name: nyu-c-zzz;
+}
+
+@keyframes nyu-stage {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+  }
+  10%,
+  86% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes nyu-c-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(46px);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(-5px);
+  }
+  26%,
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+}
+
+@keyframes nyu-c-read {
+  0%,
+  22% {
+    transform: translateX(-10px);
+  }
+  42% {
+    transform: translateX(10px) translateY(4px);
+  }
+  46% {
+    transform: translateX(-10px) translateY(8px);
+  }
+  66% {
+    transform: translateX(10px) translateY(8px);
+  }
+  82%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes nyu-c-trail {
+  0%,
+  22% {
+    opacity: 0;
+    stroke-dashoffset: 0;
+  }
+  40% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: -64;
+  }
+}
+
+@keyframes nyu-c-fly {
+  0% {
+    opacity: 0;
+    transform: translate(-40px, 12px) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+    transform: none;
+  }
+  24% {
+    transform: translate(-8px, 6px) rotate(-8deg) scale(1.05);
+  }
+  34% {
+    opacity: 1;
+    transform: none;
+  }
+  88%,
+  100% {
+    opacity: 0;
+    transform: translate(110px, -104px) rotate(22deg) scale(0.5);
+  }
+}
+
+@keyframes nyu-c-twinkle {
+  0%,
+  40% {
+    opacity: 0;
+    transform: scale(0) rotate(-40deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.25) rotate(0);
+  }
+  65%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes nyu-c-drop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-70px) rotate(-10deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  34% {
+    opacity: 1;
+    transform: none;
+  }
+  54% {
+    opacity: 1;
+    transform: translateY(var(--drop, 40px));
+  }
+  58%,
+  100% {
+    opacity: 0;
+    transform: translateY(var(--drop, 40px));
+  }
+}
+
+@keyframes nyu-c-flap {
+  0%,
+  52% {
+    transform: none;
+  }
+  66% {
+    transform: scale(0.9, -0.45);
+  }
+  72%,
+  100% {
+    transform: scale(0.8, -0.3);
+  }
+}
+
+@keyframes nyu-c-pop-late {
+  0%,
+  66% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  76% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+  84%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes nyu-c-hop {
+  0%,
+  62%,
+  100% {
+    transform: none;
+  }
+  70% {
+    transform: translateY(-14%) scale(0.96, 1.04);
+  }
+  78% {
+    transform: scale(1.05, 0.95);
+  }
+  86% {
+    transform: translateY(-6%);
+  }
+}
+
+@keyframes nyu-c-lid-open {
+  0%,
+  8% {
+    transform: none;
+  }
+  18%,
+  44% {
+    transform: rotate(-28deg);
+  }
+  54% {
+    transform: rotate(3deg);
+  }
+  60%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes nyu-c-lid-slam {
+  0%,
+  30% {
+    transform: rotate(-34deg);
+  }
+  40% {
+    transform: rotate(4deg);
+  }
+  46% {
+    transform: rotate(-4deg);
+  }
+  52%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes nyu-c-puff {
+  0%,
+  38% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  52% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-16px) scale(1.4);
+  }
+}
+
+@keyframes nyu-c-confetti {
+  0% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.2);
+  }
+  10% {
+    opacity: 1;
+  }
+  34% {
+    transform: none;
+  }
+  86% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(22px) rotate(30deg);
+  }
+}
+
+@keyframes nyu-c-heart {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.3);
+  }
+  25% {
+    opacity: 1;
+    transform: translateY(0) scale(1.1);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-14px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-34px) scale(0.9);
+  }
+}
+
+@keyframes nyu-c-squish {
+  0%,
+  100% {
+    transform: none;
+  }
+  14%,
+  44% {
+    transform: scale(1.08, 0.9);
+  }
+  28%,
+  58% {
+    transform: translateY(-6%) scale(0.95, 1.06);
+  }
+  70% {
+    transform: none;
+  }
+}
+
+@keyframes nyu-c-polaroid {
+  0%,
+  34% {
+    opacity: 0;
+    transform: translate(-40px, 44px) rotate(-20deg) scale(0.5);
+  }
+  40% {
+    opacity: 1;
+  }
+  58% {
+    transform: translate(4px, -6px) rotate(4deg);
+  }
+  68%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes nyu-c-flash {
+  0%,
+  18% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  26% {
+    opacity: 1;
+    transform: scale(1.6) rotate(20deg);
+  }
+  40%,
+  100% {
+    opacity: 0;
+    transform: scale(2.2) rotate(40deg);
+  }
+}
+
+@keyframes nyu-c-sway {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-5deg);
+  }
+  60% {
+    transform: rotate(5deg);
+  }
+}
+
+@keyframes nyu-c-zzz {
+  0% {
+    opacity: 0;
+    transform: translate(-10px, 12px) scale(0.6);
+  }
+  30% {
+    opacity: 1;
+    transform: none;
+  }
+  80% {
+    opacity: 1;
+    transform: translate(6px, -10px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(10px, -18px);
+  }
+}

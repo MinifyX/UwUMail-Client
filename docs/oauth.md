@@ -21,20 +21,31 @@ repository secrets with the same names.
 
 ## Microsoft
 
+The official builds use their own Entra app, **UwUMail-Client**; its client id
+is the repository secret `UWUMAIL_MICROSOFT_CLIENT_ID`, which the desktop,
+Android, iOS and release workflows pass to the build. To register your own:
+
 1. [Microsoft Entra admin center](https://entra.microsoft.com) → App
    registrations → New registration.
-2. Name `UwUMail`, supported account types **"Accounts in any organizational
-   directory and personal Microsoft accounts"**.
-3. Platform **"Mobile and desktop applications"**, redirect URIs
-   `http://localhost` (desktop; any port on localhost is allowed for this
-   platform) and `app.uwumail://oauth` (Android, where the browser comes back to
-   the app through this link).
-4. Authentication → Advanced → **Allow public client flows: Yes**.
-5. API permissions → Add → APIs my organization uses → search
-   **"Office 365 Exchange Online"** → Delegated →
-   `IMAP.AccessAsUser.All` and `SMTP.Send`. Add `offline_access` from
-   Microsoft Graph.
-6. Copy the **Application (client) ID** into `UWUMAIL_MICROSOFT_CLIENT_ID`.
+2. Name it (the official one is `UwUMail-Client`), supported account types
+   **"Accounts in any organizational directory and personal Microsoft
+   accounts"**, so Outlook.com and Hotmail work next to Microsoft 365.
+3. Authentication → Add a platform → **"Mobile and desktop applications"**,
+   redirect URIs:
+   - `http://localhost` — desktop. Any port on localhost is allowed for this
+     platform, the app listens on a free one for the moment of the sign-in.
+   - `app.uwumail://oauth` — Android and iOS, where the browser comes back to
+     the app through this link (see [Phones](#phones)).
+4. Authentication → Advanced settings → **Allow public client flows: Yes**.
+5. API permissions → Add a permission → **Microsoft Graph** → Delegated
+   permissions → `IMAP.AccessAsUser.All`, `SMTP.Send` and `offline_access`.
+   (Older guides pick the first two under "Office 365 Exchange Online"; the
+   Graph entries are the same grants.) The app still asks for the scopes as
+   `https://outlook.office.com/IMAP.AccessAsUser.All` and
+   `https://outlook.office.com/SMTP.Send`, which is how IMAP and SMTP want the
+   token; that is expected.
+6. Copy the **Application (client) ID** into `UWUMAIL_MICROSOFT_CLIENT_ID`
+   (repository secret for CI, environment variable for a local build).
 
 No client secret is needed; the app is a public client. The client id isn't
 secret either, it ends up in every build.
@@ -101,12 +112,31 @@ article.
 Tenants that switch user consent off entirely always need that admin step, no
 matter how verified an app is. That one is not ours to solve.
 
-On Android the engine is told `Engine::use_oauth_app_link("app.uwumail://oauth")`;
-the activity that receives the link passes the URL to `Engine::finish_sign_in`,
-which only accepts that link and hands it to the sign-in that is waiting. The
-sign-in checks `state` and uses PKCE, so a forged link can't complete it; it is
-ignored and the sign-in keeps waiting for its own link, like the loopback
-listener on desktop ignores requests with the wrong `state`.
+### Phones
+
+A phone pauses UwUMail while the browser is in front, so nothing would answer
+on a loopback port. On Android and iOS the engine is told
+`Engine::use_oauth_app_link("app.uwumail://oauth")`, and Microsoft sends the
+browser there instead:
+
+- **Android**: `AndroidManifest.xml` has an intent filter for
+  `app.uwumail://oauth`; `Launch.kt` passes the URL to `Engine::finish_sign_in`.
+- **iOS**: `Info.ios.plist` registers the URL scheme `app.uwumail`
+  (`CFBundleURLTypes`); Safari asks once whether to open UwUMail, and
+  `ios.rs` hands the opened URL (`RunEvent::Opened`) to `Engine::finish_sign_in`.
+
+`finish_sign_in` only accepts that link and hands it to the sign-in that is
+waiting. The sign-in checks `state` and uses PKCE, so a forged link can't
+complete it; it is ignored and the sign-in keeps waiting for its own link, like
+the loopback listener on desktop ignores requests with the wrong `state`.
+
+Personal accounts and Microsoft 365 work the same way on the phone, including
+the admin consent page after a refused company sign-in.
+
+Google's desktop clients only take a loopback redirect, never an app link, so
+Google keeps the loopback on phones too (`oauth::takes_app_link`). On Android
+that works while UwUMail keeps running behind the browser; iOS usually pauses
+the app too soon, so Gmail on the iPhone is best added with an app password.
 
 ## Google
 

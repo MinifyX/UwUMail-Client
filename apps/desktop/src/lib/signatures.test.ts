@@ -12,15 +12,15 @@ const signature = (id: string, email: string, forNew: boolean, forReplies: boole
 });
 
 const all = [
-  signature("lang", "mini@uwumail.dev", true, false),
-  signature("kurz", "mini@uwumail.dev", false, true),
-  signature("studio", "hallo@uwumail.dev", true, true),
+  signature("lang", "mini@uwumail.example", true, false),
+  signature("kurz", "mini@uwumail.example", false, true),
+  signature("studio", "hallo@uwumail.example", true, true),
 ];
 
 describe("signatures", () => {
   it("picks the default for new mail or replies of an address", () => {
-    expect(defaultSignature(all, "MINI@uwumail.dev", "new")?.id).toBe("lang");
-    expect(defaultSignature(all, "mini@uwumail.dev", "reply")?.id).toBe("kurz");
+    expect(defaultSignature(all, "MINI@uwumail.example", "new")?.id).toBe("lang");
+    expect(defaultSignature(all, "mini@uwumail.example", "reply")?.id).toBe("kurz");
     expect(defaultSignature(all, "leni@wanders.example", "new")).toBeUndefined();
   });
 

@@ -7,7 +7,7 @@ const svg = (body: string) =>
   )}`;
 
 const PICTURES: Record<string, SenderPicture> = {
-  "uwumail.dev": {
+  "uwumail.example": {
     kind: "logo",
     url: svg(
       `<rect width="64" height="64" fill="#ff5c96"/><rect x="11" y="17" width="42" height="30" rx="6" fill="#fff"/>` +

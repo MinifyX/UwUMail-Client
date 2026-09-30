@@ -12,6 +12,8 @@ import {
   type AssistAnswer,
   type AssistChoice,
   type AssistEffective,
+  type AssistEstimate,
+  type AssistEstimateMethod,
   type AssistEvent,
   type AssistFeature,
   type AssistFeatures,
@@ -27,10 +29,13 @@ import {
   type AssistSettings,
   type AssistSettingsPatch,
   type AssistSpamCheck,
+  type AssistCost,
+  type AssistPrice,
   type AssistUsage,
   type AssistVerdict,
   type ChatgptLogin,
   type ChatgptPoll,
+  type LocalModelServer,
 } from "./types";
 
 export type Raw = Record<string, unknown>;
@@ -124,7 +129,39 @@ export function toAssistProvider(raw: Raw): AssistProvider {
       : null,
     experimental: raw.experimental === true || kind === "chatgpt",
     connected: raw.connected === true,
+    inputPricePerMillion: asPrice(raw.inputPricePerMillion),
+    outputPricePerMillion: asPrice(raw.outputPricePerMillion),
+    price: toAssistPrice(raw.price),
   };
+}
+
+/** A price per million tokens: a finite number of at least 0, else null. */
+const asPrice = (value: unknown): number | null => {
+  const number = asNumber(value);
+  return number !== null && number >= 0 ? number : null;
+};
+
+const PRICE_SOURCES: readonly AssistPrice["source"][] = ["auto", "manual", "free"];
+
+export function toAssistPrice(value: unknown): AssistPrice | null {
+  const raw = asObject(value);
+  if (!raw) return null;
+  const input = asPrice(raw.inputPerMillion);
+  const output = asPrice(raw.outputPerMillion);
+  const source = PRICE_SOURCES.find((known) => known === raw.source);
+  return input === null || output === null || !source
+    ? null
+    : { inputPerMillion: input, outputPerMillion: output, source };
+}
+
+/** A cost as the server (or this device) answers it; null when missing or odd. */
+export function toAssistCost(value: unknown): AssistCost | null {
+  const raw = asObject(value);
+  if (!raw) return null;
+  const amount = asNumber(raw.amount);
+  const currency = asString(raw.currency);
+  if (amount === null || amount < 0 || !currency || !/^[A-Z]{3}$/.test(currency)) return null;
+  return { amount, currency, usd: asPrice(raw.usd) };
 }
 
 export function toAssistProviders(value: unknown): AssistProvider[] {
@@ -151,6 +188,8 @@ function providerPatch(input: AssistProviderInput, creating: boolean): Raw {
   if (input.apiKey !== undefined && (input.apiKey !== "" || !creating)) out.apiKey = input.apiKey.trim();
   if (input.model !== undefined) out.model = input.model?.trim() || null;
   if (input.fastModel !== undefined) out.fastModel = input.fastModel?.trim() || null;
+  if (input.inputPricePerMillion !== undefined) out.inputPricePerMillion = input.inputPricePerMillion;
+  if (input.outputPricePerMillion !== undefined) out.outputPricePerMillion = input.outputPricePerMillion;
   return out;
 }
 
@@ -163,6 +202,55 @@ export function toAssistModels(value: unknown): AssistModels {
     model: asString(raw.model),
     fastModel: asString(raw.fastModel),
   };
+}
+
+const ESTIMATE_METHODS: readonly AssistEstimateMethod[] = [
+  "Assist/compose",
+  "Assist/summarize",
+  "Assist/spamCheck",
+  "Assist/extractEvents",
+];
+
+/** A count of tokens or requests: a whole number, never below zero; null when missing. */
+const asAmount = (value: unknown): number | null => {
+  const number = asNumber(value);
+  return number === null ? null : Math.max(0, Math.round(number));
+};
+
+/**
+ * `Assist/estimate`'s answer; null when it isn't one (an older server's, or nothing), so the
+ * button just goes without its tooltip.
+ */
+export function toAssistEstimate(value: unknown, method: AssistEstimateMethod): AssistEstimate | null {
+  const raw = asObject(value);
+  if (!raw) return null;
+  const input = asAmount(raw.inputTokens);
+  const output = asAmount(raw.outputTokens);
+  if (input === null || output === null) return null;
+  const named = asString(raw.method);
+  return {
+    method: named && (ESTIMATE_METHODS as readonly string[]).includes(named) ? (named as AssistEstimateMethod) : method,
+    inputTokens: input,
+    outputTokens: output,
+    totalTokens: asAmount(raw.totalTokens) ?? input + output,
+    providerId: asString(raw.providerId),
+    providerName: asString(raw.providerName),
+    model: asString(raw.model),
+    tokensLeftToday: asAmount(raw.tokensLeftToday),
+    requestsLeftToday: asAmount(raw.requestsLeftToday),
+    cost: toAssistCost(raw.cost),
+  };
+}
+
+/** Ollama and LM Studio found on this computer; anything of another shape is left out. */
+export function toLocalModelServers(value: unknown): LocalModelServer[] {
+  return asObjects(value).flatMap((raw) => {
+    const kind = raw.kind === "ollama" || raw.kind === "openaiCompatible" ? raw.kind : null;
+    const name = asString(raw.name);
+    const baseUrl = asString(raw.baseUrl);
+    if (!kind || !name || !baseUrl || !/^http:\/\/127\.0\.0\.1:\d+(\/|$)/.test(baseUrl)) return [];
+    return [{ kind, name, baseUrl, models: toAssistModels({ models: raw.models }).models, added: raw.added === true }];
+  });
 }
 
 export function toChatgptLogin(value: unknown): ChatgptLogin {
@@ -405,6 +493,7 @@ export function toUsage(value: unknown): AssistUsage {
       requests: asCount(entry.requests),
       inputTokens: asCount(entry.inputTokens),
       outputTokens: asCount(entry.outputTokens),
+      cost: toAssistCost(entry.cost),
     })),
     today: asObjects(raw.today).map((entry) => ({
       providerId: asString(entry.providerId) ?? "",
@@ -413,6 +502,7 @@ export function toUsage(value: unknown): AssistUsage {
       tokens: asCount(entry.tokens),
       requestsPerDay: asNumber(entry.requestsPerDay),
       tokensPerDay: asNumber(entry.tokensPerDay),
+      cost: toAssistCost(entry.cost),
     })),
   };
 }

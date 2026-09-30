@@ -183,6 +183,7 @@ mod calendar_ops;
 mod contacts_ops;
 mod folder_ops;
 mod ocr_ops;
+mod price_ops;
 mod push_ops;
 
 impl Engine {
@@ -524,7 +525,8 @@ impl Engine {
                 // Before the browser opens: the token must not be able to go anywhere else.
                 autoconfig::check_oauth_servers(provider, &[&record.imap, &record.smtp])?;
                 let mut waiting = None;
-                let redirect = match self.inner.oauth_redirect.lock().unwrap().clone() {
+                let app_link = self.inner.oauth_redirect.lock().unwrap().clone();
+                let redirect = match app_link.filter(|_| oauth::takes_app_link(provider)) {
                     Some(uri) => {
                         let (sender, incoming) = tokio::sync::mpsc::channel(SIGN_IN_LINK_QUEUE);
                         // A newer sign-in replaces an abandoned one.

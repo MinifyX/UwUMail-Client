@@ -10,6 +10,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: Size;
   icon?: LucideIcon;
   busy?: boolean;
+  /** Shown instead of the spinner while busy, e.g. <NyuThinking size="sm" /> while the AI works. */
+  busyIndicator?: ReactNode;
   children?: ReactNode;
 }
 
@@ -26,8 +28,13 @@ const SIZES: Record<Size, string> = {
   lg: "h-12 px-6 text-[15px] gap-2",
 };
 
+/** The busy button's turning ring. */
+export function Spinner() {
+  return <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />;
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "secondary", size = "md", icon: Icon, busy, className, children, disabled, ...rest },
+  { variant = "secondary", size = "md", icon: Icon, busy, busyIndicator, className, children, disabled, ...rest },
   ref,
 ) {
   return (
@@ -44,11 +51,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       aria-busy={busy || undefined}
       {...rest}
     >
-      {busy ? (
-        <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
-      ) : (
-        Icon && <Icon className="size-4" strokeWidth={2.2} aria-hidden />
-      )}
+      {busy ? (busyIndicator ?? <Spinner />) : Icon && <Icon className="size-4" strokeWidth={2.2} aria-hidden />}
       {children}
     </button>
   );

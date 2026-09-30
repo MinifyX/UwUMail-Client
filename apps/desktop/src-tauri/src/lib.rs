@@ -231,10 +231,11 @@ async fn set_default_address_book(engine: State<'_, Engine>, address_book_id: St
     engine.set_default_address_book(&address_book_id).await
 }
 
-/// Every contact card (JSContact) of every account.
+/// Every contact card (JSContact) of every account. With `look: false` only from accounts whose
+/// address books are known, without searching for a CardDAV server.
 #[tauri::command]
-async fn list_contact_cards(engine: State<'_, Engine>) -> CommandResult<Vec<ContactCardEntry>> {
-    engine.contact_cards().await
+async fn list_contact_cards(engine: State<'_, Engine>, look: Option<bool>) -> CommandResult<Vec<ContactCardEntry>> {
+    if look == Some(false) { engine.known_contact_cards().await } else { engine.contact_cards().await }
 }
 
 #[tauri::command]
@@ -540,8 +541,13 @@ async fn assist_update_settings(engine: State<'_, Engine>, scope: String, patch:
 }
 
 #[tauri::command]
-async fn assist_usage(engine: State<'_, Engine>, scope: String, days: Option<u32>) -> CommandResult<Json> {
-    engine.assist_usage(&scope, days).await
+async fn assist_usage(
+    engine: State<'_, Engine>,
+    scope: String,
+    days: Option<u32>,
+    currency: Option<String>,
+) -> CommandResult<Json> {
+    engine.assist_usage(&scope, days, currency.as_deref()).await
 }
 
 #[tauri::command]
@@ -645,6 +651,31 @@ async fn assist_extract_events(
     include_images: bool,
 ) -> CommandResult<Json> {
     engine.assist_extract_events(&message_id, include_images).await
+}
+
+/// What a call to the assistant would take, for the tooltip on its button; null when the mailbox's
+/// UwUMail server is too old to say.
+#[tauri::command]
+async fn assist_estimate(
+    engine: State<'_, Engine>,
+    account_id: String,
+    method: String,
+    arguments: Json,
+    currency: Option<String>,
+) -> CommandResult<Option<Json>> {
+    engine.assist_estimate(&account_id, &method, arguments, currency.as_deref()).await
+}
+
+/// Ollama and LM Studio running on this computer, with their models.
+#[tauri::command]
+async fn assist_local_models(engine: State<'_, Engine>) -> CommandResult<Json> {
+    engine.assist_local_models().await
+}
+
+/// The models at an address that isn't saved as a provider yet (this device only).
+#[tauri::command]
+async fn assist_probe_models(engine: State<'_, Engine>, input: Json) -> CommandResult<Json> {
+    engine.assist_probe_models(input).await
 }
 
 #[tauri::command]
@@ -1084,6 +1115,9 @@ pub fn run() {
             assist_cancel,
             assist_spam_check,
             assist_extract_events,
+            assist_estimate,
+            assist_local_models,
+            assist_probe_models,
             set_keywords,
             get_attachment,
             open_attachment,

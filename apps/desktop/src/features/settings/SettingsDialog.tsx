@@ -42,6 +42,7 @@ import { workspaceOf } from "@/lib/workspaces";
 import { PrivacyProxy } from "./PrivacyProxy";
 import { confirmIdentity } from "@/state/lock";
 import {
+  NYU_ANIMATIONS,
   useSettings,
   type LanguageSetting,
   type LockAfter,
@@ -128,6 +129,14 @@ function Appearance() {
             { value: "on", label: t("motion.on") },
             { value: "off", label: t("motion.off") },
           ]}
+        />
+      </Row>
+      <Row label={t("settings.nyuAnimations")} description={t("settings.nyuAnimationsDesc")}>
+        <Segmented
+          label={t("settings.nyuAnimations")}
+          value={settings.nyuAnimations}
+          onChange={(nyuAnimations) => settings.update({ nyuAnimations })}
+          options={NYU_ANIMATIONS.map((value) => ({ value, label: t(`nyuAnimations.${value}`) }))}
         />
       </Row>
       <Row

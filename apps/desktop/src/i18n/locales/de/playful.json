@@ -113,6 +113,7 @@
   "settings": {
     "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)",
     "motionDesc": "Soll Nyu blinzeln, hüpfen und herumfliegen? „Wie System“ hält sich an dein Betriebssystem.",
+    "nyuAnimationsDesc": "Soll ich deiner Mail hinterherwinken, beim Archivieren die Kiste zumachen und grübeln, während die KI arbeitet? „Reduziert“: Ich halte still wie auf einem Foto.",
     "senderPicturesCleared": "Bilder weggefegt ✧",
     "trustedSendersEmpty": "Noch keiner auf meiner Liste (・・ )? Absender fügst du direkt im Bilder-Hinweis einer Mail hinzu.",
     "protocolSwitched": "{{email}} spricht jetzt {{protocol}} ✧",
@@ -273,6 +274,13 @@
     },
     "labels": {
       "startersTitle": "Magst du mit ein paar Labels anfangen? (｀・ω・´)"
+    },
+    "local": {
+      "title": "Guck mal, eine lokale KI auf diesem Computer! ✿"
     }
+  },
+  "dates": {
+    "searching": "Nyu sucht nach Terminen … (・ω・)",
+    "noneFound": "Nyu hat überall geschaut: hier steht kein anstehender Termin ( ˘ω˘ )"
   }
 }

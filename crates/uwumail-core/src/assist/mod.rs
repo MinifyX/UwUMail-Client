@@ -8,8 +8,11 @@
 //! fixed, checked shape, and nothing reaches a draft or a mail without a click, except the person's
 //! own labels when they switched auto-labels on.
 
+pub mod discover;
+pub mod estimate;
 pub mod local;
 pub mod mail;
+pub mod prices;
 pub mod prompts;
 pub mod provider;
 pub mod server;

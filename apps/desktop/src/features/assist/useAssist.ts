@@ -21,6 +21,7 @@ import {
 } from "@/backend/types";
 import { translate } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
+import { useAssistCurrency } from "./cost";
 
 const ScopeContext = createContext<string>(DEVICE_ASSIST_SCOPE);
 const AccountContext = createContext<string | null>(null);
@@ -143,10 +144,13 @@ export function useLabelLog(emailId: string, enabled: boolean) {
 export function useAssistUsage(enabled = true) {
   const scope = useAssistScope();
   const { data: options } = useAssistOptions();
+  const currency = useAssistCurrency();
   return useQuery({
-    queryKey: [...queryKeys.assistUsage, scope],
-    queryFn: () => backend().assistUsage(scope, 30),
+    queryKey: [...queryKeys.assistUsage, scope, currency],
+    queryFn: () => backend().assistUsage(scope, 30, currency),
     enabled: enabled && Boolean(options),
+    // Every request changes it; the global cache time would show old numbers for a while.
+    staleTime: 0,
   });
 }
 

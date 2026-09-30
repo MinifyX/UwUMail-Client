@@ -35,7 +35,7 @@ export function useMailDates(message: Message, options: MailEventsOptions): Mail
     openInCalendar(picked, { subject: message.subject, from: message.from, accountId: message.accountId }, t);
   };
   return {
-    bar: <EventsBar messageId={message.id} found={found} onAdd={add} />,
+    bar: <EventsBar messageId={message.id} accountId={message.accountId} found={found} onAdd={add} />,
     body: {
       dateMarks: found.marks,
       onDate: (index, anchor) => setShown(index === null ? null : { index, anchor }),

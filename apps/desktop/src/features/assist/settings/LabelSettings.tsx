@@ -3,7 +3,8 @@ import { Check, Pencil, Plus, Sparkles, Tags, Trash, Wand2 } from "lucide-react"
 import { useEffect, useState, type FormEvent } from "react";
 import { AssistError, backend } from "@/backend/backend";
 import type { AssistLabel, AssistLabelInput, AssistOptions } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
+import { NyuThinking } from "@/components/nyu/NyuThinking";
+import { Button, IconButton, Spinner } from "@/components/ui/Button";
 import { Field, TextInput, Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { toast } from "@/state/toasts";
@@ -161,7 +162,13 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
           <p className="min-w-[min(100%,14rem)] flex-1 text-[12.5px] text-muted">
             {t("assist.labels.applyDesc", { count: APPLY_COUNT })}
           </p>
-          <Button size="sm" icon={Sparkles} busy={applying} onClick={() => void applyNow()}>
+          <Button
+            size="sm"
+            icon={Sparkles}
+            busy={applying}
+            busyIndicator={<NyuThinking size="sm" fallback={<Spinner />} />}
+            onClick={() => void applyNow()}
+          >
             {t("assist.labels.apply")}
           </Button>
         </div>

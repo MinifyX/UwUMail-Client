@@ -865,7 +865,7 @@ fn usage_of(usage: &Value, input: &str, output: &str) -> Option<TokenUsage> {
 // ---------------------------------------------------------------------------------------------
 // Models
 
-fn model_list(value: &Value) -> Vec<Model> {
+pub(crate) fn model_list(value: &Value) -> Vec<Model> {
     let list = value.get("data").or_else(|| value.get("models")).and_then(Value::as_array);
     let mut models: Vec<Model> = list
         .into_iter()

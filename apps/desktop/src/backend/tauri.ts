@@ -12,6 +12,7 @@ import {
   toAssistFeaturesOrNull,
   toAssistLabel,
   toAssistLabels,
+  toAssistEstimate,
   toAssistModels,
   toAssistProvider,
   toAssistProviders,
@@ -26,6 +27,7 @@ import {
   toSummaryText,
   toUsage,
   type Raw,
+  toLocalModelServers,
 } from "./assistConvert";
 import type {
   BlockedSender,
@@ -33,6 +35,8 @@ import type {
   AddressBookInfo,
   AssistComposeRequest,
   AssistComposeResult,
+  AssistEstimateMethod,
+  AssistProbeInput,
   AssistEventsResult,
   AssistLabelInput,
   AssistProviderInput,
@@ -414,6 +418,11 @@ export class TauriBackend implements Backend {
     return entries.map((entry) => toContactRecord(entry.card, entry.accountId));
   }
 
+  async knownContacts() {
+    const entries = await call<{ accountId: string; card: JmapCard }[]>("list_contact_cards", { look: false });
+    return entries.map((entry) => toContactRecord(entry.card, entry.accountId));
+  }
+
   createContact(input: ContactInput) {
     return call<string>("create_contact_card", { addressBookId: input.addressBookId, card: cardFromInput(input) });
   }
@@ -618,6 +627,30 @@ export class TauriBackend implements Backend {
     return toAssistModels(await call<unknown>("assist_models", { scope, providerId }));
   }
 
+  async assistProbeModels(input: AssistProbeInput) {
+    return toAssistModels(
+      await call<unknown>("assist_probe_models", {
+        input: { kind: input.kind, baseUrl: input.baseUrl, apiKey: input.apiKey ?? null },
+      }),
+    );
+  }
+
+  async assistLocalModels() {
+    return toLocalModelServers(await call<unknown>("assist_local_models"));
+  }
+
+  async assistEstimate(
+    accountId: string,
+    method: AssistEstimateMethod,
+    args: Record<string, unknown>,
+    currency?: string,
+  ) {
+    return toAssistEstimate(
+      await call<unknown>("assist_estimate", { accountId, method, arguments: args, currency: currency ?? null }),
+      method,
+    );
+  }
+
   async chatgptLogin(scope: string, providerId: string) {
     return toChatgptLogin(await call<unknown>("assist_chatgpt_login", { scope, providerId }));
   }
@@ -634,8 +667,8 @@ export class TauriBackend implements Backend {
     await call<void>("assist_update_settings", { scope, patch: assistSettingsUpdate(patch) });
   }
 
-  async assistUsage(scope: string, days?: number) {
-    return toUsage(await call<unknown>("assist_usage", { scope, days: days ?? null }));
+  async assistUsage(scope: string, days?: number, currency?: string) {
+    return toUsage(await call<unknown>("assist_usage", { scope, days: days ?? null, currency: currency ?? null }));
   }
 
   async assistLabels(scope: string) {

@@ -4,12 +4,15 @@ import type {
   AddressBookInfo,
   AssistComposeRequest,
   AssistComposeResult,
+  AssistEstimate,
+  AssistEstimateMethod,
   AssistEventsResult,
   AssistFeatures,
   AssistLabel,
   AssistLabelInput,
   AssistLabelLogEntry,
   AssistModels,
+  AssistProbeInput,
   AssistProvider,
   AssistProviderInput,
   AssistScope,
@@ -45,6 +48,7 @@ import type {
   Identity,
   ImageSizeProbe,
   ImageTextResult,
+  LocalModelServer,
   MailtoDraft,
   MovedMessage,
   NewAccount,
@@ -231,6 +235,11 @@ export interface Backend {
   setDefaultAddressBook(id: string): Promise<void>;
   /** Every contact of every address book. */
   contacts(): Promise<ContactRecord[]>;
+  /**
+   * The contacts of the accounts whose address books are known already; never searches for a
+   * CardDAV server, so opening a mail may use it (Nyu's birthday and contact scenes).
+   */
+  knownContacts(): Promise<ContactRecord[]>;
   /** Returns the new contact's id. */
   createContact(input: ContactInput): Promise<string>;
   /** Changes what the editor shows and leaves the rest of the card as it is. */
@@ -345,14 +354,30 @@ export interface Backend {
   deleteAssistProvider(scope: string, id: string): Promise<void>;
   /** Asks the provider for its models; doubles as a test of the key. */
   assistModels(scope: string, providerId: string): Promise<AssistModels>;
+  /** The models at an Ollama or OpenAI-compatible address not saved yet (this device's scope only). */
+  assistProbeModels(input: AssistProbeInput): Promise<AssistModels>;
+  /** Ollama and LM Studio running on this computer, with their installed models. */
+  assistLocalModels(): Promise<LocalModelServer[]>;
+  /**
+   * What a call to the assistant would take, for the tooltip on its button. `args` are what the
+   * call itself gets (the app's ids); `accountId` the draft's or the mail's mailbox. Null when the
+   * mailbox's UwUMail server is too old to say. `currency` (ISO 4217, EUR when left out) is what the
+   * cost is given in.
+   */
+  assistEstimate(
+    accountId: string,
+    method: AssistEstimateMethod,
+    args: Record<string, unknown>,
+    currency?: string,
+  ): Promise<AssistEstimate | null>;
   /** Starts the device-code sign-in of a server scope's `chatgpt` provider (experimental; not on this device). */
   chatgptLogin(scope: string, providerId: string): Promise<ChatgptLogin>;
   /** Whether that sign-in went through; ask every `interval` seconds while `pending`. */
   chatgptPoll(scope: string, providerId: string): Promise<ChatgptPoll>;
   assistSettings(scope: string): Promise<AssistSettings>;
   updateAssistSettings(scope: string, patch: AssistSettingsPatch): Promise<void>;
-  /** What was used: per day (UTC) and feature, and today per provider with its limits. */
-  assistUsage(scope: string, days?: number): Promise<AssistUsage>;
+  /** What was used: per day (UTC) and feature, and today per provider with its limits; costs in `currency`. */
+  assistUsage(scope: string, days?: number, currency?: string): Promise<AssistUsage>;
   assistLabels(scope: string): Promise<AssistLabel[]>;
   createAssistLabel(scope: string, input: AssistLabelInput): Promise<AssistLabel>;
   updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>): Promise<void>;

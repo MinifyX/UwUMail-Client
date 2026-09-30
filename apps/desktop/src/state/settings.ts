@@ -9,6 +9,9 @@ export type Tone = "playful" | "neutral";
 export type ThemeSetting = "system" | "light" | "dark";
 /** Animations: follow the system's reduced-motion setting, or override it. */
 export type MotionSetting = "system" | "on" | "off";
+/** Nyu's little scenes (sending, archiving, occasions, the AI thinking): see components/nyu/level. */
+export const NYU_ANIMATIONS = ["on", "reduced", "off"] as const;
+export type NyuAnimations = (typeof NYU_ANIMATIONS)[number];
 export type LanguageSetting = "system" | "de" | "en";
 export type RemoteImages = "ask" | "always";
 /** Beta gets pre-releases (tags like v0.2.0-beta.1) before everyone else. */
@@ -24,6 +27,9 @@ export type SwipeAction = "read" | "archive" | "spam" | "trash" | "flag" | "none
 export type LockAfter = 0 | 1 | 5 | 15;
 /** Android: days of mail kept complete on the phone; 0 keeps everything. */
 export type OfflineDays = 30 | 90 | 365 | 0;
+/** The money AI costs are shown in where the person may choose (English): euros or dollars. */
+export const CURRENCY_CHOICES = ["EUR", "USD"] as const;
+export type CurrencyChoice = (typeof CURRENCY_CHOICES)[number];
 /** Mailboxes shown apart, see lib/workspaces. */
 export type Workspace = "private" | "business";
 
@@ -34,6 +40,11 @@ export interface Settings {
   tone: Tone;
   theme: ThemeSetting;
   motion: MotionSetting;
+  /**
+   * Capped at "reduced" while motion is reduced (setting or operating system). App-wide, for every
+   * mailbox; follows the account that keeps the settings as `nyu.animations`.
+   */
+  nyuAnimations: NyuAnimations;
   language: LanguageSetting;
   conversations: boolean;
   remoteImages: RemoteImages;
@@ -91,6 +102,8 @@ export interface Settings {
   assistRefineEvents: boolean;
   /** Dates in mails are offered for the calendar, see lib/dates. Follows the account as `mail.detectEvents`. */
   detectEvents: boolean;
+  /** AI costs in English: euros or dollars (other languages have their own currency). This device only. */
+  assistCurrency: CurrencyChoice;
 }
 
 interface SettingsActions {
@@ -113,6 +126,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tone: "playful",
   theme: "system",
   motion: "system",
+  nyuAnimations: "on",
   language: "system",
   conversations: true,
   remoteImages: "ask",
@@ -143,6 +157,7 @@ export const DEFAULT_SETTINGS: Settings = {
   businessAccounts: [],
   assistRefineEvents: false,
   detectEvents: true,
+  assistCurrency: "EUR",
 };
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -175,6 +190,17 @@ export const useSettings = create<Settings & SettingsActions>()(
           return { businessAccounts: workspace === "business" ? [...others, accountId] : others };
         }),
     }),
-    { name: "uwumail.settings", version: 1 },
+    {
+      name: "uwumail.settings",
+      version: 1,
+      // A value this version doesn't know (left by a newer one) falls back to the default.
+      merge: (persisted, current) => {
+        const state = { ...current, ...(persisted as Partial<Settings>) };
+        if (!(NYU_ANIMATIONS as readonly unknown[]).includes(state.nyuAnimations)) {
+          state.nyuAnimations = DEFAULT_SETTINGS.nyuAnimations;
+        }
+        return state;
+      },
+    },
   ),
 );

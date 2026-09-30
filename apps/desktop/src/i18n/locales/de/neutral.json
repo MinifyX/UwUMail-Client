@@ -320,6 +320,8 @@
     "theme": "Design",
     "motion": "Animationen",
     "motionDesc": "„Wie System“ richtet sich nach der Einstellung für reduzierte Bewegung in deinem Betriebssystem.",
+    "nyuAnimations": "Nyu-Animationen",
+    "nyuAnimationsDesc": "Kurze Szenen beim Senden, Archivieren und Öffnen von Mails und während der Assistent nachdenkt, für alle Postfächer. „Reduziert“ zeigt sie als Standbild, genau wie reduzierte Bewegung.",
     "tone": "Ton",
     "language": "Sprache",
     "conversations": "Mails als Unterhaltungen gruppieren",
@@ -484,6 +486,11 @@
     "on": "An",
     "off": "Aus"
   },
+  "nyuAnimations": {
+    "on": "An",
+    "reduced": "Reduziert",
+    "off": "Aus"
+  },
   "language": {
     "system": "System",
     "de": "Deutsch",
@@ -645,7 +652,10 @@
     "over": "Schon vorbei.",
     "notesQuote": "„{{quote}}“",
     "notesFrom": "Aus der Mail „{{subject}}“ von {{sender}}",
-    "noSubject": "(kein Betreff)"
+    "noSubject": "(kein Betreff)",
+    "findAppointment": "Termin suchen",
+    "searching": "Suche Termine in dieser Mail …",
+    "noneFound": "In dieser Mail steht kein anstehender Termin."
   },
   "density": {
     "relaxed": "Entspannt",
@@ -1433,7 +1443,14 @@
       "deviceDescription": "Die hier eingerichteten Anbieter, für jedes Postfach ohne Assistent auf seinem Server. Schlüssel bleiben im Schlüsselbund des Systems; Mails gehen direkt von diesem Gerät zum Anbieter.",
       "serverDescription": "Der Assistent des Servers dieses UwUMail-Kontos.",
       "deviceNoneTitle": "Noch kein Anbieter eingerichtet",
-      "deviceNoneBody": "Füge unten einen Anbieter hinzu, etwa deinen eigenen Schlüssel für OpenAI, Anthropic, Gemini oder Mistral, oder ein lokales Modell mit Ollama."
+      "deviceNoneBody": "Füge unten einen Anbieter hinzu, etwa deinen eigenen Schlüssel für OpenAI, Anthropic, Gemini oder Mistral, oder ein lokales Modell mit Ollama.",
+      "costsTitle": "Kosten",
+      "currency": "Währung",
+      "currencyHint": "KI-Kosten werden in dieser Währung gezeigt, umgerechnet mit den EZB-Referenzkursen.",
+      "currencies": {
+        "EUR": "Euro (€)",
+        "USD": "US-Dollar ($)"
+      }
     },
     "providers": {
       "title": "Anbieter",
@@ -1495,8 +1512,18 @@
         "urlMissing": "Für diesen Anbieter wird die Adresse gebraucht.",
         "urlScheme": "Die Adresse muss mit http:// oder https:// beginnen.",
         "urlLogin": "Lass Benutzername und Passwort aus der Adresse weg.",
-        "keyMissing": "Dieser Anbieter braucht einen API-Schlüssel."
-      }
+        "keyMissing": "Dieser Anbieter braucht einen API-Schlüssel.",
+        "priceInvalid": "Ein Preis von 0 bis 10.000, z. B. 0,40."
+      },
+      "pickModel": "Aus der Liste wählen: {{field}}",
+      "modelsLoading": "Lade Modelle …",
+      "modelsFailed": "Der Anbieter hat keine Modelle genannt. Du kannst eins eintippen.",
+      "modelsNone": "Keine Modelle gefunden. Du kannst eins eintippen.",
+      "inputPrice": "Preis Eingabe (USD pro Million Tokens)",
+      "outputPrice": "Preis Ausgabe (USD pro Million Tokens)",
+      "priceHint": "Leer nimmt den bekannten Preis des Modells.",
+      "priceAuto": "automatisch: {{price}}",
+      "priceUnknown": "unbekannt"
     },
     "chatgpt": {
       "warningTitle": "Experimentell und inoffiziell",
@@ -1531,6 +1558,24 @@
       "lastDays_one": "Letzter Tag",
       "lastDays_other": "Letzte {{count}} Tage",
       "nothing": "In dieser Zeit nichts verbraucht."
+    },
+    "estimate": {
+      "tokens": "≈ {{formatted}} Tokens",
+      "tokensLeft": "heute noch {{formatted}} übrig",
+      "requestsLeft_one": "heute noch {{formatted}} Anfrage",
+      "requestsLeft_other": "heute noch {{formatted}} Anfragen"
+    },
+    "local": {
+      "title": "Auf diesem Computer gefunden",
+      "description": "Hier läuft eine lokale KI. Mit einem Klick hinzufügen – deine Mails verlassen dafür diesen Computer nicht.",
+      "model": "Modell für {{name}}",
+      "noModels": "Noch keine Modelle installiert",
+      "add": "Hinzufügen"
+    },
+    "cost": {
+      "free": "kostenlos",
+      "below": "< {{amount}}",
+      "about": "≈ {{amount}}"
     }
   }
 }

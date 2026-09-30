@@ -1,10 +1,12 @@
 import clsx from "clsx";
-import { CalendarPlus, ChevronDown, ImageIcon, MapPin, Sparkles, TriangleAlert, X } from "lucide-react";
+import { CalendarPlus, CalendarSearch, ChevronDown, ImageIcon, MapPin, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useId, useState } from "react";
-import { Button, IconButton } from "@/components/ui/Button";
+import { NyuThinking } from "@/components/nyu/NyuThinking";
+import { Button, IconButton, Spinner } from "@/components/ui/Button";
 import { useT } from "@/i18n";
 import type { DetectedEvent } from "@/lib/dates";
 import { toast } from "@/state/toasts";
+import { EstimateTip } from "../assist/estimate";
 import { Popover } from "../calendar/Popover";
 import type { Anchor } from "../calendar/state";
 import { useDismissedDates } from "./dismissed";
@@ -48,6 +50,8 @@ function titleOf(event: DetectedEvent, untitled: string): string {
 
 interface EventsBarProps {
   messageId: string;
+  /** The mail's mailbox, whose assistant reads it. */
+  accountId: string;
   found: MailEvents;
   onAdd: (event: DetectedEvent) => void;
 }
@@ -57,13 +61,23 @@ interface EventsBarProps {
  * "3 Termine erkannt". Put away per mail. The assistant only reads the mail on a click here, unless
  * the person switched that on for every mail.
  */
-export function EventsBar({ messageId, found, onAdd }: EventsBarProps) {
+export function EventsBar({ messageId, accountId, found, onAdd }: EventsBarProps) {
   const { t, i18n } = useT();
   const dismissed = useDismissedDates((s) => s.ids.includes(messageId));
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
   const events = found.events.filter((event) => isUpcoming(event));
-  if (dismissed || events.length === 0) return null;
+  const estimate = {
+    accountId,
+    method: "Assist/extractEvents" as const,
+    args: { emailId: messageId, includeImages: found.includeImages },
+  };
+  if (dismissed) return null;
+  if (events.length === 0) {
+    // Asked for by a click: what the assistant is doing, or that it found nothing.
+    if (!found.asked || !found.canRefine) return null;
+    return <SearchStatus messageId={messageId} found={found} estimate={estimate} />;
+  }
   const locale = i18n.language;
   const untitled = t("calendar.untitled");
   const single = events.length === 1 ? events[0]! : null;
@@ -76,16 +90,18 @@ export function EventsBar({ messageId, found, onAdd }: EventsBarProps) {
   };
 
   const refine = found.canRefine && !found.refined && (
-    <Button
-      size="sm"
-      variant="ghost"
-      icon={Sparkles}
-      busy={found.refining}
-      onClick={found.refine}
-      title={t("dates.refineHint")}
-    >
-      {found.refineFailed ? t("dates.refineAgain") : t("dates.refine")}
-    </Button>
+    <EstimateTip request={estimate} hint={t("dates.refineHint")}>
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={Sparkles}
+        busy={found.refining}
+        busyIndicator={<NyuThinking size="sm" fallback={<Spinner />} />}
+        onClick={found.refine}
+      >
+        {found.refineFailed ? t("dates.refineAgain") : t("dates.refine")}
+      </Button>
+    </EstimateTip>
   );
 
   return (
@@ -169,6 +185,53 @@ export function EventsBar({ messageId, found, onAdd }: EventsBarProps) {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** The bar while the assistant looks for appointments nobody found by rules, and its answer. */
+function SearchStatus({
+  messageId,
+  found,
+  estimate,
+}: {
+  messageId: string;
+  found: MailEvents;
+  estimate: Parameters<typeof EstimateTip>[0]["request"];
+}) {
+  const { t } = useT();
+  const dismiss = () => useDismissedDates.getState().dismiss(messageId);
+  return (
+    <section
+      aria-label={t("dates.barLabel")}
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-hairline bg-canvas px-4 py-2.5 text-[13px]"
+    >
+      <CalendarSearch className="size-4 shrink-0 text-pink" aria-hidden />
+      <p role="status" aria-live="polite" className="min-w-[min(100%,14rem)] flex-1 text-muted">
+        {found.refining ? (
+          <span className="inline-flex items-center gap-2">
+            <span
+              className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+              aria-hidden
+            />
+            {t("dates.searching")}
+          </span>
+        ) : found.refineFailed ? (
+          <span className="text-danger">{t("dates.refineFailed")}</span>
+        ) : (
+          t("dates.noneFound")
+        )}
+      </p>
+      <span className="ml-auto flex items-center gap-1.5">
+        {found.refineFailed && !found.refining && (
+          <EstimateTip request={estimate}>
+            <Button size="sm" variant="ghost" icon={Sparkles} onClick={found.refine}>
+              {t("dates.refineAgain")}
+            </Button>
+          </EstimateTip>
+        )}
+        <IconButton icon={X} size="sm" label={t("dates.dismiss")} title={t("dates.dismiss")} onClick={dismiss} />
+      </span>
     </section>
   );
 }

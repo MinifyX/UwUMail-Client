@@ -20,6 +20,20 @@
 		<string>fetch</string>
 	</array>
 
+	<!-- Signing in with Microsoft comes back to the app through app.uwumail://oauth
+	     (docs/oauth.md); Safari hands the link to UwUMail. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.uwumail.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app.uwumail</string>
+			</array>
+		</dict>
+	</array>
+
 	<!-- UwUMail only uses TLS the way every mail app does. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

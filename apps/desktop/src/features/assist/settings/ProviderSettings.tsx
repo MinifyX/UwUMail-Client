@@ -1,9 +1,10 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   CircleCheck,
   CircleDashed,
   Copy,
+  Cpu,
   ExternalLink,
   FlaskConical,
   KeyRound,
@@ -19,10 +20,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AssistError, backend } from "@/backend/backend";
 import {
   type AssistOptions,
+  type AssistProbeInput,
   type AssistProvider,
   type AssistProviderKind,
   type ChatgptLogin,
   DEVICE_ASSIST_SCOPE,
+  type LocalModelServer,
 } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Field, Select, TextInput } from "@/components/ui/Field";
@@ -35,6 +38,7 @@ import { useUi } from "@/state/ui";
 import {
   emptyProviderForm,
   insecureUrl,
+  isFreeKind,
   PROVIDER_NAME_MAX,
   providerCreateInput,
   providerFormFrom,
@@ -43,12 +47,14 @@ import {
   type ProviderForm,
 } from "../providerForm";
 import { assistErrorDetail, assistErrorText, useAssistProviders, useAssistScope } from "../useAssist";
+import { useSettled } from "../estimate";
 import { ModelInput, Note, Section } from "./common";
 
 /** The server's providers the person may use, and their own ones with add, change, test and remove. */
 export function ProviderSettings({ options }: { options: AssistOptions }) {
   const { t } = useT();
   const { data: providers = [], isPending } = useAssistProviders();
+  const scope = useAssistScope();
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [signIn, setSignIn] = useState<string | null>(null);
   const setSettingsFormDirty = useUi((s) => s.setSettingsFormDirty);
@@ -75,6 +81,7 @@ export function ProviderSettings({ options }: { options: AssistOptions }) {
         )
       }
     >
+      {options.mayAddProviders && scope === DEVICE_ASSIST_SCOPE && room && editing === null && <LocalModels />}
       {editing === "new" && (
         <ProviderEditor
           provider={null}
@@ -113,6 +120,89 @@ export function ProviderSettings({ options }: { options: AssistOptions }) {
         )}
       </ul>
     </Section>
+  );
+}
+
+/**
+ * Ollama or LM Studio running on this computer: offered with one click, with a model picked from
+ * the installed ones. Only on this device's scope; a UwUMail server can't reach this computer.
+ */
+function LocalModels() {
+  const { t } = useT();
+  const { data: servers = [] } = useQuery({
+    queryKey: queryKeys.assistLocalModels,
+    queryFn: () => backend().assistLocalModels(),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const offered = servers.filter((server) => !server.added);
+  if (offered.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-pink/30 bg-pink-tint/20 px-3.5 py-3">
+      <p className="flex items-center gap-2 text-[13px] font-bold">
+        <Cpu className="size-4 shrink-0 text-pink" aria-hidden />
+        {t("assist.local.title")}
+      </p>
+      <p className="text-[12.5px] text-muted">{t("assist.local.description")}</p>
+      <ul className="flex flex-col gap-2">
+        {offered.map((server) => (
+          <LocalModelOffer key={server.baseUrl} server={server} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function LocalModelOffer({ server }: { server: LocalModelServer }) {
+  const { t } = useT();
+  const scope = useAssistScope();
+  const client = useQueryClient();
+  const [model, setModel] = useState(server.models[0]?.id ?? "");
+  const [busy, setBusy] = useState(false);
+  const add = () => {
+    setBusy(true);
+    backend()
+      .createAssistProvider(scope, {
+        name: server.name,
+        kind: server.kind,
+        baseUrl: server.baseUrl,
+        ...(model ? { model, fastModel: model } : {}),
+      })
+      .then(() => {
+        toast(t("assist.providers.added", { name: server.name }), "success");
+        for (const key of [queryKeys.assistProviders, queryKeys.assistSettings, queryKeys.assistLocalModels]) {
+          void client.invalidateQueries({ queryKey: key });
+        }
+      })
+      .catch((error: unknown) => toast(assistErrorText(error), "error"))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-surface px-3 py-2">
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13.5px] font-bold">{server.name}</span>
+        <span className="block truncate font-mono text-[11.5px] text-muted">{server.baseUrl}</span>
+      </span>
+      {server.models.length > 0 ? (
+        <Select
+          aria-label={t("assist.local.model", { name: server.name })}
+          value={model}
+          onChange={(event) => setModel(event.target.value)}
+          className="h-9 max-w-[min(100%,16rem)] text-[13px]"
+        >
+          {server.models.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.id}
+            </option>
+          ))}
+        </Select>
+      ) : (
+        <span className="text-[12.5px] text-muted">{t("assist.local.noModels")}</span>
+      )}
+      <Button size="sm" variant="primary" icon={Plus} busy={busy} onClick={add}>
+        {t("assist.local.add")}
+      </Button>
+    </li>
   );
 }
 
@@ -332,7 +422,7 @@ function ProviderEditor({
   options: AssistOptions;
   onDone: (made?: AssistProvider) => void;
 }) {
-  const { t } = useT();
+  const { t, i18n } = useT();
   const scope = useAssistScope();
   const [form, setForm] = useState<ProviderForm>(() =>
     provider ? providerFormFrom(provider) : emptyProviderForm("openai"),
@@ -343,16 +433,25 @@ function ProviderEditor({
   const kind = assistKind(form.kind);
   const problems = providerProblems(form, provider);
   const fromServer = serverProblems(failure);
+  // A new provider at its own address on this device lists its models before it is saved.
+  const settledUrl = useSettled(form.baseUrl.trim());
+  const probe: AssistProbeInput | null =
+    !provider && scope === DEVICE_ASSIST_SCOPE && kind.baseUrl && settledUrl && !problems.baseUrl
+      ? { kind: form.kind, baseUrl: settledUrl, apiKey: form.apiKey.trim() || null }
+      : null;
   const change = (patch: Partial<ProviderForm>) => {
     setForm((current) => ({ ...current, ...patch }));
     setFailure(null);
   };
 
-  const problemText = (field: "name" | "baseUrl" | "apiKey"): string | undefined => {
+  const problemText = (field: "name" | "baseUrl" | "apiKey" | "inputPrice" | "outputPrice"): string | undefined => {
     const problem = touched ? problems[field] : undefined;
     if (problem) return t(`assist.providers.problem.${problem}`, { max: PROVIDER_NAME_MAX });
-    return fromServer[field];
+    return fromServer[field === "inputPrice" || field === "outputPrice" ? `${field}PerMillion` : field];
   };
+  // What the model is known to cost, as the placeholder of an empty price.
+  const known = provider?.price && provider.price.source !== "manual" ? provider.price : null;
+  const priceNumber = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 4 });
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -503,6 +602,7 @@ function ProviderEditor({
           {() => (
             <ModelInput
               providerId={provider?.id ?? null}
+              probe={probe}
               value={form.model}
               label={t("assist.providers.writeModel")}
               placeholder={kind.model || t("assist.providers.modelPlaceholder")}
@@ -514,6 +614,7 @@ function ProviderEditor({
           {() => (
             <ModelInput
               providerId={provider?.id ?? null}
+              probe={probe}
               value={form.fastModel}
               label={t("assist.providers.fastModel")}
               placeholder={kind.fastModel || t("assist.providers.modelPlaceholder")}
@@ -522,6 +623,37 @@ function ProviderEditor({
           )}
         </Field>
       </div>
+      {!isFreeKind(form.kind) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(["inputPrice", "outputPrice"] as const).map((field) => (
+            <Field
+              key={field}
+              label={t(`assist.providers.${field}`)}
+              hint={t("assist.providers.priceHint")}
+              error={problemText(field)}
+            >
+              {(id) => (
+                <TextInput
+                  id={id}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={form[field]}
+                  placeholder={
+                    known
+                      ? t("assist.providers.priceAuto", {
+                          price: priceNumber.format(
+                            field === "inputPrice" ? known.inputPerMillion : known.outputPerMillion,
+                          ),
+                        })
+                      : t("assist.providers.priceUnknown")
+                  }
+                  onChange={(event) => change({ [field]: event.target.value })}
+                />
+              )}
+            </Field>
+          ))}
+        </div>
+      )}
       {failure !== null && Object.keys(fromServer).length === 0 && (
         <p role="alert" className="rounded-xl bg-danger-tint px-3 py-2 text-[13px] text-danger">
           {assistErrorText(failure)}

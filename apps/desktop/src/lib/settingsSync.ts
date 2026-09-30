@@ -10,7 +10,7 @@
  * same time never overwrite each other. Removing an entry sets its key to `null`.
  */
 
-import { UNDO_SEND_CHOICES, type Settings } from "@/state/settings";
+import { CURRENCY_CHOICES, NYU_ANIMATIONS, UNDO_SEND_CHOICES, type Settings } from "@/state/settings";
 
 /** Keys and their values, as the server holds them. */
 export type SettingsValues = Record<string, unknown>;
@@ -37,8 +37,10 @@ export type SyncedChoice = (typeof SYNCED_CHOICES)[number];
  * and its key on the server.
  */
 export const KEYED_CHOICES = {
+  assistCurrency: "assist.currency",
   assistRefineEvents: "assist.refineEvents",
   detectEvents: "mail.detectEvents",
+  nyuAnimations: "nyu.animations",
 } as const;
 export type KeyedChoice = keyof typeof KEYED_CHOICES;
 
@@ -81,8 +83,10 @@ const CHOICES: Record<SyncedChoice | (typeof KEYED_CHOICES)[KeyedChoice], (value
   senderPictures: isBoolean,
   undoSendSeconds: oneOf(...UNDO_SEND_CHOICES),
   linkConfirm: isBoolean,
+  "assist.currency": oneOf(...CURRENCY_CHOICES),
   "assist.refineEvents": isBoolean,
   "mail.detectEvents": isBoolean,
+  "nyu.animations": oneOf(...NYU_ANIMATIONS),
 };
 
 const ENTRY_MAX = 254;

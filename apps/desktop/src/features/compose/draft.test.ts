@@ -4,8 +4,8 @@ import { initialDraft, replyFrom } from "./draft";
 
 const account: Account = {
   id: "acc",
-  name: "uwumail.dev",
-  email: "mini@uwumail.dev",
+  name: "uwumail.example",
+  email: "mini@uwumail.example",
   displayName: "Mini",
   color: "pink",
   auth: "password",
@@ -15,8 +15,8 @@ const account: Account = {
 };
 
 const identities: Identity[] = [
-  { id: "acc", accountId: "acc", email: "mini@uwumail.dev", name: "Mini", primary: true, fromServer: false },
-  { id: "i1", accountId: "acc", email: "hallo@uwumail.dev", name: "Studio", primary: false, fromServer: false },
+  { id: "acc", accountId: "acc", email: "mini@uwumail.example", name: "Mini", primary: true, fromServer: false },
+  { id: "i1", accountId: "acc", email: "hallo@uwumail.example", name: "Studio", primary: false, fromServer: false },
   { id: "i2", accountId: "other", email: "shop@elsewhere.example", name: "", primary: false, fromServer: true },
 ];
 
@@ -45,18 +45,20 @@ const t = (key: string) => key;
 
 describe("replies", () => {
   it("come from the alias the mail was sent to", () => {
-    expect(replyFrom(message(["HALLO@uwumail.dev"]), identities)).toBe("hallo@uwumail.dev");
-    expect(replyFrom(message(["leni@wanders.example"], ["hallo@uwumail.dev"]), identities)).toBe("hallo@uwumail.dev");
+    expect(replyFrom(message(["HALLO@uwumail.example"]), identities)).toBe("hallo@uwumail.example");
+    expect(replyFrom(message(["leni@wanders.example"], ["hallo@uwumail.example"]), identities)).toBe(
+      "hallo@uwumail.example",
+    );
   });
 
   it("use the mailbox's own address otherwise", () => {
-    expect(replyFrom(message(["mini@uwumail.dev"]), identities)).toBe("");
+    expect(replyFrom(message(["mini@uwumail.example"]), identities)).toBe("");
     // An alias of another mailbox doesn't count.
     expect(replyFrom(message(["shop@elsewhere.example"]), identities)).toBe("");
   });
 
   it("leave all my addresses out of reply all", () => {
-    const source = message(["hallo@uwumail.dev", "fee@friends.example"], ["mini@uwumail.dev"]);
+    const source = message(["hallo@uwumail.example", "fee@friends.example"], ["mini@uwumail.example"]);
     const draft = initialDraft({ key: 1, mode: "replyAll", source }, [account], identities, t, "de");
     expect([...draft.to, ...draft.cc].map((a) => a.email)).toEqual(["leni@wanders.example", "fee@friends.example"]);
     expect(draft.fromEmail).toBeNull();

@@ -13,9 +13,11 @@ import type {
   BlockedSender,
   Account,
   AssistComposeRequest,
+  AssistEstimateMethod,
   AssistEventsResult,
   AssistFeatures,
   AssistLabelInput,
+  AssistProbeInput,
   AssistProviderInput,
   AssistScope,
   AssistSettingsPatch,
@@ -41,6 +43,7 @@ import type {
   Identity,
   ImageSizeProbe,
   ImageTextResult,
+  LocalModelServer,
   MailtoDraft,
   MovedMessage,
   Message,
@@ -68,7 +71,7 @@ const OAUTH_DOMAINS: Record<string, "microsoft" | "google"> = {
 };
 
 /** Demo domains that pretend to offer JMAP. */
-const JMAP_DOMAINS = ["fastmail.com", "fastmail.fm", "uwumail.dev", "stalwart.example"];
+const JMAP_DOMAINS = ["fastmail.com", "fastmail.fm", "uwumail.example", "stalwart.example"];
 
 const DEMO_FREEMAIL = new Set(["gmail.com", "gmx.de", "web.de", "outlook.com", "icloud.com", "posteo.de", "proton.me"]);
 
@@ -134,7 +137,7 @@ export class DemoBackend implements Backend {
     {
       id: "id-studio",
       accountId: DEMO_ACCOUNTS[0]!.id,
-      email: "hallo@uwumail.dev",
+      email: "hallo@uwumail.example",
       name: "Mini vom Studio",
       primary: false,
       fromServer: true,
@@ -610,6 +613,11 @@ export class DemoBackend implements Backend {
     return this.accounts.some((a) => a.id === DEMO_ACCOUNTS[0]!.id) ? this.addressBook.contacts() : [];
   }
 
+  /** The demo's address book is always known: the same contacts. */
+  knownContacts() {
+    return this.contacts();
+  }
+
   async createContact(input: ContactInput) {
     await wait(150);
     return this.addressBook.createContact(input);
@@ -892,7 +900,7 @@ export class DemoBackend implements Backend {
     await wait(350);
     const account = this.accounts.find((a) => a.id === draft.accountId);
     if (!account) throw new BackendError("not_found", "Account not found");
-    const draftKey = draft.draftKey ?? `demo-${this.nextId++}@${account.email.split("@")[1] ?? "uwumail.dev"}`;
+    const draftKey = draft.draftKey ?? `demo-${this.nextId++}@${account.email.split("@")[1] ?? "uwumail.example"}`;
     this.removeDraftMessage(draftKey);
     const original = draft.inReplyTo ? this.messages.find((m) => m.id === draft.inReplyTo) : undefined;
     const id = `msg-${this.nextId++}`;
@@ -1180,6 +1188,38 @@ export class DemoBackend implements Backend {
     return this.assistOf(scope).models(providerId);
   }
 
+  async assistProbeModels(input: AssistProbeInput) {
+    await wait(300);
+    return this.assistDevice.probeModels(input.kind, input.baseUrl);
+  }
+
+  /** The demo pretends an Ollama runs on this computer. */
+  async assistLocalModels(): Promise<LocalModelServer[]> {
+    await wait(200);
+    const baseUrl = "http://127.0.0.1:11434";
+    return [
+      {
+        kind: "ollama",
+        name: "Ollama",
+        baseUrl,
+        models: ["gemma3:4b", "llama3.2:3b", "qwen3:8b"].map((id) => ({ id, name: id })),
+        added: this.assistDevice.hasAddress(baseUrl),
+      },
+    ];
+  }
+
+  async assistEstimate(
+    accountId: string,
+    method: AssistEstimateMethod,
+    args: Record<string, unknown>,
+    currency?: string,
+  ) {
+    await wait(60);
+    const emailId = typeof args.emailId === "string" ? args.emailId : null;
+    const assist = method === "Assist/compose" || !emailId ? this.assistFor(accountId) : this.assistForMessage(emailId);
+    return assist.estimate(method, args, currency);
+  }
+
   async chatgptLogin(scope: string, providerId: string) {
     await wait(300);
     return this.assistOf(scope).chatgptLogin(providerId);
@@ -1200,9 +1240,9 @@ export class DemoBackend implements Backend {
     this.assistOf(scope).updateSettings(patch);
   }
 
-  async assistUsage(scope: string, days = 30) {
+  async assistUsage(scope: string, days = 30, currency?: string) {
     await wait(80);
-    return this.assistOf(scope).usageReport(Math.min(90, Math.max(1, days)));
+    return this.assistOf(scope).usageReport(Math.min(90, Math.max(1, days)), currency);
   }
 
   async assistLabels(scope: string) {

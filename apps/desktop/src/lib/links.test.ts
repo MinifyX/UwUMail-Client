@@ -3,7 +3,7 @@ import { claimedHost, isOpenableLink, misleadingLink, targetHost } from "./links
 
 describe("links", () => {
   it("opens only web and mail links", () => {
-    expect(isOpenableLink("https://uwumail.dev")).toBe(true);
+    expect(isOpenableLink("https://uwumail.example")).toBe(true);
     expect(isOpenableLink("mailto:leni@example.com")).toBe(true);
     expect(isOpenableLink("javascript:alert(1)")).toBe(false);
     expect(isOpenableLink("file:///C:/Windows/System32/calc.exe")).toBe(false);

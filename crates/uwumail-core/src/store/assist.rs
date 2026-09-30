@@ -63,6 +63,15 @@ CREATE TABLE assist_usage (
 );
 "#;
 
+/// Prices of the assistant: what an own provider costs when set by hand (USD per million tokens,
+/// input and output), and what the day's requests cost in USD when they were made (null where the
+/// price was unknown then).
+pub(super) const PRICE_MIGRATION: &str = r#"
+ALTER TABLE assist_providers ADD COLUMN input_price REAL;
+ALTER TABLE assist_providers ADD COLUMN output_price REAL;
+ALTER TABLE assist_usage ADD COLUMN cost_usd REAL;
+"#;
+
 /// Keywords as the messages table keeps them.
 pub(super) fn keywords_text(keywords: &[String]) -> String {
     let mut list: Vec<String> = keywords.iter().map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).collect();
@@ -80,7 +89,7 @@ pub(super) fn keywords_list(text: &str) -> Vec<String> {
 const MAX_KEYWORDS: usize = 30;
 
 /// A provider set up on this device.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProviderRecord {
     pub id: String,
     pub name: String,
@@ -91,6 +100,9 @@ pub struct ProviderRecord {
     /// The last four characters of the key; `None` without a key.
     pub key_hint: Option<String>,
     pub created_at: i64,
+    /// The price set by hand, USD per million tokens; `None` follows the known prices.
+    pub input_price: Option<f64>,
+    pub output_price: Option<f64>,
 }
 
 /// A label the model set, as the log keeps it.
@@ -110,7 +122,7 @@ pub struct LabelLogRecord {
 }
 
 /// One row of usage: a day (UTC, `YYYY-MM-DD`), a provider and a feature.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UsageRecord {
     pub day: String,
     pub provider_id: String,
@@ -119,6 +131,8 @@ pub struct UsageRecord {
     pub requests: u64,
     pub input_tokens: u64,
     pub output_tokens: u64,
+    /// What it cost in USD at the time; `None` where the price was unknown.
+    pub cost_usd: Option<f64>,
 }
 
 const LOG_COLUMNS: &str =
@@ -265,8 +279,8 @@ impl Store {
     pub fn assist_providers(&self) -> Result<Vec<ProviderRecord>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, name, kind, base_url, model, fast_model, key_hint, created_at FROM assist_providers
-             ORDER BY created_at, rowid",
+            "SELECT id, name, kind, base_url, model, fast_model, key_hint, created_at, input_price, output_price
+             FROM assist_providers ORDER BY created_at, rowid",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(ProviderRecord {
@@ -278,6 +292,8 @@ impl Store {
                 fast_model: row.get(5)?,
                 key_hint: row.get(6)?,
                 created_at: row.get(7)?,
+                input_price: row.get(8)?,
+                output_price: row.get(9)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -286,10 +302,12 @@ impl Store {
     /// Adds or replaces a provider.
     pub fn save_assist_provider(&self, provider: &ProviderRecord) -> Result<()> {
         self.conn().execute(
-            "INSERT INTO assist_providers (id, name, kind, base_url, model, fast_model, key_hint, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO assist_providers
+                (id, name, kind, base_url, model, fast_model, key_hint, created_at, input_price, output_price)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT (id) DO UPDATE SET name = excluded.name, base_url = excluded.base_url,
-                model = excluded.model, fast_model = excluded.fast_model, key_hint = excluded.key_hint",
+                model = excluded.model, fast_model = excluded.fast_model, key_hint = excluded.key_hint,
+                input_price = excluded.input_price, output_price = excluded.output_price",
             params![
                 provider.id,
                 provider.name,
@@ -298,7 +316,9 @@ impl Store {
                 provider.model,
                 provider.fast_model,
                 provider.key_hint,
-                provider.created_at
+                provider.created_at,
+                provider.input_price,
+                provider.output_price
             ],
         )?;
         Ok(())
@@ -460,11 +480,14 @@ impl Store {
     /// Counts one request.
     pub fn add_assist_usage(&self, row: &UsageRecord) -> Result<()> {
         self.conn().execute(
-            "INSERT INTO assist_usage (day, provider_id, provider_name, feature, requests, input_tokens, output_tokens)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO assist_usage
+                (day, provider_id, provider_name, feature, requests, input_tokens, output_tokens, cost_usd)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT (day, provider_id, feature) DO UPDATE SET requests = requests + excluded.requests,
                 input_tokens = input_tokens + excluded.input_tokens,
-                output_tokens = output_tokens + excluded.output_tokens, provider_name = excluded.provider_name",
+                output_tokens = output_tokens + excluded.output_tokens, provider_name = excluded.provider_name,
+                cost_usd = CASE WHEN excluded.cost_usd IS NULL THEN cost_usd
+                                ELSE COALESCE(cost_usd, 0) + excluded.cost_usd END",
             params![
                 row.day,
                 row.provider_id,
@@ -472,7 +495,8 @@ impl Store {
                 row.feature,
                 row.requests as i64,
                 row.input_tokens as i64,
-                row.output_tokens as i64
+                row.output_tokens as i64,
+                row.cost_usd
             ],
         )?;
         Ok(())
@@ -482,7 +506,7 @@ impl Store {
     pub fn assist_usage(&self, since: &str) -> Result<Vec<UsageRecord>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT day, provider_id, provider_name, feature, requests, input_tokens, output_tokens
+            "SELECT day, provider_id, provider_name, feature, requests, input_tokens, output_tokens, cost_usd
              FROM assist_usage WHERE day >= ?1 ORDER BY day DESC, provider_name, feature",
         )?;
         let rows = stmt.query_map([since], |row| {
@@ -494,6 +518,7 @@ impl Store {
                 requests: row.get::<_, i64>(4)?.max(0) as u64,
                 input_tokens: row.get::<_, i64>(5)?.max(0) as u64,
                 output_tokens: row.get::<_, i64>(6)?.max(0) as u64,
+                cost_usd: row.get(7)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -604,11 +629,18 @@ mod tests {
             requests: 1,
             input_tokens: 10,
             output_tokens: 5,
+            cost_usd: Some(0.25),
         };
         store.add_assist_usage(&row).unwrap();
         store.add_assist_usage(&row).unwrap();
+        // A request whose price was unknown adds nothing to the cost.
+        store.add_assist_usage(&UsageRecord { cost_usd: None, ..row.clone() }).unwrap();
         let rows = store.assist_usage("2026-09-01").unwrap();
-        assert_eq!((rows[0].requests, rows[0].input_tokens), (2, 20));
+        assert_eq!((rows[0].requests, rows[0].input_tokens), (3, 30));
+        assert_eq!(rows[0].cost_usd, Some(0.5));
+        store.add_assist_usage(&UsageRecord { feature: "compose".into(), cost_usd: None, ..row.clone() }).unwrap();
+        let unknown = store.assist_usage("2026-09-01").unwrap().into_iter().find(|r| r.feature == "compose").unwrap();
+        assert_eq!(unknown.cost_usd, None);
         assert!(store.assist_usage("2026-09-30").unwrap().is_empty());
     }
 

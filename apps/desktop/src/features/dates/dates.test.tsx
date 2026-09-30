@@ -12,6 +12,7 @@ import { EventEditor } from "../calendar/EventEditor";
 import { useCalendarUi } from "../calendar/state";
 import { eventDraft, openInCalendar } from "./addToCalendar";
 import { useDismissedDates } from "./dismissed";
+import { useEventSearch } from "./search";
 import { EventsBar } from "./EventsBar";
 import { swappedDay, whenLabel } from "./format";
 import { useMailEvents, type MailEvents } from "./useMailEvents";
@@ -117,6 +118,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   useSettings.getState().update({ detectEvents: true, assistRefineEvents: false });
   useDismissedDates.getState().clear();
+  useEventSearch.setState({ asked: {} });
 });
 afterEach(() => {
   cleanup();
@@ -190,10 +192,12 @@ function found(events: DetectedEvent[], patch: Partial<MailEvents> = {}): MailEv
     marks: [],
     textEvents: events,
     canRefine: false,
+    asked: false,
     refining: false,
     refined: false,
     refineFailed: false,
     refine: vi.fn(),
+    includeImages: false,
     ...patch,
   };
 }
@@ -203,7 +207,10 @@ describe("EventsBar", () => {
 
   it("offers a single appointment right away", () => {
     const onAdd = vi.fn();
-    render(<EventsBar messageId="m1" found={found([future("Pixel Days vom 6. – 9. Okt")])} onAdd={onAdd} />);
+    render(
+      <EventsBar accountId="a1" messageId="m1" found={found([future("Pixel Days vom 6. – 9. Okt")])} onAdd={onAdd} />,
+      { wrapper: wrapper() },
+    );
     const bar = screen.getByRole("region", { name: "Appointments in this mail" });
     expect(within(bar).getByText("Pixel Days")).toBeTruthy();
     fireEvent.click(within(bar).getByRole("button", { name: "Add to calendar" }));
@@ -212,7 +219,7 @@ describe("EventsBar", () => {
 
   it("folds several and lists them on request", () => {
     const events = [future("Lesung am 16.10. um 19 Uhr"), future("Kino am 20.10. um 20 Uhr")];
-    render(<EventsBar messageId="m1" found={found(events)} onAdd={vi.fn()} />);
+    render(<EventsBar accountId="a1" messageId="m1" found={found(events)} onAdd={vi.fn()} />, { wrapper: wrapper() });
     const toggle = screen.getByRole("button", { name: /2 appointments found/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("list")).toBeNull();
@@ -226,27 +233,31 @@ describe("EventsBar", () => {
   it("shows nothing for what's over, and stays away once put away for the mail", () => {
     const { rerender } = render(
       <EventsBar
+        accountId="a1"
         messageId="m1"
         found={found([{ ...future("Party am 16.10."), end: "2000-01-01T00:00:00" }])}
         onAdd={vi.fn()}
       />,
+      { wrapper: wrapper() },
     );
     expect(screen.queryByRole("region")).toBeNull();
-    rerender(<EventsBar messageId="m1" found={found([future("Party am 16.10.")])} onAdd={vi.fn()} />);
+    rerender(<EventsBar accountId="a1" messageId="m1" found={found([future("Party am 16.10.")])} onAdd={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Hide for this mail" }));
     expect(screen.queryByRole("region")).toBeNull();
-    rerender(<EventsBar messageId="m2" found={found([future("Party am 16.10.")])} onAdd={vi.fn()} />);
+    rerender(<EventsBar accountId="a1" messageId="m2" found={found([future("Party am 16.10.")])} onAdd={vi.fn()} />);
     expect(screen.getByRole("region")).toBeTruthy();
   });
 
   it("asks the assistant only on a click, and only where it can", () => {
     const refine = vi.fn();
     const { rerender } = render(
-      <EventsBar messageId="m1" found={found([future("Party am 16.10.")])} onAdd={vi.fn()} />,
+      <EventsBar accountId="a1" messageId="m1" found={found([future("Party am 16.10.")])} onAdd={vi.fn()} />,
+      { wrapper: wrapper() },
     );
     expect(screen.queryByRole("button", { name: "Check with AI" })).toBeNull();
     rerender(
       <EventsBar
+        accountId="a1"
         messageId="m1"
         found={found([future("Party am 16.10.")], { canRefine: true, refine })}
         onAdd={vi.fn()}
@@ -254,6 +265,45 @@ describe("EventsBar", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Check with AI" }));
     expect(refine).toHaveBeenCalledOnce();
+  });
+  it("says what the assistant does when asked by a click, and when it found nothing", () => {
+    const refine = vi.fn();
+    const { rerender } = render(
+      <EventsBar accountId="a1" messageId="m1" found={found([], { canRefine: true })} onAdd={vi.fn()} />,
+      { wrapper: wrapper() },
+    );
+    // Not asked: no bar for a mail without dates.
+    expect(screen.queryByRole("region")).toBeNull();
+    rerender(
+      <EventsBar
+        accountId="a1"
+        messageId="m1"
+        found={found([], { canRefine: true, asked: true, refining: true })}
+        onAdd={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain("Looking for appointments");
+    rerender(
+      <EventsBar
+        accountId="a1"
+        messageId="m1"
+        found={found([], { canRefine: true, asked: true, refined: true })}
+        onAdd={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain("No upcoming appointment");
+    rerender(
+      <EventsBar
+        accountId="a1"
+        messageId="m1"
+        found={found([], { canRefine: true, asked: true, refineFailed: true, refine })}
+        onAdd={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Try AI again" }));
+    expect(refine).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Hide for this mail" }));
+    expect(screen.queryByRole("region")).toBeNull();
   });
 });
 
@@ -335,6 +385,35 @@ describe("useMailEvents", () => {
       useSettings.getState().update({ detectEvents: true });
     }
     expect(fake.assistFeatures).not.toHaveBeenCalled();
+    expect(fake.extractEvents).not.toHaveBeenCalled();
+  });
+});
+
+describe("Find appointment", () => {
+  const options = { open: true, allowRemote: false, inJunk: false };
+
+  it("asks the assistant on a click even when finding dates is off", async () => {
+    useSettings.getState().update({ detectEvents: false });
+    const { result } = renderHook(() => useMailEvents(message(), options), { wrapper: wrapper() });
+    await waitFor(() => expect(fake.calendarsAvailable).toHaveBeenCalled());
+    expect(result.current.textEvents).toEqual([]);
+    expect(fake.extractEvents).not.toHaveBeenCalled();
+    // Put away before: asking shows the bar again.
+    useDismissedDates.getState().dismiss("m1");
+    act(() => useEventSearch.getState().ask("m1"));
+    expect(useDismissedDates.getState().ids).not.toContain("m1");
+    await waitFor(() => expect(result.current.refined).toBe(true));
+    expect(result.current.asked).toBe(true);
+    expect(fake.extractEvents).toHaveBeenCalledWith("m1", false);
+    expect(result.current.events.map((found) => found.source)).toEqual(["ai"]);
+  });
+
+  it("never reads a draft", async () => {
+    const draft = message({ flags: { seen: true, flagged: false, answered: false, draft: true } });
+    const { result } = renderHook(() => useMailEvents(draft, options), { wrapper: wrapper() });
+    act(() => useEventSearch.getState().ask("m1"));
+    await waitFor(() => expect(fake.calendarsAvailable).toHaveBeenCalled());
+    expect(result.current.canRefine).toBe(false);
     expect(fake.extractEvents).not.toHaveBeenCalled();
   });
 });

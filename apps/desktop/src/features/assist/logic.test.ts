@@ -143,6 +143,9 @@ const provider = (patch: Partial<AssistProvider>): AssistProvider => ({
   quota: null,
   experimental: false,
   connected: true,
+  inputPricePerMillion: null,
+  outputPricePerMillion: null,
+  price: null,
   ...patch,
 });
 
@@ -272,6 +275,7 @@ describe("the usage", () => {
         requests: 3,
         inputTokens: 100,
         outputTokens: 20,
+        cost: null,
       },
       {
         day: "2026-09-29",
@@ -281,6 +285,7 @@ describe("the usage", () => {
         requests: 1,
         inputTokens: 50,
         outputTokens: 50,
+        cost: null,
       },
       {
         day: "2026-09-27",
@@ -290,6 +295,7 @@ describe("the usage", () => {
         requests: 2,
         inputTokens: 10,
         outputTokens: 10,
+        cost: null,
       },
       {
         day: "2026-08-01",
@@ -299,6 +305,7 @@ describe("the usage", () => {
         requests: 9,
         inputTokens: 1,
         outputTokens: 1,
+        cost: null,
       },
     ],
     today: [],
@@ -307,9 +314,9 @@ describe("the usage", () => {
   it("fills every day of the window, oldest first", () => {
     const days = dailyTotals(usage, 3, new Date("2026-09-29T22:00:00Z"));
     expect(days).toEqual([
-      { day: "2026-09-27", requests: 2, tokens: 20 },
-      { day: "2026-09-28", requests: 0, tokens: 0 },
-      { day: "2026-09-29", requests: 4, tokens: 220 },
+      { day: "2026-09-27", requests: 2, tokens: 20, cost: null },
+      { day: "2026-09-28", requests: 0, tokens: 0, cost: null },
+      { day: "2026-09-29", requests: 4, tokens: 220, cost: null },
     ]);
   });
 
@@ -322,7 +329,7 @@ describe("the usage", () => {
   });
 
   it("measures today against the limit that runs out first", () => {
-    const base = { providerId: "q1", providerName: "M", requests: 50, tokens: 90_000 };
+    const base = { providerId: "q1", providerName: "M", requests: 50, tokens: 90_000, cost: null };
     expect(todayShare({ ...base, requestsPerDay: 200, tokensPerDay: 100_000 })).toEqual({
       requests: 0.25,
       tokens: 0.9,

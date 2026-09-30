@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { backend } from "@/backend/backend";
 import type { Message } from "@/backend/types";
 import { useT } from "@/i18n";
@@ -17,6 +17,7 @@ import { useSettings } from "@/state/settings";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { readableBody } from "../mail/MessageBody";
 import { whenLabel } from "./format";
+import { useEventSearch } from "./search";
 
 export interface MailEventsOptions {
   /** The mail is open, not a collapsed line of its thread. */
@@ -35,11 +36,15 @@ export interface MailEvents {
   textEvents: DetectedEvent[];
   /** The assistant can read this mail for appointments. */
   canRefine: boolean;
+  /** The person asked for this mail by a click ("Find appointment", "Check with AI"). */
+  asked: boolean;
   refining: boolean;
   refined: boolean;
   refineFailed: boolean;
   /** Asks the assistant now (it costs the person tokens, so only on their click or setting). */
   refine: () => void;
+  /** What the assistant is asked, for its estimate. */
+  includeImages: boolean;
 }
 
 const NONE: DetectedEvent[] = [];
@@ -48,7 +53,7 @@ const NONE: DetectedEvent[] = [];
  * The mail has pictures of its own the server could read: embedded ones (cid:, data:) or attached
  * ones. Remote ones count separately, only once they may load.
  */
-function hasOwnPictures(message: Message): boolean {
+export function hasOwnPictures(message: Message): boolean {
   return (
     /<img\b[^>]*\ssrc\s*=\s*["']?\s*(?:cid|data):/i.test(message.bodyHtml ?? "") ||
     message.attachments.some((attachment) => attachment.mimeType.toLowerCase().startsWith("image/"))
@@ -99,20 +104,24 @@ export function useMailEvents(message: Message, { open, allowRemote, inJunk }: M
     [imageText.data, context],
   );
 
+  const asked = useEventSearch((s) => s.asked[message.id] === true);
   const features = useQuery({
     queryKey: ["assistFeatures", message.accountId],
     queryFn: () => backend().assistFeatures(message.accountId),
-    enabled: on,
+    enabled: on || (asked && open),
     staleTime: Infinity,
     retry: false,
   });
-  const canRefine = on && features.data?.extractEvents === true;
-  const [asked, setAsked] = useState<string | null>(null);
-  const includeImages = pictures && (!message.hasRemoteContent || allowRemote);
+  const ask = useEventSearch((s) => s.ask);
+  // Asked by a click, the assistant reads the mail even when finding dates by rules is off or it
+  // lies in the junk folder: the person wants to know.
+  const reachable = open && calendars && !message.flags.draft;
+  const canRefine = (on || (asked && reachable)) && features.data?.extractEvents === true;
+  const includeImages = (remote || hasOwnPictures(message)) && reachable && (!message.hasRemoteContent || allowRemote);
   const assistant = useQuery({
     queryKey: ["extractEvents", message.id, includeImages],
     queryFn: () => backend().extractEvents(message.id, includeImages),
-    enabled: canRefine && (refineAlways || asked === message.id),
+    enabled: canRefine && ((refineAlways && on) || asked),
     staleTime: Infinity,
     retry: false,
   });
@@ -151,13 +160,15 @@ export function useMailEvents(message: Message, { open, allowRemote, inJunk }: M
     marks,
     textEvents,
     canRefine,
+    asked,
     refining: assistant.isFetching,
     refined: assistant.isSuccess,
     refineFailed: assistant.isError,
     refine: () => {
-      setAsked(message.id);
+      ask(message.id);
       if (assistant.isError) void assistant.refetch();
     },
+    includeImages,
   };
 }
 

@@ -320,6 +320,8 @@
     "theme": "Theme",
     "motion": "Animations",
     "motionDesc": "With System, UwUMail follows the reduced motion setting of your operating system.",
+    "nyuAnimations": "Nyu animations",
+    "nyuAnimationsDesc": "Short scenes when you send, archive or open mail, and while the assistant thinks, for every mailbox. Reduced shows them as still pictures, as reduced motion does.",
     "tone": "Tone",
     "language": "Language",
     "conversations": "Group messages into conversations",
@@ -484,6 +486,11 @@
     "on": "On",
     "off": "Off"
   },
+  "nyuAnimations": {
+    "on": "On",
+    "reduced": "Reduced",
+    "off": "Off"
+  },
   "language": {
     "system": "System",
     "de": "Deutsch",
@@ -645,7 +652,10 @@
     "over": "Already over.",
     "notesQuote": "“{{quote}}”",
     "notesFrom": "From the mail “{{subject}}” by {{sender}}",
-    "noSubject": "(no subject)"
+    "noSubject": "(no subject)",
+    "findAppointment": "Find appointment",
+    "searching": "Looking for appointments in this mail…",
+    "noneFound": "No upcoming appointment found in this mail."
   },
   "density": {
     "relaxed": "Relaxed",
@@ -1433,7 +1443,14 @@
       "deviceDescription": "The providers set up here, for every mailbox without an assistant on its server. Keys stay in the system keychain; mail goes straight from this device to the provider.",
       "serverDescription": "The assistant of this UwUMail account’s server.",
       "deviceNoneTitle": "No provider set up yet",
-      "deviceNoneBody": "Add a provider below, such as your own OpenAI, Anthropic, Gemini or Mistral key, or a local model with Ollama."
+      "deviceNoneBody": "Add a provider below, such as your own OpenAI, Anthropic, Gemini or Mistral key, or a local model with Ollama.",
+      "costsTitle": "Costs",
+      "currency": "Currency",
+      "currencyHint": "AI costs are shown in this currency, converted with the ECB reference rates.",
+      "currencies": {
+        "EUR": "Euro (€)",
+        "USD": "US dollar ($)"
+      }
     },
     "providers": {
       "title": "Providers",
@@ -1495,8 +1512,18 @@
         "urlMissing": "The address is needed for this provider.",
         "urlScheme": "The address has to start with http:// or https://.",
         "urlLogin": "Leave user name and password out of the address.",
-        "keyMissing": "This provider needs an API key."
-      }
+        "keyMissing": "This provider needs an API key.",
+        "priceInvalid": "A price from 0 to 10,000, e.g. 0.40."
+      },
+      "pickModel": "Pick from the list: {{field}}",
+      "modelsLoading": "Loading models…",
+      "modelsFailed": "The provider didn't list its models. You can still type one.",
+      "modelsNone": "No models found. You can still type one.",
+      "inputPrice": "Input price (USD per million tokens)",
+      "outputPrice": "Output price (USD per million tokens)",
+      "priceHint": "Empty uses the known price of the model.",
+      "priceAuto": "automatic: {{price}}",
+      "priceUnknown": "unknown"
     },
     "chatgpt": {
       "warningTitle": "Experimental and unofficial",
@@ -1531,6 +1558,24 @@
       "lastDays_one": "Last day",
       "lastDays_other": "Last {{count}} days",
       "nothing": "Nothing used in this time."
+    },
+    "estimate": {
+      "tokens": "≈ {{formatted}} tokens",
+      "tokensLeft": "{{formatted}} left today",
+      "requestsLeft_one": "{{formatted}} request left today",
+      "requestsLeft_other": "{{formatted}} requests left today"
+    },
+    "local": {
+      "title": "Found on this computer",
+      "description": "A local AI is running here. Add it with one click, and your mail never leaves this computer for it.",
+      "model": "Model for {{name}}",
+      "noModels": "No models installed yet",
+      "add": "Add"
+    },
+    "cost": {
+      "free": "free",
+      "below": "< {{amount}}",
+      "about": "≈ {{amount}}"
     }
   }
 }

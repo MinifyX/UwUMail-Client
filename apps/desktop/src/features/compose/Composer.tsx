@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
+import { playNyu } from "@/components/nyu/cameo";
 import type { Identity, OutgoingAttachment, Signature } from "@/backend/types";
 import { Menu } from "@/components/ui/Menu";
 import { defaultSignature, withSignature, withoutSignatureMarker } from "@/lib/signatures";
@@ -386,6 +387,8 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       }
       clearLocalDraft();
       closeCompose();
+      // Off it goes: Nyu waves the letter goodbye right away, also while it can still be taken back.
+      playNyu("sent");
       if (queued) {
         // It goes out when the toast does; "sent" follows from the engine (send:done).
         toast(t("toast.sending"), "info", undefined, {
@@ -754,7 +757,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             />
           )}
         />
-        {assist.available && <ComposeAssistButton onPick={assist.start} />}
+        {assist.available && <ComposeAssistButton onPick={assist.start} estimate={assist.estimateFor} />}
         <input
           ref={fileInput}
           type="file"

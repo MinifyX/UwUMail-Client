@@ -510,8 +510,23 @@ impl Engine {
 
     /// Every card of every account, with the app's ids. Accounts that can't be reached are left out.
     pub async fn contact_cards(&self) -> Result<Vec<ContactCardEntry>> {
+        self.cards_of_accounts(true).await
+    }
+
+    /// Like `contact_cards`, but only from accounts whose address books are known already: never
+    /// searches for a CardDAV server (e.g. for Nyu's little scenes when a mail opens).
+    pub async fn known_contact_cards(&self) -> Result<Vec<ContactCardEntry>> {
+        self.cards_of_accounts(false).await
+    }
+
+    async fn cards_of_accounts(&self, look: bool) -> Result<Vec<ContactCardEntry>> {
         let accounts = self.inner.store.accounts()?;
-        let reads = accounts.iter().map(|account| self.inner.remote_cards(&account.id));
+        let reads = accounts.iter().map(|account| async move {
+            if !look && !matches!(self.inner.contacts_source_known(&account.id).await, Some(Ok(_))) {
+                return Err(Error::not_supported("The address books of this mailbox aren't known yet."));
+            }
+            self.inner.remote_cards(&account.id).await
+        });
         let mut found = Vec::new();
         for (account, read) in accounts.iter().zip(futures::future::join_all(reads).await) {
             match read {
@@ -793,6 +808,7 @@ mod tests {
         let unchecked = accounts.iter().find(|account| account.account_id == "p").unwrap();
         assert_eq!((unchecked.checked, &unchecked.source, &unchecked.problem), (false, &None, &None));
         assert!(engine.recipient_suggestions("pat").await.unwrap().is_empty());
+        assert!(engine.known_contact_cards().await.unwrap().is_empty());
         assert!(!engine.inner.contacts_sources.lock().await.contains_key("p"), "no search ran");
         // A search that found none is remembered past a restart, until the address changes.
         let find = |accounts: Vec<ContactsAccount>| accounts.into_iter().find(|account| account.account_id == "p");

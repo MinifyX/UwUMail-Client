@@ -113,6 +113,7 @@
   "settings": {
     "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)",
     "motionDesc": "Should Nyu blink, hop and fly around? With System, I follow your operating system.",
+    "nyuAnimationsDesc": "Shall I wave your mail goodbye, close the box when you archive and ponder while the AI works? Reduced: I hold still like in a photo.",
     "senderPicturesCleared": "Pictures swept away ✧",
     "trustedSendersEmpty": "Nobody on my list yet (・・ )? Add senders right in the image notice of a message.",
     "protocolSwitched": "{{email}} speaks {{protocol}} now ✧",
@@ -273,6 +274,13 @@
     },
     "labels": {
       "startersTitle": "Want a few labels to start with? (｀・ω・´)"
+    },
+    "local": {
+      "title": "Look, a local AI on this computer! ✿"
     }
+  },
+  "dates": {
+    "searching": "Nyu is hunting for appointments… (・ω・)",
+    "noneFound": "Nyu looked everywhere: no upcoming appointment in here ( ˘ω˘ )"
   }
 }
