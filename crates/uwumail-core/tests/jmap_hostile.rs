@@ -436,3 +436,120 @@ async fn the_servers_assistant_answers_refuses_and_streams_safely() {
     assert_eq!(failed.assist_kind(), Some("overQuota"));
     assert!(!failed.message.contains('\u{7}'), "{}", failed.message);
 }
+
+async fn connect_to(stub: &support::Stub) -> uwumail_core::Result<Client> {
+    let http = reqwest::Client::builder().build().unwrap();
+    Client::connect(&http, stub.url("127.0.0.1", "/.well-known/jmap").as_str(), "mini@a.test", "dummy-password").await
+}
+
+/// A session that names its endpoints on another site never sends the login there: announced under
+/// another name for the whole API, it moves to the address that answered; a single endpoint
+/// elsewhere is refused (audit CC-11).
+#[tokio::test]
+async fn endpoints_on_another_site_never_get_the_login() {
+    for (key, elsewhere) in [
+        ("downloadUrl", "https://collector.example.net/d/{accountId}/{blobId}/{name}?type={type}"),
+        ("uploadUrl", "https://collector.example.net/u/{accountId}/"),
+        ("eventSourceUrl", "https://collector.example.net/events?types={types}"),
+        ("downloadUrl", "http://127.0.0.2/d/{accountId}/{blobId}/{name}?type={type}"),
+    ] {
+        let stub = http_stub(move |request| {
+            if request.path.starts_with("/.well-known/jmap") {
+                let mut session = session();
+                session[key] = json!(elsewhere);
+                return Response::json(&session);
+            }
+            answer(request)
+        })
+        .await;
+        let refused = connect_to(&stub).await.err().unwrap_or_else(|| panic!("{key} {elsewhere} was taken"));
+        assert!(refused.message.contains("another site"), "{}", refused.message);
+        assert!(stub.seen().iter().all(|r| r.path.starts_with("/.well-known/jmap")), "no API call went out");
+    }
+
+    // A server behind a proxy announcing its public name everywhere: used at the address that answered.
+    let stub = http_stub(|request| {
+        if request.path.starts_with("/.well-known/jmap") {
+            let mut session = session();
+            session["apiUrl"] = json!("https://mail.public.example/api");
+            session["downloadUrl"] =
+                json!("https://mail.public.example/download/{accountId}/{blobId}/{name}?type={type}");
+            session["uploadUrl"] = json!("https://mail.public.example/upload/{accountId}/");
+            return Response::json(&session);
+        }
+        answer(request)
+    })
+    .await;
+    let client = connect_to(&stub).await.unwrap();
+    assert!(client.session.api_url.starts_with(stub.url("127.0.0.1", "/").as_str()), "{}", client.session.api_url);
+    assert!(client.session.download_url.starts_with(stub.url("127.0.0.1", "/download/").as_str()));
+}
+
+/// Blobs stop arriving past their limit instead of filling the memory (audit C-14).
+#[tokio::test]
+async fn a_blob_bigger_than_its_limit_stops_arriving() {
+    let stub = http_stub(answer).await;
+    let client = client(&stub).await;
+    let refused = client.download_within("a1", "b1", "m.eml", "message/rfc822", 1024).await.unwrap_err();
+    assert!(refused.message.contains("too big"), "{}", refused.message);
+    assert_eq!(
+        client.download_within("a1", "b1", "m.eml", "message/rfc822", 4 * 1024 * 1024).await.unwrap().len(),
+        2 * 1024 * 1024
+    );
+}
+
+const PNG_2X1: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\0\x02\0\0\0\x01\x08\x06\0\0\0";
+
+/// Pictures the server fetched for the reader: only pictures, typed by their bytes (EG-2), and no
+/// bigger than pictures fetched here (EG-3).
+#[tokio::test]
+async fn pictures_from_the_server_are_pictures_of_a_sensible_size() {
+    let stub = http_stub(|request| {
+        if request.path.starts_with("/.well-known/jmap") {
+            let mut session = session();
+            session["capabilities"][uwumail_core::jmap::REMOTE] = json!({ "imageUrl": "/image/{accountId}?url={url}" });
+            return Response::json(&session);
+        }
+        if request.path.contains("page") {
+            return Response::new(200, "<html><script>alert(1)</script></html>").header("content-type", "image/png");
+        }
+        if request.path.contains("huge") {
+            return Response::new(200, [PNG_2X1, &vec![0u8; 11 * 1024 * 1024]].concat())
+                .header("content-type", "image/png");
+        }
+        if request.path.starts_with("/image/") {
+            return Response::new(200, PNG_2X1).header("content-type", "text/html");
+        }
+        answer(request)
+    })
+    .await;
+    let client = client(&stub).await;
+    let (media_type, bytes) = client.remote_image("https://cdn.example.com/a.png").await.unwrap().unwrap();
+    assert_eq!((media_type.as_str(), bytes.as_slice()), ("image/png", PNG_2X1), "the type comes from the bytes");
+    assert_eq!(client.remote_image("https://cdn.example.com/page").await.unwrap(), None, "a page is no picture");
+    let refused = client.remote_image("https://cdn.example.com/huge.png").await.unwrap_err();
+    assert!(refused.message.contains("too big"), "{}", refused.message);
+}
+
+/// The assistant's stream endpoint gets the login only on the server's own site (CC-11).
+#[tokio::test]
+async fn the_assistants_stream_stays_on_the_servers_site() {
+    use std::sync::Arc;
+    use uwumail_core::assist::{StreamEvent, StreamSink, server};
+
+    let stub = http_stub(|request| {
+        if request.path.starts_with("/.well-known/jmap") {
+            let mut session = assist_session();
+            session["capabilities"][ASSIST]["streamUrl"] = json!("https://collector.example.net/stream");
+            return Response::json(&session);
+        }
+        assist_answer(request)
+    })
+    .await;
+    let jmap = client(&stub).await;
+    let sink: StreamSink = Arc::new(|_: StreamEvent| {});
+    let refused = server::stream_or_call(&jmap, "Assist/compose", json!({ "instruction": "lunch" }), Some(sink))
+        .await
+        .unwrap_err();
+    assert!(refused.message.contains("another site"), "{}", refused.message);
+}

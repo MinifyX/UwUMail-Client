@@ -74,10 +74,16 @@ pub async fn load(client: &Client) -> Result<MailRules> {
     let Some((_, blob_id, active)) = existing(client).await? else {
         return Ok(MailRules { script: None, active: false });
     };
-    let bytes = client.download_for(account(client)?, &blob_id, "UwUMail.sieve", SIEVE_TYPE).await?;
-    if bytes.len() > MAX_SCRIPT {
-        return Err(Error::invalid("The mail rules on the server are too big to show."));
-    }
+    // Read only as far as rules may go: a bigger one stops arriving (audit C-14).
+    let bytes = client
+        .download_within(account(client)?, &blob_id, "UwUMail.sieve", SIEVE_TYPE, MAX_SCRIPT)
+        .await
+        .map_err(|error| match error.code {
+            crate::error::ErrorCode::ConnectionFailed if error.message.contains("too big") => {
+                Error::invalid("The mail rules on the server are too big to show.")
+            }
+            _ => error,
+        })?;
     let script = String::from_utf8(bytes).map_err(|_| Error::invalid("The mail rules on the server aren't text."))?;
     Ok(MailRules { script: Some(script), active })
 }

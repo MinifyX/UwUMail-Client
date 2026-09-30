@@ -93,6 +93,17 @@ async fn privacy_proxy() -> Result<Option<String>> {
     }
 }
 
+/// Whether lookups that tell a sender about the reader may go straight from this device, e.g. a
+/// BIMI record through the system's resolver: only when the app said it uses no proxy. Through a
+/// proxy the sender's DNS would still see this device's resolver (audit EG-4).
+pub async fn direct_lookups_allowed() -> bool {
+    direct_allowed(&privacy_proxy().await)
+}
+
+fn direct_allowed(proxy: &Result<Option<String>>) -> bool {
+    matches!(proxy, Ok(None))
+}
+
 /// A client for requests that tell a sender something about the reader. Built with `configure`, through
 /// the privacy proxy when one is set, and built anew when it changes.
 pub struct PrivacyClient {
@@ -141,6 +152,13 @@ pub fn http_client() -> Result<reqwest::ClientBuilder> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_direct_lookups_behind_a_proxy() {
+        assert!(direct_allowed(&Ok(None)));
+        assert!(!direct_allowed(&Ok(Some("socks5h://127.0.0.1:9050".into()))));
+        assert!(!direct_allowed(&Err(Error::internal("not told yet"))));
+    }
 
     #[test]
     fn socks_proxies_look_up_names_themselves() {

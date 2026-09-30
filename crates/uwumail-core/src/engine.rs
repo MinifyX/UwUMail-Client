@@ -285,7 +285,7 @@ impl Engine {
                 if !record.imap.host.is_empty() && !record.smtp.host.is_empty() {
                     protocols.push(Protocol::Imap);
                 }
-                if record.jmap_url.is_some() && record.auth == AuthKind::Password {
+                if trusted_jmap_url(&record).is_some() && record.auth == AuthKind::Password {
                     protocols.push(Protocol::Jmap);
                 }
                 Account {
@@ -1591,6 +1591,15 @@ fn oauth_mailbox<'a>(username: &'a str, email: &'a str) -> &'a str {
     if username.contains('@') { username } else { email }
 }
 
+/// The JMAP address that may get a password mailbox's password: the one it signs in with, or for
+/// an IMAP mailbox one on the site of its mail servers. Mailboxes added before audit CC-7 may keep
+/// one that only the domain's website named; that one is never used (audit CC-9).
+fn trusted_jmap_url(account: &AccountRecord) -> Option<&str> {
+    let url = account.jmap_url.as_deref()?;
+    let mail_hosts = [account.imap.host.as_str(), account.smtp.host.as_str()];
+    (account.protocol == Protocol::Jmap || crate::jmap::on_mail_site(url, &mail_hosts)).then_some(url)
+}
+
 fn sender(account: &AccountRecord) -> Address {
     Address { name: Some(account.display_name.clone()).filter(|n| !n.is_empty()), email: account.email.clone() }
 }
@@ -1781,9 +1790,8 @@ impl Inner {
         }
         let client = match self.secrets.get(&account.id) {
             Ok(Secret::Password { password }) => {
-                let url = account
-                    .jmap_url
-                    .clone()
+                let url = trusted_jmap_url(account)
+                    .map(String::from)
                     .unwrap_or_else(|| format!("https://{}/.well-known/jmap", account.imap.host));
                 match JmapClient::connect(&self.http, &url, &account.username, &password).await {
                     Ok(client) => Some(Arc::new(client)).filter(|client| client.session.image_url.is_some()),
@@ -2472,5 +2480,30 @@ mod tests {
         assert!(is_blocked(&blocked, "news@werbung.example"));
         assert!(is_blocked(&blocked, "news@mail.werbung.example"), "subdomains too");
         assert!(!is_blocked(&blocked, "leni@keinewerbung.example"));
+    }
+
+    #[test]
+    fn only_a_jmap_address_on_the_mail_servers_site_gets_the_password() {
+        let record = |protocol, jmap_url: &str| AccountRecord {
+            id: "m".into(),
+            name: "Work".into(),
+            email: "mini@mailhost.example".into(),
+            display_name: "Mini".into(),
+            color: AccountColor::Sky,
+            auth: AuthKind::Password,
+            username: "mini@mailhost.example".into(),
+            imap: ServerSettings { host: "imap.mailhost.example".into(), port: 993, security: Security::Tls },
+            smtp: ServerSettings { host: "smtp.mailhost.example".into(), port: 465, security: Security::Tls },
+            protocol,
+            jmap_url: Some(jmap_url.into()),
+        };
+        let own = record(Protocol::Imap, "https://jmap.mailhost.example/.well-known/jmap");
+        assert_eq!(trusted_jmap_url(&own), Some("https://jmap.mailhost.example/.well-known/jmap"));
+        // What only the domain's website named before CC-7: never switched to, never used for pictures.
+        let elsewhere = record(Protocol::Imap, "https://collector.example.net/.well-known/jmap");
+        assert_eq!(trusted_jmap_url(&elsewhere), None);
+        // The address a JMAP mailbox signs in with is its own choice.
+        let chosen = record(Protocol::Jmap, "https://collector.example.net/.well-known/jmap");
+        assert!(trusted_jmap_url(&chosen).is_some());
     }
 }

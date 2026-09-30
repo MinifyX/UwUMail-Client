@@ -23,6 +23,9 @@ const EMAIL_STATE: &str = "Email";
 const FULL_DOWNLOAD_LIMIT: u64 = 2 * 1024 * 1024;
 const PARALLEL_DOWNLOADS: usize = 6;
 const MAX_CHANGES: usize = 500;
+/// Rounds of `Email/changes` in one sync at most: a server that always has more changes can't keep
+/// UwUMail asking (and collecting) forever; after that the known emails are compared instead.
+const MAX_CHANGE_ROUNDS: usize = 100;
 const LIGHT_PROPERTIES: [&str; 6] = ["id", "blobId", "mailboxIds", "keywords", "size", "receivedAt"];
 /// Server search looks at this many of the newest matches.
 const SEARCH_LIMIT: usize = 200;
@@ -154,7 +157,7 @@ async fn changes_since(client: &Client, since: &str) -> Result<Listing> {
     let mut emails = Vec::new();
     let mut destroyed = Vec::new();
     let max_changes = MAX_CHANGES.min(client.session.max_objects_in_get);
-    loop {
+    for _ in 0..MAX_CHANGE_ROUNDS {
         let get = |path: &str| {
             json!({
                 "accountId": account,
@@ -190,6 +193,7 @@ async fn changes_since(client: &Client, since: &str) -> Result<Listing> {
             return Ok(Listing::Changes { emails, destroyed, state });
         }
     }
+    Ok(Listing::Reset)
 }
 
 /// Which of the known emails still exist, for when the server lost track of our state.
@@ -463,11 +467,26 @@ async fn update_emails(client: &Client, remote_ids: &[String], patch: Value) -> 
     Ok(())
 }
 
+/// Whether a JMAP keyword may be sent: RFC 8621's keyword characters (an IMAP atom), 1 to 255 of them.
+pub fn is_keyword(keyword: &str) -> bool {
+    (1..=255).contains(&keyword.len()) && keyword.bytes().all(|b| b.is_ascii_graphic() && !b"(){]%*\"\\".contains(&b))
+}
+
+/// A patch path segment (RFC 6901): `~` and `/` escaped, so a keyword names only itself.
+fn pointer_segment(key: &str) -> String {
+    key.replace('~', "~0").replace('/', "~1")
+}
+
 /// Sets or clears keywords such as `$seen` and `$flagged`.
 pub async fn set_keywords(client: &Client, remote_ids: &[String], keywords: &[(&str, bool)]) -> Result<()> {
+    if let Some((bad, _)) = keywords.iter().find(|(keyword, _)| !is_keyword(keyword)) {
+        return Err(Error::invalid(format!("\"{bad}\" can't be a keyword.")));
+    }
     let patch: Map<String, Value> = keywords
         .iter()
-        .map(|(keyword, on)| (format!("keywords/{keyword}"), if *on { Value::Bool(true) } else { Value::Null }))
+        .map(|(keyword, on)| {
+            (format!("keywords/{}", pointer_segment(keyword)), if *on { Value::Bool(true) } else { Value::Null })
+        })
         .collect();
     update_emails(client, remote_ids, Value::Object(patch)).await
 }
@@ -717,7 +736,7 @@ async fn drain_mailbox(client: &Client, mailbox_id: &str, trash_id: Option<&str>
         for (id, mailboxes) in page {
             if mailboxes.iter().any(|other| other != mailbox_id) {
                 let mut leave = Map::new();
-                let segment = mailbox_id.replace('~', "~0").replace('/', "~1");
+                let segment = pointer_segment(mailbox_id);
                 leave.insert(format!("mailboxIds/{segment}"), Value::Null);
                 update.insert(id, Value::Object(leave));
             } else if let Some(trash) = trash_id {
@@ -945,4 +964,20 @@ pub async fn send(
         return Err(error);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keywords_are_atoms_and_name_only_themselves_in_a_patch() {
+        for good in ["$seen", "$junk", "rechnungen", "a/b", "x~y", "reisen-2026"] {
+            assert!(is_keyword(good), "{good}");
+        }
+        for bad in ["", "a b", "a\r\nb", "(x", "a\"b", "a\\b", "a]", "50%", "a*", "ä", &"k".repeat(256)] {
+            assert!(!is_keyword(bad), "{bad:?}");
+        }
+        assert_eq!(pointer_segment("a/b~c"), "a~1b~0c");
+    }
 }

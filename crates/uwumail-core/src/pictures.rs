@@ -478,7 +478,10 @@ impl SenderPictures {
 
     async fn lookup(&self, domain: &str) -> Lookup {
         let mut answered = false;
-        if let Some((logo, dns_answered)) = self.bimi(domain).await {
+        // BIMI asks the device's resolver, past the privacy proxy: only without one (audit EG-4).
+        if crate::tls::direct_lookups_allowed().await
+            && let Some((logo, dns_answered)) = self.bimi(domain).await
+        {
             answered |= dns_answered;
             if let Some(url) = logo
                 && let Ok(Some((bytes, _))) = self.download(&url, MAX_IMAGE).await

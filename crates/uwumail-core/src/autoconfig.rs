@@ -15,6 +15,8 @@ use crate::model::{DiscoveredSettings, DiscoverySource, OAuthProvider, Security,
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(6);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+/// An autoconfig file is a few kilobytes; a bigger answer isn't one.
+const MAX_CONFIG: usize = 256 * 1024;
 
 #[derive(Debug, Deserialize)]
 struct ClientConfig {
@@ -163,12 +165,17 @@ pub(crate) fn parse_client_config(xml: &str, email: &str, source: DiscoverySourc
     // website, and a sign-in with Google or Microsoft must not end up at a server of theirs.
     let oauth = oauth_provider_of_host(&imap.hostname)
         .filter(|provider| wants_oauth || oauth_provider_for(domain) == Some(*provider));
+    // The domain's own file may call itself anything ("Microsoft 365") while it names a server of its
+    // own: its name only counts for servers on the domain's site. Otherwise setup shows the server
+    // that gets the password (audit CC-5). ISPDB entries are curated and keep theirs.
+    let named = source != DiscoverySource::Autoconfig || same_site(&imap.hostname, &domain.to_ascii_lowercase());
     Some(DiscoveredSettings {
         email: email.to_string(),
         provider_name: provider
             .display_name
             .filter(|n| !n.is_empty())
-            .or((!provider.id.is_empty()).then_some(provider.id)),
+            .or((!provider.id.is_empty()).then_some(provider.id))
+            .filter(|_| named),
         oauth,
         imap: ServerSettings { host: imap.hostname.clone(), port: imap.port, security: security(&imap.socket_type) },
         smtp: ServerSettings { host: smtp.hostname.clone(), port: smtp.port, security: security(&smtp.socket_type) },
@@ -178,18 +185,57 @@ pub(crate) fn parse_client_config(xml: &str, email: &str, source: DiscoverySourc
     })
 }
 
+/// Server settings decide where the password goes: a redirect is followed only to HTTPS, never
+/// through plain HTTP on the way (audit CC-6), and at most five times.
+fn https_redirects_only(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    builder.redirect(reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= 5 {
+            attempt.error("too many redirects")
+        } else if attempt.url().scheme() != "https" {
+            attempt.stop()
+        } else {
+            attempt.follow()
+        }
+    }))
+}
+
+fn config_client() -> Option<reqwest::Client> {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Some(client.clone());
+    }
+    let builder = crate::tls::http_client().ok()?.user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION")));
+    let client = https_redirects_only(builder).timeout(HTTP_TIMEOUT).build().ok()?;
+    Some(CLIENT.get_or_init(|| client).clone())
+}
+
+/// The body of an answer, `None` beyond `limit` bytes or when it isn't text.
+async fn read_text(mut response: reqwest::Response, limit: usize) -> Option<String> {
+    if response.content_length().is_some_and(|length| length > limit as u64) {
+        return None;
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if body.len() + chunk.len() > limit {
+            return None;
+        }
+        body.extend_from_slice(&chunk);
+    }
+    String::from_utf8(body).ok()
+}
+
 async fn fetch_config(
-    http: &reqwest::Client,
+    _http: &reqwest::Client,
     url: &str,
     email: &str,
     source: DiscoverySource,
 ) -> Option<DiscoveredSettings> {
+    let http = config_client()?;
     let response = timeout(HTTP_TIMEOUT, http.get(url).send()).await.ok()?.ok()?;
-    // Server settings decide where the password goes: never take them from a redirect to plain http.
     if !response.status().is_success() || response.url().scheme() != "https" {
         return None;
     }
-    let body = timeout(HTTP_TIMEOUT, response.text()).await.ok()?.ok()?;
+    let body = timeout(HTTP_TIMEOUT, read_text(response, MAX_CONFIG)).await.ok()??;
     parse_client_config(&body, email, source)
 }
 
@@ -447,6 +493,61 @@ mod tests {
         assert_eq!(settings.oauth, Some(OAuthProvider::Google));
         assert_eq!(settings.provider_name.as_deref(), Some("Google Mail"));
         assert_eq!(settings.username, "mini@gmail.com");
+    }
+
+    #[test]
+    fn a_domains_own_file_names_itself_only_for_its_own_servers() {
+        // The domain's website calls its file "Google Mail", but the servers are somebody else's.
+        let foreign = GMAIL
+            .replace("imap.gmail.com", "imap.collector.example")
+            .replace("smtp.gmail.com", "smtp.collector.example");
+        let settings = parse_client_config(&foreign, "mini@example.org", DiscoverySource::Autoconfig).unwrap();
+        assert_eq!(settings.provider_name, None, "setup shows the server instead");
+        assert_eq!(settings.imap.host, "imap.collector.example");
+        let own = GMAIL.replace("imap.gmail.com", "imap.example.org").replace("smtp.gmail.com", "smtp.example.org");
+        let settings = parse_client_config(&own, "mini@example.org", DiscoverySource::Autoconfig).unwrap();
+        assert_eq!(settings.provider_name.as_deref(), Some("Google Mail"));
+        // A curated ISPDB entry keeps its name.
+        let settings = parse_client_config(&foreign, "mini@example.org", DiscoverySource::Ispdb).unwrap();
+        assert_eq!(settings.provider_name.as_deref(), Some("Google Mail"));
+    }
+
+    /// Answers `/hop` with a redirect to plain HTTP, `/big` with more than an autoconfig file, and
+    /// anything else with a small text.
+    async fn stub() -> u16 {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut buffer = [0u8; 4096];
+                let n = socket.read(&mut buffer).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buffer[..n]).into_owned();
+                let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
+                let answer = match path.as_str() {
+                    "/hop" => format!(
+                        "HTTP/1.1 301 Moved\r\nLocation: http://127.0.0.1:{port}/end\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    ),
+                    "/big" => format!("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{}", "x".repeat(MAX_CONFIG + 1)),
+                    _ => "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".to_string(),
+                };
+                let _ = socket.write_all(answer.as_bytes()).await;
+                let _ = socket.shutdown().await;
+            }
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn autoconfig_answers_stay_on_https_and_small() {
+        let port = stub().await;
+        let http = https_redirects_only(reqwest::Client::builder().no_proxy()).build().unwrap();
+        let hop = http.get(format!("http://127.0.0.1:{port}/hop")).send().await.unwrap();
+        assert_eq!(hop.status(), reqwest::StatusCode::MOVED_PERMANENTLY, "a hop to plain http isn't followed");
+        let big = http.get(format!("http://127.0.0.1:{port}/big")).send().await.unwrap();
+        assert_eq!(read_text(big, MAX_CONFIG).await, None);
+        let small = http.get(format!("http://127.0.0.1:{port}/small")).send().await.unwrap();
+        assert_eq!(read_text(small, MAX_CONFIG).await.as_deref(), Some("ok"));
     }
 
     #[test]

@@ -112,6 +112,19 @@ pub fn picture_request(query: &str) -> Option<(Option<String>, String)> {
     Some((account, url.filter(|url| url.starts_with("https://") || url.starts_with("http://"))?))
 }
 
+/// The media type of a picture the reader may show, read from its first bytes; `None` for anything
+/// else (an HTML page, a script), whatever type its server claimed.
+pub fn image_media_type(bytes: &[u8]) -> Option<&'static str> {
+    Some(match sniff_image(bytes)? {
+        "png" => "image/png",
+        "jpg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        _ => return None,
+    })
+}
+
 /// Nothing that tells the sender which program, or which version of it, is looking.
 pub(crate) const AGENT: &str = "Mozilla/5.0";
 
@@ -281,11 +294,7 @@ impl MailImages {
             }
             body.extend_from_slice(&chunk);
         }
-        if matches!(sniff_image(&body), Some("png" | "jpg" | "gif" | "webp" | "svg")) {
-            Ok(Arc::new(body))
-        } else {
-            Err(Miss::Unusable)
-        }
+        if image_media_type(&body).is_some() { Ok(Arc::new(body)) } else { Err(Miss::Unusable) }
     }
 
     fn is_dead(&self, host: &str) -> bool {
@@ -383,6 +392,15 @@ mod tests {
         assert!(!public("https://user:secret@shop.example.com/a.png"));
         assert!(!public("ftp://shop.example.com/a.png"));
         assert!(!public("file:///C:/a.png"));
+    }
+
+    #[test]
+    fn only_pictures_get_a_picture_type() {
+        assert_eq!(image_media_type(PNG_2X1), Some("image/png"));
+        assert_eq!(image_media_type(b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>"), Some("image/svg+xml"));
+        assert_eq!(image_media_type(b"<html><script>alert(1)</script></html>"), None);
+        assert_eq!(image_media_type(&[0, 0, 1, 0, 1, 0, 16, 16]), None, "icons are for sender pictures only");
+        assert_eq!(image_media_type(b""), None);
     }
 
     #[test]
