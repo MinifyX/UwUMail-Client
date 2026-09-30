@@ -64,7 +64,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Update check (starts working with the first Android release)
 - [ ] APK on every release with the update feed (`android-beta.json`, `android-stable.json`)
 - [ ] Home screen widget
-- [ ] Sign in with Microsoft and Google on Android
+- [x] Sign in with Microsoft on Android (Google: app password)
 
 ## iOS
 
@@ -75,7 +75,8 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Attachments saved into UwUMail's folder in the Files app; profiles and apps from mail refused
 - [ ] Share sheet: hand attachments to other apps, print, share a mail
 - [ ] Background refresh: answer iOS' wake-up and look for mail
-- [ ] `mailto:` links and the redirect back from Microsoft and Google sign-in
+- [x] Redirect back from Microsoft sign-in (`app.uwumail://oauth`)
+- [ ] `mailto:` links and Google sign-in
 
 ## After v0.1 — official addons
 
