@@ -9,6 +9,9 @@ export type Tone = "playful" | "neutral";
 export type ThemeSetting = "system" | "light" | "dark";
 /** Animations: follow the system's reduced-motion setting, or override it. */
 export type MotionSetting = "system" | "on" | "off";
+/** Nyu's little scenes (sending, archiving, occasions, the AI thinking): see components/nyu/level. */
+export const NYU_ANIMATIONS = ["on", "reduced", "off"] as const;
+export type NyuAnimations = (typeof NYU_ANIMATIONS)[number];
 export type LanguageSetting = "system" | "de" | "en";
 export type RemoteImages = "ask" | "always";
 /** Beta gets pre-releases (tags like v0.2.0-beta.1) before everyone else. */
@@ -34,6 +37,11 @@ export interface Settings {
   tone: Tone;
   theme: ThemeSetting;
   motion: MotionSetting;
+  /**
+   * Capped at "reduced" while motion is reduced (setting or operating system). App-wide, for every
+   * mailbox; follows the account that keeps the settings as `nyu.animations`.
+   */
+  nyuAnimations: NyuAnimations;
   language: LanguageSetting;
   conversations: boolean;
   remoteImages: RemoteImages;
@@ -113,6 +121,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tone: "playful",
   theme: "system",
   motion: "system",
+  nyuAnimations: "on",
   language: "system",
   conversations: true,
   remoteImages: "ask",
@@ -175,6 +184,17 @@ export const useSettings = create<Settings & SettingsActions>()(
           return { businessAccounts: workspace === "business" ? [...others, accountId] : others };
         }),
     }),
-    { name: "uwumail.settings", version: 1 },
+    {
+      name: "uwumail.settings",
+      version: 1,
+      // A value this version doesn't know (left by a newer one) falls back to the default.
+      merge: (persisted, current) => {
+        const state = { ...current, ...(persisted as Partial<Settings>) };
+        if (!(NYU_ANIMATIONS as readonly unknown[]).includes(state.nyuAnimations)) {
+          state.nyuAnimations = DEFAULT_SETTINGS.nyuAnimations;
+        }
+        return state;
+      },
+    },
   ),
 );

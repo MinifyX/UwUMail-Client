@@ -26,6 +26,7 @@ import { ThreadAssistButton, ThreadSummary } from "../assist/ReaderAssist";
 import { AssistForAccount } from "../assist/useAssist";
 import { MessageView } from "../mail/MessageView";
 import { requestMove } from "../mail/selection";
+import { useNyuOnOpen } from "../mail/nyuOnOpen";
 
 /** Messages that start expanded: the newest one plus every unread one. */
 function initiallyExpanded(messages: Message[]) {
@@ -62,6 +63,7 @@ export function MobileReader({ threadId }: { threadId: string }) {
   const lastScroll = useRef(0);
   const messages = data?.messages;
   const loadedThreadId = data?.thread.id;
+  useNyuOnOpen(data);
 
   const initial = useMemo(
     () => (messages ? initiallyExpanded(messages) : new Set<string>()),

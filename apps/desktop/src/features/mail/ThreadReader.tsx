@@ -24,6 +24,7 @@ import { ThreadAssistButton, ThreadSummary } from "../assist/ReaderAssist";
 import { AssistForAccount } from "../assist/useAssist";
 import { MessageView } from "./MessageView";
 import { requestMove } from "./selection";
+import { useNyuOnOpen } from "./nyuOnOpen";
 
 interface ThreadReaderProps {
   variant: "simple" | "pro";
@@ -49,6 +50,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const actions = useMessageActions();
   const messages = data?.messages;
   const loadedThreadId = data?.thread.id;
+  useNyuOnOpen(data);
 
   // Snapshot per thread: marking messages as read must not collapse them again.
   const initial = useMemo(

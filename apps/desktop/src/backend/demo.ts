@@ -610,6 +610,11 @@ export class DemoBackend implements Backend {
     return this.accounts.some((a) => a.id === DEMO_ACCOUNTS[0]!.id) ? this.addressBook.contacts() : [];
   }
 
+  /** The demo's address book is always known: the same contacts. */
+  knownContacts() {
+    return this.contacts();
+  }
+
   async createContact(input: ContactInput) {
     await wait(150);
     return this.addressBook.createContact(input);

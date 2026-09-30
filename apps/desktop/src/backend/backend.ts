@@ -231,6 +231,11 @@ export interface Backend {
   setDefaultAddressBook(id: string): Promise<void>;
   /** Every contact of every address book. */
   contacts(): Promise<ContactRecord[]>;
+  /**
+   * The contacts of the accounts whose address books are known already; never searches for a
+   * CardDAV server, so opening a mail may use it (Nyu's birthday and contact scenes).
+   */
+  knownContacts(): Promise<ContactRecord[]>;
   /** Returns the new contact's id. */
   createContact(input: ContactInput): Promise<string>;
   /** Changes what the editor shows and leaves the rest of the card as it is. */

@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { NyuThinking } from "@/components/nyu/NyuThinking";
 import { backend } from "@/backend/backend";
 import { ASSIST_PRESETS, type AssistComposeRequest, type AssistPreset } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -452,20 +453,23 @@ function Note({ tone, children }: { tone: "warning" | "danger"; children: ReactN
   );
 }
 
-/** The model is thinking: three soft dots. */
+/** The model is thinking: Nyu ponders, or three soft dots while Nyu's animations are off. */
 export function Thinking() {
   const { t } = useT();
+  const dots = (
+    <span className="inline-flex gap-1" aria-hidden>
+      {[0, 1, 2].map((dot) => (
+        <span
+          key={dot}
+          className="size-1.5 animate-pulse rounded-full bg-pink"
+          style={{ animationDelay: `${dot * 180}ms` }}
+        />
+      ))}
+    </span>
+  );
   return (
     <span className="inline-flex items-center gap-2 text-[13px] text-muted">
-      <span className="inline-flex gap-1" aria-hidden>
-        {[0, 1, 2].map((dot) => (
-          <span
-            key={dot}
-            className="size-1.5 animate-pulse rounded-full bg-pink"
-            style={{ animationDelay: `${dot * 180}ms` }}
-          />
-        ))}
-      </span>
+      <NyuThinking fallback={dots} className="-my-1.5" />
       {t("assist.thinking")}
     </span>
   );
