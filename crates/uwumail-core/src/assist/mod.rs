@@ -10,6 +10,7 @@
 
 pub mod discover;
 pub mod estimate;
+pub mod foreign;
 pub mod local;
 pub mod mail;
 pub mod prices;
@@ -76,4 +77,38 @@ pub struct Label {
     pub keyword: String,
     /// `#rrggbb`, or `None` for the default.
     pub color: Option<String>,
+    /// Conditions that put it on new mail (docs/labels.md of UwUMail Server); `None` for none.
+    #[serde(default)]
+    pub rules: Option<uwumail_labels::Rules>,
+    /// A built-in detector that puts it on new mail: `invoice`, `appointment`, `newsletter` or
+    /// `shipping`.
+    #[serde(default)]
+    pub detector: Option<String>,
+    /// A sender whose mail got it by hand twice gets it on new mail.
+    #[serde(default = "on")]
+    pub learn_senders: bool,
+    /// Its classifier may put it on new mail once it has learned enough.
+    #[serde(default = "on")]
+    pub classifier: bool,
+}
+
+fn on() -> bool {
+    true
+}
+
+impl Label {
+    /// A label with a name and nothing else set; learning is on, as for a new one.
+    pub fn named(id: &str, name: &str, keyword: &str) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            description: String::new(),
+            keyword: keyword.into(),
+            color: None,
+            rules: None,
+            detector: None,
+            learn_senders: true,
+            classifier: true,
+        }
+    }
 }

@@ -90,27 +90,104 @@ pub struct LabelPick {
     pub reason: String,
 }
 
-/// Which of the person's labels the model chose, with its reasons. Names that are not labels are
-/// dropped, each label counts once.
-pub fn parse_labels(answer: &Value, labels: &[Label]) -> Vec<LabelPick> {
-    let mut picks: Vec<LabelPick> = Vec::new();
-    for entry in answer.get("labels").and_then(Value::as_array).into_iter().flatten().take(50) {
-        let (name, reason) = match entry {
-            Value::String(name) => (name.as_str(), ""),
+/// What the model said about one label: why, and whether it fits.
+#[derive(Debug, Clone)]
+pub struct Verdict {
+    pub label: Label,
+    pub reason: String,
+    pub fits: bool,
+}
+
+/// The model's verdicts on the person's labels, in the order of the labels. Names that are not
+/// labels are dropped, each label counts once (its first entry), a label the model did not answer
+/// for is left out, and an entry without `fits` counts as fitting, like the server reads it.
+pub fn parse_verdicts(answer: &Value, labels: &[Label]) -> Vec<Verdict> {
+    let mut found: Vec<(usize, Verdict)> = Vec::new();
+    for entry in answer.get("labels").and_then(Value::as_array).into_iter().flatten().take(100) {
+        let (name, reason, fits) = match entry {
+            Value::String(name) => (name.as_str(), "", true),
             Value::Object(object) => (
                 object.get("name").and_then(Value::as_str).unwrap_or_default(),
                 object.get("reason").and_then(Value::as_str).unwrap_or_default(),
+                object.get("fits").and_then(Value::as_bool).unwrap_or(true),
             ),
             _ => continue,
         };
         let name = name.trim().to_lowercase();
-        let Some(label) = labels.iter().find(|label| label.name.trim().to_lowercase() == name) else { continue };
-        if picks.iter().any(|pick| pick.label.id == label.id) {
+        let Some(index) = labels.iter().position(|label| label.name.trim().to_lowercase() == name) else { continue };
+        if found.iter().any(|(known, _)| *known == index) {
             continue;
         }
-        picks.push(LabelPick { label: label.clone(), reason: clean(&reason.replace('\n', " "), MAX_REASON_CHARS) });
+        let reason = clean(&reason.replace('\n', " "), MAX_REASON_CHARS);
+        found.push((index, Verdict { label: labels[index].clone(), reason, fits }));
     }
-    picks
+    found.sort_by_key(|(index, _)| *index);
+    found.into_iter().map(|(_, verdict)| verdict).collect()
+}
+
+/// Which of the person's labels the model chose, with its reasons: the ones it says fit.
+pub fn parse_labels(answer: &Value, labels: &[Label]) -> Vec<LabelPick> {
+    parse_verdicts(answer, labels)
+        .into_iter()
+        .filter(|verdict| verdict.fits)
+        .map(|verdict| LabelPick { label: verdict.label, reason: verdict.reason })
+        .collect()
+}
+
+/// A new label the model proposes for a mail no label fits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NewLabel {
+    pub name: String,
+    pub description: String,
+    pub color: String,
+    pub reason: String,
+}
+
+/// New labels proposed, most 2.
+pub const MAX_NEW_LABELS: usize = 2;
+const MAX_LABEL_NAME_CHARS: usize = 40;
+const MAX_LABEL_DESCRIPTION_CHARS: usize = 300;
+/// Colors for a proposed label that came without a usable one.
+const LABEL_COLORS: [&str; 8] =
+    ["#e11d48", "#ea580c", "#ca8a04", "#16a34a", "#0d9488", "#2563eb", "#7c3aed", "#db2777"];
+
+/// Whether a color is `#rrggbb`.
+pub fn is_color(color: &str) -> bool {
+    color.len() == 7 && color.starts_with('#') && color[1..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// The new labels the model proposed, at most `room` (and [`MAX_NEW_LABELS`]): names of 1 to 40
+/// characters that are no label's yet (`taken`, ignoring case) nor proposed twice, descriptions of at
+/// most 300; a color that isn't `#rrggbb` is replaced by one picked here. Others are dropped.
+pub fn parse_new_labels(answer: &Value, taken: &[String], room: usize) -> Vec<NewLabel> {
+    let mut out: Vec<NewLabel> = Vec::new();
+    let taken: Vec<String> = taken.iter().map(|name| name.trim().to_lowercase()).collect();
+    for entry in answer.get("newLabels").and_then(Value::as_array).into_iter().flatten().take(10) {
+        if out.len() >= room.min(MAX_NEW_LABELS) {
+            break;
+        }
+        let text = |key: &str| entry.get(key).and_then(Value::as_str).unwrap_or_default();
+        let name = clean(&text("name").replace('\n', " "), 200);
+        let description = clean(&text("description").replace('\n', " "), 1000);
+        if name.is_empty()
+            || chars(&name) > MAX_LABEL_NAME_CHARS
+            || chars(&description) > MAX_LABEL_DESCRIPTION_CHARS
+            || taken.contains(&name.to_lowercase())
+            || out.iter().any(|known| known.name.to_lowercase() == name.to_lowercase())
+        {
+            continue;
+        }
+        let color = text("color").trim().to_lowercase();
+        let color = if is_color(&color) {
+            color
+        } else {
+            let pick = uwumail_labels::token_hash(&name.to_lowercase()).unsigned_abs() as usize;
+            LABEL_COLORS[(pick + out.len()) % LABEL_COLORS.len()].to_owned()
+        };
+        let reason = clean(&text("reason").replace('\n', " "), MAX_REASON_CHARS);
+        out.push(NewLabel { name, description, color, reason });
+    }
+    out
 }
 
 /// Somebody an event names, with an address the person knows.
@@ -403,13 +480,7 @@ mod tests {
     }
 
     fn label(id: &str, name: &str) -> Label {
-        Label {
-            id: id.into(),
-            name: name.into(),
-            description: String::new(),
-            keyword: label_keyword(name),
-            color: None,
-        }
+        Label::named(id, name, &label_keyword(name))
     }
 
     #[test]
@@ -425,6 +496,45 @@ mod tests {
         let picks = parse_labels(&answer, &labels);
         assert_eq!(picks.iter().map(|p| p.label.id.as_str()).collect::<Vec<_>>(), ["g1", "g2"]);
         assert_eq!(picks[0].reason, "Eine Rechnung");
+    }
+
+    #[test]
+    fn labels_the_model_argues_against_are_not_picked() {
+        let labels = [label("g1", "Rechnungen"), label("g2", "Reisen"), label("g3", "Privat")];
+        let answer = json!({ "labels": [
+            { "name": "Reisen", "reason": "Es geht nicht um eine Reise.", "fits": false },
+            { "name": "Rechnungen", "reason": "Eine Rechnung über 49,90 €.", "fits": true },
+            { "name": "Reisen", "reason": "Doch!", "fits": true }
+        ]});
+        let verdicts = parse_verdicts(&answer, &labels);
+        // In the order of the labels, each once, the unanswered one left out.
+        assert_eq!(
+            verdicts.iter().map(|v| (v.label.id.as_str(), v.fits)).collect::<Vec<_>>(),
+            [("g1", true), ("g2", false)]
+        );
+        assert_eq!(parse_labels(&answer, &labels).len(), 1);
+    }
+
+    #[test]
+    fn proposed_labels_are_held_to_their_shape() {
+        let taken = vec!["Rechnungen".to_owned()];
+        let answer = json!({ "newLabels": [
+            { "name": "rechnungen", "description": "taken", "color": "#123456", "reason": "x" },
+            { "name": "Vereine", "description": "Post von Vereinen", "color": "#A1B2C3", "reason": "Ein Verein\nschreibt." },
+            { "name": "vereine", "description": "twice", "color": "#000000", "reason": "x" },
+            { "name": "", "description": "no name", "color": "#000000", "reason": "x" },
+            { "name": "x".repeat(41), "description": "", "color": "#000000", "reason": "x" },
+            { "name": "Lang", "description": "d".repeat(301), "color": "#000000", "reason": "x" },
+            { "name": "Sport", "description": "", "color": "red", "reason": "x" },
+            { "name": "Drittes", "description": "", "color": "#000000", "reason": "x" }
+        ]});
+        let proposed = parse_new_labels(&answer, &taken, 5);
+        assert_eq!(proposed.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(), ["Vereine", "Sport"]);
+        assert_eq!(proposed[0].color, "#a1b2c3");
+        assert_eq!(proposed[0].reason, "Ein Verein schreibt.");
+        assert!(is_color(&proposed[1].color), "a color picked here");
+        assert_eq!(parse_new_labels(&answer, &taken, 1).len(), 1, "never more than there is room for");
+        assert!(parse_new_labels(&json!({}), &taken, 2).is_empty());
     }
 
     #[test]

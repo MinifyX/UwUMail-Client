@@ -77,11 +77,7 @@ impl MailText {
     /// Reads a message from what the store keeps (no headers): for work in the background, which
     /// shouldn't download anything.
     pub fn from_stored(message: &Message, max_chars: usize) -> Self {
-        let text = match (&message.body_text, &message.body_html) {
-            (Some(text), _) if !text.trim().is_empty() => text.clone(),
-            (_, Some(html)) => html_to_text(html),
-            _ => message.snippet.clone(),
-        };
+        let text = body_text(message);
         let mut links = Vec::new();
         if let Some(html) = &message.body_html {
             collect_links(html, &mut links);
@@ -134,6 +130,15 @@ impl MailText {
     /// All the mail's text a model's quote may come from.
     pub fn searchable(&self) -> String {
         format!("{}\n{}\n{}", self.subject, self.text, self.links.join("\n"))
+    }
+}
+
+/// A stored message's text: its plain text, else its HTML turned into text, else its preview.
+pub fn body_text(message: &Message) -> String {
+    match (&message.body_text, &message.body_html) {
+        (Some(text), _) if !text.trim().is_empty() => text.clone(),
+        (_, Some(html)) => html_to_text(html),
+        _ => message.snippet.clone(),
     }
 }
 

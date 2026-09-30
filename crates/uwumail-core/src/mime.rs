@@ -38,6 +38,11 @@ pub struct ParsedMessage {
     pub attachments: Vec<ParsedAttachment>,
     pub has_body: bool,
     pub unsubscribe: Option<crate::model::Unsubscribe>,
+    /// The headers labels without a model read (`uwumail_labels::HEADERS`: List-Id, Precedence, …),
+    /// lower-case name and unfolded value.
+    pub label_headers: Vec<(String, String)>,
+    /// A `text/calendar` or `application/ics` part: an invitation.
+    pub calendar: bool,
 }
 
 fn addresses(value: Option<&ParsedAddress>) -> Vec<Address> {
@@ -146,6 +151,19 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
         unsubscribe: message
             .header_raw("List-Unsubscribe")
             .and_then(|value| unsubscribe_options(value, message.header_raw("List-Unsubscribe-Post"))),
+        label_headers: message
+            .headers_raw()
+            .filter(|(name, _)| uwumail_labels::HEADERS.iter().any(|known| known.eq_ignore_ascii_case(name)))
+            .take(20)
+            .map(|(name, value)| (name.to_ascii_lowercase(), value.split_whitespace().collect::<Vec<_>>().join(" ")))
+            .collect(),
+        calendar: message.parts.iter().any(|part| {
+            part.content_type().is_some_and(|ct| {
+                let subtype = ct.subtype().unwrap_or_default();
+                (ct.ctype().eq_ignore_ascii_case("text") && subtype.eq_ignore_ascii_case("calendar"))
+                    || (ct.ctype().eq_ignore_ascii_case("application") && subtype.eq_ignore_ascii_case("ics"))
+            })
+        }),
     }
 }
 

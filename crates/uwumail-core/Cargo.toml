@@ -36,6 +36,7 @@ tokio-rustls.workspace = true
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
+uwumail-labels.workspace = true
 uwumail-tnef.workspace = true
 
 # Desktop systems check certificates themselves. On Android that needs Java

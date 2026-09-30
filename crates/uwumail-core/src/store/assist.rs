@@ -96,6 +96,37 @@ CREATE TABLE assist_calibration (
 CREATE INDEX assist_calibration_key ON assist_calibration (provider_id, model, feature, id);
 "#;
 
+/// Labels without a model (docs/labels.md of UwUMail Server): a label's rules (JSON), detector and
+/// switches; who put a logged label on and why (`source`, `code`, `params` as JSON; older entries
+/// were the model's); the headers of a mail the detectors read and whether it has a calendar part
+/// (unknown for mail stored before); how often the person gave a sender's mail a label by hand;
+/// and the classifier's examples: a mail's token hashes (little-endian i64s) with the ids of the
+/// labels it has, space-separated.
+pub(super) const LABELS_MIGRATION: &str = r#"
+ALTER TABLE assist_labels ADD COLUMN rules TEXT;
+ALTER TABLE assist_labels ADD COLUMN detector TEXT;
+ALTER TABLE assist_labels ADD COLUMN learn_senders INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE assist_labels ADD COLUMN classifier INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE assist_label_log ADD COLUMN source TEXT NOT NULL DEFAULT 'ai';
+ALTER TABLE assist_label_log ADD COLUMN code TEXT NOT NULL DEFAULT 'ai';
+ALTER TABLE assist_label_log ADD COLUMN params TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE messages ADD COLUMN label_headers TEXT;
+ALTER TABLE messages ADD COLUMN calendar INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE label_senders (
+    label_id TEXT NOT NULL,
+    address TEXT NOT NULL,
+    count INTEGER NOT NULL,
+    PRIMARY KEY (label_id, address)
+);
+CREATE TABLE label_examples (
+    id INTEGER PRIMARY KEY,
+    message_id TEXT NOT NULL UNIQUE,
+    labels TEXT NOT NULL DEFAULT '',
+    tokens BLOB NOT NULL,
+    created_at INTEGER NOT NULL
+);
+"#;
+
 /// Calls kept per provider, model and feature for calibration.
 const CALIBRATION_KEPT: i64 = 50;
 
@@ -132,7 +163,7 @@ pub struct ProviderRecord {
     pub output_price: Option<f64>,
 }
 
-/// A label the model set, as the log keeps it.
+/// A label put on by itself, as the log keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabelLogRecord {
     pub id: String,
@@ -142,6 +173,13 @@ pub struct LabelLogRecord {
     pub name: String,
     pub keyword: String,
     pub reason: String,
+    /// `ai`, `rule`, `sender`, `detector` or `classifier`.
+    pub source: String,
+    /// What `reason` says, for the page to put in its own words: `ai`, `rule`, `sender`,
+    /// `classifier` or a detector's name.
+    pub code: String,
+    /// The details `code` names, as JSON.
+    pub params: String,
     pub provider_name: Option<String>,
     pub model: Option<String>,
     pub created_at: i64,
@@ -178,8 +216,8 @@ pub struct CalibrationRecord {
     pub created_at: i64,
 }
 
-const LOG_COLUMNS: &str =
-    "id, account_id, message_id, label_id, name, keyword, reason, provider_name, model, created_at, undone";
+const LOG_COLUMNS: &str = "id, account_id, message_id, label_id, name, keyword, reason, provider_name, model, \
+                           created_at, undone, source, code, params";
 
 fn log_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LabelLogRecord> {
     Ok(LabelLogRecord {
@@ -194,7 +232,41 @@ fn log_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LabelLogRecord> {
         model: row.get(8)?,
         created_at: row.get(9)?,
         undone: row.get(10)?,
+        source: row.get(11)?,
+        code: row.get(12)?,
+        params: row.get(13)?,
     })
+}
+
+/// Token hashes as a blob, and back.
+fn tokens_blob(tokens: &[i64]) -> Vec<u8> {
+    tokens.iter().flat_map(|token| token.to_le_bytes()).collect()
+}
+
+fn blob_tokens(blob: &[u8]) -> Vec<i64> {
+    blob.as_chunks::<8>().0.iter().map(|chunk| i64::from_le_bytes(*chunk)).collect()
+}
+
+fn label_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Label> {
+    let rules: Option<String> = row.get(5)?;
+    Ok(Label {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        description: row.get(2)?,
+        keyword: row.get(3)?,
+        color: row.get(4)?,
+        rules: rules.and_then(|text| serde_json::from_str(&text).ok()),
+        detector: row.get(6)?,
+        learn_senders: row.get(7)?,
+        classifier: row.get(8)?,
+    })
+}
+
+/// A classifier example: the ids of the labels the mail has, and its token hashes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelExample {
+    pub labels: Vec<String>,
+    pub tokens: Vec<i64>,
 }
 
 impl Store {
@@ -398,41 +470,215 @@ impl Store {
 
     pub fn assist_labels(&self) -> Result<Vec<Label>> {
         let conn = self.conn();
-        let mut stmt =
-            conn.prepare("SELECT id, name, description, keyword, color FROM assist_labels ORDER BY created_at, rowid")?;
-        let rows = stmt.query_map([], |row| {
-            Ok(Label {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                keyword: row.get(3)?,
-                color: row.get(4)?,
-            })
-        })?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, description, keyword, color, rules, detector, learn_senders, classifier
+             FROM assist_labels ORDER BY created_at, rowid",
+        )?;
+        let rows = stmt.query_map([], label_row)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn insert_assist_label(&self, label: &Label, created_at: i64) -> Result<()> {
         self.conn().execute(
-            "INSERT INTO assist_labels (id, name, description, keyword, color, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![label.id, label.name, label.description, label.keyword, label.color, created_at],
+            "INSERT INTO assist_labels
+                (id, name, description, keyword, color, created_at, rules, detector, learn_senders, classifier)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                label.id,
+                label.name,
+                label.description,
+                label.keyword,
+                label.color,
+                created_at,
+                label.rules.as_ref().map(|rules| rules.to_json().to_string()),
+                label.detector,
+                label.learn_senders,
+                label.classifier
+            ],
         )?;
         Ok(())
     }
 
-    /// Changes name, description and color; the keyword stays.
+    /// Changes everything but the keyword, which stays.
     pub fn update_assist_label(&self, label: &Label) -> Result<bool> {
         Ok(self.conn().execute(
-            "UPDATE assist_labels SET name = ?2, description = ?3, color = ?4 WHERE id = ?1",
-            params![label.id, label.name, label.description, label.color],
+            "UPDATE assist_labels SET name = ?2, description = ?3, color = ?4, rules = ?5, detector = ?6,
+                learn_senders = ?7, classifier = ?8 WHERE id = ?1",
+            params![
+                label.id,
+                label.name,
+                label.description,
+                label.color,
+                label.rules.as_ref().map(|rules| rules.to_json().to_string()),
+                label.detector,
+                label.learn_senders,
+                label.classifier
+            ],
         )? > 0)
     }
 
-    /// Deletes a label and forgets its log.
+    /// Deletes a label and forgets its log, its learned senders and what its classifier learned.
     pub fn delete_assist_label(&self, id: &str) -> Result<bool> {
         let conn = self.conn();
         conn.execute("DELETE FROM assist_label_log WHERE label_id = ?1", [id])?;
+        conn.execute("DELETE FROM label_senders WHERE label_id = ?1", [id])?;
+        let mut stmt = conn.prepare("SELECT id, labels FROM label_examples WHERE labels != ''")?;
+        let rows: Vec<(i64, String)> =
+            stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
+        for (example, labels) in rows {
+            if labels.split(' ').any(|label| label == id) {
+                let rest: Vec<&str> = labels.split(' ').filter(|label| *label != id).collect();
+                conn.execute("UPDATE label_examples SET labels = ?1 WHERE id = ?2", params![rest.join(" "), example])?;
+            }
+        }
         Ok(conn.execute("DELETE FROM assist_labels WHERE id = ?1", [id])? > 0)
+    }
+
+    /// The headers of a mail the detectors read (empty when unknown) and whether it has a calendar
+    /// part.
+    pub fn label_headers(&self, message_id: &str) -> Result<(Vec<(String, String)>, bool)> {
+        let found: Option<(Option<String>, bool)> = self
+            .conn()
+            .query_row("SELECT label_headers, calendar FROM messages WHERE id = ?1", [message_id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .optional()?;
+        let (headers, calendar) = found.unwrap_or_default();
+        Ok((headers.and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default(), calendar))
+    }
+
+    /// Tests only: a message as if it were being moved (no uid on the server yet), so changes to
+    /// its keywords stay on this device.
+    #[cfg(test)]
+    pub(crate) fn unlink_for_tests(&self, id: &str) {
+        self.conn().execute("UPDATE messages SET uid = -rowid WHERE id = ?1", [id]).unwrap();
+    }
+
+    // ------------------------------------------------ learning from the person
+
+    /// Per label id, how often the person gave mail from `address` (lower case) the label by hand.
+    pub fn label_senders(&self, address: &str) -> Result<std::collections::HashMap<String, i64>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT label_id, count FROM label_senders WHERE address = ?1")?;
+        let rows = stmt.query_map([address], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Counts one more hand-labeling of a sender's mail.
+    pub fn count_label_sender(&self, label_id: &str, address: &str) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO label_senders (label_id, address, count) VALUES (?1, ?2, 1)
+             ON CONFLICT (label_id, address) DO UPDATE SET count = count + 1",
+            params![label_id, address],
+        )?;
+        Ok(())
+    }
+
+    /// Forgets a sender for a label (the label was taken off their mail by hand).
+    pub fn forget_label_sender(&self, label_id: &str, address: &str) -> Result<()> {
+        self.conn()
+            .execute("DELETE FROM label_senders WHERE label_id = ?1 AND address = ?2", params![label_id, address])?;
+        Ok(())
+    }
+
+    /// Learns a mail as a classifier example: with the label (`Some((id, true))`), without it
+    /// (`Some((id, false))`) or with no label at all (`None`, an ordinary mail). A mail learned before
+    /// keeps its other labels. Beyond `max` examples the oldest are forgotten. Answers whether it
+    /// became an example with the label just now.
+    pub fn learn_label_example(
+        &self,
+        message_id: &str,
+        tokens: &[i64],
+        label: Option<(&str, bool)>,
+        now: i64,
+        max: usize,
+    ) -> Result<bool> {
+        let conn = self.conn();
+        let known: Option<String> = conn
+            .query_row("SELECT labels FROM label_examples WHERE message_id = ?1", [message_id], |row| row.get(0))
+            .optional()?;
+        let mut labels: Vec<String> = known.as_deref().map(keywords_list).unwrap_or_default();
+        let newly = label.is_some_and(|(id, with)| with && !labels.iter().any(|known| known == id));
+        if let Some((id, with)) = label {
+            labels.retain(|known| known != id);
+            if with {
+                labels.push(id.to_string());
+            }
+        }
+        match known {
+            Some(_) => conn.execute(
+                "UPDATE label_examples SET labels = ?1 WHERE message_id = ?2",
+                params![labels.join(" "), message_id],
+            )?,
+            None => conn.execute(
+                "INSERT INTO label_examples (message_id, labels, tokens, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![message_id, labels.join(" "), tokens_blob(tokens), now],
+            )?,
+        };
+        conn.execute(
+            "DELETE FROM label_examples WHERE id NOT IN (SELECT id FROM label_examples ORDER BY id DESC LIMIT ?1)",
+            [i64::try_from(max).unwrap_or(i64::MAX)],
+        )?;
+        Ok(newly)
+    }
+
+    /// Every classifier example.
+    pub fn label_examples(&self) -> Result<Vec<LabelExample>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT labels, tokens FROM label_examples ORDER BY id")?;
+        let rows = stmt.query_map([], |row| {
+            let labels: String = row.get(0)?;
+            let tokens: Vec<u8> = row.get(1)?;
+            Ok(LabelExample { labels: keywords_list(&labels), tokens: blob_tokens(&tokens) })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Per label id, the examples with the label.
+    pub fn label_example_counts(&self) -> Result<std::collections::HashMap<String, u64>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT labels FROM label_examples WHERE labels != ''")?;
+        let mut counts = std::collections::HashMap::new();
+        for labels in stmt.query_map([], |row| row.get::<_, String>(0))? {
+            for label in keywords_list(&labels?) {
+                *counts.entry(label).or_insert(0) += 1;
+            }
+        }
+        Ok(counts)
+    }
+
+    /// Ordinary mail to learn as an example without any label: the newest `limit` inbox mails of
+    /// an account since `since` (unix seconds) that carry none of `keywords` and are no example yet,
+    /// newest first.
+    pub fn unlabeled_inbox(
+        &self,
+        account_id: &str,
+        since: i64,
+        keywords: &[String],
+        limit: usize,
+    ) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT m.id, m.keywords FROM messages m JOIN folders f ON f.id = m.folder_id
+             WHERE f.role = 'inbox' AND m.account_id = ?1 AND m.date >= ?2
+               AND NOT EXISTS (SELECT 1 FROM label_examples e WHERE e.message_id = m.id)
+             ORDER BY m.date DESC, m.id LIMIT ?3",
+        )?;
+        let rows = stmt.query_map(params![account_id, since, i64::try_from(limit * 5).unwrap_or(i64::MAX)], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, own) = row?;
+            if keywords_list(&own).iter().any(|keyword| keywords.contains(keyword)) {
+                continue;
+            }
+            out.push(id);
+            if out.len() >= limit {
+                break;
+            }
+        }
+        Ok(out)
     }
 
     /// Messages that carry a keyword, with their account: to take a deleted label off.
@@ -449,7 +695,8 @@ impl Store {
     pub fn insert_label_log(&self, entry: &LabelLogRecord) -> Result<()> {
         self.conn().execute(
             &format!(
-                "INSERT INTO assist_label_log ({LOG_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
+                "INSERT INTO assist_label_log ({LOG_COLUMNS})
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"
             ),
             params![
                 entry.id,
@@ -462,7 +709,10 @@ impl Store {
                 entry.provider_name,
                 entry.model,
                 entry.created_at,
-                entry.undone
+                entry.undone,
+                entry.source,
+                entry.code,
+                entry.params
             ],
         )?;
         Ok(())
@@ -710,13 +960,8 @@ mod tests {
     #[test]
     fn labels_log_and_usage() {
         let (store, id) = store();
-        let label = Label {
-            id: "g1".into(),
-            name: "Rechnungen".into(),
-            description: "Rechnungen und Quittungen".into(),
-            keyword: "rechnungen".into(),
-            color: None,
-        };
+        let label =
+            Label { description: "Rechnungen und Quittungen".into(), ..Label::named("g1", "Rechnungen", "rechnungen") };
         store.insert_assist_label(&label, 1).unwrap();
         assert!(store.insert_assist_label(&Label { id: "g2".into(), ..label.clone() }, 2).is_err(), "keyword unique");
         let entry = LabelLogRecord {
@@ -727,6 +972,9 @@ mod tests {
             name: "Rechnungen".into(),
             keyword: "rechnungen".into(),
             reason: "Eine Rechnung".into(),
+            source: "ai".into(),
+            code: "ai".into(),
+            params: "{}".into(),
             provider_name: Some("Mistral".into()),
             model: None,
             created_at: 100,

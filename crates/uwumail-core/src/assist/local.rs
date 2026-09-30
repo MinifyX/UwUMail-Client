@@ -52,16 +52,20 @@ pub fn utc_day(secs: i64) -> String {
     chrono::DateTime::from_timestamp(secs, 0).map(|d| d.format("%Y-%m-%d").to_string()).unwrap_or_default()
 }
 
-/// What the device offers, in the shape of the server's account capability.
-pub fn options(features: &Value) -> Value {
+/// What the device offers, in the shape of the server's account capability. `foreign_servers` are
+/// the UwUMail accounts whose server may do the AI of this device's mailboxes (`serverAssist`).
+pub fn options(features: &Value, foreign_servers: &[String]) -> Value {
     json!({
         "features": features,
         "mayAddProviders": true,
         "mayUsePrivateAddresses": true,
         "maxProviders": MAX_PROVIDERS,
         "maxLabels": MAX_LABELS,
+        "maxLabelConditions": uwumail_labels::MAX_CONDITIONS,
         "maxInstructionChars": MAX_INSTRUCTION_CHARS,
         "maxTextChars": MAX_TEXT_CHARS,
+        "foreignMail": false,
+        "foreignServers": foreign_servers,
     })
 }
 
@@ -350,8 +354,21 @@ impl Device<'_> {
             .and_then(|value| Choice::from_value(&value)))
     }
 
+    /// Whether the model judges the labels of new mail (off by default).
     pub fn auto_labels_on(&self) -> Result<bool> {
         Ok(self.store.assist_setting("autoLabels")?.as_deref() == Some("true"))
+    }
+
+    /// Whether labels go on new mail by their rules, detectors, senders and classifier (on by
+    /// default).
+    pub fn non_ai_labels_on(&self) -> Result<bool> {
+        Ok(self.store.assist_setting("nonAiLabels")?.as_deref() != Some("false"))
+    }
+
+    /// The UwUMail account whose server does the AI of this device's mailboxes, if the person
+    /// chose one.
+    pub fn server_assist(&self) -> Result<Option<String>> {
+        self.store.assist_setting("serverAssist")
     }
 
     /// What a feature really uses: its choice, the default, then the first usable provider.
@@ -420,12 +437,15 @@ impl Device<'_> {
             "default": self.choice("default")?.map_or(Value::Null, |c| c.to_value()),
             "features": features,
             "autoLabels": self.auto_labels_on()?,
+            "nonAiLabels": self.non_ai_labels_on()?,
+            "serverAssist": self.server_assist()?,
             "effective": effective,
         }))
     }
 
-    /// Applies the server's update shape: `default`, `features/<f>` (or a whole `features` map) and
-    /// `autoLabels`.
+    /// Applies the server's update shape: `default`, `features/<f>` (or a whole `features` map),
+    /// `autoLabels` and `nonAiLabels`; and this device's `serverAssist`, an account id the engine
+    /// checked already, or `null`.
     pub fn update_settings(&self, patch: &Value) -> Result<()> {
         let patch = patch.as_object().ok_or_else(|| Error::assist("invalidArguments", "No settings given."))?;
         let providers = self.providers()?;
@@ -450,10 +470,15 @@ impl Device<'_> {
                         changes.push(choice_change(format!("features/{}", feature.as_str()), value)?);
                     }
                 }
-                "autoLabels" => {
-                    let on = value.as_bool().ok_or_else(|| invalid("autoLabels", "This must be on or off."))?;
-                    changes.push(("autoLabels".into(), Some(on.to_string())));
+                "autoLabels" | "nonAiLabels" => {
+                    let on = value.as_bool().ok_or_else(|| invalid(key, "This must be on or off."))?;
+                    changes.push((key.clone(), Some(on.to_string())));
                 }
+                "serverAssist" => match value {
+                    Value::Null => changes.push((key.clone(), None)),
+                    Value::String(id) if !id.trim().is_empty() => changes.push((key.clone(), Some(id.trim().into()))),
+                    _ => return Err(invalid(key, "This must be a mailbox or nothing.")),
+                },
                 other => match other.strip_prefix("features/").and_then(Feature::parse) {
                     Some(feature) => changes.push(choice_change(format!("features/{}", feature.as_str()), value)?),
                     None => return Err(invalid(other, "This setting doesn't exist.")),
@@ -492,6 +517,9 @@ impl Device<'_> {
         Ok(())
     }
 
+    /// A label with what `input` sets: name, description, color, and the server's checks of
+    /// `rules`, `detector`, `learnSenders` and `classifier`. The counts are the device's to set and
+    /// are ignored, like `id` and `keyword`.
     fn label_input(input: &Value, base: Label) -> Result<Label> {
         let text = |key: &str| input.get(key).and_then(Value::as_str).map(|t| t.trim().to_string());
         let mut label = base;
@@ -506,6 +534,25 @@ impl Device<'_> {
             Some(Value::String(color)) => label.color = Some(color.to_lowercase()),
             _ => {}
         }
+        if let Some(rules) = input.get("rules") {
+            label.rules = uwumail_labels::Rules::check(rules).map_err(|reason| invalid("rules", &reason))?;
+        }
+        match input.get("detector") {
+            None => {}
+            Some(Value::Null) => label.detector = None,
+            Some(Value::String(name)) => match uwumail_labels::Detector::parse(name) {
+                Some(detector) => label.detector = Some(detector.as_str().into()),
+                None => return Err(invalid("detector", "A detector is invoice, appointment, newsletter or shipping.")),
+            },
+            Some(_) => return Err(invalid("detector", "A detector is invoice, appointment, newsletter or shipping.")),
+        }
+        for (key, field) in [("learnSenders", &mut label.learn_senders), ("classifier", &mut label.classifier)] {
+            match input.get(key) {
+                None => {}
+                Some(Value::Bool(on)) => *field = *on,
+                Some(_) => return Err(invalid(key, "This must be on or off.")),
+            }
+        }
         Ok(label)
     }
 
@@ -514,14 +561,7 @@ impl Device<'_> {
         if labels.len() >= MAX_LABELS {
             return Err(Error::assist("overQuota", "There are as many labels as there may be."));
         }
-        let empty = Label {
-            id: String::new(),
-            name: String::new(),
-            description: String::new(),
-            keyword: String::new(),
-            color: None,
-        };
-        let mut label = Self::label_input(input, empty)?;
+        let mut label = Self::label_input(input, Label::named("", "", ""))?;
         self.check_label(&label, None)?;
         let taken = |keyword: &str| labels.iter().any(|l| l.keyword == keyword);
         let mut keyword = label_keyword(&label.name);
@@ -550,12 +590,18 @@ impl Device<'_> {
 
     /// The main call of a request as the heuristic expects it: the prompt with the API's framing,
     /// a typical answer of `output` tokens, and thinking for a model that thinks.
-    pub fn heuristic(&self, effective: &Effective, prompt: &Prompt, output: u64) -> Call {
+    pub fn heuristic(&self, effective: &Effective, feature: Feature, prompt: &Prompt, output: u64) -> Call {
         let price = self.price_of(&effective.provider, &effective.model);
         let sheet = price.as_ref().map(|price| &price.sheet);
         let listed = sheet.is_some_and(|sheet| sheet.supports_reasoning);
         let reasons = estimate::thinks(effective.kind, &effective.model, listed);
-        estimate::heuristic_call(effective.kind, prompt, output, reasons, sheet.and_then(|s| s.max_output_tokens))
+        let mut call =
+            estimate::heuristic_call(effective.kind, prompt, output, reasons, sheet.and_then(|s| s.max_output_tokens));
+        // Judging labels is short thinking, like the server counts it.
+        if feature == Feature::AutoLabels && call.reasoning > 0 {
+            call.reasoning = estimate::TYPICAL_LABELS_REASONING_TOKENS.min(call.max_output.saturating_sub(call.output));
+        }
+        call
     }
 
     /// What recent real calls teach about this provider, model and feature; `None` with too few.
@@ -569,7 +615,7 @@ impl Device<'_> {
     /// and an answer that isn't usable is not asked for again. A request refused for its answer
     /// format is asked once more, but refused requests cost nothing.
     pub fn estimate(&self, effective: &Effective, feature: Feature, prompt: &Prompt, output: u64) -> Result<Estimate> {
-        let call = self.heuristic(effective, prompt, output);
+        let call = self.heuristic(effective, feature, prompt, output);
         Ok(match self.calibration(effective, feature)? {
             Some(calibration) => Estimate { calls: vec![call.calibrated(&calibration)], calibrated: true },
             None => Estimate { calls: vec![call], calibrated: false },
@@ -710,7 +756,7 @@ impl Device<'_> {
             json_schema: prompt.schema.as_ref().map(|(name, schema)| JsonSchema { name, schema: schema.clone() }),
             temperature: None,
         };
-        let expected = self.heuristic(&effective, prompt, typical_output);
+        let expected = self.heuristic(&effective, feature, prompt, typical_output);
         let answer = provider::chat(http, &endpoint, &request, on_delta).await;
         self.record_usage(&effective, feature, answer.as_ref().ok(), Some(&expected))?;
         Ok((answer?, effective))
@@ -843,5 +889,38 @@ mod tests {
         device.update_label(&label.id, &json!({ "name": "Pakete" })).unwrap();
         let renamed = device.labels().unwrap().into_iter().find(|l| l.id == label.id).unwrap();
         assert_eq!((renamed.name.as_str(), renamed.keyword.as_str()), ("Pakete", "bestellungen-versand"));
+    }
+
+    #[test]
+    fn label_rules_and_switches_are_checked_like_the_servers() {
+        let (store, secrets) = device();
+        let device = Device { store: &store, secrets: &secrets, prices: None };
+        let property = |input: Value| device.create_label(&input).unwrap_err().assist.unwrap().properties;
+        let condition = json!({ "field": "subject", "value": "Rechnung" });
+        let many: Vec<Value> = (0..11).map(|_| condition.clone()).collect();
+        assert_eq!(property(json!({ "name": "A", "rules": { "conditions": many } })), ["rules"]);
+        let maybe = json!({ "conditions": [{ "field": "hasAttachment", "value": "maybe" }] });
+        assert_eq!(property(json!({ "name": "A", "rules": maybe })), ["rules"]);
+        let control = json!({ "conditions": [{ "field": "text", "value": "a\u{7}b" }] });
+        assert_eq!(property(json!({ "name": "A", "rules": control })), ["rules"]);
+        let long = json!({ "conditions": [{ "field": "text", "value": "x".repeat(201) }] });
+        assert_eq!(property(json!({ "name": "A", "rules": long })), ["rules"]);
+        assert_eq!(property(json!({ "name": "A", "detector": "spam" })), ["detector"]);
+        assert_eq!(property(json!({ "name": "A", "learnSenders": "yes" })), ["learnSenders"]);
+
+        let label = device
+            .create_label(&json!({ "name": "Rechnungen", "detector": "invoice", "classifier": false,
+                                   "rules": { "match": "any", "conditions": [condition] } }))
+            .unwrap();
+        assert_eq!(label.detector.as_deref(), Some("invoice"));
+        assert!(label.learn_senders && !label.classifier);
+        assert_eq!(label.rules.as_ref().unwrap().conditions.len(), 1);
+        // Rules without conditions are none; what isn't named stays.
+        device
+            .update_label(&label.id, &json!({ "rules": { "match": "all", "conditions": [] }, "detector": null }))
+            .unwrap();
+        let stored = device.labels().unwrap().pop().unwrap();
+        assert_eq!((stored.rules, stored.detector, stored.classifier), (None, None, false));
+        assert_eq!(options(&json!({}), &[])["maxLabelConditions"], 10);
     }
 }
