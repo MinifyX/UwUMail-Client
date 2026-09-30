@@ -13,7 +13,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { backend } from "@/backend/backend";
 import type { Account, Folder, MailboxView } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
@@ -278,7 +278,15 @@ function useNewMailHops() {
   return hops;
 }
 
-export function MailboxNav({ className, workspaceSwitch = false }: { className?: string; workspaceSwitch?: boolean }) {
+export function MailboxNav({
+  className,
+  style,
+  workspaceSwitch = false,
+}: {
+  className?: string;
+  style?: CSSProperties;
+  workspaceSwitch?: boolean;
+}) {
   const { t } = useT();
   const hops = useNewMailHops();
   const { accounts } = useVisibleAccounts();
@@ -300,7 +308,7 @@ export function MailboxNav({ className, workspaceSwitch = false }: { className?:
     : accounts.length > 1 && t("nav.unified");
 
   return (
-    <nav className={clsx("flex h-full flex-col gap-4 px-3 pt-4 pb-3", className)}>
+    <nav className={clsx("flex h-full flex-col gap-4 px-3 pt-4 pb-3", className)} style={style}>
       <div className="flex items-center justify-between px-2">
         <Wordmark className="text-[19px]" hop={hops} />
       </div>

@@ -236,7 +236,9 @@
     "pro": {
       "name": "Pro",
       "desc": "Folders always visible, three columns, keyboard shortcuts."
-    }
+    },
+    "resizeNav": "Resize the sidebar",
+    "resizeList": "Resize the mail list"
   },
   "tone": {
     "playful": {

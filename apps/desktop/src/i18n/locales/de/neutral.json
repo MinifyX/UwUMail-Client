@@ -236,7 +236,9 @@
     "pro": {
       "name": "Profi",
       "desc": "Ordner immer sichtbar, drei Spalten, Tastenkürzel."
-    }
+    },
+    "resizeNav": "Breite der Seitenleiste ändern",
+    "resizeList": "Breite der Mailliste ändern"
   },
   "tone": {
     "playful": {

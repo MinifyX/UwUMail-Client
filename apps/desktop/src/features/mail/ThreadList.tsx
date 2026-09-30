@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { ListFilter } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -57,9 +57,10 @@ export const SEARCH_INPUT_ID = "uwu-search";
 interface ThreadListProps {
   variant: "simple" | "pro";
   className?: string;
+  style?: CSSProperties;
 }
 
-export function ThreadList({ variant, className }: ThreadListProps) {
+export function ThreadList({ variant, className, style }: ThreadListProps) {
   const { t } = useT();
   const view = useUi((s) => s.view);
   const filter = useUi((s) => s.filter);
@@ -136,7 +137,11 @@ export function ThreadList({ variant, className }: ThreadListProps) {
               : "other";
 
   return (
-    <section className={clsx("flex h-full min-w-0 flex-col bg-surface", className)} aria-label={info.title}>
+    <section
+      className={clsx("flex h-full min-w-0 flex-col bg-surface", className)}
+      style={style}
+      aria-label={info.title}
+    >
       <header className={clsx("flex flex-col gap-3 pt-4", variant === "pro" ? "px-5 pb-3" : "px-4 pb-2")}>
         <div className="flex items-center gap-2">
           {variant === "simple" && (
