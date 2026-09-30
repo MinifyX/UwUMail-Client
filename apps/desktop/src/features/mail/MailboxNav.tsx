@@ -27,6 +27,7 @@ import { canEmpty, useFolderEdit } from "@/state/folderEdit";
 import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
+import { LabelNav } from "../labels/LabelNav";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { AppSwitch } from "../shell/AppSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
@@ -344,6 +345,8 @@ export function MailboxNav({
             );
           })}
         </section>
+
+        <LabelNav />
 
         {accounts.map((account) => (
           <AccountSection

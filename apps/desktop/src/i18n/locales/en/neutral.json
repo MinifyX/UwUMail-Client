@@ -476,7 +476,8 @@
     "signatureLocalOnly": "Only here",
     "signatureLocalOnlyDesc": "This signature stays on this device: it’s too big to sync (256 KB at most) or has pictures that only work here.",
     "rules": "Rules",
-    "assistant": "AI assistant"
+    "assistant": "AI assistant",
+    "labels": "Labels"
   },
   "theme": {
     "system": "System",
@@ -539,7 +540,8 @@
     "contactsEdit": "Edit contact",
     "contactsDelete": "Delete contact",
     "contactsNext": "Next contact",
-    "contactsPrevious": "Previous contact"
+    "contactsPrevious": "Previous contact",
+    "label": "Label"
   },
   "palette": {
     "placeholder": "Type a command",
@@ -1595,5 +1597,28 @@
       "below": "< {{amount}}",
       "about": "≈ {{amount}}"
     }
+  },
+  "labels": {
+    "title": "Labels",
+    "allFolders": "All folders",
+    "navUnread": "{{name}}, {{count}} unread",
+    "manage": "Manage labels",
+    "create": "Create a label",
+    "otherMailboxes": "Other mailboxes",
+    "otherMailbox": "“{{name}}” belongs to another mailbox.",
+    "added_one": "“{{name}}” added",
+    "added_other": "“{{name}}” added to {{count}} conversations",
+    "removed_one": "“{{name}}” removed",
+    "removed_other": "“{{name}}” removed from {{count}} conversations",
+    "pickerTitle": "Labels",
+    "pickerSearch": "Find or create a label",
+    "pickerEmpty": "No labels yet. Type a name to create one.",
+    "pickerNone": "No label with this name.",
+    "createNamed": "Create “{{name}}”",
+    "createdApplied": "“{{name}}” created and added",
+    "pick": "Labels…",
+    "group": "Group by label",
+    "ungroup": "Stop grouping by label",
+    "none": "No label"
   }
 }

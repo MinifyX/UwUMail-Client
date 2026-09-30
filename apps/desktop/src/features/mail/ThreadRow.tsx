@@ -27,6 +27,7 @@ interface ThreadRowProps {
   inTrash?: boolean;
   /** The row sits in junk, where "spam" means "not spam". */
   inJunk?: boolean;
+  onContextMenu?: (event: React.MouseEvent) => void;
 }
 
 function QuickAction({
@@ -74,6 +75,7 @@ export function ThreadRow({
   dragIds,
   inTrash = false,
   inJunk = false,
+  onContextMenu,
 }: ThreadRowProps) {
   const { t, i18n } = useT();
   const compact = density === "compact";
@@ -92,6 +94,7 @@ export function ThreadRow({
   return (
     <div
       data-thread-id={thread.id}
+      onContextMenu={onContextMenu}
       draggable={dragIds !== undefined}
       onDragStart={(event) => {
         if (!dragIds) return;

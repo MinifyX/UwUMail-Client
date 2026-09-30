@@ -476,7 +476,8 @@
     "signatureLocalOnly": "Nur hier",
     "signatureLocalOnlyDesc": "Diese Signatur bleibt auf diesem Gerät: Sie ist zu groß zum Synchronisieren (höchstens 256 KB) oder hat Bilder, die nur hier gehen.",
     "rules": "Regeln",
-    "assistant": "KI-Assistent"
+    "assistant": "KI-Assistent",
+    "labels": "Labels"
   },
   "theme": {
     "system": "System",
@@ -539,7 +540,8 @@
     "contactsEdit": "Kontakt bearbeiten",
     "contactsDelete": "Kontakt löschen",
     "contactsNext": "Nächster Kontakt",
-    "contactsPrevious": "Vorheriger Kontakt"
+    "contactsPrevious": "Vorheriger Kontakt",
+    "label": "Label vergeben"
   },
   "palette": {
     "placeholder": "Befehl eingeben",
@@ -1595,5 +1597,28 @@
       "below": "< {{amount}}",
       "about": "≈ {{amount}}"
     }
+  },
+  "labels": {
+    "title": "Labels",
+    "allFolders": "Alle Ordner",
+    "navUnread": "{{name}}, {{count}} ungelesen",
+    "manage": "Labels verwalten",
+    "create": "Label anlegen",
+    "otherMailboxes": "Andere Postfächer",
+    "otherMailbox": "„{{name}}“ gehört zu einem anderen Postfach.",
+    "added_one": "„{{name}}“ vergeben",
+    "added_other": "„{{name}}“ an {{count}} Unterhaltungen vergeben",
+    "removed_one": "„{{name}}“ entfernt",
+    "removed_other": "„{{name}}“ von {{count}} Unterhaltungen entfernt",
+    "pickerTitle": "Labels",
+    "pickerSearch": "Label suchen oder anlegen",
+    "pickerEmpty": "Noch keine Labels. Tippe einen Namen, um eins anzulegen.",
+    "pickerNone": "Kein Label mit diesem Namen.",
+    "createNamed": "„{{name}}“ anlegen",
+    "createdApplied": "„{{name}}“ angelegt und vergeben",
+    "pick": "Labels …",
+    "group": "Nach Label gruppieren",
+    "ungroup": "Nicht mehr nach Label gruppieren",
+    "none": "Ohne Label"
   }
 }

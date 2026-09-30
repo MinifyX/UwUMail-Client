@@ -38,6 +38,17 @@ export interface SavedDraft {
   savedToServer?: boolean;
 }
 
+/** Mail waiting for the label picker (L). */
+export interface LabelRequest {
+  threadIds: string[];
+}
+
+/** A label chip that filters the list: which label of which scope. */
+export interface LabelChoice {
+  scope: string;
+  labelId: string;
+}
+
 /** Mail waiting for "Move to…". */
 export interface MoveRequest {
   messageIds: string[];
@@ -47,7 +58,7 @@ export interface MoveRequest {
 }
 
 export type SettingsSection =
-  "appearance" | "mail" | "compose" | "rules" | "assistant" | "security" | "accounts" | "addons" | "about";
+  "appearance" | "mail" | "compose" | "rules" | "labels" | "assistant" | "security" | "accounts" | "addons" | "about";
 
 /** The two halves of the app. */
 export type AppSection = "mail" | "calendar" | "contacts";
@@ -76,6 +87,9 @@ interface UiState {
   /** Where a Shift range ends: the row Shift+↑/↓ last reached. */
   selectionCursor: string | null;
   moving: MoveRequest | null;
+  /** The label chip the list is filtered by, if any. */
+  labelFilter: LabelChoice | null;
+  labeling: LabelRequest | null;
 
   setSection: (section: AppSection) => void;
   /** Also switches back to the mail. */
@@ -103,6 +117,9 @@ interface UiState {
   checkAllVisible: () => void;
   openMove: (request: MoveRequest) => void;
   closeMove: () => void;
+  setLabelFilter: (choice: LabelChoice | null) => void;
+  openLabeling: (request: LabelRequest) => void;
+  closeLabeling: () => void;
 }
 
 export const useUi = create<UiState>()((set, get) => ({
@@ -124,6 +141,8 @@ export const useUi = create<UiState>()((set, get) => ({
   selectionAnchor: null,
   selectionCursor: null,
   moving: null,
+  labelFilter: null,
+  labeling: null,
 
   setSection: (section) => set({ section, folderDrawerOpen: false, paletteOpen: false }),
   setView: (view) =>
@@ -131,6 +150,7 @@ export const useUi = create<UiState>()((set, get) => ({
       section: "mail",
       view,
       selectedThreadId: null,
+      labelFilter: null,
       folderDrawerOpen: false,
       checkedThreadIds: [],
       selectionAnchor: null,
@@ -177,4 +197,14 @@ export const useUi = create<UiState>()((set, get) => ({
   checkAllVisible: () => set((state) => ({ checkedThreadIds: [...state.visibleThreadIds] })),
   openMove: (request) => set({ moving: request }),
   closeMove: () => set({ moving: null }),
+  setLabelFilter: (choice) =>
+    set({
+      labelFilter: choice,
+      selectedThreadId: null,
+      checkedThreadIds: [],
+      selectionAnchor: null,
+      selectionCursor: null,
+    }),
+  openLabeling: (request) => set({ labeling: request.threadIds.length > 0 ? request : null }),
+  closeLabeling: () => set({ labeling: null }),
 }));

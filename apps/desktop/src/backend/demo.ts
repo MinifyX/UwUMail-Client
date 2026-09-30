@@ -2,6 +2,7 @@ import { AssistError, BackendError, type Backend } from "./backend";
 import { DemoAssist } from "./demo-assist";
 import { DEVICE_ASSIST_SCOPE } from "./types";
 import { isDangerous } from "@/lib/attachments";
+import { hasLabel, matchesLabels } from "@/lib/labelFilter";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
@@ -10,6 +11,8 @@ import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMes
 import { DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
+  LabelCount,
+  LabelRef,
   BlockedSender,
   Account,
   AssistComposeRequest,
@@ -1310,6 +1313,17 @@ export class DemoBackend implements Backend {
     return this.assistForMessage(messageId).spamCheck(messageId);
   }
 
+  async labelCounts(labels: LabelRef[]): Promise<LabelCount[]> {
+    await wait(40);
+    return labels.map((ref) => {
+      const on = this.messages.filter((m) => {
+        const role = this.roleOf(m);
+        return role !== "trash" && role !== "junk" && hasLabel(m, ref);
+      });
+      return { total: on.length, unread: on.filter((m) => !m.flags.seen).length };
+    });
+  }
+
   async setKeywords(messageIds: string[], keywords: Record<string, boolean>) {
     await wait(60);
     for (const message of this.messages) {
@@ -1467,6 +1481,7 @@ export class DemoBackend implements Backend {
     if (query.accountIds && !query.accountIds.includes(message.accountId)) return false;
     if (view.kind === "folder") return message.folderId === view.folderId;
     const role = this.roleOf(message);
+    if (view.kind === "label") return role !== "trash" && role !== "junk" && hasLabel(message, view);
     switch (view.role) {
       case "inbox":
         return role === "inbox";
@@ -1485,6 +1500,7 @@ export class DemoBackend implements Backend {
     if (query.filter === "unread" && message.flags.seen) return false;
     if (query.filter === "flagged" && !message.flags.flagged) return false;
     if (query.filter === "attachments" && message.attachments.length === 0) return false;
+    if (query.labels && !matchesLabels(message, query.labels)) return false;
     const search = query.search?.trim().toLowerCase();
     if (!search) return true;
     return [message.subject, message.from.name ?? "", message.from.email, message.bodyText ?? ""]

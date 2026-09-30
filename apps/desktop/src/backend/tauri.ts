@@ -30,6 +30,8 @@ import {
   toLocalModelServers,
 } from "./assistConvert";
 import type {
+  LabelCount,
+  LabelRef,
   BlockedSender,
   Account,
   AddressBookInfo,
@@ -735,6 +737,10 @@ export class TauriBackend implements Backend {
 
   setKeywords(messageIds: string[], keywords: Record<string, boolean>) {
     return call<void>("set_keywords", { messageIds, keywords });
+  }
+
+  labelCounts(labels: LabelRef[]) {
+    return call<LabelCount[]>("label_counts", { labels });
   }
 
   searchContacts(query: string) {

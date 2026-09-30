@@ -77,7 +77,25 @@ export interface Address {
 /** Where the message list is looking. */
 export type MailboxView =
   | { kind: "unified"; role: "inbox" | "unread" | "flagged" | "drafts" | "sent" }
-  | { kind: "folder"; accountId: string; folderId: string };
+  | { kind: "folder"; accountId: string; folderId: string }
+  /** Mail with a label, in every folder but trash and junk of the mailboxes the label belongs to. */
+  | { kind: "label"; scope: string; labelId: string; keyword: string; accountIds: string[] };
+
+/**
+ * A label as a filter: its keyword, on mail of the mailboxes whose label it is. Labels live per
+ * UwUMail account (on its server) or on this device for every other mailbox, so the same keyword
+ * elsewhere may be a different label.
+ */
+export interface LabelRef {
+  keyword: string;
+  accountIds: string[];
+}
+
+/** How much mail carries a label, like a folder's counts. */
+export interface LabelCount {
+  total: number;
+  unread: number;
+}
 
 export type ListFilter = "all" | "unread" | "flagged" | "attachments";
 
@@ -90,6 +108,8 @@ export interface ThreadQuery {
   accountIds?: string[];
   cursor?: string;
   limit: number;
+  /** Label filters that must all hold; one holds when any of its labels is on the mail. */
+  labels?: LabelRef[][];
 }
 
 export interface ThreadSummary {

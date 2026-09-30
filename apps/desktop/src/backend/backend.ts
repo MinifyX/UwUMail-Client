@@ -1,4 +1,6 @@
 import type {
+  LabelCount,
+  LabelRef,
   BlockedSender,
   Account,
   AddressBookInfo,
@@ -410,6 +412,8 @@ export interface Backend {
    * keep own keywords refuse with `not_supported`.
    */
   setKeywords(messageIds: string[], keywords: Record<string, boolean>): Promise<void>;
+  /** Per label, how much mail outside trash and junk carries it, and how much of that is unread. */
+  labelCounts(labels: LabelRef[]): Promise<LabelCount[]>;
   /** Main domain of a company address (`news.shop.example` → `shop.example`); null for mail providers. */
   companyDomain(email: string): Promise<string | null>;
 

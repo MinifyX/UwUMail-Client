@@ -20,6 +20,7 @@ import {
   ShieldAlert,
   Sparkles,
   Star,
+  Tag,
   Trash,
   Undo2,
   UserPlus,
@@ -151,6 +152,18 @@ export function buildCommands(
       keys: ["v"],
       needsThread: true,
       run: withThread((thread) => requestMove(thread.messages, () => ui.selectThread(null))),
+    },
+    {
+      id: "label",
+      title: t("shortcuts.label"),
+      icon: Tag,
+      keys: ["l"],
+      // The ticked conversations, else the open one.
+      run: () => {
+        const { checkedThreadIds, selectedThreadId, openLabeling } = useUi.getState();
+        const threadIds = checkedThreadIds.length > 0 ? checkedThreadIds : selectedThreadId ? [selectedThreadId] : [];
+        openLabeling({ threadIds });
+      },
     },
     {
       id: "spam",

@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { backend } from "@/backend/backend";
 import { playNyu, type CameoName } from "@/components/nyu/cameo";
 import type {
+  LabelRef,
   FlagChange,
   Folder,
   ListFilter,
@@ -83,11 +84,18 @@ export function useFolders() {
 
 const PAGE_SIZE = 50;
 
-export function useThreads(view: MailboxView, filter: ListFilter, search: string) {
+/** `labels`: label filters (chips, `label:` in the search) that must all hold. */
+export function useThreads(
+  view: MailboxView,
+  filter: ListFilter,
+  search: string,
+  labels: LabelRef[][] = [],
+  enabled = true,
+) {
   const conversations = useSettings((s) => s.conversations);
   const { accountIds } = useVisibleAccounts();
   return useInfiniteQuery({
-    queryKey: [...queryKeys.threads, view, filter, search, conversations, accountIds],
+    queryKey: [...queryKeys.threads, view, filter, search, conversations, accountIds, labels],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       backend().listThreads({
@@ -98,11 +106,12 @@ export function useThreads(view: MailboxView, filter: ListFilter, search: string
         accountIds: accountIds ?? undefined,
         cursor: pageParam,
         limit: PAGE_SIZE,
+        labels: labels.length > 0 ? labels : undefined,
       }),
     getNextPageParam: (page) => page.nextCursor,
     placeholderData: (previous) => previous,
     // With workspaces on, the list waits for the mailboxes instead of briefly showing none.
-    enabled: accountIds !== null,
+    enabled: enabled && accountIds !== null,
   });
 }
 

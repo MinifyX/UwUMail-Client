@@ -18,6 +18,7 @@ import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { useContactsAvailable } from "../contacts/useContactsData";
 import { Composer } from "../compose/Composer";
 import { loadLocalDraft } from "../compose/localDraft";
+import { LabelPicker } from "../labels/LabelPicker";
 import { MailboxNav } from "../mail/MailboxNav";
 import { scrollReader, wantsTextSelectAll } from "../mail/readerKeys";
 import { MoveDialog } from "../mail/MoveDialog";
@@ -267,6 +268,7 @@ export function MailShell() {
       <CommandPalette commands={commands} />
       <ShortcutsDialog />
       <MoveDialog />
+      <LabelPicker />
     </div>
   );
 }
