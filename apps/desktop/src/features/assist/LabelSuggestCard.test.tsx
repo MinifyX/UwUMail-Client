@@ -97,7 +97,7 @@ describe("Label again", () => {
     expect(await screen.findByText("It is an invoice.")).toBeTruthy();
     expect(fake.suggestLabels).toHaveBeenCalledWith("m1", "en", true);
     expect(screen.getByText("Nothing about travel.")).toBeTruthy();
-    expect(screen.getByText("on now")).toBeTruthy();
+    expect(screen.getByText("set now")).toBeTruthy();
 
     fireEvent.click(await screen.findByRole("button", { name: "Apply 2 changes" }));
     await waitFor(() => expect(fake.setKeywords).toHaveBeenCalledWith(["m1"], { rechnungen: true, reisen: false }));
@@ -111,7 +111,7 @@ describe("Label again", () => {
         <LabelSuggestCard message={mail} />
       </QueryClientProvider>,
     );
-    const create = await screen.findByRole("button", { name: "Create and add" });
+    const create = await screen.findByRole("button", { name: "Create and apply" });
     await waitFor(() => expect((create as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(create);
     await waitFor(() =>
@@ -122,6 +122,6 @@ describe("Label again", () => {
       }),
     );
     await waitFor(() => expect(fake.setKeywords).toHaveBeenCalledWith(["m1"], { strom: true }));
-    expect(await screen.findByRole("button", { name: "Added" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Created and applied" })).toBeTruthy();
   });
 });

@@ -1622,22 +1622,25 @@
     },
     "labelAgain": {
       "menu": "Neu labeln",
-      "title": "Labels für diese Mail",
+      "title": "Neu labeln",
       "again": "Nochmal fragen",
       "close": "Label-Vorschläge schließen",
-      "fits": "Passt",
-      "fitsNot": "Passt nicht",
-      "isSet": "gerade gesetzt",
-      "noLabels": "Für dieses Postfach gibt es noch keine Labels.",
+      "fits": "passt",
+      "fitsNot": "passt nicht",
+      "isSet": "jetzt gesetzt",
+      "noLabels": "Du hast noch keine Labels.",
       "newTitle": "Ideen für neue Labels",
       "create": "Anlegen und setzen",
-      "created": "Gesetzt",
+      "created": "Angelegt und gesetzt",
       "decide": "Erst mit „Übernehmen“ ändert sich etwas. Deine Häkchen lernen auch die automatischen Labels.",
       "apply_one": "{{count}} Änderung übernehmen",
       "apply_other": "{{count}} Änderungen übernehmen",
       "nothing": "Keine Änderungen",
       "applied_one": "{{count}} Label geändert",
-      "applied_other": "{{count}} Labels geändert"
+      "applied_other": "{{count}} Labels geändert",
+      "menuLatest": "Neueste Mail neu labeln",
+      "willAdd": "wird gesetzt",
+      "willRemove": "wird entfernt"
     }
   },
   "labels": {

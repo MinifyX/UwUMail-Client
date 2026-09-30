@@ -195,6 +195,11 @@ export function LabelSuggestCard({ message }: { message: Message }) {
                             {verdict.fits ? t("assist.labelAgain.fits") : t("assist.labelAgain.fitsNot")}
                           </span>
                           {on && <span className="text-[11px] text-faint">{t("assist.labelAgain.isSet")}</span>}
+                          {entry && checked !== on && (
+                            <span className="text-[11px] font-semibold text-pink-ink">
+                              {checked ? t("assist.labelAgain.willAdd") : t("assist.labelAgain.willRemove")}
+                            </span>
+                          )}
                         </span>
                         {verdict.reason && <span className="text-[12.5px] break-words">{verdict.reason}</span>}
                       </span>

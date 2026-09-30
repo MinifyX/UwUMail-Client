@@ -220,7 +220,11 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
       ? [
           {
             label: (
-              <ItemLabel icon={Tags} text={t("assist.labelAgain.menu")} estimate={labelsEstimate(newest, language)} />
+              <ItemLabel
+                icon={Tags}
+                text={t(messages.length > 1 ? "assist.labelAgain.menuLatest" : "assist.labelAgain.menu")}
+                estimate={labelsEstimate(newest, language)}
+              />
             ),
             onSelect: () => showLabelCheck(newest.id),
           },
