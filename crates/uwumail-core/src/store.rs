@@ -12,7 +12,7 @@ use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
 
 mod assist;
-pub use assist::{CalibrationRecord, LabelExample, LabelLogRecord, ProviderRecord, UsageRecord};
+pub use assist::{CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, ProviderRecord, UsageRecord};
 
 const MIGRATIONS: &[&str] = &[
     r#"
@@ -201,6 +201,7 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     assist::PRICE_MIGRATION,
     assist::COST_MIGRATION,
     assist::LABELS_MIGRATION,
+    assist::FROM_TRUSTED_MIGRATION,
 ];
 
 /// What this device remembers about one calendar.
@@ -1000,9 +1001,9 @@ impl Store {
             "INSERT INTO messages (id, account_id, folder_id, uid, message_id, in_reply_to, refs, thread_id, subject,
                 from_json, to_json, cc_json, reply_to_json, date, seen, flagged, answered, draft, snippet, size,
                 has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id, unsubscribe_json, bcc_json,
-                label_headers, calendar)
+                label_headers, calendar, from_trusted)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
-                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31)",
+                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32)",
             params![
                 id,
                 account_id,
@@ -1035,6 +1036,7 @@ impl Store {
                 json(&parsed.bcc)?,
                 json(&parsed.label_headers)?,
                 parsed.calendar,
+                parsed.from_trusted,
             ],
         )?;
 
@@ -1163,7 +1165,7 @@ impl Store {
         tx.execute(
             "UPDATE messages SET has_body = 1, body_html = ?1, body_text = ?2, has_remote = ?3, snippet = ?4,
                 attachments_json = ?5, unsubscribe_json = COALESCE(?7, unsubscribe_json), label_headers = ?8,
-                calendar = ?9 WHERE id = ?6",
+                calendar = ?9, from_trusted = ?10 WHERE id = ?6",
             params![
                 parsed.html,
                 parsed.text,
@@ -1173,7 +1175,8 @@ impl Store {
                 id,
                 parsed.unsubscribe.as_ref().map(json).transpose()?,
                 json(&parsed.label_headers)?,
-                parsed.calendar
+                parsed.calendar,
+                parsed.from_trusted
             ],
         )?;
         let from: Address = serde_json::from_str(&from_json)?;

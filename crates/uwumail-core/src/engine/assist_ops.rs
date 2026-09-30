@@ -17,7 +17,7 @@ use crate::assist::prompts::{self, ComposeRequest, Prompt, SUBJECT_MARK};
 use crate::assist::provider::{self, ProviderKind};
 use crate::assist::validate::{self, EventContext};
 use crate::assist::{Feature, Label, StreamEvent, StreamSink, discover, foreign, server, signals};
-use crate::store::{LabelExample, LabelLogRecord};
+use crate::store::{LabelExample, LabelHeaders, LabelLogRecord};
 
 /// At most this much picture text goes along when the assistant reads a mail's appointments.
 const IMAGE_TEXT_CHARS: usize = 8_000;
@@ -1402,7 +1402,7 @@ impl Engine {
     /// A stored mail as labels without a model see it. Mail stored before its list headers were
     /// kept shows what its unsubscribe link says of them.
     fn label_mail(&self, message: &Message) -> Result<uwumail_labels::Mail> {
-        let (mut headers, calendar) = self.inner.store.label_headers(&message.id)?;
+        let LabelHeaders { mut headers, calendar, from_trusted } = self.inner.store.label_headers(&message.id)?;
         if headers.is_empty()
             && let Some(unsubscribe) = &message.unsubscribe
         {
@@ -1422,14 +1422,17 @@ impl Engine {
             .iter()
             .map(|a| uwumail_labels::Attachment { name: a.filename.clone(), content_type: a.mime_type.to_lowercase() })
             .collect();
-        Ok(uwumail_labels::Mail::new(
+        let mut mail = uwumail_labels::Mail::new(
             &message.from.email,
             &message.subject,
             &mail::body_text(message),
             attachments,
             calendar,
             headers,
-        ))
+        );
+        // Learned senders only label mail whose From address the receiving server vouched for.
+        mail.from_trusted = from_trusted;
+        Ok(mail)
     }
 
     /// Puts this device's labels on a new mail by their rules, detectors, learned senders and
@@ -2459,9 +2462,12 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         let label = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Leni" })).await.unwrap();
         let label_id = label["id"].as_str().unwrap().to_string();
         let from = "Leni <leni@example.com>";
+        let vouched = ["Authentication-Results: mx.example.org; dkim=pass header.d=example.com"];
         let mails: Vec<String> =
-            (10..14).map(|uid| add_mail(&engine, uid, from, "Hallo", "Wie geht's?", &[], None)).collect();
-        let other = add_mail(&engine, 20, "Tom <tom@example.com>", "Hi", "Na?", &[], None);
+            (10..14).map(|uid| add_mail(&engine, uid, from, "Hallo", "Wie geht's?", &vouched, None)).collect();
+        let other = add_mail(&engine, 20, "Tom <tom@example.com>", "Hi", "Na?", &vouched, None);
+        // Anyone can write Leni's address into From: without the server vouching, no label.
+        let forged = add_mail(&engine, 21, from, "Hallo", "Wie geht's?", &[], None);
         let on: HashMap<String, bool> = [("leni".to_string(), true)].into();
         let off: HashMap<String, bool> = [("leni".to_string(), false)].into();
         let senders = || engine.inner.store.label_senders("leni@example.com").unwrap().get(&label_id).copied();
@@ -2482,9 +2488,10 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         assert!((3..=4).contains(&examples.len()), "{examples:?}");
         assert_eq!(engine.assist_labels(DEVICE_SCOPE).await.unwrap()[0]["examples"], 2);
 
-        engine.auto_label("acc", vec![mails[2].clone(), other.clone()]).await;
+        engine.auto_label("acc", vec![mails[2].clone(), other.clone(), forged.clone()]).await;
         assert_eq!(keywords(&engine, &mails[2]), ["leni"]);
         assert!(keywords(&engine, &other).is_empty());
+        assert!(keywords(&engine, &forged).is_empty(), "a From address nobody vouched for");
         let log = engine.assist_label_log(DEVICE_SCOPE, Some(vec![mails[2].clone()]), None).await.unwrap();
         assert_eq!(log[0]["params"], json!({ "address": "leni@example.com", "count": 2 }));
         assert_eq!(log[0]["reason"], "leni@example.com got this label by hand 2 times");

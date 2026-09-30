@@ -43,6 +43,9 @@ pub struct ParsedMessage {
     pub label_headers: Vec<(String, String)>,
     /// A `text/calendar` or `application/ics` part: an invitation.
     pub calendar: bool,
+    /// The receiving server's `Authentication-Results` vouch for the From address's domain
+    /// ([`crate::assist::signals::from_vouched`]); learned senders only label such mail.
+    pub from_trusted: bool,
 }
 
 /// Characters of a header value kept in [`ParsedMessage::label_headers`].
@@ -83,6 +86,22 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 /// Parses a full message or just its header block.
+/// Whether the receiving server vouches for the From address (see [`ParsedMessage::from_trusted`]).
+fn from_trusted(message: &mail_parser::Message<'_>) -> bool {
+    let Some(from) = message.from().and_then(|from| from.first()).and_then(|addr| addr.address.as_deref()) else {
+        return false;
+    };
+    let headers: Vec<(String, String)> = message
+        .headers_raw()
+        .filter(|(name, _)| {
+            name.eq_ignore_ascii_case("Received") || name.eq_ignore_ascii_case("Authentication-Results")
+        })
+        .take(10)
+        .map(|(name, value)| (name.to_owned(), value.chars().take(4_000).collect()))
+        .collect();
+    crate::assist::signals::from_vouched(&headers, from)
+}
+
 pub fn parse(raw: &[u8]) -> ParsedMessage {
     let Some(message) = MessageParser::default().parse(raw) else {
         return ParsedMessage::default();
@@ -164,6 +183,7 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
                 (name.to_ascii_lowercase(), value.chars().take(MAX_LABEL_HEADER_CHARS).collect())
             })
             .collect(),
+        from_trusted: from_trusted(&message),
         calendar: message.parts.iter().any(|part| {
             part.content_type().is_some_and(|ct| {
                 let subtype = ct.subtype().unwrap_or_default();

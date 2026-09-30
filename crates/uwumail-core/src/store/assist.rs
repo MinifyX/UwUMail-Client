@@ -127,6 +127,11 @@ CREATE TABLE label_examples (
 );
 "#;
 
+/// Whether the receiving server vouched for a mail's From address (`mime::ParsedMessage::from_trusted`);
+/// mail stored before is not vouched for.
+pub(super) const FROM_TRUSTED_MIGRATION: &str =
+    "ALTER TABLE messages ADD COLUMN from_trusted INTEGER NOT NULL DEFAULT 0;";
+
 /// Calls kept per provider, model and feature for calibration.
 const CALIBRATION_KEPT: i64 = 50;
 
@@ -167,6 +172,17 @@ pub struct ProviderRecord {
 }
 
 /// A label put on by itself, as the log keeps it.
+/// What labels without a model read of a stored mail besides its text.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LabelHeaders {
+    /// The headers the detectors read (empty when unknown).
+    pub headers: Vec<(String, String)>,
+    /// A calendar part.
+    pub calendar: bool,
+    /// The receiving server vouched for the From address.
+    pub from_trusted: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabelLogRecord {
     pub id: String,
@@ -537,17 +553,22 @@ impl Store {
         Ok(conn.execute("DELETE FROM assist_labels WHERE id = ?1", [id])? > 0)
     }
 
-    /// The headers of a mail the detectors read (empty when unknown) and whether it has a calendar
-    /// part.
-    pub fn label_headers(&self, message_id: &str) -> Result<(Vec<(String, String)>, bool)> {
-        let found: Option<(Option<String>, bool)> = self
+    /// What labels without a model read of a stored mail besides its text.
+    pub fn label_headers(&self, message_id: &str) -> Result<LabelHeaders> {
+        let found: Option<(Option<String>, bool, bool)> = self
             .conn()
-            .query_row("SELECT label_headers, calendar FROM messages WHERE id = ?1", [message_id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
+            .query_row(
+                "SELECT label_headers, calendar, from_trusted FROM messages WHERE id = ?1",
+                [message_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
             .optional()?;
-        let (headers, calendar) = found.unwrap_or_default();
-        Ok((headers.and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default(), calendar))
+        let (headers, calendar, from_trusted) = found.unwrap_or_default();
+        Ok(LabelHeaders {
+            headers: headers.and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default(),
+            calendar,
+            from_trusted,
+        })
     }
 
     /// Tests only: a message as if it were being moved (no uid on the server yet), so changes to
