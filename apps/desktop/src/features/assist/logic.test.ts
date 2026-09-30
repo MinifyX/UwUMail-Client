@@ -9,6 +9,7 @@ import {
   setByAssistant,
   STARTER_LABELS,
   threadKeywords,
+  usableProposals,
   LABEL_DEFAULTS,
   labelReason,
 } from "./labels";
@@ -123,6 +124,27 @@ describe("the label form", () => {
     expect(labelProblems({ name: "Ok", description: "y".repeat(301), color: null }, LABELS)).toEqual({
       description: "descriptionTooLong",
     });
+  });
+
+  it("refuses names that turn the text around them", () => {
+    expect(labelProblems({ name: "abc\u202Efdp.exe", description: "", color: null }, LABELS)).toEqual({
+      name: "control",
+    });
+    expect(labelProblems({ name: "a\u0085b", description: "", color: null }, LABELS)).toEqual({ name: "control" });
+    // Emoji sequences stay fine.
+    expect(labelProblems({ name: "Familie 👨\u200D👩\u200D👧", description: "", color: null }, LABELS)).toEqual({});
+  });
+
+  it("offers only new labels a model proposed that could be saved as they are", () => {
+    const proposal = (name: string, description = "") => ({ name, description, color: null, reason: "" });
+    const offered = usableProposals([
+      proposal("Strom"),
+      proposal("x".repeat(41)),
+      proposal("Bank\nKonto"),
+      proposal("\u202Etxt"),
+      proposal("Ok", "y".repeat(301)),
+    ]);
+    expect(offered.map((each) => each.name)).toEqual(["Strom"]);
   });
 
   it("sends only what changed", () => {

@@ -102,9 +102,10 @@ export function missingStarters(
 
 export type LabelProblem = "nameMissing" | "nameTooLong" | "nameTaken" | "descriptionTooLong" | "control";
 
-// Line breaks and control characters don't belong in a name.
+// Line breaks and control characters don't belong in a name, nor do the bidi controls that would
+// turn the text around it (a name shows in the list, the chips and the rules).
 // eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f]/;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/;
 
 /** What is wrong with a label form, per field; empty when it can be saved. */
 export function labelProblems(
@@ -122,6 +123,20 @@ export function labelProblems(
   }
   if ([...input.description.trim()].length > LABEL_LIMITS.description) problems.description = "descriptionTooLong";
   return problems;
+}
+
+/**
+ * The new labels a model proposed that could be saved as proposed. The model reads the mail, so a
+ * mail can steer what it proposes: a name too long or with control characters isn't offered.
+ */
+export function usableProposals<T extends { name: string; description: string; color: string | null }>(
+  proposals: readonly T[],
+): T[] {
+  return proposals.filter(
+    (proposal) =>
+      Object.keys(labelProblems({ name: proposal.name, description: proposal.description, color: proposal.color }, []))
+        .length === 0,
+  );
 }
 
 /** Only what changed, for `AssistLabel/set`. */

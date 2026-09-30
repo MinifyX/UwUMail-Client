@@ -10,7 +10,7 @@ import { toast } from "@/state/toasts";
 import { useLabelActions } from "../labels/labelActions";
 import { labelsFor, useLabelDirectory } from "../labels/useLabels";
 import { Thinking } from "./ComposeAssist";
-import { LABEL_COLORS, chipStyle } from "./labels";
+import { LABEL_COLORS, chipStyle, usableProposals } from "./labels";
 import { useAssistReader } from "./readerState";
 import { assistErrorDetail, assistErrorText, isAbort, providerLabel, useScopeOf } from "./useAssist";
 
@@ -121,6 +121,7 @@ export function LabelSuggestCard({ message }: { message: Message }) {
   };
 
   const result = !state.working && state.error === null ? saved : undefined;
+  const proposals = result ? usableProposals(result.newLabels) : [];
 
   return (
     <section
@@ -210,13 +211,13 @@ export function LabelSuggestCard({ message }: { message: Message }) {
             </ul>
           )}
 
-          {result.newLabels.length > 0 && (
+          {proposals.length > 0 && (
             <div className="flex flex-col gap-1.5 border-t border-hairline pt-3">
               <p className="text-[12px] font-bold tracking-wide text-muted uppercase">
                 {t("assist.labelAgain.newTitle")}
               </p>
               <ul className="flex flex-col gap-1.5">
-                {result.newLabels.map((proposal, index) => {
+                {proposals.map((proposal, index) => {
                   const done = made.includes(proposal.name);
                   return (
                     <li key={proposal.name} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-2 py-1">

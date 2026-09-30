@@ -35,13 +35,28 @@ function unwrapLinkText(node: Element) {
   if (original !== null) node.textContent = original;
 }
 
+const MATHML = "http://www.w3.org/1998/Math/MathML";
+
+/**
+ * WebKit (macOS, iOS, Linux) follows `href` on any MathML element, past the reader's link question
+ * (which catches `a` and `area`) and into the frame itself. Formulas stay, as text.
+ */
+function dropMathLinks(node: Element) {
+  if (node.namespaceURI !== MATHML) return;
+  node.removeAttribute("href");
+  node.removeAttributeNS("http://www.w3.org/1999/xlink", "href");
+}
+
 /**
  * The engine already sanitizes HTML. We sanitize again here because the demo
  * backend and future addons can also produce message bodies.
  */
 function sanitize(html: string) {
   const purify = DOMPurify();
-  purify.addHook("afterSanitizeAttributes", unwrapLinkText);
+  purify.addHook("afterSanitizeAttributes", (node) => {
+    unwrapLinkText(node);
+    dropMathLinks(node);
+  });
   return purify.sanitize(html, {
     WHOLE_DOCUMENT: false,
     FORBID_TAGS: [

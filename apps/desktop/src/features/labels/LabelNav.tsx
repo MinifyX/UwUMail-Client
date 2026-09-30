@@ -9,7 +9,7 @@ import type { LabelEntry } from "@/lib/labelFilter";
 import { useAccounts } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
-import { THREAD_DRAG_TYPE } from "../mail/selection";
+import { droppedThreads, isThreadDrag } from "../mail/threadDrag";
 import { sameView } from "../mail/view";
 import { useLabelActions } from "./labelActions";
 import { useLabelCounts, useLabelDirectory } from "./useLabels";
@@ -43,7 +43,7 @@ function LabelItem({ entry, unread }: { entry: LabelEntry; unread: number }) {
   const [dropping, setDropping] = useState(false);
   const target = labelView(entry);
   const active = sameView(view, target);
-  const accepts = (event: React.DragEvent) => event.dataTransfer.types.includes(THREAD_DRAG_TYPE);
+  const accepts = (event: React.DragEvent) => isThreadDrag(event.dataTransfer);
 
   return (
     <li>
@@ -63,7 +63,8 @@ function LabelItem({ entry, unread }: { entry: LabelEntry; unread: number }) {
           setDropping(false);
           if (!accepts(event)) return;
           event.preventDefault();
-          const threadIds = JSON.parse(event.dataTransfer.getData(THREAD_DRAG_TYPE) || "[]") as string[];
+          const threadIds = droppedThreads(event.dataTransfer);
+          if (threadIds.length === 0) return;
           useUi.getState().setCheckedThreadIds([]);
           void setOnThreads(threadIds, entry, true).catch(() => {});
         }}

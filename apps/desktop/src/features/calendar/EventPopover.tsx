@@ -36,6 +36,15 @@ export function LinkedText({ text }: { text: string }) {
               event.preventDefault();
               requestOpenLink(part.text, part.text);
             }}
+            // A middle click asks like a click; dragging the link out would open it elsewhere
+            // without the question (security-audit C-12, as the mail reader does for W-17).
+            onAuxClick={(event) => {
+              event.preventDefault();
+              if (event.button === 1) requestOpenLink(part.text, part.text);
+            }}
+            draggable={false}
+            onDragStart={(event) => event.preventDefault()}
+            onContextMenu={(event) => event.preventDefault()}
             className="break-all text-pink-ink underline decoration-pink/40 underline-offset-2 hover:decoration-pink"
           >
             {part.text}

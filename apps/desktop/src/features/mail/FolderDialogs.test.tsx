@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account, Folder } from "@/backend/types";
+import { ARMING_MS } from "@/components/ui/armed";
 import { i18n } from "@/i18n";
 import { useFolderEdit } from "@/state/folderEdit";
 import { useToasts } from "@/state/toasts";
@@ -43,6 +44,20 @@ const createFolder = vi.fn(async () => "new");
 const renameFolder = vi.fn(async () => {});
 const deleteFolder = vi.fn(async () => {});
 const emptyFolder = vi.fn(async () => 3);
+
+/**
+ * Answers a destructive question: a click right away is part of the gesture that asked and does
+ * nothing (security-audit C-10); one after the arming time answers.
+ */
+function answer(button: HTMLElement, action: ReturnType<typeof vi.fn>) {
+  const asked = performance.now();
+  const now = vi.spyOn(performance, "now").mockReturnValue(asked + 10);
+  fireEvent.click(button);
+  expect(action).not.toHaveBeenCalled();
+  now.mockReturnValue(asked + ARMING_MS + 10);
+  fireEvent.click(button);
+  now.mockRestore();
+}
 
 vi.mock("@/backend/backend", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/backend/backend")>()),
@@ -129,7 +144,7 @@ describe("folder management", () => {
     expect(screen.queryByRole("menuitem", { name: "Delete folder" })).toBeNull();
     fireEvent.click(screen.getByRole("menuitem", { name: "Empty trash" }));
     expect(await screen.findByText(/3 messages will be (deleted|gone) for good/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Delete for good" }));
+    answer(screen.getByRole("button", { name: "Delete for good" }), emptyFolder);
     await waitFor(() => expect(emptyFolder).toHaveBeenCalledWith("trash"));
     await waitFor(() => expect(useToasts.getState().toasts.at(-1)?.message).toMatch(/3 messages/));
   });
@@ -139,7 +154,7 @@ describe("folder management", () => {
     fireEvent.click(await screen.findByRole("button", { name: "More for Receipts" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete folder" }));
     expect(await screen.findByText(/2 messages (go )?to the trash/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Delete folder" }));
+    answer(screen.getByRole("button", { name: "Delete folder" }), deleteFolder);
     await waitFor(() => expect(deleteFolder).toHaveBeenCalledWith("receipts"));
   });
 });

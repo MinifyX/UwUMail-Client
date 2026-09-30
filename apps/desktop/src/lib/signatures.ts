@@ -1,4 +1,5 @@
 import type { Signature } from "@/backend/types";
+import { quotableHtml } from "./safeHtml";
 
 /** Marks the signature block in the composer, so switching replaces it. Removed before sending. */
 export const SIGNATURE_ATTRIBUTE = "data-uwu-signature";
@@ -26,7 +27,9 @@ export function withSignature(html: string, signature: Signature | null, placeme
   }
   const block = doc.createElement("div");
   block.setAttribute(SIGNATURE_ATTRIBUTE, signature.id);
-  block.innerHTML = signature.html;
+  // The composer writes the result straight into its editor, in the app's own page: stored or
+  // synced signature HTML goes through the composer's cleaner first (security-audit CS-8).
+  block.innerHTML = quotableHtml(signature.html);
   if (current) {
     current.replaceWith(block);
   } else if (placement === "beforeQuote" && body.firstElementChild) {

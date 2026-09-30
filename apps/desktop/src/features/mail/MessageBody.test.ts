@@ -78,6 +78,15 @@ describe("buildDocument", () => {
     expect(doc).not.toContain("steal");
   });
 
+  it("keeps no link the reader can't catch: MathML carries none (WebKit follows its href)", () => {
+    const html = readableBody(
+      message({ bodyHtml: '<p>E = <math><mi href="https://elsewhere.example/">mc</mi></math></p>' }),
+    );
+    expect(html).not.toContain("elsewhere.example");
+    expect(html).toContain("<math");
+    expect(html).toContain("mc");
+  });
+
   it("does not force app typography onto HTML mail", () => {
     const doc = buildDocument(message({ bodyHtml: "<p>Hi</p>" }), false, "light");
     expect(doc).not.toContain("Manrope");

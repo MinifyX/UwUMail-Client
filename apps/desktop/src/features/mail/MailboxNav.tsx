@@ -32,7 +32,8 @@ import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { AppSwitch } from "../shell/AppSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
-import { THREAD_DRAG_TYPE, useSelectionActions } from "./selection";
+import { useSelectionActions } from "./selection";
+import { droppedThreads, isThreadDrag } from "./threadDrag";
 import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
 
 const UNIFIED_ROLES = ["inbox", "unread", "flagged", "drafts", "sent"] as const;
@@ -117,7 +118,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   const actions = useMessageActions();
   const [dropping, setDropping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const accepts = (event: React.DragEvent) => folder.selectable && event.dataTransfer.types.includes(THREAD_DRAG_TYPE);
+  const accepts = (event: React.DragEvent) => folder.selectable && isThreadDrag(event.dataTransfer);
 
   return (
     <li role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined} aria-selected={active}>
@@ -137,7 +138,8 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
           setDropping(false);
           if (!accepts(event)) return;
           event.preventDefault();
-          const threadIds = JSON.parse(event.dataTransfer.getData(THREAD_DRAG_TYPE) || "[]") as string[];
+          const threadIds = droppedThreads(event.dataTransfer);
+          if (threadIds.length === 0) return;
           void selection.messagesOf(threadIds).then((messages) => {
             const here = messages.filter((message) => message.accountId === account.id).map((message) => message.id);
             if (here.length === 0) {

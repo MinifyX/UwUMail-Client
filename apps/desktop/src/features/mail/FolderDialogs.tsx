@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { backend } from "@/backend/backend";
 import type { Folder } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
+import { ArmedButton } from "@/components/ui/ArmedButton";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, TextInput } from "@/components/ui/Field";
@@ -159,9 +160,9 @@ function DeleteQuestion({ folder, onDone }: { folder: Folder; onDone: () => void
         {folder.total > 0 ? t("folders.deleteBody", { count: folder.total }) : t("folders.deleteBodyEmpty")}
       </p>
       <div className="flex flex-wrap justify-center gap-2 pt-1">
-        <Button variant="danger" busy={busy} autoFocus onClick={() => void confirm()}>
+        <ArmedButton variant="danger" busy={busy} autoFocus onClick={() => void confirm()}>
           {t("folders.delete")}
-        </Button>
+        </ArmedButton>
         <Button variant="ghost" onClick={onDone}>
           {t("common.cancel")}
         </Button>
@@ -199,9 +200,9 @@ function EmptyQuestion({ folder, onDone }: { folder: Folder; onDone: () => void 
       </h2>
       <p className="text-[13px] text-muted">{t("folders.emptyBody", { count: folder.total })}</p>
       <div className="flex flex-wrap justify-center gap-2 pt-1">
-        <Button variant="danger" busy={busy} autoFocus onClick={() => void confirm()}>
+        <ArmedButton variant="danger" busy={busy} autoFocus onClick={() => void confirm()}>
           {t("folders.emptyConfirm")}
-        </Button>
+        </ArmedButton>
         <Button variant="ghost" onClick={onDone}>
           {t("common.cancel")}
         </Button>

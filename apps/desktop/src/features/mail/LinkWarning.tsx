@@ -1,8 +1,9 @@
 import clsx from "clsx";
 import { AlertTriangle, Copy, LockOpen, Route, ShieldOff } from "lucide-react";
-import { useState, type KeyboardEvent } from "react";
+import { useState } from "react";
 import type { Address } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
+import { armedActivation } from "@/components/ui/armed";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
@@ -207,23 +208,7 @@ export function LinkWarning() {
   );
 }
 
-/**
- * How long after the question appears its buttons still ignore a click: the second click of a
- * double click, or the rest of the gesture that opened the question, must not answer it.
- */
-export const ARMING_MS = 600;
-
-/** Props for a button that opens the link: no answer while arming, none from a held-down key. */
-export function armedActivation(shownAt: number, action: () => void) {
-  return {
-    onClick: () => {
-      if (performance.now() - shownAt >= ARMING_MS) action();
-    },
-    onKeyDown: (event: KeyboardEvent) => {
-      if (event.repeat) event.preventDefault();
-    },
-  };
-}
+export { ARMING_MS, armedActivation } from "@/components/ui/armed";
 
 function LinkQuestion({ check, onDone }: { check: LinkCheck; onDone: () => void }) {
   const { t } = useT();

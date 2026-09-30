@@ -5,6 +5,7 @@ import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { CalendarInfo } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
+import { ArmedButton } from "@/components/ui/ArmedButton";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Select, TextInput } from "@/components/ui/Field";
@@ -167,7 +168,7 @@ export function CalendarList() {
             </h2>
             <p className="text-[13px] text-muted">{t("calendar.deleteCalendarBody")}</p>
             <div className="flex flex-wrap justify-center gap-2 pt-1">
-              <Button
+              <ArmedButton
                 variant="danger"
                 autoFocus
                 onClick={() => {
@@ -180,7 +181,7 @@ export function CalendarList() {
                 }}
               >
                 {t("calendar.deleteCalendar")}
-              </Button>
+              </ArmedButton>
               <Button variant="ghost" onClick={() => setDeleting(null)}>
                 {t("common.cancel")}
               </Button>

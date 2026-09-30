@@ -8,7 +8,7 @@ import { displayName, formatListDate } from "@/lib/format";
 import type { useThreadActions } from "@/lib/queries";
 import type { ListDensity } from "@/state/settings";
 import { ThreadLabelChips } from "../assist/LabelChips";
-import { THREAD_DRAG_TYPE } from "./selection";
+import { endThreadDrag, startThreadDrag } from "./threadDrag";
 
 interface ThreadRowProps {
   thread: ThreadSummary;
@@ -98,9 +98,9 @@ export function ThreadRow({
       draggable={dragIds !== undefined}
       onDragStart={(event) => {
         if (!dragIds) return;
-        event.dataTransfer.setData(THREAD_DRAG_TYPE, JSON.stringify(dragIds));
-        event.dataTransfer.effectAllowed = "move";
+        startThreadDrag(event.dataTransfer, dragIds);
       }}
+      onDragEnd={endThreadDrag}
       className={clsx(
         "group relative flex text-left transition-colors",
         compact ? "gap-2.5 rounded-xl py-2 pr-3 pl-1.5" : "gap-3 rounded-2xl py-3 pr-3 pl-1.5",
