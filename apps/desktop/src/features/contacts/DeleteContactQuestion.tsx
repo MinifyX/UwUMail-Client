@@ -1,4 +1,5 @@
 import { NyuScene } from "@/components/nyu/scenes";
+import { ArmedButton } from "@/components/ui/ArmedButton";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
@@ -21,7 +22,7 @@ export function DeleteContactQuestion() {
           </h2>
           <p className="text-[13px] text-muted">{t("contacts.deleteBody")}</p>
           <div className="flex flex-wrap justify-center gap-2 pt-1">
-            <Button
+            <ArmedButton
               variant="danger"
               autoFocus
               onClick={() => {
@@ -30,7 +31,7 @@ export function DeleteContactQuestion() {
               }}
             >
               {t("contacts.delete")}
-            </Button>
+            </ArmedButton>
             <Button variant="ghost" onClick={() => askDelete(null)}>
               {t("common.cancel")}
             </Button>

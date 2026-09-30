@@ -17,8 +17,14 @@ import java.io.File
 object Files {
     private fun authority(context: Context) = "${context.packageName}.fileprovider"
 
+    /** Only web addresses (sign-in pages) go to the browser; no intent:, file: or content: links. */
     fun openUrl(context: Context, url: String) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val uri = Uri.parse(url)
+        val scheme = uri.scheme?.lowercase()
+        require((scheme == "https" || scheme == "http") && !uri.host.isNullOrEmpty()) { "Only web addresses open in the browser" }
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
 

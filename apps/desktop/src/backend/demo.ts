@@ -2,6 +2,7 @@ import { AssistError, BackendError, type Backend } from "./backend";
 import { DemoAssist } from "./demo-assist";
 import { DEVICE_ASSIST_SCOPE } from "./types";
 import { isDangerous } from "@/lib/attachments";
+import { hasLabel, matchesLabels } from "@/lib/labelFilter";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
@@ -10,6 +11,8 @@ import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMes
 import { DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
+  LabelCount,
+  LabelRef,
   BlockedSender,
   Account,
   AssistComposeRequest,
@@ -1105,6 +1108,8 @@ export class DemoBackend implements Backend {
     lang(),
     () => this.messages.filter((message) => message.accountId === DEMO_ACCOUNTS[0]!.id),
     (mail) => this.assistChanged(DEMO_ACCOUNTS[0]!.id, mail),
+    false,
+    () => (this.serverForOthers() ? this.messages.filter((message) => message.accountId !== DEMO_ACCOUNTS[0]!.id) : []),
   );
   private assistDevice = new DemoAssist(
     lang(),
@@ -1123,9 +1128,14 @@ export class DemoBackend implements Backend {
     return scope === DEVICE_ASSIST_SCOPE ? this.assistDevice : this.assistServer;
   }
 
-  /** The demo assistant that serves a mailbox. */
+  /** The other mailboxes use the JMAP account's server for their AI (the device's `serverAssist`). */
+  private serverForOthers(): boolean {
+    return this.assistDevice.getSettings().serverAssist === DEMO_ACCOUNTS[0]!.id;
+  }
+
+  /** The demo assistant whose model answers for a mailbox. */
   private assistFor(accountId: string): DemoAssist {
-    return accountId === DEMO_ACCOUNTS[0]!.id ? this.assistServer : this.assistDevice;
+    return accountId === DEMO_ACCOUNTS[0]!.id || this.serverForOthers() ? this.assistServer : this.assistDevice;
   }
 
   private assistForMessage(messageId: string): DemoAssist {
@@ -1144,7 +1154,11 @@ export class DemoBackend implements Backend {
         kind: "device",
         accountId: null,
         accountIds: others,
-        options: this.assistDevice.options(),
+        options: {
+          ...this.assistDevice.options(),
+          ...(this.serverForOthers() ? { features: this.assistServer.options().features } : {}),
+          foreignServers: [server],
+        },
       },
     ];
   }
@@ -1275,6 +1289,14 @@ export class DemoBackend implements Backend {
     this.assistOf(scope).undo(logIds);
   }
 
+  async suggestLabels(messageId: string, _language?: string, suggestNew = true) {
+    const message = this.messages.find((entry) => entry.id === messageId);
+    if (!message) throw new AssistError("notFound", "That mail is gone.");
+    // Labels are the mailbox's own; the model may be its server's.
+    const labels = message.accountId === DEMO_ACCOUNTS[0]!.id ? this.assistServer : this.assistDevice;
+    return labels.suggest(messageId, suggestNew, this.assistFor(message.accountId));
+  }
+
   async applyAssistLabels(messageIds: string[]) {
     const server = messageIds.filter(
       (id) => this.messages.find((m) => m.id === id)?.accountId === DEMO_ACCOUNTS[0]!.id,
@@ -1308,6 +1330,17 @@ export class DemoBackend implements Backend {
 
   async assistSpamCheck(messageId: string) {
     return this.assistForMessage(messageId).spamCheck(messageId);
+  }
+
+  async labelCounts(labels: LabelRef[]): Promise<LabelCount[]> {
+    await wait(40);
+    return labels.map((ref) => {
+      const on = this.messages.filter((m) => {
+        const role = this.roleOf(m);
+        return role !== "trash" && role !== "junk" && hasLabel(m, ref);
+      });
+      return { total: on.length, unread: on.filter((m) => !m.flags.seen).length };
+    });
   }
 
   async setKeywords(messageIds: string[], keywords: Record<string, boolean>) {
@@ -1467,6 +1500,7 @@ export class DemoBackend implements Backend {
     if (query.accountIds && !query.accountIds.includes(message.accountId)) return false;
     if (view.kind === "folder") return message.folderId === view.folderId;
     const role = this.roleOf(message);
+    if (view.kind === "label") return role !== "trash" && role !== "junk" && hasLabel(message, view);
     switch (view.role) {
       case "inbox":
         return role === "inbox";
@@ -1485,6 +1519,7 @@ export class DemoBackend implements Backend {
     if (query.filter === "unread" && message.flags.seen) return false;
     if (query.filter === "flagged" && !message.flags.flagged) return false;
     if (query.filter === "attachments" && message.attachments.length === 0) return false;
+    if (query.labels && !matchesLabels(message, query.labels)) return false;
     const search = query.search?.trim().toLowerCase();
     if (!search) return true;
     return [message.subject, message.from.name ?? "", message.from.email, message.bodyText ?? ""]

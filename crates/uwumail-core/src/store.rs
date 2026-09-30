@@ -12,7 +12,7 @@ use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
 
 mod assist;
-pub use assist::{CalibrationRecord, LabelLogRecord, ProviderRecord, UsageRecord};
+pub use assist::{CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, ProviderRecord, UsageRecord};
 
 const MIGRATIONS: &[&str] = &[
     r#"
@@ -200,6 +200,8 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     assist::MIGRATION,
     assist::PRICE_MIGRATION,
     assist::COST_MIGRATION,
+    assist::LABELS_MIGRATION,
+    assist::FROM_TRUSTED_MIGRATION,
 ];
 
 /// What this device remembers about one calendar.
@@ -354,6 +356,11 @@ fn from_json<T: serde::de::DeserializeOwned + Default>(text: &str) -> T {
     serde_json::from_str(text).unwrap_or_default()
 }
 
+/// Text for a `LIKE … ESCAPE '\'` pattern that matches it literally.
+fn like_escaped(text: &str) -> String {
+    text.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+}
+
 /// Turns user input into an FTS5 prefix query: `leni clip` → `"leni"* "clip"*`.
 fn fts_query(input: &str) -> Option<String> {
     let terms: Vec<String> = input
@@ -365,10 +372,44 @@ fn fts_query(input: &str) -> Option<String> {
     (!terms.is_empty()).then(|| terms.join(" "))
 }
 
+/// Best effort: the data folder 0700, the database and its journal files 0600 (Unix only; elsewhere
+/// the app's data folder belongs to the person anyway).
+#[cfg(unix)]
+fn restrict_permissions(path: &Path) {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let set = |path: &Path, mode: u32| {
+        if let Err(error) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::debug!("Couldn't restrict the permissions of {}: {error}", path.display());
+        }
+    };
+    if let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
+        set(dir, 0o700);
+    }
+    // Made with 0600 from the start, so it is never readable by others for a moment.
+    let _ = std::fs::OpenOptions::new().write(true).create(true).truncate(false).mode(0o600).open(path);
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let mut name = path.as_os_str().to_owned();
+        name.push(suffix);
+        set(Path::new(&name), 0o600);
+    }
+}
+
+#[cfg(not(unix))]
+fn restrict_permissions(_path: &Path) {}
+
 impl Store {
+    /// Opens (or makes) the database. On Unix its folder is the owner's alone (0700), with the mail,
+    /// attachments and pictures in it, and the database files too (0600): the default permissions
+    /// would let every account on the computer read the mail.
     pub fn open(path: &Path) -> Result<Self> {
+        restrict_permissions(path);
         let conn = Connection::open(path)?;
-        Self::init(conn)
+        let store = Self::init(conn)?;
+        // SQLite made the journal files like the database; ones from before are set here.
+        restrict_permissions(path);
+        Ok(store)
     }
 
     pub fn open_in_memory() -> Result<Self> {
@@ -646,6 +687,11 @@ impl Store {
             [id],
         )?;
         conn.execute("DELETE FROM accounts WHERE id = ?1", [id])?;
+        // What the labels of this device noted about its mail goes with it, and so does the choice
+        // of its server for the AI of the other mailboxes.
+        conn.execute("DELETE FROM assist_label_log WHERE account_id = ?1", [id])?;
+        conn.execute("DELETE FROM label_examples WHERE message_id NOT IN (SELECT id FROM messages)", [])?;
+        conn.execute("DELETE FROM assist_settings WHERE key = 'serverAssist' AND value = ?1", [id])?;
         Ok(())
     }
 
@@ -954,9 +1000,10 @@ impl Store {
         tx.execute(
             "INSERT INTO messages (id, account_id, folder_id, uid, message_id, in_reply_to, refs, thread_id, subject,
                 from_json, to_json, cc_json, reply_to_json, date, seen, flagged, answered, draft, snippet, size,
-                has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id, unsubscribe_json, bcc_json)
+                has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id, unsubscribe_json, bcc_json,
+                label_headers, calendar, from_trusted)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
-                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)",
+                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32)",
             params![
                 id,
                 account_id,
@@ -987,6 +1034,9 @@ impl Store {
                 remote.map(|(_, blob_id)| blob_id),
                 parsed.unsubscribe.as_ref().map(json).transpose()?,
                 json(&parsed.bcc)?,
+                json(&parsed.label_headers)?,
+                parsed.calendar,
+                parsed.from_trusted,
             ],
         )?;
 
@@ -999,7 +1049,7 @@ impl Store {
                 let mut stmt = tx.prepare(
                     "SELECT DISTINCT thread_id FROM messages
                      WHERE account_id = ?1 AND thread_id != ?2
-                       AND (in_reply_to = ?3 OR (' ' || refs || ' ') LIKE ('% ' || ?3 || ' %'))",
+                       AND (in_reply_to = ?3 OR instr(' ' || refs || ' ', ' ' || ?3 || ' ') > 0)",
                 )?;
                 let rows = stmt.query_map(params![account_id, thread_id, message_id], |row| row.get(0))?;
                 rows.collect::<rusqlite::Result<_>>()?
@@ -1114,7 +1164,8 @@ impl Store {
             .collect();
         tx.execute(
             "UPDATE messages SET has_body = 1, body_html = ?1, body_text = ?2, has_remote = ?3, snippet = ?4,
-                attachments_json = ?5, unsubscribe_json = COALESCE(?7, unsubscribe_json) WHERE id = ?6",
+                attachments_json = ?5, unsubscribe_json = COALESCE(?7, unsubscribe_json), label_headers = ?8,
+                calendar = ?9, from_trusted = ?10 WHERE id = ?6",
             params![
                 parsed.html,
                 parsed.text,
@@ -1122,7 +1173,10 @@ impl Store {
                 parsed.snippet,
                 json(&attachments)?,
                 id,
-                parsed.unsubscribe.as_ref().map(json).transpose()?
+                parsed.unsubscribe.as_ref().map(json).transpose()?,
+                json(&parsed.label_headers)?,
+                parsed.calendar,
+                parsed.from_trusted
             ],
         )?;
         let from: Address = serde_json::from_str(&from_json)?;
@@ -1338,7 +1392,55 @@ impl Store {
                 values.push(Value::Text(folder_id.clone()));
                 format!("m.folder_id = ?{}", values.len())
             }
+            MailboxView::Label { keyword, account_ids } => format!(
+                "COALESCE(f.role, '') NOT IN ('trash', 'junk') AND {}",
+                Self::label_clause(&LabelRef { keyword: keyword.clone(), account_ids: account_ids.clone() }, values)
+            ),
         }
+    }
+
+    /// A label on the mail, in one of its mailboxes. Keywords are kept space-separated.
+    fn label_clause(label: &LabelRef, values: &mut Vec<Value>) -> String {
+        // A keyword is one word: one with a space would match two neighbouring keywords.
+        let keyword = label.keyword.trim();
+        if label.account_ids.is_empty() || keyword.is_empty() || keyword.contains(char::is_whitespace) {
+            return "0".into();
+        }
+        let accounts = Self::placeholders(&label.account_ids, values);
+        values.push(Value::Text(format!(" {} ", label.keyword.trim().to_lowercase())));
+        format!("(m.account_id IN ({accounts}) AND instr(' ' || m.keywords || ' ', ?{}) > 0)", values.len())
+    }
+
+    /// Any of these labels.
+    fn any_label_clause(labels: &[LabelRef], values: &mut Vec<Value>) -> String {
+        if labels.is_empty() {
+            return "0".into();
+        }
+        let parts: Vec<String> = labels.iter().take(50).map(|label| Self::label_clause(label, values)).collect();
+        format!("({})", parts.join(" OR "))
+    }
+
+    /// Per label, how much mail outside trash and junk carries it, and how much of that is unread.
+    pub fn label_counts(&self, labels: &[LabelRef]) -> Result<Vec<LabelCount>> {
+        let conn = self.conn();
+        let mut out = Vec::with_capacity(labels.len());
+        for label in labels.iter().take(200) {
+            let mut values = Vec::new();
+            let clause = Self::label_clause(label, &mut values);
+            let (total, unread): (i64, i64) = conn.query_row(
+                &format!(
+                    "SELECT COUNT(*), COALESCE(SUM(m.seen = 0), 0) FROM messages m JOIN folders f ON f.id = m.folder_id
+                     WHERE COALESCE(f.role, '') NOT IN ('trash', 'junk') AND {clause}"
+                ),
+                params_from_iter(values.iter()),
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            out.push(LabelCount {
+                total: u32::try_from(total).unwrap_or(u32::MAX),
+                unread: u32::try_from(unread).unwrap_or(u32::MAX),
+            });
+        }
+        Ok(out)
     }
 
     /// Whether a view is an account's trash folder.
@@ -1378,8 +1480,17 @@ impl Store {
         let mut clauses = Vec::new();
         match only {
             Some([]) => return nothing(),
-            Some(ids) => clauses.push(format!("m.id IN ({})", Self::placeholders(ids, &mut values))),
+            Some(ids) => {
+                clauses.push(format!("m.id IN ({})", Self::placeholders(ids, &mut values)));
+                // Server search results of a label's view stay within that label.
+                if matches!(query.view, MailboxView::Label { .. }) {
+                    clauses.push(Self::view_clause(&query.view, &mut values));
+                }
+            }
             None => clauses.push(Self::view_clause(&query.view, &mut values)),
+        }
+        for any in query.labels.iter().take(10) {
+            clauses.push(Self::any_label_clause(any, &mut values));
         }
         match query.account_ids.as_deref() {
             Some([]) => return nothing(),
@@ -1731,10 +1842,11 @@ impl Store {
 
     pub fn search_contacts(&self, query: &str, exclude: &[String]) -> Result<Vec<Contact>> {
         let conn = self.conn();
-        let pattern = format!("%{}%", query.trim().replace('%', ""));
+        let pattern = format!("%{}%", like_escaped(query.trim()));
         let mut stmt = conn.prepare(
             "SELECT email, name, times, last_used FROM contacts
-             WHERE email LIKE ?1 OR name LIKE ?1 ORDER BY times DESC, last_used DESC LIMIT 20",
+             WHERE email LIKE ?1 ESCAPE '\\' OR name LIKE ?1 ESCAPE '\\'
+             ORDER BY times DESC, last_used DESC LIMIT 20",
         )?;
         let excluded: HashSet<String> = exclude.iter().map(|e| e.to_lowercase()).collect();
         let rows = stmt.query_map([pattern], |row| {
@@ -1814,6 +1926,29 @@ fn summarize(id: &str, messages: &[Message]) -> Option<ThreadSummary> {
 mod tests {
     use super::*;
     use crate::mime::parse;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_mail_is_the_owners_alone() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("data");
+        std::fs::create_dir(&data).unwrap();
+        std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // A database from before, readable by everyone.
+        let path = data.join("uwumail.db");
+        drop(Store::open(&path).unwrap());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let store = Store::open(&path).unwrap();
+        store.set_sync_state("acc", "Email", Some("s1")).ok();
+        let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&data), 0o700);
+        assert_eq!(mode(&path), 0o600);
+        let wal = data.join("uwumail.db-wal");
+        if wal.exists() {
+            assert_eq!(mode(&wal), 0o600);
+        }
+    }
 
     fn store_with_account() -> (Store, String, String, String) {
         let store = Store::open_in_memory().unwrap();
@@ -1988,6 +2123,129 @@ mod tests {
     }
 
     #[test]
+    fn labels_show_across_folders_and_filter_the_list() {
+        let (store, _, inbox, sent) = store_with_account();
+        let trash = folder(&store, "Trash", Some(FolderRole::Trash), ".");
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let bill = insert(&store, &inbox, 1, &raw("r@x", "Rechnung", "Shop <shop@x.example>", None, "12 €", date));
+        let sent_bill =
+            insert(&store, &sent, 2, &raw("s@x", "Deine Rechnung", "Mini <mini@uwumail.example>", None, "", date));
+        let gone = insert(&store, &trash, 3, &raw("t@x", "Alte Rechnung", "Shop <shop@x.example>", None, "", date));
+        let other = insert(&store, &inbox, 4, &raw("o@x", "Hallo", "Leni <leni@x.example>", None, "", date));
+        for id in [&bill, &sent_bill, &gone] {
+            store.set_keywords(id.as_ref().unwrap(), &["rechnungen".into()]).unwrap();
+        }
+        store.set_keywords(other.as_ref().unwrap(), &["rechnungen-alt".into()]).unwrap();
+        let label = LabelRef { keyword: "rechnungen".into(), account_ids: vec!["acc".into()] };
+        let query = |view: MailboxView, labels: Vec<Vec<LabelRef>>| ThreadQuery {
+            view,
+            filter: ListFilter::All,
+            search: None,
+            conversations: false,
+            account_ids: None,
+            cursor: None,
+            limit: 50,
+            labels,
+        };
+        let subjects = |page: ThreadPage| page.threads.into_iter().map(|t| t.subject).collect::<Vec<_>>();
+
+        // The label's view: every folder but trash, and only the whole keyword.
+        let view = MailboxView::Label { keyword: "rechnungen".into(), account_ids: vec!["acc".into()] };
+        let mut found = subjects(store.list_threads(&query(view, Vec::new())).unwrap());
+        found.sort();
+        assert_eq!(found, ["Deine Rechnung", "Rechnung"]);
+        // Another mailbox's label of the same keyword is a different label.
+        let elsewhere = MailboxView::Label { keyword: "rechnungen".into(), account_ids: vec!["other".into()] };
+        assert!(store.list_threads(&query(elsewhere, Vec::new())).unwrap().threads.is_empty());
+
+        // As a filter on the inbox.
+        let inbox_view = MailboxView::Unified { role: UnifiedRole::Inbox };
+        assert_eq!(
+            subjects(store.list_threads(&query(inbox_view.clone(), vec![vec![label.clone()]])).unwrap()),
+            ["Rechnung"]
+        );
+        assert!(store.list_threads(&query(inbox_view, vec![vec![label.clone()], vec![]])).unwrap().threads.is_empty());
+
+        assert_eq!(store.label_counts(std::slice::from_ref(&label)).unwrap(), [LabelCount { total: 2, unread: 2 }]);
+    }
+
+    #[test]
+    fn a_message_id_with_wildcards_joins_no_conversation() {
+        let (store, _, inbox, _) = store_with_account();
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let first = insert(&store, &inbox, 1, &raw("a@x", "Clip", "Leni <leni@x.example>", None, "", date)).unwrap();
+        let reply =
+            insert(&store, &inbox, 2, &raw("b@x", "Re: Clip", "Mia <mia@x.example>", Some("a@x"), "", date)).unwrap();
+        let thread = |id: &str| store.messages_by_ids(&[id.to_string()]).unwrap().pop().unwrap().thread_id;
+        assert_eq!(thread(&reply), thread(&first));
+        for (uid, id) in [(3, "%"), (4, "_@x"), (5, "%@x")] {
+            let odd = insert(&store, &inbox, uid, &raw(id, "Hallo", "Tom <tom@x.example>", None, "", date)).unwrap();
+            assert_ne!(thread(&first), thread(&odd), "{id}");
+            assert_eq!(thread(&reply), thread(&first), "{id}");
+        }
+    }
+
+    #[test]
+    fn contacts_search_takes_wildcards_literally() {
+        let (store, _, inbox, _) = store_with_account();
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        insert(&store, &inbox, 1, &raw("a@x", "Hi", "Leni <leni@x.example>", None, "", date));
+        insert(&store, &inbox, 2, &raw("b@x", "Hi", "Tom <to_m@x.example>", None, "", date));
+        let found =
+            |query: &str| store.search_contacts(query, &[]).unwrap().into_iter().map(|c| c.email).collect::<Vec<_>>();
+        assert_eq!(found("o_m"), ["to_m@x.example"]);
+        assert!(found("l_ni").is_empty());
+        assert!(found("%").is_empty() && found("\\").is_empty());
+        assert_eq!(found("leni").len(), 1);
+    }
+
+    #[test]
+    fn a_label_keyword_is_one_word() {
+        let (store, _, inbox, _) = store_with_account();
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let id = insert(&store, &inbox, 1, &raw("a@x", "Hi", "Leni <leni@x.example>", None, "", date)).unwrap();
+        store.set_keywords(&id, &["privat".into(), "rechnungen".into()]).unwrap();
+        let count = |keyword: &str| {
+            store.label_counts(&[LabelRef { keyword: keyword.into(), account_ids: vec!["acc".into()] }]).unwrap()[0]
+                .total
+        };
+        assert_eq!(count("privat"), 1);
+        assert_eq!(count("privat rechnungen"), 0);
+        assert_eq!(count("priv"), 0);
+    }
+
+    #[test]
+    fn a_removed_account_takes_its_label_notes_and_server_choice_along() {
+        let (store, _, inbox, _) = store_with_account();
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let id = insert(&store, &inbox, 1, &raw("a@x", "Hi", "Leni <leni@x.example>", None, "", date)).unwrap();
+        store.learn_label_example(&id, &[1, 2], Some(("g1", true)), 1, 10).unwrap();
+        store
+            .insert_label_log(&crate::store::LabelLogRecord {
+                id: "l1".into(),
+                account_id: "acc".into(),
+                message_id: id.clone(),
+                label_id: "g1".into(),
+                name: "R".into(),
+                keyword: "r".into(),
+                reason: String::new(),
+                source: "rule".into(),
+                code: "rule".into(),
+                params: "{}".into(),
+                provider_name: None,
+                model: None,
+                created_at: 1,
+                undone: false,
+            })
+            .unwrap();
+        store.set_assist_setting("serverAssist", Some("acc")).unwrap();
+        store.delete_account("acc").unwrap();
+        assert!(store.label_log(None, 10).unwrap().is_empty());
+        assert!(store.label_examples().unwrap().is_empty());
+        assert_eq!(store.assist_setting("serverAssist").unwrap(), None);
+    }
+
+    #[test]
     fn groups_replies_into_conversations_even_out_of_order() {
         let (store, _, inbox, sent) = store_with_account();
         // The reply arrives before the message it answers.
@@ -2020,6 +2278,7 @@ mod tests {
                 account_ids: None,
                 cursor: None,
                 limit: 50,
+                labels: Vec::new(),
             })
             .unwrap();
         assert_eq!(page.threads.len(), 1);
@@ -2049,6 +2308,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                 account_ids: None,
                 cursor: None,
                 limit: 50,
+                labels: Vec::new(),
             })
             .unwrap();
         let detail = store.get_thread(&page.threads[0].id, true).unwrap();
@@ -2096,6 +2356,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                     account_ids: None,
                     cursor: None,
                     limit: 50,
+                    labels: Vec::new(),
                 })
                 .unwrap()
                 .threads
@@ -2157,6 +2418,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                     account_ids: None,
                     cursor: None,
                     limit: 50,
+                    labels: Vec::new(),
                 })
                 .unwrap()
                 .threads
@@ -2236,6 +2498,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                 account_ids,
                 cursor: None,
                 limit: 50,
+                labels: Vec::new(),
             };
             store.list_threads(&query).unwrap().threads.into_iter().map(|t| t.subject).collect()
         };

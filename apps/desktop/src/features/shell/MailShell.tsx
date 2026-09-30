@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { backend } from "@/backend/backend";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
+import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { useT } from "@/i18n";
 import { isAndroid, PRO_QUERY, useIsPhone, useMediaQuery } from "@/lib/device";
 import { useHotkeys, type HotkeyMap } from "@/lib/hotkeys";
+import { fitPanes, usePaneWidths } from "@/lib/paneWidths";
 import { useAccounts, useBackendEvents, useIdentities, useSignatures } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
@@ -16,6 +18,7 @@ import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { useContactsAvailable } from "../contacts/useContactsData";
 import { Composer } from "../compose/Composer";
 import { loadLocalDraft } from "../compose/localDraft";
+import { LabelPicker } from "../labels/LabelPicker";
 import { MailboxNav } from "../mail/MailboxNav";
 import { scrollReader, wantsTextSelectAll } from "../mail/readerKeys";
 import { MoveDialog } from "../mail/MoveDialog";
@@ -68,6 +71,33 @@ function AddAccountDialog() {
       />
     </>
   );
+}
+
+/** Sidebar | list | reader, the first two as wide as the person dragged them on this device. */
+function ProColumns() {
+  const { t } = useT();
+  const saved = usePaneWidths((s) => s.widths);
+  const windowWidth = useWindowWidth();
+  const { nav, list } = fitPanes(saved, windowWidth);
+  return (
+    <div className="flex min-h-0 flex-1">
+      <MailboxNav workspaceSwitch className="min-h-0 shrink-0 bg-canvas" style={{ width: nav }} />
+      <ResizeHandle pane="nav" width={nav} label={t("layout.resizeNav")} />
+      <ThreadList variant="pro" className="min-h-0 shrink-0" style={{ width: list }} />
+      <ResizeHandle pane="list" width={list} label={t("layout.resizeList")} />
+      <ThreadReader variant="pro" className="min-h-0 min-w-0 flex-1" />
+    </div>
+  );
+}
+
+function useWindowWidth() {
+  const [width, setWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return width;
 }
 
 export function MailShell() {
@@ -196,12 +226,7 @@ export function MailShell() {
       ) : section === "contacts" ? (
         <LazyContacts />
       ) : pro ? (
-        // A minmax(0,1fr) row keeps the columns at window height so each one scrolls on its own.
-        <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,420px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
-          <MailboxNav workspaceSwitch className="min-h-0 bg-canvas" />
-          <ThreadList variant="pro" className="min-h-0 border-x border-hairline" />
-          <ThreadReader variant="pro" className="min-h-0" />
-        </div>
+        <ProColumns />
       ) : (
         <div className="relative flex min-h-0 flex-1 gap-3 p-3">
           <ThreadList
@@ -243,6 +268,7 @@ export function MailShell() {
       <CommandPalette commands={commands} />
       <ShortcutsDialog />
       <MoveDialog />
+      <LabelPicker />
     </div>
   );
 }

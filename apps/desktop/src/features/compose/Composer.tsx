@@ -31,7 +31,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { useT } from "@/i18n";
 import { formatSize } from "@/lib/format";
 import { modKey } from "@/lib/platform";
-import { htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
+import { foreignHtml, htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { useAccounts, useIdentities, useMessageActions, useSignatures } from "@/lib/queries";
 import { activeFirst, sendersByWorkspace } from "@/lib/workspaces";
 import { toast } from "@/state/toasts";
@@ -614,7 +614,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             if (!html && !text) return;
             event.preventDefault();
             const cleaned = html
-              ? quotableHtml(html)
+              ? quotableHtml(html, { foreign: true })
               : text
                   .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)
                   .replace(/\r?\n/g, "<br>");
@@ -632,7 +632,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           }}
           onDrop={(event) => {
             // Moving text inside the draft stays the browser's job; markup from elsewhere is cleaned.
-            if (draggingInside.current || !insertDroppedHtml(event, quotableHtml)) return;
+            if (draggingInside.current || !insertDroppedHtml(event, foreignHtml)) return;
             setError(null);
             changed();
             body.current = event.currentTarget.innerHTML;

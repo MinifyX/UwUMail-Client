@@ -7,6 +7,7 @@ import { Menu } from "@/components/ui/Menu";
 import { useT } from "@/i18n";
 import { useFolders } from "@/lib/queries";
 import {
+  LABEL_OPS,
   RULE_FIELDS,
   RULE_OPS,
   validateRule,
@@ -15,6 +16,8 @@ import {
   type RuleCondition,
   type RuleProblem,
 } from "@/lib/sieveRules";
+import type { AssistLabel } from "@/backend/types";
+import { useAccountLabels } from "../labels/useLabels";
 import { FolderPicker } from "./FolderPicker";
 import { folderDisplayPath } from "./folderPath";
 
@@ -30,12 +33,13 @@ interface RuleEditorProps {
 }
 
 type ActionType = RuleAction["type"];
-const ACTION_TYPES: ActionType[] = ["move", "trash", "markRead", "flag", "forward"];
+const ACTION_TYPES: ActionType[] = ["move", "trash", "markRead", "flag", "label", "forward"];
 
 /** Name, conditions and actions of one rule. Problems show once saving was tried. */
 export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onDirty }: RuleEditorProps) {
   const { t } = useT();
   const { data: folders = [] } = useFolders();
+  const { data: labels = [] } = useAccountLabels(accountId);
   const [draft, setDraftState] = useState(rule);
   const [tried, setTried] = useState(false);
   const [picking, setPicking] = useState<number | null>(null);
@@ -59,7 +63,24 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
   const trash = folders.find((folder) => folder.accountId === accountId && folder.role === "trash");
   const present = new Set(draft.actions.map((action) => action.type));
   const filing = present.has("move") || present.has("trash");
-  const addable = ACTION_TYPES.filter((type) => (type === "move" || type === "trash" ? !filing : !present.has(type)));
+  const addable = ACTION_TYPES.filter((type) =>
+    type === "move" || type === "trash"
+      ? !filing
+      : // Several labels may go on, but only where there are labels.
+        type === "label"
+        ? labels.length > 0
+        : !present.has(type),
+  );
+  // Only the fields there is something for: labels where the account has some (or a rule asks for one).
+  const fields = RULE_FIELDS.filter(
+    (field) => field !== "label" || labels.length > 0 || draft.conditions.some((c) => c.field === "label"),
+  );
+  const changeField = (index: number, field: RuleCondition["field"]) => {
+    const before = draft.conditions[index]!;
+    if (field === "label") setCondition(index, { field, op: "is", value: labels[0]?.keyword ?? "" });
+    else if (before.field === "label") setCondition(index, { field, op: "contains", value: "" });
+    else setCondition(index, { field });
+  };
   const newAction = (type: ActionType): RuleAction => {
     switch (type) {
       case "move":
@@ -68,6 +89,12 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
         return { type: "trash", mailboxId: trash?.id ?? "", mailboxName: trash?.path ?? "" };
       case "forward":
         return { type: "forward", address: "", keepCopy: true };
+      case "label": {
+        const unused = labels.find(
+          (label) => !draft.actions.some((action) => action.type === "label" && action.keyword === label.keyword),
+        );
+        return { type: "label", keyword: unused?.keyword ?? "", name: unused?.name ?? "" };
+      }
       default:
         return { type };
     }
@@ -122,12 +149,13 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
                 <Select
                   aria-label={t("rules.field.label")}
                   value={condition.field}
-                  onChange={(event) => setCondition(index, { field: event.target.value as RuleCondition["field"] })}
+                  onChange={(event) => changeField(index, event.target.value as RuleCondition["field"])}
                   className="w-full sm:w-40 sm:shrink-0"
                 >
-                  {RULE_FIELDS.map((field) => (
+                  {fields.map((field) => (
                     <option key={field} value={field}>
-                      {t(`rules.field.${field}`)}
+                      {/* `rules.field.label` names the select itself. */}
+                      {field === "label" ? t("rules.field.hasLabel") : t(`rules.field.${field}`)}
                     </option>
                   ))}
                 </Select>
@@ -137,19 +165,29 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
                   onChange={(event) => setCondition(index, { op: event.target.value as RuleCondition["op"] })}
                   className="w-full sm:w-44 sm:shrink-0"
                 >
-                  {RULE_OPS.map((op) => (
+                  {(condition.field === "label" ? LABEL_OPS : RULE_OPS).map((op) => (
                     <option key={op} value={op}>
-                      {t(`rules.op.${op}`)}
+                      {condition.field === "label" ? t(`rules.labelOp.${op}`) : t(`rules.op.${op}`)}
                     </option>
                   ))}
                 </Select>
-                <TextInput
-                  aria-label={t("rules.value")}
-                  aria-invalid={empty}
-                  value={condition.value}
-                  onChange={(event) => setCondition(index, { value: event.target.value })}
-                  className="min-w-0 flex-1"
-                />
+                {condition.field === "label" ? (
+                  <LabelSelect
+                    labels={labels}
+                    value={condition.value}
+                    invalid={empty}
+                    onChange={(label) => setCondition(index, { value: label.keyword })}
+                    className="min-w-0 flex-1"
+                  />
+                ) : (
+                  <TextInput
+                    aria-label={t("rules.value")}
+                    aria-invalid={empty}
+                    value={condition.value}
+                    onChange={(event) => setCondition(index, { value: event.target.value })}
+                    className="min-w-0 flex-1"
+                  />
+                )}
                 <IconButton
                   icon={X}
                   size="sm"
@@ -184,7 +222,10 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
           <ActionRow
             key={`${action.type}-${index}`}
             action={action}
-            problem={shown.find((p) => (p.kind === "noFolder" || p.kind === "badAddress") && p.action === index)}
+            problem={shown.find(
+              (p) => (p.kind === "noFolder" || p.kind === "badAddress" || p.kind === "noLabel") && p.action === index,
+            )}
+            labels={labels}
             onChange={(next) => setAction(index, next)}
             onRemove={() => removeAction(index)}
             onPickFolder={() => setPicking(index)}
@@ -259,12 +300,14 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
 function ActionRow({
   action,
   problem,
+  labels,
   onChange,
   onRemove,
   onPickFolder,
 }: {
   action: RuleAction;
   problem: RuleProblem | undefined;
+  labels: AssistLabel[];
   onChange: (action: RuleAction) => void;
   onRemove: () => void;
   onPickFolder: () => void;
@@ -287,6 +330,16 @@ function ActionRow({
               {action.mailboxId ? folderLabel(action.mailboxId, action.mailboxName) : t("rules.chooseFolder")}
             </span>
           </Button>
+        )}
+        {action.type === "label" && (
+          <LabelSelect
+            labels={labels}
+            value={action.keyword}
+            fallbackName={action.name}
+            invalid={problem?.kind === "noLabel"}
+            onChange={(label) => onChange({ type: "label", keyword: label.keyword, name: label.name })}
+            className="min-w-0 flex-1 sm:max-w-64"
+          />
         )}
         <span className="flex-1" />
         <IconButton icon={X} size="sm" label={t("rules.removeAction")} onClick={onRemove} />
@@ -317,9 +370,52 @@ function ActionRow({
       )}
       {problem && (
         <p role="alert" className={clsx("text-[13px] text-danger")}>
-          {problem.kind === "badAddress" ? t("rules.problem.badAddress") : t("rules.problem.noFolder")}
+          {problem.kind === "badAddress"
+            ? t("rules.problem.badAddress")
+            : problem.kind === "noLabel"
+              ? t("rules.problem.noLabel")
+              : t("rules.problem.noFolder")}
         </p>
       )}
     </div>
+  );
+}
+
+/** One of the person's labels, by keyword; a label that is gone stays as its old name. */
+function LabelSelect({
+  labels,
+  value,
+  fallbackName,
+  invalid,
+  onChange,
+  className,
+}: {
+  labels: AssistLabel[];
+  value: string;
+  fallbackName?: string;
+  invalid?: boolean;
+  onChange: (label: AssistLabel) => void;
+  className?: string;
+}) {
+  const { t } = useT();
+  const known = labels.some((label) => label.keyword === value);
+  return (
+    <Select
+      aria-label={t("rules.labelValue")}
+      aria-invalid={invalid}
+      value={value}
+      onChange={(event) => {
+        const label = labels.find((entry) => entry.keyword === event.target.value);
+        if (label) onChange(label);
+      }}
+      className={className}
+    >
+      {!known && <option value={value}>{value ? fallbackName || value : t("rules.chooseLabel")}</option>}
+      {labels.map((label) => (
+        <option key={label.id} value={label.keyword}>
+          {label.name}
+        </option>
+      ))}
+    </Select>
   );
 }

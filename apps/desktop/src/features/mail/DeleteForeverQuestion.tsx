@@ -1,4 +1,5 @@
 import { NyuScene } from "@/components/nyu/scenes";
+import { ArmedButton } from "@/components/ui/ArmedButton";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
@@ -20,9 +21,9 @@ export function DeleteForeverQuestion() {
           </h2>
           <p className="text-[13px] text-muted">{t("deleteForever.body", { count: pending.count })}</p>
           <div className="flex flex-wrap justify-center gap-2 pt-1">
-            <Button variant="danger" autoFocus onClick={() => answerDeleteForever(true)}>
+            <ArmedButton variant="danger" autoFocus onClick={() => answerDeleteForever(true)}>
               {t("deleteForever.confirm")}
-            </Button>
+            </ArmedButton>
             <Button variant="ghost" onClick={cancel}>
               {t("common.cancel")}
             </Button>

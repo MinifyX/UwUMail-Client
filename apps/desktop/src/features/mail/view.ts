@@ -15,6 +15,7 @@ import type { Account, Folder, FolderRole, MailboxView } from "@/backend/types";
 import { useT } from "@/i18n";
 import { useAccounts, useFolders } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
+import { useLabelDirectory } from "../labels/useLabels";
 import { useWorkspaceName } from "../workspaces/workspaces";
 
 export const ROLE_ICONS: Record<FolderRole, LucideIcon> = {
@@ -41,6 +42,7 @@ export function folderIcon(folder: Folder): LucideIcon {
 export function sameView(a: MailboxView, b: MailboxView): boolean {
   if (a.kind === "unified" && b.kind === "unified") return a.role === b.role;
   if (a.kind === "folder" && b.kind === "folder") return a.folderId === b.folderId;
+  if (a.kind === "label" && b.kind === "label") return a.scope === b.scope && a.labelId === b.labelId;
   return false;
 }
 
@@ -64,6 +66,7 @@ export function useViewInfo(view: MailboxView): ViewInfo {
   const workspaces = useSettings((s) => s.workspaces);
   const activeWorkspace = useSettings((s) => s.activeWorkspace);
   const workspaceName = useWorkspaceName();
+  const { entries: labels } = useLabelDirectory();
 
   if (view.kind === "unified") {
     const title = view.role === "inbox" ? t("nav.inbox") : t(`nav.${view.role}`);
@@ -72,6 +75,18 @@ export function useViewInfo(view: MailboxView): ViewInfo {
       subtitle: workspaces ? workspaceName(activeWorkspace) : accounts.length > 1 ? t("nav.unified") : undefined,
       isInbox: view.role === "inbox",
       isDrafts: view.role === "drafts",
+      isTrash: false,
+      isJunk: false,
+    };
+  }
+  if (view.kind === "label") {
+    const entry = labels.find((each) => each.scope === view.scope && each.label.id === view.labelId);
+    const scopeAccount = accounts.find((a) => a.id === view.scope);
+    return {
+      title: entry?.label.name ?? t("labels.title"),
+      subtitle: scopeAccount ? scopeAccount.email : t("labels.allFolders"),
+      isInbox: false,
+      isDrafts: false,
       isTrash: false,
       isJunk: false,
     };

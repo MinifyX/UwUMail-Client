@@ -25,24 +25,24 @@ To report something new see [SECURITY.md](../SECURITY.md).
 | CS-1 | Medium | One platform's build could swap another platform's release file before signing | fixed in 5e40a7c |
 | CS-2 | Medium | The phone app lock hid the screen but not the keyboard or the screen reader | fixed in 99a5ef0 |
 | CS-3 | Medium | macOS: attachments never got the quarantine flag; macOS launcher files not on the dangerous list | fixed in 3ac42ee |
-| CC-4 | Low | The Microsoft loopback redirect names `localhost`, the listener only binds `127.0.0.1` | listed |
-| CC-5 | Low | Setup shows the name from the domain's autoconfig file, not the servers it names | listed |
-| CS-4 | Low | The native "can run programs" question has "Open anyway" as its default button | listed |
-| UP-1 | Low | After an update, the relaunched app keeps the setup's `TMPDIR` and `APPIMAGE_EXTRACT_AND_RUN` | listed |
-| EG-2 | Low | `uwuimg:` passes a UwUMail server's content type through unchanged | listed |
-| EG-3 | Low | Pictures from a UwUMail server are read whole, without a size limit | listed |
-| EG-4 | Low | The BIMI lookup for sender pictures bypasses the privacy proxy | listed |
-| CC-9 | Low | IMAP mailboxes added earlier keep the JMAP address discovery found; switching to JMAP uses it | listed |
-| CC-10 | Low | The password goes to any host on the mail server's registrable domain | listed |
-| CC-6 | Informational | An autoconfig answer may pass through a plain-HTTP redirect as long as it ends on HTTPS | listed |
+| CC-4 | Low | The Microsoft loopback redirect names `localhost`, the listener only binds `127.0.0.1` | fixed in 271127c (30 Sep) |
+| CC-5 | Low | Setup shows the name from the domain's autoconfig file, not the servers it names | fixed in 271127c (30 Sep) |
+| CS-4 | Low | The native "can run programs" question has "Open anyway" as its default button | fixed in 2d320b0 (30 Sep) |
+| UP-1 | Low | After an update, the relaunched app keeps the setup's `TMPDIR` and `APPIMAGE_EXTRACT_AND_RUN` | fixed in 2d320b0 (30 Sep) |
+| EG-2 | Low | `uwuimg:` passes a UwUMail server's content type through unchanged | fixed in 2d320b0, 271127c (30 Sep) |
+| EG-3 | Low | Pictures from a UwUMail server are read whole, without a size limit | fixed in 2d320b0, 271127c (30 Sep) |
+| EG-4 | Low | The BIMI lookup for sender pictures bypasses the privacy proxy | fixed in 271127c (30 Sep) |
+| CC-9 | Low | IMAP mailboxes added earlier keep the JMAP address discovery found; switching to JMAP uses it | fixed in 271127c (30 Sep) |
+| CC-10 | Low | The password goes to any host on the mail server's registrable domain | listed (by design) |
+| CC-6 | Informational | An autoconfig answer may pass through a plain-HTTP redirect as long as it ends on HTTPS | fixed in 271127c (30 Sep) |
 | CS-5 | Informational | `fetch_mail_image`/`uwuimg:` check the host by name only (I6) | listed, comment corrected |
-| CS-6 | Informational | `.deb`/`.rpm` self-update: `pkexec` by `PATH`, file checked before root installs it | listed |
-| CS-7 | Informational | Android: every push to `main` is signed with the release key | listed |
-| CS-8 | Informational | The composer inserts stored signature HTML without cleaning it | listed |
-| CS-9 | Informational | Any job of a release run can still replace another job's artifact before signing | listed |
+| CS-6 | Informational | `.deb`/`.rpm` self-update: `pkexec` by `PATH`, file checked before root installs it | fixed in 2d320b0 (30 Sep) |
+| CS-7 | Informational | Android: every push to `main` is signed with the release key | fixed in 789a472 (30 Sep) |
+| CS-8 | Informational | The composer inserts stored signature HTML without cleaning it | fixed in abbed23 (30 Sep) |
+| CS-9 | Informational | Any job of a release run can still replace another job's artifact before signing | fixed in 789a472 (30 Sep) |
 | EG-5 | Informational | With a UwUMail server among the accounts, every account's senders go to it for pictures | listed |
-| EG-6 | Informational | The proxy's login is kept and shown in plain text | listed |
-| CC-11 | Informational | A JMAP session may name its API endpoints on another site | listed |
+| EG-6 | Informational | The proxy's login is kept and shown in plain text | shown hidden since abbed23 (30 Sep); still stored in plain text |
+| CC-11 | Informational | A JMAP session may name its API endpoints on another site | fixed in 271127c (30 Sep) |
 
 Nothing Critical or High. The Linux updater question (does it unpack the setup AppImage into a
 predictable folder in `/tmp`?) is answered with no: it has run the setup with `TMPDIR` set to the

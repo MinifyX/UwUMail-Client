@@ -2,7 +2,7 @@
 //! JMAP) and the app's own calendar model: occurrences in the viewer's wall time, events as the
 //! editor fills them in, and the smallest patch between the two.
 
-use chrono::{Duration as TimeDelta, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{Datelike, Duration as TimeDelta, NaiveDate, NaiveDateTime, Offset, TimeZone, Utc};
 use chrono_tz::Tz;
 use serde_json::{Map, Value, json};
 
@@ -24,6 +24,13 @@ pub fn parse_local(text: &str) -> Option<NaiveDateTime> {
     NaiveDateTime::parse_from_str(text, LOCAL_FORMAT)
         .ok()
         .or_else(|| NaiveDate::parse_from_str(text, "%Y-%m-%d").ok().and_then(|date| date.and_hms_opt(0, 0, 0)))
+        // Four-digit years only: arithmetic near chrono's ends would panic.
+        .filter(|time| (1..=9999).contains(&time.year()))
+}
+
+/// `time` moved by `delta`, or left where it is where that would leave the calendar.
+fn shifted(time: NaiveDateTime, delta: TimeDelta) -> NaiveDateTime {
+    time.checked_add_signed(delta).unwrap_or(time)
 }
 
 pub fn format_local(time: NaiveDateTime) -> String {
@@ -92,14 +99,16 @@ pub fn to_utc(local: NaiveDateTime, zone: Tz) -> chrono::DateTime<Utc> {
     match zone.from_local_datetime(&local) {
         chrono::LocalResult::Single(time) | chrono::LocalResult::Ambiguous(time, _) => time.with_timezone(&Utc),
         chrono::LocalResult::None => zone
-            .from_local_datetime(&(local + TimeDelta::hours(1)))
+            .from_local_datetime(&shifted(local, TimeDelta::hours(1)))
             .earliest()
             .map_or_else(|| Utc.from_utc_datetime(&local), |time| time.with_timezone(&Utc)),
     }
 }
 
 pub fn in_zone(time: chrono::DateTime<Utc>, zone: Tz) -> NaiveDateTime {
-    time.with_timezone(&zone).naive_local()
+    // `naive_local` panics when the offset leaves the calendar; this stays at the UTC time then.
+    let offset = zone.offset_from_utc_datetime(&time.naive_utc()).fix().local_minus_utc();
+    shifted(time.naive_utc(), TimeDelta::seconds(i64::from(offset)))
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -312,15 +321,16 @@ pub fn occurrence(
     let duration = TimeDelta::seconds(duration_of(instance, all_day));
     let (start, end) = if all_day {
         let start = time.start.date().and_hms_opt(0, 0, 0).unwrap_or(time.start);
-        (start, start + duration)
+        (start, shifted(start, duration))
     } else if let Some((utc_start, utc_end)) = time.utc {
         (in_zone(utc_start, viewer), in_zone(utc_end.max(utc_start), viewer))
     } else if let Some(zone) = zone {
         let utc_start = to_utc(time.start, zone);
-        (in_zone(utc_start, viewer), in_zone(utc_start + duration, viewer))
+        let utc_end = utc_start.checked_add_signed(duration).unwrap_or(utc_start);
+        (in_zone(utc_start, viewer), in_zone(utc_end, viewer))
     } else {
         // Floating: the same wall time wherever the viewer is.
-        (time.start, time.start + duration)
+        (time.start, shifted(time.start, duration))
     };
     let (recurrence, recurrence_editable) = recurrence_of(series.unwrap_or(instance));
     CalendarOccurrence {
@@ -772,6 +782,37 @@ mod tests {
         let floating = json!({ "title": "Wake up", "start": "2026-09-24T07:00:00", "duration": "PT5M" });
         let time = OccurrenceTime { start: parse_local("2026-09-24T07:00:00").unwrap(), utc: None };
         assert_eq!(super::occurrence(ids(), &floating, None, &time, berlin).start, "2026-09-24T07:00:00");
+    }
+
+    #[test]
+    fn times_at_the_ends_of_the_calendar_never_panic() {
+        let ids = || OccurrenceIds {
+            id: "a:e1".into(),
+            event_id: "a:e1".into(),
+            account_id: "a".into(),
+            calendar_id: "a:c1".into(),
+            read_only: false,
+        };
+        let berlin = parse_zone("Europe/Berlin").unwrap();
+        for start in
+            ["262143-12-31T23:00:00", "+262143-12-31T23:00:00", "-262144-01-01T00:30:00", "99999-01-01T00:00:00"]
+        {
+            assert!(parse_local(start).is_none(), "{start}");
+        }
+        let latest = NaiveDate::MAX.and_hms_opt(23, 0, 0).unwrap();
+        let earliest = NaiveDate::MIN.and_hms_opt(0, 30, 0).unwrap();
+        for local in [latest, earliest] {
+            for event in [
+                json!({ "duration": "P3000D", "timeZone": "Europe/Berlin" }),
+                json!({ "duration": "P3000D", "showWithoutTime": true }),
+                json!({ "duration": "P3000D" }),
+            ] {
+                let time = OccurrenceTime { start: local, utc: None };
+                let _ = occurrence(ids(), &event, None, &time, berlin);
+            }
+            let _ = to_utc(local, berlin);
+            let _ = in_zone(to_utc(local, berlin), parse_zone("Pacific/Kiritimati").unwrap());
+        }
     }
 
     #[test]

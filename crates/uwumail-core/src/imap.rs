@@ -284,8 +284,10 @@ pub async fn list_folders(session: &mut ImapSession) -> Result<Vec<RemoteFolder>
             matches!(a, NameAttribute::NoSelect)
                 || matches!(a, NameAttribute::Extension(ext) if ext.eq_ignore_ascii_case("\\NonExistent"))
         });
-        let path = name.name().to_string();
-        let display = decode_modified_utf7(match name.delimiter() {
+        // The IMAP library hands quoted names back with their escapes (audit C-7).
+        let path = unescape_quoted(name.name());
+        let delimiter = name.delimiter().map(unescape_quoted);
+        let display = decode_modified_utf7(match delimiter.as_deref() {
             Some(delimiter) if !delimiter.is_empty() => path.rsplit(delimiter).next().unwrap_or(&path),
             _ => &path,
         });
@@ -303,14 +305,7 @@ pub async fn list_folders(session: &mut ImapSession) -> Result<Vec<RemoteFolder>
         };
         let is_all = attributes.iter().any(|a| matches!(a, NameAttribute::All | NameAttribute::Flagged));
         special_roles.push(if selectable { special } else { None });
-        folders.push(RemoteFolder {
-            name: display,
-            path,
-            role: None,
-            delimiter: name.delimiter().map(String::from),
-            selectable,
-            skip_sync: is_all,
-        });
+        folders.push(RemoteFolder { name: display, path, role: None, delimiter, selectable, skip_sync: is_all });
     }
 
     // Special-use flags from the server win over guesses from folder names.
@@ -329,6 +324,23 @@ pub async fn list_folders(session: &mut ImapSession) -> Result<Vec<RemoteFolder>
         folder.name = "Inbox".into();
     }
     Ok(folders)
+}
+
+/// A folder name or delimiter as the server means it: `\\` and `\"` of a quoted string undone. Names
+/// can't hold a backslash or a quote unquoted, so an escape only ever comes from quoting.
+fn unescape_quoted(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        match (c, chars.clone().next()) {
+            ('\\', Some(next @ ('\\' | '"'))) => {
+                out.push(next);
+                chars.next();
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// Decodes IMAP's modified UTF-7 folder names (RFC 3501 5.1.3), e.g. `Entw&APw-rfe` → `Entwürfe`.
@@ -406,6 +418,11 @@ pub async fn store_keyword(
 ) -> Result<()> {
     if uids.is_empty() {
         return Ok(());
+    }
+    // It goes into the command as it is, so only an atom of the kind labels are made of passes, never
+    // anything that could end the flag list or the command.
+    if !crate::assist::validate::is_own_keyword(keyword) {
+        return Err(Error::invalid(format!("\"{keyword}\" can't be a label.")));
     }
     let mailbox = session.select(folder_path).await?;
     if on && !may_keep_keyword(&mailbox.permanent_flags, keyword) {
@@ -598,6 +615,15 @@ pub async fn sync_folder(
     Ok(result)
 }
 
+/// A folder name for a command that takes it as written (a `LIST` pattern), as a quoted string.
+/// Refused with a line break or NUL in it, which no quoting can carry.
+fn quoted_mailbox(name: &str) -> Result<String> {
+    if name.contains(['\r', '\n', '\0']) {
+        return Err(Error::invalid("This folder name can't be sent to the mail server."));
+    }
+    Ok(format!("\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\"")))
+}
+
 /// An IMAP quoted string. Line breaks can't be quoted and would end the command, so they become spaces.
 fn quoted(text: &str) -> String {
     let text: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
@@ -744,7 +770,8 @@ pub async fn has_children(session: &mut ImapSession, path: &str, delimiter: &str
     if delimiter.is_empty() {
         return Ok(false);
     }
-    let pattern = format!("{path}{delimiter}%");
+    // The library writes the pattern as given (audit C-8); `%` stays a wildcard inside the quotes.
+    let pattern = quoted_mailbox(&format!("{path}{delimiter}%"))?;
     let names: Vec<_> = session.list(Some(""), Some(&pattern)).await?.try_collect().await?;
     Ok(!names.is_empty())
 }
@@ -848,6 +875,63 @@ mod tests {
     fn search_text_stays_one_command() {
         assert_eq!(quoted("Rechnung \"März\""), "\"Rechnung \\\"März\\\"\"");
         assert_eq!(quoted("a\r\nb2 LOGOUT"), "\"a  b2 LOGOUT\"");
+    }
+
+    #[test]
+    fn quoted_folder_names_come_back_as_they_are_called() {
+        assert_eq!(unescape_quoted(r#"a\"b"#), r#"a"b"#);
+        assert_eq!(unescape_quoted(r"a\\b"), r"a\b");
+        assert_eq!(unescape_quoted(r#"a\\\"b"#), r#"a\"b"#);
+        assert_eq!(unescape_quoted(r"trailing\"), r"trailing\");
+        assert_eq!(unescape_quoted("INBOX.Sent"), "INBOX.Sent");
+    }
+
+    #[test]
+    fn list_patterns_stay_one_argument() {
+        assert_eq!(quoted_mailbox("Mein Ordner/%").unwrap(), "\"Mein Ordner/%\"");
+        assert_eq!(quoted_mailbox(r#"a"b\c.%"#).unwrap(), r#""a\"b\\c.%""#);
+        assert!(quoted_mailbox("a\r\nb2 LOGOUT").is_err());
+        assert!(quoted_mailbox("a\0b").is_err());
+    }
+
+    /// An IMAP server that takes any login and answers every other command with OK, keeping the
+    /// lines it got.
+    async fn yes_server() -> (u16, std::sync::Arc<Mutex<Vec<String>>>) {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let lines = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let seen = lines.clone();
+        tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let (read, mut write) = socket.into_split();
+            write.write_all(b"* OK IMAP ready\r\n").await.unwrap();
+            let mut read = BufReader::new(read);
+            let mut line = String::new();
+            while read.read_line(&mut line).await.is_ok_and(|n| n > 0) {
+                seen.lock().unwrap().push(line.clone());
+                let tag = line.split(' ').next().unwrap_or("*").to_string();
+                let _ = write.write_all(format!("{tag} OK done\r\n").as_bytes()).await;
+                line.clear();
+            }
+        });
+        (port, lines)
+    }
+
+    #[tokio::test]
+    async fn keywords_that_could_leave_the_flag_list_never_reach_the_server() {
+        let (port, lines) = yes_server().await;
+        let settings = ServerSettings { host: "127.0.0.1".into(), port, security: Security::None };
+        let mut session =
+            login(&settings, Login::Password { username: "mini", password: "dummy-password" }).await.unwrap();
+        let long = "k".repeat(65);
+        for bad in ["a b", "x)\r\nA9 DELETE INBOX", "(x", "a\"b", "a\\b", "$junk", "\\Seen", "a]", "", &long] {
+            let refused = store_keyword(&mut session, "INBOX", &[1], bad, true).await.unwrap_err();
+            assert_eq!(refused.code, crate::error::ErrorCode::InvalidInput, "{bad:?}");
+        }
+        let sent = lines.lock().unwrap().clone();
+        assert_eq!(sent.len(), 1, "only the login went out: {sent:?}");
+        assert!(sent[0].contains("LOGIN"));
     }
 
     #[test]

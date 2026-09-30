@@ -21,11 +21,21 @@ export function isEmbeddedSource(value: string): boolean {
  * the composer. Unlike the mail view, there is no sandboxed frame around it,
  * so styles must not leak into the app and nothing may load from the internet
  * (a tracking pixel would otherwise fire just by pressing "Reply").
+ *
+ * `foreign`: the markup comes from elsewhere (a mail being quoted or forwarded, something pasted
+ * or dropped, a signature) and keeps none of the app's own `data-uwu-*` markers. Otherwise a
+ * quoted mail's `data-uwu-signature` would be taken for the draft's signature and replaced or
+ * removed along with it (webmail W-42). The composer's own body keeps its markers.
  */
-export function quotableHtml(html: string): string {
+export function quotableHtml(html: string, { foreign = false }: { foreign?: boolean } = {}): string {
   const purify = DOMPurify();
   purify.addHook("afterSanitizeAttributes", (node) => {
     if (node instanceof Element) {
+      if (foreign) {
+        for (const name of node.getAttributeNames()) {
+          if (name.toLowerCase().startsWith("data-uwu-")) node.removeAttribute(name);
+        }
+      }
       for (const name of ["src", "srcset", "background", "poster"]) {
         const value = node.getAttribute(name);
         if (value !== null && (name === "srcset" || !isEmbeddedSource(value))) node.removeAttribute(name);
@@ -65,6 +75,11 @@ export function quotableHtml(html: string): string {
     FORBID_ATTR: ["class", "id", "srcdoc", "formaction", "ping"],
     FORCE_BODY: true,
   });
+}
+
+/** `quotableHtml` for markup from elsewhere (pasted, dropped, a signature), see there. */
+export function foreignHtml(html: string): string {
+  return quotableHtml(html, { foreign: true });
 }
 
 /** Plain text of some HTML, without loading anything it references. */

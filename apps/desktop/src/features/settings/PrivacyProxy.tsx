@@ -3,6 +3,7 @@ import { backend } from "@/backend/backend";
 import { Button } from "@/components/ui/Button";
 import { Field, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
+import { hideProxyPassword, withSavedProxyPassword } from "@/lib/proxyLogin";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 
@@ -14,16 +15,18 @@ export function PrivacyProxy() {
   const { t } = useT();
   const saved = useSettings((s) => s.privacyProxy);
   const update = useSettings((s) => s.update);
-  const [text, setText] = useState(saved);
+  // The password in a proxy login never shows again once saved (security-audit EG-6).
+  const [text, setText] = useState(() => hideProxyPassword(saved));
   const [invalid, setInvalid] = useState(false);
   const [busy, setBusy] = useState(false);
-  const trimmed = text.trim();
+  const trimmed = withSavedProxyPassword(text.trim(), saved);
 
   const save = async () => {
     setBusy(true);
     try {
       await backend().setPrivacyProxy(trimmed);
       update({ privacyProxy: trimmed });
+      setText(hideProxyPassword(trimmed));
       setInvalid(false);
       toast(trimmed ? t("settings.proxySaved") : t("settings.proxyRemoved"), "success");
     } catch {

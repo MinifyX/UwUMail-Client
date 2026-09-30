@@ -337,6 +337,23 @@ mod tests {
     }
 
     #[test]
+    fn attachment_types_and_names_stay_in_their_header() {
+        let from = Address { name: None, email: "mini@uwumail.example".into() };
+        let to = [Address { name: None, email: "leni@wanders.example".into() }];
+        let attachment = [OutgoingAttachment {
+            filename: "a.txt\r\nBcc: sneaky@evil.example".into(),
+            mime_type: "text/plain\r\nBcc: sneaky@evil.example".into(),
+            size: 5,
+            source: AttachmentSource::Base64 { data: "SGFsbG8=".into() },
+        }];
+        let message = build(&Mail { attachments: &attachment, ..mail(&from, &to, "Hi") }).unwrap();
+        let raw = String::from_utf8(message.formatted()).unwrap();
+        assert!(!raw.contains("\r\nBcc:"), "{raw}");
+        assert!(raw.contains("application/octet-stream"), "a broken type falls back");
+        assert_eq!(message.envelope().to().len(), 1);
+    }
+
+    #[test]
     fn refuses_messages_without_recipients() {
         let from = Address { name: None, email: "mini@uwumail.example".into() };
         assert!(build(&mail(&from, &[], "Hi")).is_err());

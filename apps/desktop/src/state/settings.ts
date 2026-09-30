@@ -104,6 +104,10 @@ export interface Settings {
   detectEvents: boolean;
   /** AI costs in English: euros or dollars (other languages have their own currency). This device only. */
   assistCurrency: CurrencyChoice;
+  /** The mail list in sections per label. This device only. */
+  groupByLabel: boolean;
+  /** The sidebar's labels are folded away. */
+  labelsCollapsed: boolean;
 }
 
 interface SettingsActions {
@@ -158,6 +162,8 @@ export const DEFAULT_SETTINGS: Settings = {
   assistRefineEvents: false,
   detectEvents: true,
   assistCurrency: "EUR",
+  groupByLabel: false,
+  labelsCollapsed: false,
 };
 
 export const useSettings = create<Settings & SettingsActions>()(

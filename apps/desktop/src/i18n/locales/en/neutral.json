@@ -236,7 +236,9 @@
     "pro": {
       "name": "Pro",
       "desc": "Folders always visible, three columns, keyboard shortcuts."
-    }
+    },
+    "resizeNav": "Resize the sidebar",
+    "resizeList": "Resize the mail list"
   },
   "tone": {
     "playful": {
@@ -474,7 +476,8 @@
     "signatureLocalOnly": "Only here",
     "signatureLocalOnlyDesc": "This signature stays on this device: it’s too big to sync (256 KB at most) or has pictures that only work here.",
     "rules": "Rules",
-    "assistant": "AI assistant"
+    "assistant": "AI assistant",
+    "labels": "Labels"
   },
   "theme": {
     "system": "System",
@@ -537,7 +540,8 @@
     "contactsEdit": "Edit contact",
     "contactsDelete": "Delete contact",
     "contactsNext": "Next contact",
-    "contactsPrevious": "Previous contact"
+    "contactsPrevious": "Previous contact",
+    "label": "Label"
   },
   "palette": {
     "placeholder": "Type a command",
@@ -985,6 +989,9 @@
     "valid": "The server accepts these rules.",
     "inactive": "These rules are switched off on the server right now.",
     "activate": "Switch on",
+    "otherActive": "Another filter script, “{{name}}”, sorts your mail on the server right now. Saving rules here switches it off.",
+    "otherActiveUnnamed": "Another filter script sorts your mail on the server right now. Saving rules here switches it off.",
+    "takeOver": "Use these rules instead",
     "name": "Name",
     "namePlaceholder": "e.g. “Invoices”",
     "when": "When a message arrives",
@@ -1013,7 +1020,8 @@
       "cc": "Cc",
       "toOrCc": "To or Cc",
       "subject": "Subject",
-      "listId": "Mailing list"
+      "listId": "Mailing list",
+      "hasLabel": "Label"
     },
     "op": {
       "label": "Comparison",
@@ -1029,12 +1037,18 @@
       "trash": "Move to trash",
       "markRead": "Mark as read",
       "flag": "Flag",
-      "forward": "Forward"
+      "forward": "Forward",
+      "label": "Set label"
     },
     "summary": {
       "move": "into {{folder}}",
       "forward": "forward to {{address}}",
-      "stop": "stops"
+      "stop": "stops",
+      "label": {
+        "is": "label {{name}} is set",
+        "isNot": "label {{name}} isn't set"
+      },
+      "setLabel": "label {{name}}"
     },
     "problem": {
       "noName": "Give the rule a name.",
@@ -1042,7 +1056,8 @@
       "noActions": "Add at least one action.",
       "noFolder": "Choose a folder.",
       "badAddress": "Enter one complete address, like name@example.com.",
-      "tooMany": "One folder and one forward per rule."
+      "tooMany": "One folder and one forward per rule.",
+      "noLabel": "Choose a label."
     },
     "foreignTitle": "These rules were edited elsewhere",
     "foreignBody": "Another program changed the rules script, so UwUMail shows it as text. You can edit it here, or replace it with rules you manage in UwUMail.",
@@ -1051,7 +1066,13 @@
     "check": "Check",
     "replace": "Replace with UwUMail rules",
     "replaceConfirm": "Replace the script",
-    "replaceBody": "The script above will be deleted and you start with an empty list of rules."
+    "replaceBody": "The script above will be deleted and you start with an empty list of rules.",
+    "labelOp": {
+      "is": "is set",
+      "isNot": "is not set"
+    },
+    "labelValue": "Label",
+    "chooseLabel": "Choose label"
   },
   "accountCalendar": {
     "title": "Calendar",
@@ -1452,6 +1473,15 @@
       "currencies": {
         "EUR": "Euro (€)",
         "USD": "US dollar ($)"
+      },
+      "serverAssist": {
+        "title": "AI from your UwUMail server",
+        "use": "Use a UwUMail server's AI for these mailboxes",
+        "useOne": "Use the AI of {{server}} for these mailboxes",
+        "description": "Summaries, spam checks, appointments and labels for your other mailboxes then come from that server instead of the providers set up here. The mail's content (sender, subject and text) is sent to that server for this.",
+        "which": "Server",
+        "sentTitle": "Mail of your other mailboxes goes to {{server}} for the AI",
+        "sentBody": "Only when the AI is asked, and only what it needs. That server's providers, limits and usage apply; the providers set up here are not used for these mailboxes while this is on."
       }
     },
     "providers": {
@@ -1592,6 +1622,152 @@
       "free": "free",
       "below": "< {{amount}}",
       "about": "≈ {{amount}}"
+    },
+    "labelAgain": {
+      "menu": "Label again",
+      "title": "Label again",
+      "again": "Ask again",
+      "close": "Close label suggestions",
+      "fits": "fits",
+      "fitsNot": "doesn't fit",
+      "isSet": "set now",
+      "noLabels": "You have no labels yet.",
+      "newTitle": "Ideas for new labels",
+      "create": "Create and apply",
+      "created": "Created and applied",
+      "decide": "Nothing changes until you apply. Your ticks also teach the automatic labels.",
+      "apply_one": "Apply {{count}} change",
+      "apply_other": "Apply {{count}} changes",
+      "nothing": "No changes",
+      "applied_one": "{{count}} label changed",
+      "applied_other": "{{count}} labels changed",
+      "menuLatest": "Label the latest mail again",
+      "willAdd": "will be added",
+      "willRemove": "will be removed"
+    }
+  },
+  "labels": {
+    "title": "Labels",
+    "allFolders": "All folders",
+    "navUnread": "{{name}}, {{count}} unread",
+    "manage": "Manage labels",
+    "create": "Create a label",
+    "otherMailboxes": "Other mailboxes",
+    "otherMailbox": "“{{name}}” belongs to another mailbox.",
+    "added_one": "“{{name}}” added",
+    "added_other": "“{{name}}” added to {{count}} conversations",
+    "removed_one": "“{{name}}” removed",
+    "removed_other": "“{{name}}” removed from {{count}} conversations",
+    "pickerTitle": "Labels",
+    "pickerSearch": "Find or create a label",
+    "pickerEmpty": "No labels yet. Type a name to create one.",
+    "pickerNone": "No label with this name.",
+    "createNamed": "Create “{{name}}”",
+    "createdApplied": "“{{name}}” created and added",
+    "pick": "Labels…",
+    "group": "Group by label",
+    "ungroup": "Stop grouping by label",
+    "none": "No label",
+    "settings": {
+      "title": "Labels",
+      "intro": "Your own words for kinds of mail, shown in the list and in other mail apps (as keywords). They go on new mail by their rules, detectors and what they learned from you, without any AI; the assistant can add more if you switch it on.",
+      "device": "Other mailboxes (this device)",
+      "deviceDesc": "Labels of every mailbox that isn't a UwUMail account. They stay on this device and are set here.",
+      "serverDesc": "Kept on your UwUMail server and set there, also while this app is closed.",
+      "listTitle": "Your labels",
+      "description": "New mail gets labels by their rules, detectors and learning first; then the model judges the ones still missing. It never moves, deletes or answers a mail.",
+      "descriptionManual": "New mail gets labels by their rules, detectors and learning. You can also put them on by hand in the reader, with a right-click in the list or with L.",
+      "nonAi": "Label new mail without AI",
+      "nonAiDesc": "Rules, detectors, learned senders and the classifier put labels on new mail. Nothing leaves this device or your server for it.",
+      "automaticTitle": "Put it on new mail by itself",
+      "automaticDesc": "The first of these that matches puts the label on; no AI needed.",
+      "detector": "Detector",
+      "detectorHint": "Built-in recognition of common kinds of mail.",
+      "detectorNone": "None",
+      "rules": "Conditions",
+      "match": "How conditions combine",
+      "matchAll": "All must match",
+      "matchAny": "Any may match",
+      "noRules": "No conditions.",
+      "field": "What to check",
+      "value": "Value",
+      "fields": {
+        "from": "Sender or domain",
+        "subject": "Subject contains",
+        "text": "Text contains",
+        "hasAttachment": "Attachment"
+      },
+      "placeholders": {
+        "from": "billing@shop.example or shop.example",
+        "subject": "Invoice",
+        "text": "order number",
+        "hasAttachment": ""
+      },
+      "withAttachment": "has an attachment",
+      "withoutAttachment": "has no attachment",
+      "addCondition": "Add condition",
+      "removeCondition": "Remove condition",
+      "problem": {
+        "tooLong": "At most {{max}} characters.",
+        "control": "Line breaks and control characters can't be used."
+      },
+      "learnSenders": "Learn senders",
+      "learnSendersDesc": "A sender whose mail you gave this label by hand twice gets it on new mail. Taking it off forgets the sender.",
+      "learnsSenders": "learns senders",
+      "classifier": "Learn from your labeling",
+      "classifierDesc": "Once it knows 15 mails you labeled by hand, very similar new mail gets the label. So far: {{count}} of {{needed}}.",
+      "classifierOn": "classifier on ({{count}} examples)",
+      "classifierLearning": "classifier learning ({{count}}/{{needed}})",
+      "count_one": "{{count}} mail, {{unread}} unread",
+      "count_other": "{{count}} mails, {{unread}} unread"
+    },
+    "detector": {
+      "invoice": "Invoices",
+      "appointment": "Appointments",
+      "newsletter": "Newsletters",
+      "shipping": "Shipping"
+    },
+    "source": {
+      "ai": "AI",
+      "rule": "Rule",
+      "sender": "Learned sender",
+      "detector": "Detector",
+      "classifier": "Classifier"
+    },
+    "reason": {
+      "from": "sender is {{value}}",
+      "subject": "subject contains “{{value}}”",
+      "text": "text contains “{{value}}”",
+      "attachment": "has an attachment",
+      "noAttachment": "has no attachment",
+      "and": " and ",
+      "or": " or ",
+      "rule": "Matches the label's conditions: {{conditions}}",
+      "sender_one": "{{address}} got this label by hand once",
+      "sender_other": "{{address}} got this label by hand {{count}} times",
+      "invoiceAttachment": "Looks like an invoice: PDF attachment “{{name}}”",
+      "invoiceAmount": "Looks like an invoice: “{{word}}” in the subject, {{amount}}",
+      "invoiceWord": "Looks like an invoice: “{{word}}” in the subject",
+      "appointmentCalendar": "Looks like an appointment: a calendar invitation",
+      "appointment": "Looks like an appointment: “{{word}}” on {{date}} at {{time}}",
+      "newsletter": "Looks like a newsletter: it has List-Unsubscribe and {{header}}",
+      "shipping": "Looks like a shipment: {{details}}",
+      "shippingPlain": "Looks like a shipment",
+      "tracking": "tracking number {{number}}",
+      "classifier_one": "Similar to the mail with this label ({{percent, number(maximumFractionDigits: 1)}} % sure)",
+      "classifier_other": "Similar to the {{count}} mails with this label ({{percent, number(maximumFractionDigits: 1)}} % sure)"
+    },
+    "log": {
+      "title": "Set lately",
+      "description": "Labels that went on by themselves, and why. Undo takes one off and teaches the label.",
+      "empty": "Nothing yet.",
+      "undone": "undone",
+      "open": "Open mail",
+      "more": "Show more"
+    },
+    "chip": {
+      "automatic": "Set automatically",
+      "bySource": "Set automatically ({{source}})"
     }
   }
 }

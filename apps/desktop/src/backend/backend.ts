@@ -1,4 +1,6 @@
 import type {
+  LabelCount,
+  LabelRef,
   BlockedSender,
   Account,
   AddressBookInfo,
@@ -11,6 +13,7 @@ import type {
   AssistLabel,
   AssistLabelInput,
   AssistLabelLogEntry,
+  AssistLabelSuggestion,
   AssistModels,
   AssistProbeInput,
   AssistProvider,
@@ -168,7 +171,7 @@ export interface Backend {
   /** Whether the mailbox's server runs mail rules (see ruleAccounts); without an id, whether any does. */
   mailRulesAvailable(accountId?: string): Promise<boolean>;
   /** The Sieve script "UwUMail" and whether the server runs it; the first rules account when `accountId` is left out. */
-  mailRules(accountId?: string): Promise<{ script: string | null; active: boolean }>;
+  mailRules(accountId?: string): Promise<{ script: string | null; active: boolean; otherActive?: string | null }>;
   /** Uploads the script as "UwUMail" and makes it the active one. */
   saveMailRules(script: string, accountId?: string): Promise<void>;
   /** What the server finds wrong with the script (error text), or null when it can run it. */
@@ -387,6 +390,11 @@ export interface Backend {
   assistLabelLog(scope: string, messageIds: string[] | null, limit?: number): Promise<AssistLabelLogEntry[]>;
   /** Takes labels the model set off again, by log entry. */
   undoAssistLabels(scope: string, logIds: string[]): Promise<void>;
+  /**
+   * "Label again": the model judges every label for one mail (also those on it) and, when none
+   * fits, proposes up to two new ones. Changes nothing; the page applies what the person ticks.
+   */
+  suggestLabels(messageId: string, language?: string, suggestNew?: boolean): Promise<AssistLabelSuggestion>;
   /** Asks the model now for these mails (at most 20); label ids per message id. */
   applyAssistLabels(messageIds: string[]): Promise<Record<string, string[]>>;
   /** The newest mails of the scope's inboxes (for labelling mail that came before auto-labels). */
@@ -410,6 +418,8 @@ export interface Backend {
    * keep own keywords refuse with `not_supported`.
    */
   setKeywords(messageIds: string[], keywords: Record<string, boolean>): Promise<void>;
+  /** Per label, how much mail outside trash and junk carries it, and how much of that is unread. */
+  labelCounts(labels: LabelRef[]): Promise<LabelCount[]>;
   /** Main domain of a company address (`news.shop.example` → `shop.example`); null for mail providers. */
   companyDomain(email: string): Promise<string | null>;
 

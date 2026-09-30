@@ -28,6 +28,11 @@ export interface MailRulesState {
   /** False when the script exists but another one (or none) filters the mail. */
   active: boolean;
   exists: boolean;
+  /**
+   * Another app's script the server runs instead, by name. Saving here would switch it off, so the
+   * settings say so and save nothing until the person chooses these rules (security-audit C-11).
+   */
+  otherActive: string | null;
 }
 
 /** The account's rules as the editor sees them, and the one way to store them. */
@@ -37,11 +42,12 @@ export function useMailRules(accountId: string) {
   const query = useQuery({
     queryKey: key,
     queryFn: async (): Promise<MailRulesState> => {
-      const { script, active } = await backend().mailRules(accountId);
+      const { script, active, otherActive } = await backend().mailRules(accountId);
       return {
         parsed: script === null ? { kind: "rules", set: emptyRuleSet() } : parseRulesScript(script),
         active,
         exists: script !== null,
+        otherActive: otherActive ?? null,
       };
     },
     retry: false,
@@ -58,7 +64,7 @@ export function useMailRules(accountId: string) {
         return false;
       }
       await backend().saveMailRules(script, accountId);
-      client.setQueryData<MailRulesState>(key, { parsed: next, active: true, exists: true });
+      client.setQueryData<MailRulesState>(key, { parsed: next, active: true, exists: true, otherActive: null });
       return true;
     } catch (error) {
       toast(translate("rules.saveFailed", { reason: error instanceof Error ? error.message : String(error) }), "error");

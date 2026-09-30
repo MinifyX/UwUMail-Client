@@ -14,6 +14,8 @@ use super::provider::{self, Model, ProviderKind};
 
 /// How long one program may take to answer. It runs on this computer, or not at all.
 const WAIT: Duration = Duration::from_millis(1500);
+/// The largest model list taken.
+const MAX_LIST: usize = 1024 * 1024;
 
 /// A program that may run here: its kind, its name, where it is asked and the address saved.
 #[derive(Debug, Clone, Copy)]
@@ -54,13 +56,19 @@ pub struct Found {
 
 async fn ask(http: &reqwest::Client, candidate: Candidate) -> Option<Found> {
     let work = async {
-        let response =
+        let mut response =
             http.get(candidate.probe).header(reqwest::header::ACCEPT, "application/json").send().await.ok()?;
         if !response.status().is_success() {
             return None;
         }
-        // A model list is small; anything big is not one of these programs.
-        let bytes = response.bytes().await.ok().filter(|b| b.len() <= 1024 * 1024)?;
+        // A model list is small; anything big is not one of these programs, and stops arriving.
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.ok()? {
+            if bytes.len() + chunk.len() > MAX_LIST {
+                return None;
+            }
+            bytes.extend_from_slice(&chunk);
+        }
         let value: Value = serde_json::from_slice(&bytes).ok()?;
         (value.get("models").is_some_and(Value::is_array) || value.get("data").is_some_and(Value::is_array))
             .then(|| provider::model_list(&value))

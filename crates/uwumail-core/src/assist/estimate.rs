@@ -23,8 +23,11 @@ pub const TYPICAL_SPAM_TOKENS: u64 = 150;
 pub const TYPICAL_EVENTS_TOKENS: u64 = 250;
 /// A rewritten or adjusted draft is about as long as the draft, and at least this.
 pub const MIN_REWRITE_TOKENS: u64 = 100;
-/// The labels that fit one mail, with a reason each.
-pub const TYPICAL_LABELS_TOKENS: u64 = 120;
+/// Judging labels: a reason and a verdict per label, and new labels proposed on top; a thinking
+/// model thinks about this much before (the server's numbers for `AssistLabel/suggest`).
+pub const TYPICAL_VERDICT_TOKENS: u64 = 40;
+pub const TYPICAL_NEW_LABELS_TOKENS: u64 = 120;
+pub const TYPICAL_LABELS_REASONING_TOKENS: u64 = 300;
 /// A reasoning model thinks about this many times as long as it answers, and at least this long.
 pub const REASONING_PER_OUTPUT: u64 = 2;
 pub const MIN_REASONING_TOKENS: u64 = 256;
@@ -47,6 +50,7 @@ pub enum Method {
     Summarize,
     SpamCheck,
     ExtractEvents,
+    SuggestLabels,
 }
 
 impl Method {
@@ -56,6 +60,7 @@ impl Method {
             "Assist/summarize" => Some(Self::Summarize),
             "Assist/spamCheck" => Some(Self::SpamCheck),
             "Assist/extractEvents" => Some(Self::ExtractEvents),
+            "AssistLabel/suggest" => Some(Self::SuggestLabels),
             _ => None,
         }
     }
@@ -66,6 +71,7 @@ impl Method {
             Self::Summarize => "Assist/summarize",
             Self::SpamCheck => "Assist/spamCheck",
             Self::ExtractEvents => "Assist/extractEvents",
+            Self::SuggestLabels => "AssistLabel/suggest",
         }
     }
 
@@ -75,6 +81,7 @@ impl Method {
             Self::Summarize => super::Feature::Summarize,
             Self::SpamCheck => super::Feature::SpamCheck,
             Self::ExtractEvents => super::Feature::ExtractEvents,
+            Self::SuggestLabels => super::Feature::AutoLabels,
         }
     }
 }
@@ -132,7 +139,11 @@ pub enum Answer<'a> {
     },
     SpamCheck,
     Events,
-    Labels,
+    /// Verdicts on this many labels, with new labels proposed or not.
+    Labels {
+        labels: usize,
+        suggest_new: bool,
+    },
 }
 
 /// The answer's size in tokens, at most what the prompt allows the model.
@@ -145,7 +156,9 @@ pub fn output_tokens(answer: Answer<'_>, prompt: &Prompt) -> u64 {
             .min(TYPICAL_SUMMARY_MAX_TOKENS),
         Answer::SpamCheck => TYPICAL_SPAM_TOKENS,
         Answer::Events => TYPICAL_EVENTS_TOKENS,
-        Answer::Labels => TYPICAL_LABELS_TOKENS,
+        Answer::Labels { labels, suggest_new } => {
+            TYPICAL_VERDICT_TOKENS * labels as u64 + if suggest_new { TYPICAL_NEW_LABELS_TOKENS } else { 0 }
+        }
     };
     typical.min(u64::from(prompt.max_tokens))
 }
@@ -573,7 +586,9 @@ mod tests {
 
     #[test]
     fn methods_have_the_servers_names() {
-        for method in [Method::Compose, Method::Summarize, Method::SpamCheck, Method::ExtractEvents] {
+        for method in
+            [Method::Compose, Method::Summarize, Method::SpamCheck, Method::ExtractEvents, Method::SuggestLabels]
+        {
             assert_eq!(Method::parse(method.as_str()), Some(method));
         }
         assert_eq!(Method::parse("Assist/estimate"), None);

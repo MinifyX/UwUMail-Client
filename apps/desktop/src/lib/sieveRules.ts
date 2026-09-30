@@ -26,7 +26,8 @@ export interface MailRule {
   stop: boolean;
 }
 
-export type RuleField = "from" | "to" | "cc" | "toOrCc" | "subject" | "listId";
+/** `label` asks whether the message carries a label's keyword (only `is` and `isNot`). */
+export type RuleField = "from" | "to" | "cc" | "toOrCc" | "subject" | "listId" | "label";
 export type RuleOp = "contains" | "notContains" | "is" | "isNot" | "startsWith" | "endsWith";
 
 export interface RuleCondition {
@@ -41,7 +42,9 @@ export type RuleAction =
   | { type: "markRead" }
   | { type: "flag" }
   | { type: "trash"; mailboxId: string; mailboxName: string }
-  | { type: "forward"; address: string; keepCopy: boolean };
+  | { type: "forward"; address: string; keepCopy: boolean }
+  /** Puts a label on: its keyword as a flag; `name` is only shown. */
+  | { type: "label"; keyword: string; name: string };
 
 export interface RuleSet {
   v: 1;
@@ -54,12 +57,20 @@ export type RuleProblem =
   | { kind: "emptyValue"; condition: number }
   | { kind: "noFolder"; action: number }
   | { kind: "badAddress"; action: number }
+  | { kind: "noLabel"; action: number }
   | { kind: "tooManyForwards" }
   | { kind: "tooManyFolders" };
 
 export type ParsedRules = { kind: "rules"; set: RuleSet } | { kind: "foreign"; text: string };
 
-export const RULE_FIELDS: readonly RuleField[] = ["from", "to", "cc", "toOrCc", "subject", "listId"];
+export const RULE_FIELDS: readonly RuleField[] = ["from", "to", "cc", "toOrCc", "subject", "listId", "label"];
+/** What a label condition may ask: has it, or hasn't it. */
+export const LABEL_OPS: readonly RuleOp[] = ["is", "isNot"];
+
+/** A keyword as a flag can carry it: what the server makes of a label's name. */
+export function isLabelKeyword(keyword: string): boolean {
+  return /^[a-z0-9._-]{1,64}$/.test(keyword);
+}
 export const RULE_OPS: readonly RuleOp[] = ["contains", "notContains", "is", "isNot", "startsWith", "endsWith"];
 
 const HEADER =
@@ -73,6 +84,7 @@ const HEADER_NAMES: Record<RuleField, string> = {
   toOrCc: '["to", "cc"]',
   subject: '"subject"',
   listId: '"list-id"',
+  label: "",
 };
 
 /**
@@ -130,7 +142,10 @@ export function validateRule(rule: MailRule): RuleProblem[] {
   const problems: RuleProblem[] = [];
   if (!clean(rule.name).trim()) problems.push({ kind: "noName" });
   rule.conditions.forEach((condition, index) => {
-    if (!clean(condition.value).trim()) problems.push({ kind: "emptyValue", condition: index });
+    const value = clean(condition.value).trim();
+    if (!value || (condition.field === "label" && !isLabelKeyword(value))) {
+      problems.push({ kind: "emptyValue", condition: index });
+    }
   });
   if (rule.actions.length === 0) problems.push({ kind: "noActions" });
   let forwards = 0;
@@ -144,6 +159,7 @@ export function validateRule(rule: MailRule): RuleProblem[] {
       forwards += 1;
       if (!isForwardAddress(action.address)) problems.push({ kind: "badAddress", action: index });
     }
+    if (action.type === "label" && !isLabelKeyword(action.keyword)) problems.push({ kind: "noLabel", action: index });
   });
   // The server sends at most one redirect per message, and one mail should land in one folder.
   if (forwards > 1) problems.push({ kind: "tooManyForwards" });
@@ -154,6 +170,12 @@ export function validateRule(rule: MailRule): RuleProblem[] {
 function test(condition: RuleCondition): string {
   const header = HEADER_NAMES[condition.field];
   const value = condition.value.trim();
+  if (condition.field === "label") {
+    // Labels the server set without AI before the rules ran come as X-UwUMail-Label headers (the
+    // server removes such headers that came with the mail); ones an earlier rule set are flags.
+    const has = `anyof (header :is "X-UwUMail-Label" ${quote(value)}, hasflag ${quote(value)})`;
+    return condition.op === "isNot" ? `not ${has}` : has;
+  }
   let positive: string;
   switch (condition.op) {
     case "contains":
@@ -186,6 +208,9 @@ function ruleToSieve(rule: MailRule): string {
   const lines: string[] = [];
   if (rule.actions.some((action) => action.type === "markRead")) lines.push('addflag "\\\\Seen";');
   if (rule.actions.some((action) => action.type === "flag")) lines.push('addflag "\\\\Flagged";');
+  for (const action of rule.actions) {
+    if (action.type === "label") lines.push(`addflag ${quote(action.keyword.trim())};`);
+  }
   for (const action of rule.actions) {
     if (action.type === "forward") {
       lines.push(`redirect ${action.keepCopy ? ":copy " : ""}${quote(action.address.trim())};`);
@@ -221,6 +246,8 @@ function normalize(set: RuleSet): RuleSet {
             return { type: action.type, mailboxId: clean(action.mailboxId), mailboxName: clean(action.mailboxName) };
           case "forward":
             return { type: "forward", address: clean(action.address), keepCopy: action.keepCopy };
+          case "label":
+            return { type: "label", keyword: clean(action.keyword), name: clean(action.name) };
           default:
             return { type: action.type };
         }
@@ -236,7 +263,9 @@ export function rulesToSieve(input: RuleSet): string {
   const actions = active.flatMap((rule) => rule.actions);
   const needs = {
     fileinto: actions.some((action) => action.type === "move" || action.type === "trash"),
-    imap4flags: actions.some((action) => action.type === "markRead" || action.type === "flag"),
+    imap4flags:
+      actions.some((action) => action.type === "markRead" || action.type === "flag" || action.type === "label") ||
+      active.some((rule) => rule.conditions.some((condition) => condition.field === "label")),
     copy: actions.some((action) => action.type === "forward" && action.keepCopy),
   };
   const require = [
@@ -275,6 +304,10 @@ function readAction(value: unknown): RuleAction | null {
       return typeof value.address === "string" && typeof value.keepCopy === "boolean"
         ? { type: "forward", address: value.address, keepCopy: value.keepCopy }
         : null;
+    case "label":
+      return typeof value.keyword === "string" && typeof value.name === "string"
+        ? { type: "label", keyword: value.keyword, name: value.name }
+        : null;
     case "markRead":
     case "flag":
       return { type: value.type };
@@ -287,6 +320,7 @@ function readCondition(value: unknown): RuleCondition | null {
   if (!isObject(value)) return null;
   const { field, op } = value;
   if (!RULE_FIELDS.includes(field as RuleField) || !RULE_OPS.includes(op as RuleOp)) return null;
+  if (field === "label" && !LABEL_OPS.includes(op as RuleOp)) return null;
   if (typeof value.value !== "string") return null;
   return { field: field as RuleField, op: op as RuleOp, value: value.value };
 }

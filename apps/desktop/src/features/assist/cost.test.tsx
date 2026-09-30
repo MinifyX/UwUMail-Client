@@ -32,6 +32,9 @@ const OPTIONS: AssistOptions = {
   maxLabels: 30,
   maxInstructionChars: 2000,
   maxTextChars: 20000,
+  maxLabelConditions: 10,
+  foreignMail: false,
+  foreignServers: [],
 };
 
 const ESTIMATE: AssistEstimate = {

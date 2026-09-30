@@ -21,6 +21,11 @@ import {
   type AssistLabel,
   type AssistLabelInput,
   type AssistLabelLogEntry,
+  type AssistLabelSuggestion,
+  LABEL_DETECTORS,
+  type LabelConditionField,
+  type LabelRules,
+  type LabelSource,
   type AssistModels,
   type AssistOptions,
   type AssistProvider,
@@ -86,8 +91,11 @@ export function toAssistOptions(value: unknown): AssistOptions {
     mayUsePrivateAddresses: raw.mayUsePrivateAddresses === true,
     maxProviders: asNumber(raw.maxProviders) ?? 10,
     maxLabels: asNumber(raw.maxLabels) ?? 30,
+    maxLabelConditions: asNumber(raw.maxLabelConditions) ?? 10,
     maxInstructionChars: asNumber(raw.maxInstructionChars) ?? 2000,
     maxTextChars: asNumber(raw.maxTextChars) ?? 20000,
+    foreignMail: raw.foreignMail === true,
+    foreignServers: asStrings(raw.foreignServers),
   };
 }
 
@@ -210,6 +218,7 @@ const ESTIMATE_METHODS: readonly AssistEstimateMethod[] = [
   "Assist/summarize",
   "Assist/spamCheck",
   "Assist/extractEvents",
+  "AssistLabel/suggest",
 ];
 
 /** A count of tokens or requests: a whole number, never below zero; null when missing. */
@@ -350,6 +359,9 @@ export function toAssistSettings(value: unknown): AssistSettings {
       AssistChoice | null
     >,
     autoLabels: raw?.autoLabels === true,
+    // On unless it says off: servers before 0.21 always labelled by nothing but the model.
+    nonAiLabels: raw?.nonAiLabels !== false,
+    serverAssist: asString(raw?.serverAssist),
     effective: Object.fromEntries(
       ASSIST_FEATURES.map((feature) => [feature, toEffective(effective[feature])]),
     ) as Record<AssistFeature, AssistEffective | null>,
@@ -364,7 +376,23 @@ export function assistSettingsUpdate(patch: AssistSettingsPatch): Raw {
     if (choice !== undefined) update[`features/${feature}`] = choice;
   }
   if (patch.autoLabels !== undefined) update.autoLabels = patch.autoLabels;
+  if (patch.nonAiLabels !== undefined) update.nonAiLabels = patch.nonAiLabels;
+  if (patch.serverAssist !== undefined) update.serverAssist = patch.serverAssist;
   return update;
+}
+
+const FIELDS: readonly LabelConditionField[] = ["from", "subject", "text", "hasAttachment"];
+
+/** A label's rules; conditions of unknown fields are left out, no conditions are none. */
+export function toLabelRules(value: unknown): LabelRules | null {
+  const raw = asObject(value);
+  if (!raw) return null;
+  const conditions = asObjects(raw.conditions).flatMap((condition) => {
+    const field = FIELDS.find((each) => each === condition.field);
+    const text = typeof condition.value === "boolean" ? String(condition.value) : asString(condition.value);
+    return field && text !== null ? [{ field, value: text }] : [];
+  });
+  return conditions.length > 0 ? { match: raw.match === "any" ? "any" : "all", conditions } : null;
 }
 
 export function toAssistLabel(raw: Raw): AssistLabel {
@@ -375,6 +403,14 @@ export function toAssistLabel(raw: Raw): AssistLabel {
     description: asString(raw.description) ?? "",
     keyword: (asString(raw.keyword) ?? "").toLowerCase(),
     color: color && /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : null,
+    rules: toLabelRules(raw.rules),
+    detector: LABEL_DETECTORS.find((detector) => detector === raw.detector) ?? null,
+    // Both default to on, also for labels of servers before 0.21.
+    learnSenders: raw.learnSenders !== false,
+    classifier: raw.classifier !== false,
+    totalEmails: asNumber(raw.totalEmails),
+    unreadEmails: asNumber(raw.unreadEmails),
+    examples: asCount(raw.examples),
   };
 }
 
@@ -384,8 +420,16 @@ export function toAssistLabels(value: unknown): AssistLabel[] {
     .map(toAssistLabel);
 }
 
+/** Rules as the server takes them: trimmed values, none without conditions. */
+function rulesOut(rules: LabelRules | null): LabelRules | null {
+  const conditions = (rules?.conditions ?? [])
+    .map((condition) => ({ field: condition.field, value: condition.value.trim() }))
+    .filter((condition) => condition.value !== "");
+  return rules && conditions.length > 0 ? { match: rules.match, conditions } : null;
+}
+
 export function labelCreate(input: AssistLabelInput): Raw {
-  return { name: input.name.trim(), description: input.description.trim(), color: input.color };
+  return labelUpdate({ ...input });
 }
 
 export function labelUpdate(patch: Partial<AssistLabelInput>): Raw {
@@ -393,8 +437,14 @@ export function labelUpdate(patch: Partial<AssistLabelInput>): Raw {
   if (patch.name !== undefined) out.name = patch.name.trim();
   if (patch.description !== undefined) out.description = patch.description.trim();
   if (patch.color !== undefined) out.color = patch.color;
+  if (patch.rules !== undefined) out.rules = rulesOut(patch.rules);
+  if (patch.detector !== undefined) out.detector = patch.detector;
+  if (patch.learnSenders !== undefined) out.learnSenders = patch.learnSenders;
+  if (patch.classifier !== undefined) out.classifier = patch.classifier;
   return out;
 }
+
+const SOURCES: readonly LabelSource[] = ["ai", "rule", "sender", "detector", "classifier"];
 
 export function toLabelLogEntry(raw: Raw): AssistLabelLogEntry {
   return {
@@ -403,7 +453,11 @@ export function toLabelLogEntry(raw: Raw): AssistLabelLogEntry {
     labelId: String(raw.labelId),
     name: asString(raw.name) ?? "",
     keyword: (asString(raw.keyword) ?? "").toLowerCase(),
+    // Entries from before 0.21 were all the model's.
+    source: SOURCES.find((source) => source === raw.source) ?? "ai",
     reason: asString(raw.reason) ?? "",
+    code: asString(raw.code) ?? "ai",
+    params: asObject(raw.params) ?? {},
     createdAt: asString(raw.createdAt) ?? new Date(0).toISOString(),
     undone: raw.undone === true,
     providerName: asString(raw.providerName),
@@ -415,6 +469,38 @@ export function toLabelLog(value: unknown): AssistLabelLogEntry[] {
   return asObjects(value)
     .filter((raw) => raw.id !== undefined && raw.emailId !== undefined)
     .map(toLabelLogEntry);
+}
+
+/** "Label again": verdicts per label and new labels; anything malformed is left out. */
+export function toLabelSuggestion(value: unknown, emailId: string): AssistLabelSuggestion {
+  const raw = asObject(value) ?? {};
+  const verdicts = asObjects(raw.verdicts).flatMap((verdict) => {
+    const labelId = asString(verdict.labelId);
+    if (!labelId || typeof verdict.fits !== "boolean") return [];
+    return [
+      {
+        labelId,
+        name: asString(verdict.name) ?? "",
+        reason: asString(verdict.reason) ?? "",
+        fits: verdict.fits,
+        isSet: verdict.isSet === true,
+      },
+    ];
+  });
+  const newLabels = asObjects(raw.newLabels).flatMap((label) => {
+    const name = asString(label.name)?.trim();
+    if (!name) return [];
+    const color = asString(label.color);
+    return [
+      {
+        name,
+        description: asString(label.description) ?? "",
+        color: color && /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : null,
+        reason: asString(label.reason) ?? "",
+      },
+    ];
+  });
+  return { ...answerOf(raw), emailId, verdicts, newLabels: newLabels.slice(0, 2) };
 }
 
 /** `assist_apply_labels`: label ids per message id; anything else is left out. */

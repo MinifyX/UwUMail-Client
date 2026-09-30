@@ -46,20 +46,7 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
         .map(|(_, domain)| domain.trim().trim_end_matches('>').to_ascii_lowercase())
         .filter(|domain| !domain.is_empty());
     let mut signals = AuthenticationSignals { from_domain, ..AuthenticationSignals::default() };
-    let mut received = 0;
-    let mut ours = None;
-    for (name, value) in headers {
-        if name.eq_ignore_ascii_case("Received") {
-            received += 1;
-            if received >= 2 {
-                break;
-            }
-        } else if name.eq_ignore_ascii_case("Authentication-Results") {
-            ours = Some(value);
-            break;
-        }
-    }
-    let Some(value) = ours else { return signals };
+    let Some(value) = receiving_results(headers) else { return signals };
     let mut dkim: Vec<String> = Vec::new();
     for part in value.split(';').skip(1) {
         let Some(first) = part.split_whitespace().next() else { continue };
@@ -78,6 +65,78 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
     }
     signals.dkim = if dkim.iter().any(|r| r == "pass") { Some("pass".into()) } else { dkim.into_iter().next() };
     signals
+}
+
+/// The receiving server's own `Authentication-Results`: read top first, only one above the second
+/// `Received:` counts, so a sender can't vouch for itself with one lower down.
+fn receiving_results(headers: &[(String, String)]) -> Option<&str> {
+    let mut received = 0;
+    for (name, value) in headers {
+        if name.eq_ignore_ascii_case("Received") {
+            received += 1;
+            if received >= 2 {
+                return None;
+            }
+        } else if name.eq_ignore_ascii_case("Authentication-Results") {
+            return Some(value);
+        }
+    }
+    None
+}
+
+/// Whether the receiving server's `Authentication-Results` vouch for the domain of the From
+/// address: DMARC passed for it, or DKIM or SPF passed for a domain aligned with it (the same
+/// domain or one within the same registrable domain). Labels without a model only give learned
+/// senders' labels to such mail (`from_trusted` in docs/labels.md of UwUMail Server), since anyone
+/// can write a known address into `From`. No results, or none that vouch: `false`.
+pub fn from_vouched(headers: &[(String, String)], from_email: &str) -> bool {
+    let Some(from_domain) = from_email.rsplit_once('@').and_then(|(_, domain)| domain_of(domain)) else {
+        return false;
+    };
+    let Some(value) = receiving_results(headers) else { return false };
+    for part in value.split(';').skip(1) {
+        let mut tokens = part.split_whitespace().filter(|token| !token.starts_with('('));
+        let Some((method, result)) = tokens.next().and_then(|first| first.split_once('=')) else { continue };
+        if !result.eq_ignore_ascii_case("pass") {
+            continue;
+        }
+        let property = |names: &[&str]| {
+            part.split_whitespace().find_map(|token| {
+                let (name, value) = token.split_once('=')?;
+                names.iter().any(|n| n.eq_ignore_ascii_case(name)).then(|| value.trim_matches(|c| c == '"' || c == ';'))
+            })
+        };
+        let vouched = match method.to_ascii_lowercase().as_str() {
+            // DMARC is about the From domain itself; when the server names it, it must be this one.
+            "dmarc" => property(&["header.from"]).is_none_or(|domain| aligned(domain, &from_domain)),
+            "dkim" => property(&["header.d", "header.i"]).is_some_and(|domain| aligned(domain, &from_domain)),
+            "spf" => property(&["smtp.mailfrom", "smtp.helo"]).is_some_and(|domain| aligned(domain, &from_domain)),
+            _ => false,
+        };
+        if vouched {
+            return true;
+        }
+    }
+    false
+}
+
+/// The lower-case domain of an address, or the name itself when it has no `@`.
+fn domain_of(address: &str) -> Option<String> {
+    let domain = address.rsplit_once('@').map_or(address, |(_, domain)| domain);
+    let domain = domain.trim().trim_end_matches('>').trim_end_matches('.').to_ascii_lowercase();
+    (!domain.is_empty() && domain.len() <= 253).then_some(domain)
+}
+
+/// Relaxed alignment (RFC 7489): both have the same registrable domain.
+fn aligned(vouched: &str, from_domain: &str) -> bool {
+    let Some(vouched) = domain_of(vouched) else { return false };
+    if vouched == from_domain {
+        return true;
+    }
+    match (psl::domain_str(&vouched), psl::domain_str(from_domain)) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
 }
 
 /// The receiving server's spam filter: `X-Spam-Status: Yes, score=6.0 required=5.0 tests=A,B`.
@@ -170,6 +229,33 @@ mod tests {
         let none = [header("X-Spam-Status", "No, score=0.0 required=5.0 tests=none")];
         assert_eq!(spam_status(&none), (Some(0.0), Some(5.0), vec![]));
         assert_eq!(spam_status(&[header("X-Spam-Status", "Yes, tests=<script>")]), (None, None, vec![]));
+    }
+
+    #[test]
+    fn only_aligned_passes_of_the_receiving_server_vouch_for_the_from_address() {
+        let results =
+            |value: &str| vec![header("Received", "from mx.example.net"), header("Authentication-Results", value)];
+        let vouched = |value: &str, from: &str| from_vouched(&results(value), from);
+        assert!(vouched("mx.example.org; dmarc=pass header.from=bank.example", "a@bank.example"));
+        assert!(vouched("mx.example.org; dmarc=pass", "a@bank.example"));
+        assert!(vouched("mx.example.org; dkim=pass header.d=mail.bank.example", "a@bank.example"));
+        assert!(vouched("mx.example.org; dkim=pass (good) header.i=@bank.example", "a@Bank.Example"));
+        assert!(vouched("mx.example.org; spf=pass smtp.mailfrom=bounce@news.bank.example", "a@bank.example"));
+        // Passing for someone else's domain says nothing about the From address.
+        assert!(!vouched("mx.example.org; dkim=pass header.d=mailer.example", "a@bank.example"));
+        assert!(!vouched("mx.example.org; spf=pass smtp.mailfrom=x@mailer.example", "a@bank.example"));
+        assert!(!vouched("mx.example.org; dmarc=pass header.from=mailer.example", "a@bank.example"));
+        assert!(!vouched("mx.example.org; dmarc=fail header.from=bank.example; spf=softfail", "a@bank.example"));
+        assert!(!vouched("mx.example.org; dkim=pass", "a@bank.example"));
+        assert!(!from_vouched(&[], "a@bank.example"));
+        assert!(!vouched("mx.example.org; dmarc=pass", ""));
+        // A sender's own results below the second Received line count for nothing.
+        let forged = [
+            header("Received", "from mx.example.net"),
+            header("Received", "from evil.example"),
+            header("Authentication-Results", "evil.example; dmarc=pass header.from=bank.example"),
+        ];
+        assert!(!from_vouched(&forged, "a@bank.example"));
     }
 
     #[test]

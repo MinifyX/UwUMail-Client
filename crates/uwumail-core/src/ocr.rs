@@ -37,6 +37,8 @@ const CACHED_MAILS: usize = 64;
 const MAX_REMOTE_SCAN: usize = 500;
 /// Longer picture addresses are not read.
 const MAX_URL_CHARS: usize = 4096;
+/// How far an `<img` tag is read for its `src`.
+const MAX_TAG_BYTES: usize = 8 * MAX_URL_CHARS;
 /// A server answer with more pictures than this is cut off.
 const MAX_SERVER_IMAGES: usize = 100;
 
@@ -132,7 +134,19 @@ pub fn remote_sources(html: &str) -> Vec<String> {
         if !lower[tag_start..].starts_with(|c: char| c.is_ascii_whitespace() || c == '/') {
             continue;
         }
-        let tag_end = lower[tag_start..].find('>').map_or(html.len(), |end| tag_start + end);
+        // Only so far for the tag's end: a mail of `<img ` without `>` would otherwise have all
+        // the rest of it read again for each of its (up to 500) tags.
+        let window = &lower.as_bytes()[tag_start..(tag_start + MAX_TAG_BYTES).min(lower.len())];
+        let tag_end = match window.iter().position(|b| *b == b'>') {
+            Some(end) => tag_start + end,
+            None => {
+                let mut end = tag_start + window.len();
+                while !html.is_char_boundary(end) {
+                    end -= 1;
+                }
+                end
+            }
+        };
         let attributes = crate::pictures::attributes(&html[tag_start..tag_end]);
         let Some((_, src)) = attributes.iter().find(|(name, _)| name == "src") else { continue };
         let src = src.replace("&amp;", "&");
@@ -363,6 +377,19 @@ pub(crate) mod tests {
         );
         assert!(remote_sources("<img").is_empty());
         assert!(remote_sources("ä<img src=\"https://ö.example/ü.png\"").len() == 1);
+    }
+
+    #[test]
+    fn tags_without_an_end_are_read_only_so_far() {
+        // 500 tags that never end, each followed by a lot of text: every tag reads a window only.
+        let mut html = String::new();
+        for i in 0..MAX_REMOTE_SCAN {
+            html.push_str(&format!("<img src=https://example.com/{i}.png "));
+            html.push_str(&"ö".repeat(20_000));
+        }
+        let found = remote_sources(&html);
+        assert_eq!(found.len(), MAX_REMOTE_SCAN);
+        assert_eq!(found[0], "https://example.com/0.png");
     }
 
     #[test]

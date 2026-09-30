@@ -44,4 +44,15 @@ describe("signatures", () => {
   it("drops the marker before sending", () => {
     expect(withoutSignatureMarker('<div data-uwu-signature="lang"><p>Hi</p></div>')).toBe("<div><p>Hi</p></div>");
   });
+
+  it("cleans stored signature HTML before it goes into the editor (CS-8)", () => {
+    const stored: Signature = {
+      ...all[0]!,
+      html: '<p onclick="x()">Hi<img src="https://tracker.example/p.gif" onerror="x()"><script>x()</script></p><img src="data:image/png;base64,AAAA">',
+    };
+    const html = withSignature("", stored, "end");
+    expect(html).not.toMatch(/onclick|onerror|script|tracker\.example/);
+    expect(html).toContain('<img src="data:image/png;base64,AAAA">');
+    expect(html).toContain(">Hi<");
+  });
 });

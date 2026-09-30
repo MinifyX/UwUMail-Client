@@ -47,6 +47,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Keep running in the notification area, start with Windows, default mail app (`mailto:` links)
 - [x] Auto-update on macOS and Linux (same signed feed as Windows)
 - [x] Security audit with fixes, `SECURITY.md`, dependency audit in CI ([report](security-audit.md))
+- [x] Security review of the whole app before 0.7: labels, the server's AI for other mailboxes, parsers, release pipeline ([report](security-audit-2026-09-30.md))
 - [x] Warning for links whose text shows a different site than the target
 - [x] First beta: 0.2.0-beta.1
 - [x] Text in a mail's pictures for finding dates: the UwUMail server reads them for its accounts, the system's OCR (Vision, Windows.Media.Ocr, ML Kit) for other mailboxes; off on Linux

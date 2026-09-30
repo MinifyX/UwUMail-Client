@@ -9,7 +9,11 @@ import {
   setByAssistant,
   STARTER_LABELS,
   threadKeywords,
+  usableProposals,
+  LABEL_DEFAULTS,
+  labelReason,
 } from "./labels";
+import { translate } from "@/i18n";
 import {
   emptyProviderForm,
   insecureUrl,
@@ -30,6 +34,7 @@ const label = (id: string, name: string, keyword: string, color: string | null =
   keyword,
   description: "",
   color,
+  ...LABEL_DEFAULTS,
 });
 
 const LABELS = [
@@ -44,7 +49,10 @@ const entry = (patch: Partial<AssistLabelLogEntry>): AssistLabelLogEntry => ({
   labelId: "g1",
   name: "Rechnungen",
   keyword: "rechnungen",
+  source: "ai",
   reason: "An invoice.",
+  code: "ai",
+  params: {},
   createdAt: "2026-09-28T10:00:00Z",
   undone: false,
   providerName: null,
@@ -116,6 +124,27 @@ describe("the label form", () => {
     expect(labelProblems({ name: "Ok", description: "y".repeat(301), color: null }, LABELS)).toEqual({
       description: "descriptionTooLong",
     });
+  });
+
+  it("refuses names that turn the text around them", () => {
+    expect(labelProblems({ name: "abc\u202Efdp.exe", description: "", color: null }, LABELS)).toEqual({
+      name: "control",
+    });
+    expect(labelProblems({ name: "a\u0085b", description: "", color: null }, LABELS)).toEqual({ name: "control" });
+    // Emoji sequences stay fine.
+    expect(labelProblems({ name: "Familie 👨\u200D👩\u200D👧", description: "", color: null }, LABELS)).toEqual({});
+  });
+
+  it("offers only new labels a model proposed that could be saved as they are", () => {
+    const proposal = (name: string, description = "") => ({ name, description, color: null, reason: "" });
+    const offered = usableProposals([
+      proposal("Strom"),
+      proposal("x".repeat(41)),
+      proposal("Bank\nKonto"),
+      proposal("\u202Etxt"),
+      proposal("Ok", "y".repeat(301)),
+    ]);
+    expect(offered.map((each) => each.name)).toEqual(["Strom"]);
   });
 
   it("sends only what changed", () => {
@@ -341,5 +370,39 @@ describe("the usage", () => {
     });
     expect(todayShare({ ...base, requestsPerDay: null, tokensPerDay: null }).max).toBeNull();
     expect(todayShare({ ...base, requestsPerDay: 10, tokensPerDay: null }).max).toBe(1);
+  });
+});
+
+describe("labelReason", () => {
+  const t = (key: string, options?: Record<string, unknown>) => translate(key, { ...options, lng: "en" });
+  const reason = (code: string, params: Record<string, unknown>) =>
+    labelReason({ code, params, reason: "Fallback." }, t);
+
+  it("says why in the person's words", () => {
+    expect(
+      reason("rule", {
+        match: "any",
+        conditions: [
+          { field: "subject", value: "Rechnung" },
+          { field: "hasAttachment", value: "true" },
+        ],
+      }),
+    ).toBe("Matches the label's conditions: subject contains “Rechnung” or has an attachment");
+    expect(reason("sender", { address: "leni@example.org", count: 3 })).toBe(
+      "leni@example.org got this label by hand 3 times",
+    );
+    expect(reason("invoice", { word: "Rechnung", amount: "49,90 €" })).toBe(
+      "Looks like an invoice: “Rechnung” in the subject, 49,90 €",
+    );
+    expect(reason("shipping", { carrier: "DHL", tracking: null })).toBe("Looks like a shipment: DHL");
+    expect(reason("classifier", { probability: 0.9946, examples: 23 })).toBe(
+      "Similar to the 23 mails with this label (99.4 % sure)",
+    );
+  });
+
+  it("falls back to the entry's own sentence", () => {
+    expect(reason("ai", {})).toBe("Fallback.");
+    expect(reason("somethingNew", { x: 1 })).toBe("Fallback.");
+    expect(reason("invoice", {})).toBe("Fallback.");
   });
 });

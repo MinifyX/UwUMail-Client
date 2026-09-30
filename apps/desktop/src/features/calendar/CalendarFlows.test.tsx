@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CalendarInfo, CalendarOccurrence } from "@/backend/types";
+import { ARMING_MS } from "@/components/ui/armed";
 import { i18n } from "@/i18n";
 import { deviceTimeZone } from "@/lib/calendarDates";
 import { useSettings } from "@/state/settings";
@@ -148,7 +149,14 @@ describe("calendar flows", () => {
     const dialog = question.closest("dialog")!;
     expect(within(dialog).getByLabelText<HTMLInputElement>("Only this event").checked).toBe(true);
     fireEvent.click(within(dialog).getByLabelText("All events of the series"));
+    // The gesture that asked doesn't also answer (security-audit C-10): too soon does nothing.
+    const asked = performance.now();
+    const now = vi.spyOn(performance, "now").mockReturnValue(asked + 10);
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    expect(fake.deleteEvent).not.toHaveBeenCalled();
+    now.mockReturnValue(asked + ARMING_MS + 10);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    now.mockRestore();
 
     await waitFor(() => expect(fake.deleteEvent).toHaveBeenCalledWith(YOGA.id, "series"));
   });

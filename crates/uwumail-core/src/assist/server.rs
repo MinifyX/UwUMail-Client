@@ -26,6 +26,12 @@ pub fn features(client: &Client) -> Option<Value> {
     flags.values().any(|on| on == &Value::Bool(true)).then_some(Value::Object(flags))
 }
 
+/// Whether the server lets this person use its assistant for mail of the app's other mailboxes
+/// (`foreignMail`, docs/jmap-assist.md "Foreign mail").
+pub fn foreign_mail(client: &Client) -> bool {
+    options(client).and_then(|options| options.get("foreignMail")).and_then(Value::as_bool) == Some(true)
+}
+
 fn unavailable() -> Error {
     Error::assist("assistUnavailable", "This mail server has no assistant for this mailbox.")
 }

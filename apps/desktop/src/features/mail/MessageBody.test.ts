@@ -78,6 +78,15 @@ describe("buildDocument", () => {
     expect(doc).not.toContain("steal");
   });
 
+  it("keeps no link the reader can't catch: MathML carries none (WebKit follows its href)", () => {
+    const html = readableBody(
+      message({ bodyHtml: '<p>E = <math><mi href="https://elsewhere.example/">mc</mi></math></p>' }),
+    );
+    expect(html).not.toContain("elsewhere.example");
+    expect(html).toContain("<math");
+    expect(html).toContain("mc");
+  });
+
   it("does not force app typography onto HTML mail", () => {
     const doc = buildDocument(message({ bodyHtml: "<p>Hi</p>" }), false, "light");
     expect(doc).not.toContain("Manrope");
@@ -125,6 +134,18 @@ describe("remote pictures in the reader", () => {
     // Backgrounds stay as they were, through the app.
     expect(doc).toContain(shown("https://cdn.example/bg.png"));
     expect(doc).toContain("img-src data: cid: blob: uwuimg: http://uwuimg.localhost;");
+  });
+
+  it("keeps the reader's own date marks when pictures load, and none a mail brings (W-41)", () => {
+    const dated = message({
+      bodyHtml: '<p>Hello <span data-uwu-date="7" data-uwu-src="x">you</span></p><img src="https://cdn.example/a.jpg">',
+    });
+    const mark = { from: 0, to: 5, index: 0, label: "Termin" };
+    const doc = buildDocument(dated, true, "light", new Map(), proxy, [mark], true);
+    expect(doc).toContain('data-uwu-date="0"');
+    expect(doc).not.toContain('data-uwu-date="7"');
+    expect(doc).not.toContain('data-uwu-src="x"');
+    expect(readableBody(dated)).not.toContain("data-uwu-");
   });
 
   it("defers nothing while remote pictures are blocked, or without being asked to", () => {

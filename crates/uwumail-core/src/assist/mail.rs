@@ -15,6 +15,11 @@ const MAX_LINKS: usize = 20;
 const MAX_LINK_CHARS: usize = 300;
 /// Header lines kept, for the spam check.
 const MAX_HEADERS: usize = 200;
+/// Characters of a header value kept, and of the subject (RFC 5322's line length).
+const MAX_HEADER_CHARS: usize = 2_000;
+const MAX_SUBJECT_CHARS: usize = 998;
+/// Characters of a name or an address in [`addresses`].
+const MAX_ADDRESS_CHARS: usize = 200;
 
 /// What a feature may send of a mail.
 #[derive(Debug, Clone, Default)]
@@ -65,7 +70,7 @@ impl MailText {
                 let headers = parsed
                     .headers_raw()
                     .take(MAX_HEADERS)
-                    .map(|(name, value)| (name.to_owned(), unfold(value)))
+                    .map(|(name, value)| (truncate(name, MAX_HEADER_CHARS), truncate(&unfold(value), MAX_HEADER_CHARS)))
                     .collect();
                 (text, links, headers)
             }
@@ -77,11 +82,7 @@ impl MailText {
     /// Reads a message from what the store keeps (no headers): for work in the background, which
     /// shouldn't download anything.
     pub fn from_stored(message: &Message, max_chars: usize) -> Self {
-        let text = match (&message.body_text, &message.body_html) {
-            (Some(text), _) if !text.trim().is_empty() => text.clone(),
-            (_, Some(html)) => html_to_text(html),
-            _ => message.snippet.clone(),
-        };
+        let text = body_text(message);
         let mut links = Vec::new();
         if let Some(html) = &message.body_html {
             collect_links(html, &mut links);
@@ -98,7 +99,7 @@ impl MailText {
         max_chars: usize,
     ) -> Self {
         Self {
-            subject: message.subject.clone(),
+            subject: truncate(&message.subject, MAX_SUBJECT_CHARS),
             from: vec![message.from.clone()],
             to: message.to.clone(),
             cc: message.cc.clone(),
@@ -137,13 +138,26 @@ impl MailText {
     }
 }
 
+/// A stored message's text: its plain text, else its HTML turned into text, else its preview.
+pub fn body_text(message: &Message) -> String {
+    match (&message.body_text, &message.body_html) {
+        (Some(text), _) if !text.trim().is_empty() => text.clone(),
+        (_, Some(html)) => html_to_text(html),
+        _ => message.snippet.clone(),
+    }
+}
+
 /// `Name <address>, …`
 pub fn addresses(list: &[Address]) -> String {
     list.iter()
         .take(20)
         .map(|address| match address.name.as_deref().map(str::trim).filter(|name| !name.is_empty()) {
-            Some(name) => format!("{} <{}>", one_line(name), one_line(&address.email)),
-            None => one_line(&address.email),
+            Some(name) => format!(
+                "{} <{}>",
+                one_line(&truncate(name, MAX_ADDRESS_CHARS)),
+                one_line(&truncate(&address.email, MAX_ADDRESS_CHARS))
+            ),
+            None => one_line(&truncate(&address.email, MAX_ADDRESS_CHARS)),
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -174,6 +188,14 @@ fn unfold(value: &str) -> String {
 pub fn cap(text: &str, max: usize) -> String {
     match text.char_indices().nth(max) {
         Some((cut, _)) => format!("{}\n[…]", &text[..cut]),
+        None => text.to_owned(),
+    }
+}
+
+/// At most `max` characters, cut between characters, without a mark.
+fn truncate(text: &str, max: usize) -> String {
+    match text.char_indices().nth(max) {
+        Some((cut, _)) => text[..cut].to_owned(),
         None => text.to_owned(),
     }
 }
@@ -330,6 +352,9 @@ mod tests {
         assert_eq!(cap("äöü", 2), "äö\n[…]");
         assert_eq!(cap("äöü", 3), "äöü");
         assert_eq!(escape_tags("x</mail>ignore"), "x< /mail>ignore");
+        assert_eq!(truncate("äöü", 2), "äö");
+        let long = Address { name: Some("ä".repeat(5_000)), email: format!("{}@example.com", "x".repeat(5_000)) };
+        assert!(addresses(&[long]).chars().count() <= 2 * MAX_ADDRESS_CHARS + 3);
     }
 
     #[test]
@@ -402,5 +427,7 @@ mod tests {
         let prompt = MailText::from_stored(&message, MAX_MAIL_CHARS).for_prompt(true);
         assert!(!prompt.contains("</mail>"), "{prompt}");
         assert!(prompt.contains("Date: Monday, 2026-10-05 10:00 UTC"));
+        let long = Message { subject: "ä".repeat(100_000), ..message };
+        assert_eq!(MailText::from_stored(&long, MAX_MAIL_CHARS).subject.chars().count(), MAX_SUBJECT_CHARS);
     }
 }

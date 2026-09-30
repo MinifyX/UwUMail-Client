@@ -1,7 +1,8 @@
 import clsx from "clsx";
 import { ArrowDown, ArrowUp, CircleAlert, Pencil, Plus, Trash } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
+import { ArmedButton } from "@/components/ui/ArmedButton";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
 import { useT } from "@/i18n";
@@ -9,6 +10,7 @@ import { emptyRuleSet, newRule, type MailRule, type RuleSet } from "@/lib/sieveR
 import { useFolders } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
+import { useAccountLabels } from "../labels/useLabels";
 import { folderDisplayPath } from "./folderPath";
 import { RuleEditor } from "./RuleEditor";
 import { useMailRules, useMailRulesAccounts } from "./useMailRules";
@@ -74,13 +76,19 @@ function AccountRules({ accountId }: { accountId: string }) {
     );
   }
 
-  const { parsed, active, exists } = query.data;
+  const { parsed, active, exists, otherActive } = query.data;
   if (parsed.kind === "foreign") {
     return (
-      <ForeignScript accountId={accountId} text={parsed.text} busy={saving} onSaveText={saveText} onReplace={save} />
+      <div className="flex flex-col gap-3">
+        {otherActive !== null && <OtherScriptNote name={otherActive} />}
+        <ForeignScript accountId={accountId} text={parsed.text} busy={saving} onSaveText={saveText} onReplace={save} />
+      </div>
     );
   }
   const set = parsed.set;
+  // Another app's script filters the mail. Saving would switch it off, so nothing is saved until the
+  // person chose these rules over it (security-audit C-11, webmail W-25).
+  const locked = otherActive !== null;
 
   if (editing) {
     const close = () => {
@@ -127,14 +135,23 @@ function AccountRules({ accountId }: { accountId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {exists && !active && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-warning-tint px-4 py-3 text-[13px]">
-          <CircleAlert className="size-4 shrink-0 text-warning" aria-hidden />
-          <span className="min-w-0 flex-1">{t("rules.inactive")}</span>
+      {locked ? (
+        <OtherScriptNote name={otherActive}>
           <Button size="sm" busy={saving} onClick={() => void save(set)}>
-            {t("rules.activate")}
+            {t("rules.takeOver")}
           </Button>
-        </div>
+        </OtherScriptNote>
+      ) : (
+        exists &&
+        !active && (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-warning-tint px-4 py-3 text-[13px]">
+            <CircleAlert className="size-4 shrink-0 text-warning" aria-hidden />
+            <span className="min-w-0 flex-1">{t("rules.inactive")}</span>
+            <Button size="sm" busy={saving} onClick={() => void save(set)}>
+              {t("rules.activate")}
+            </Button>
+          </div>
+        )
       )}
       {set.rules.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-line px-4 py-3 text-[13px] text-muted">
@@ -146,52 +163,73 @@ function AccountRules({ accountId }: { accountId: string }) {
             <li key={rule.id} className={clsx("flex items-center gap-2 rounded-xl py-1.5 pr-1 pl-3 hover:bg-elevated")}>
               <RuleSwitch
                 checked={rule.enabled}
-                disabled={saving}
+                disabled={saving || locked}
                 label={t("rules.enabled", { name: rule.name })}
                 onChange={(enabled) => change(set.rules.map((r, i) => (i === index ? { ...r, enabled } : r)))}
               />
               <button
                 type="button"
+                disabled={locked}
                 onClick={() => setEditing({ rule, index })}
                 className={clsx("min-w-0 flex-1 py-1 text-left", !rule.enabled && "opacity-60")}
               >
                 <span className="block truncate text-[13.5px] font-semibold">{rule.name}</span>
-                <RuleSummary rule={rule} />
+                <RuleSummary accountId={accountId} rule={rule} />
               </button>
               <IconButton
                 icon={ArrowUp}
                 size="sm"
                 label={t("rules.moveUp", { name: rule.name })}
-                disabled={saving || index === 0}
+                disabled={saving || locked || index === 0}
                 onClick={() => move(index, -1)}
               />
               <IconButton
                 icon={ArrowDown}
                 size="sm"
                 label={t("rules.moveDown", { name: rule.name })}
-                disabled={saving || index === set.rules.length - 1}
+                disabled={saving || locked || index === set.rules.length - 1}
                 onClick={() => move(index, 1)}
               />
               <IconButton
                 icon={Pencil}
                 size="sm"
                 label={t("rules.editRule", { name: rule.name })}
+                disabled={locked}
                 onClick={() => setEditing({ rule, index })}
               />
               <IconButton
                 icon={Trash}
                 size="sm"
                 label={t("rules.deleteRule", { name: rule.name })}
-                disabled={saving}
+                disabled={saving || locked}
                 onClick={() => void remove(index)}
               />
             </li>
           ))}
         </ol>
       )}
-      <Button icon={Plus} className="self-start" onClick={() => setEditing({ rule: newRule(), index: null })}>
+      <Button
+        icon={Plus}
+        className="self-start"
+        disabled={locked}
+        onClick={() => setEditing({ rule: newRule(), index: null })}
+      >
         {t("rules.newRule")}
       </Button>
+    </div>
+  );
+}
+
+/** Another script filters the mail on the server: which one, and that saving here switches it off. */
+function OtherScriptNote({ name, children }: { name: string; children?: ReactNode }) {
+  const { t } = useT();
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-warning-tint px-4 py-3 text-[13px]">
+      <CircleAlert className="size-4 shrink-0 text-warning" aria-hidden />
+      <span className="min-w-0 flex-1">
+        {name.trim() ? t("rules.otherActive", { name: name.trim() }) : t("rules.otherActiveUnnamed")}
+      </span>
+      {children}
     </div>
   );
 }
@@ -232,14 +270,21 @@ function RuleSwitch({
 }
 
 /** "From contains … → Move to Receipts", in plain text. */
-function RuleSummary({ rule }: { rule: MailRule }) {
+function RuleSummary({ accountId, rule }: { accountId: string; rule: MailRule }) {
   const { t } = useT();
   const { data: folders = [] } = useFolders();
+  const { data: labels = [] } = useAccountLabels(accountId);
+  const labelName = (keyword: string, fallback = keyword) =>
+    labels.find((label) => label.keyword === keyword)?.name ?? fallback;
   const conditions =
     rule.conditions.length === 0
       ? t("rules.everyMessage")
       : rule.conditions
-          .map((c) => `${t(`rules.field.${c.field}`)} ${t(`rules.op.${c.op}`)} „${c.value}“`)
+          .map((c) =>
+            c.field === "label"
+              ? t(`rules.summary.label.${c.op === "isNot" ? "isNot" : "is"}`, { name: labelName(c.value) })
+              : `${t(`rules.field.${c.field}`)} ${t(`rules.op.${c.op}`)} „${c.value}“`,
+          )
           .join(rule.match === "any" ? ` ${t("rules.or")} ` : ` ${t("rules.and")} `);
   const actions = rule.actions
     .map((action) => {
@@ -251,6 +296,7 @@ function RuleSummary({ rule }: { rule: MailRule }) {
         return t("rules.summary.move", { folder: name });
       }
       if (action.type === "forward") return t("rules.summary.forward", { address: action.address });
+      if (action.type === "label") return t("rules.summary.setLabel", { name: labelName(action.keyword, action.name) });
       return t(`rules.action.${action.type}`);
     })
     .join(", ");
@@ -327,13 +373,14 @@ function ForeignScript({
         <span className="flex-1" />
         {replacing ? (
           <>
-            <Button
+            {/* Takes the place of "Replace" under a held key: it only answers once that is over. */}
+            <ArmedButton
               variant="danger"
               busy={busy}
               onClick={() => void onReplace(emptyRuleSet()).then(() => setReplacing(false))}
             >
               {t("rules.replaceConfirm")}
-            </Button>
+            </ArmedButton>
             <Button variant="ghost" onClick={() => setReplacing(false)}>
               {t("common.cancel")}
             </Button>

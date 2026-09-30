@@ -77,7 +77,25 @@ export interface Address {
 /** Where the message list is looking. */
 export type MailboxView =
   | { kind: "unified"; role: "inbox" | "unread" | "flagged" | "drafts" | "sent" }
-  | { kind: "folder"; accountId: string; folderId: string };
+  | { kind: "folder"; accountId: string; folderId: string }
+  /** Mail with a label, in every folder but trash and junk of the mailboxes the label belongs to. */
+  | { kind: "label"; scope: string; labelId: string; keyword: string; accountIds: string[] };
+
+/**
+ * A label as a filter: its keyword, on mail of the mailboxes whose label it is. Labels live per
+ * UwUMail account (on its server) or on this device for every other mailbox, so the same keyword
+ * elsewhere may be a different label.
+ */
+export interface LabelRef {
+  keyword: string;
+  accountIds: string[];
+}
+
+/** How much mail carries a label, like a folder's counts. */
+export interface LabelCount {
+  total: number;
+  unread: number;
+}
 
 export type ListFilter = "all" | "unread" | "flagged" | "attachments";
 
@@ -90,6 +108,8 @@ export interface ThreadQuery {
   accountIds?: string[];
   cursor?: string;
   limit: number;
+  /** Label filters that must all hold; one holds when any of its labels is on the mail. */
+  labels?: LabelRef[][];
 }
 
 export interface ThreadSummary {
@@ -668,8 +688,17 @@ export interface AssistOptions {
   mayUsePrivateAddresses: boolean;
   maxProviders: number;
   maxLabels: number;
+  /** How many conditions the rules of one label may have. */
+  maxLabelConditions: number;
   maxInstructionChars: number;
   maxTextChars: number;
+  /** A server's: the admin lets this person use its assistant for mail of the app's other accounts. */
+  foreignMail: boolean;
+  /**
+   * This device's: the UwUMail accounts whose server may serve the other mailboxes' AI (their
+   * `foreignMail`), see `AssistSettings.serverAssist`. Empty for a server scope.
+   */
+  foreignServers: string[];
 }
 
 export type AssistProviderKind =
@@ -765,7 +794,8 @@ export interface AssistProbeInput {
 }
 
 /** The calls whose cost can be estimated before they are made. */
-export type AssistEstimateMethod = "Assist/compose" | "Assist/summarize" | "Assist/spamCheck" | "Assist/extractEvents";
+export type AssistEstimateMethod =
+  "Assist/compose" | "Assist/summarize" | "Assist/spamCheck" | "Assist/extractEvents" | "AssistLabel/suggest";
 
 /**
  * What one call would take, before it is made: `Assist/estimate` of the UwUMail server, or counted
@@ -845,8 +875,16 @@ export interface AssistSettings {
   /** What every feature uses unless it has its own choice. */
   default: AssistChoice | null;
   features: Record<AssistFeature, AssistChoice | null>;
-  /** Labels are put on incoming mail (opt-in). */
+  /** The model judges the labels of incoming mail (opt-in). */
   autoLabels: boolean;
+  /** Labels go on incoming mail by their rules, detectors, learned senders and classifier, without a model. */
+  nonAiLabels: boolean;
+  /**
+   * This device only: the UwUMail account whose server's assistant does every AI feature of the
+   * other mailboxes instead of the providers set up here (their mail goes to that server); null
+   * for none.
+   */
+  serverAssist: string | null;
   /** Per feature what will really be used, or null when nothing can. */
   effective: Record<AssistFeature, AssistEffective | null>;
 }
@@ -856,6 +894,8 @@ export interface AssistSettingsPatch {
   default?: AssistChoice | null;
   features?: Partial<Record<AssistFeature, AssistChoice | null>>;
   autoLabels?: boolean;
+  nonAiLabels?: boolean;
+  serverAssist?: string | null;
 }
 
 export interface AssistTokenUsage {
@@ -1003,6 +1043,26 @@ export interface AssistEventsResult {
   answer?: AssistAnswer | null;
 }
 
+/** A condition of a label's rules, see the server's docs/labels.md. */
+export type LabelConditionField = "from" | "subject" | "text" | "hasAttachment";
+
+export interface LabelCondition {
+  field: LabelConditionField;
+  /** `hasAttachment` takes "true" or "false". */
+  value: string;
+}
+
+/** Conditions that put a label on new mail. */
+export interface LabelRules {
+  match: "all" | "any";
+  conditions: LabelCondition[];
+}
+
+/** A built-in detector that puts a label on new mail. */
+export type LabelDetector = "invoice" | "appointment" | "newsletter" | "shipping";
+
+export const LABEL_DETECTORS: readonly LabelDetector[] = ["invoice", "appointment", "newsletter", "shipping"];
+
 /** The person's own word for a kind of mail; set on mail as the keyword `keyword`. */
 export interface AssistLabel {
   id: string;
@@ -1012,22 +1072,71 @@ export interface AssistLabel {
   keyword: string;
   /** `#rrggbb`, or null for the default. */
   color: string | null;
+  /** Conditions that put it on new mail; null for none. */
+  rules: LabelRules | null;
+  detector: LabelDetector | null;
+  /** A sender whose mail got it by hand twice gets it on new mail. */
+  learnSenders: boolean;
+  /** The label's classifier may put it on new mail once it has learned enough. */
+  classifier: boolean;
+  /** Mail with it in any folder, and of that the unread; null where not known (an older server). */
+  totalEmails: number | null;
+  unreadEmails: number | null;
+  /** Mails the classifier learned as having it (given by hand); it acts from 15 on. */
+  examples: number;
 }
 
 export interface AssistLabelInput {
   name: string;
   description: string;
   color: string | null;
+  rules?: LabelRules | null;
+  detector?: LabelDetector | null;
+  learnSenders?: boolean;
+  classifier?: boolean;
 }
 
-/** A label the model put on a mail, and why. */
+/** One label's verdict of "Label again" (`AssistLabel/suggest`). */
+export interface AssistLabelVerdict {
+  labelId: string;
+  name: string;
+  /** One sentence why, written before the verdict. */
+  reason: string;
+  fits: boolean;
+  /** The label is on the mail now. */
+  isSet: boolean;
+}
+
+/** A new label the model proposes when none fits. */
+export interface AssistNewLabel {
+  name: string;
+  description: string;
+  color: string | null;
+  reason: string;
+}
+
+export interface AssistLabelSuggestion extends AssistAnswer {
+  emailId: string;
+  verdicts: AssistLabelVerdict[];
+  newLabels: AssistNewLabel[];
+}
+
+/** Who put a label on: the model, or without one (the label's rules, a learned sender, a detector, the classifier). */
+export type LabelSource = "ai" | "rule" | "sender" | "detector" | "classifier";
+
+/** A label put on a mail by itself, and why. */
 export interface AssistLabelLogEntry {
   id: string;
   emailId: string;
   labelId: string;
   name: string;
   keyword: string;
+  source: LabelSource;
+  /** English, or the model's own words; `code` and `params` say it for a translation. */
   reason: string;
+  /** `ai`, `rule`, `sender`, `classifier`, or a detector's name; new ones may come. */
+  code: string;
+  params: Record<string, unknown>;
   createdAt: string;
   /** Taken off again, with undo or by removing the keyword. */
   undone: boolean;

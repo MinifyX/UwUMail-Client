@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -50,6 +52,8 @@ jobs:
           - 3143:3143
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - name: Linux build dependencies
         run: |
           sudo apt-get update
@@ -77,6 +81,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # Known vulnerabilities fail the job; "unmaintained" notices only show up in the log.
@@ -103,13 +109,14 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 2
+          persist-credentials: false
       - name: Skip for documentation-only changes
         id: changes
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ] && git diff --name-only HEAD^ HEAD | grep -qvE '^(docs/|brand/|README|CONTRIBUTING|\.github/ISSUE)'; then
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && git diff --name-only HEAD^ HEAD | grep -qvE '^(docs/|brand/|README|CONTRIBUTING|\.github/ISSUE)'; then
             echo "build=true" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
           else
             echo "build=false" >> "$GITHUB_OUTPUT"

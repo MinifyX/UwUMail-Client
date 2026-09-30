@@ -37,6 +37,7 @@ fn inbox_query(search: Option<&str>) -> ThreadQuery {
         account_ids: None,
         cursor: None,
         limit: 50,
+        labels: Vec::new(),
     }
 }
 

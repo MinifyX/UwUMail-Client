@@ -10,16 +10,19 @@ import {
   ShieldAlert,
   ShieldCheck,
   Star,
+  Tag,
+  Tags,
   Trash,
   Trash2,
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import type { ListFilter } from "@/backend/types";
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react";
+import type { LabelRef, ListFilter, ThreadSummary } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Menu as PopupMenu, type MenuItem } from "@/components/ui/Menu";
 import { Pill } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
 import {
@@ -32,9 +35,12 @@ import {
   useVisibleAccounts,
 } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
+import { groupByLabel, labelGroups, labelRef, splitLabelSearch, type LabelEntry } from "@/lib/labelFilter";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { openDraftThread } from "../compose/openDraft";
+import { LabelDot } from "../labels/LabelNav";
+import { labelsFor, useLabelDirectory } from "../labels/useLabels";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { useSelectionActions } from "./selection";
@@ -57,9 +63,10 @@ export const SEARCH_INPUT_ID = "uwu-search";
 interface ThreadListProps {
   variant: "simple" | "pro";
   className?: string;
+  style?: CSSProperties;
 }
 
-export function ThreadList({ variant, className }: ThreadListProps) {
+export function ThreadList({ variant, className, style }: ThreadListProps) {
   const { t } = useT();
   const view = useUi((s) => s.view);
   const filter = useUi((s) => s.filter);
@@ -98,8 +105,31 @@ export function ThreadList({ variant, className }: ThreadListProps) {
     return () => clearTimeout(timer);
   }, [draft, setSearch]);
 
-  const query = useThreads(view, filter, search);
-  const threads = flattenThreads(query.data?.pages);
+  const { entries: labelEntries, loaded: labelsLoaded } = useLabelDirectory();
+  const labelFilter = useUi((s) => s.labelFilter);
+  const setLabelFilter = useUi((s) => s.setLabelFilter);
+  const groupedByLabel = useSettings((s) => s.groupByLabel);
+  const updateSettings = useSettings((s) => s.update);
+  // The label chips: the labels this view's mail can carry.
+  const chipEntries =
+    view.kind === "label"
+      ? []
+      : view.kind === "folder"
+        ? labelsFor(labelEntries, view.accountId)
+        : labelEntries.filter((entry) => shown.some((account) => entry.accountIds.includes(account.id)));
+  const chipEntry = labelFilter
+    ? chipEntries.find((entry) => entry.scope === labelFilter.scope && entry.label.id === labelFilter.labelId)
+    : undefined;
+  const { text: searchText, names: labelNames } = splitLabelSearch(search);
+  const labelFilters: LabelRef[][] = [
+    ...labelGroups(labelNames, labelEntries),
+    ...(chipEntry ? [[labelRef(chipEntry)]] : []),
+  ];
+  // `label:` waits for the labels, rather than briefly finding nothing.
+  const query = useThreads(view, filter, searchText, labelFilters, labelNames.length === 0 || labelsLoaded);
+  const loaded = flattenThreads(query.data?.pages);
+  const sections = groupedByLabel ? groupByLabel(loaded, labelEntries) : null;
+  const threads = sections ? sections.flatMap((section) => section.items) : loaded;
   const ids = threads.map((thread) => thread.id).join("|");
   useEffect(() => {
     setVisibleThreadIds(ids ? ids.split("|") : []);
@@ -122,6 +152,77 @@ export function ThreadList({ variant, className }: ThreadListProps) {
     setChecked([]);
     void action(ids);
   };
+  // A right-click on a row: its actions, for the ticked rows when it is one of them.
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; threadIds: string[] } | null>(null);
+  const rowMenuItems = (threadIds: string[]): MenuItem[] => {
+    const rows = threads.filter((thread) => threadIds.includes(thread.id));
+    const unread = rows.some((thread) => thread.unreadCount > 0);
+    const done = () => setChecked([]);
+    return [
+      ...(labelEntries.length > 0 || labelsLoaded
+        ? [{ label: t("labels.pick"), onSelect: () => useUi.getState().openLabeling({ threadIds }) }]
+        : []),
+      { label: t("reader.archive"), onSelect: () => void selection.archive(threadIds).then(done) },
+      {
+        label: unread ? t("list.markRead") : t("reader.markUnread"),
+        onSelect: () => void selection.read(threadIds, unread).then(done),
+      },
+      { label: t("reader.move"), onSelect: () => void selection.move(threadIds, done) },
+      {
+        label: info.isJunk ? t("reader.notSpam") : t("reader.spam"),
+        onSelect: () => void selection.spam(threadIds, !info.isJunk).then(done),
+      },
+      {
+        label: info.isTrash ? t("reader.deleteForever") : t("reader.trash"),
+        danger: true,
+        onSelect: () => void selection.trash(threadIds).then(done),
+      },
+    ];
+  };
+  const renderRow = (thread: ThreadSummary) => (
+    <ThreadRow
+      key={thread.id}
+      thread={thread}
+      variant={variant}
+      density={density}
+      selected={thread.id === selectedThreadId}
+      accounts={accounts}
+      showAccount={showAccount}
+      actions={threadActions}
+      checked={checked.includes(thread.id)}
+      dragIds={checked.includes(thread.id) ? checked : [thread.id]}
+      inTrash={info.isTrash}
+      inJunk={info.isJunk}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        const threadIds = checked.includes(thread.id) ? checked : [thread.id];
+        setRowMenu({ x: event.clientX, y: event.clientY, threadIds });
+      }}
+      onSelect={(event) => {
+        const anchor = useUi.getState().selectionAnchor ?? selectedThreadId;
+        if (event.ctrlKey || event.metaKey) {
+          setChecked(checked.includes(thread.id) ? checked.filter((id) => id !== thread.id) : [...checked, thread.id]);
+          setAnchor(thread.id);
+        } else if (event.shiftKey && anchor) {
+          const order = threads.map((item) => item.id);
+          const start = order.indexOf(anchor);
+          const end = order.indexOf(thread.id);
+          if (start >= 0) {
+            const range = order.slice(Math.min(start, end), Math.max(start, end) + 1);
+            setChecked([...new Set([...checked, ...range])]);
+            // Shift+↑/↓ carry on from here.
+            setAnchor(anchor, thread.id);
+          }
+        } else if (info.isDrafts) {
+          setAnchor(thread.id);
+          void openDraftThread(thread.id);
+        } else {
+          selectThread(thread.id);
+        }
+      }}
+    />
+  );
+
   const empty =
     accountsLoaded && accounts.length === 0
       ? "noAccount"
@@ -136,7 +237,11 @@ export function ThreadList({ variant, className }: ThreadListProps) {
               : "other";
 
   return (
-    <section className={clsx("flex h-full min-w-0 flex-col bg-surface", className)} aria-label={info.title}>
+    <section
+      className={clsx("flex h-full min-w-0 flex-col bg-surface", className)}
+      style={style}
+      aria-label={info.title}
+    >
       <header className={clsx("flex flex-col gap-3 pt-4", variant === "pro" ? "px-5 pb-3" : "px-4 pb-2")}>
         <div className="flex items-center gap-2">
           {variant === "simple" && (
@@ -156,6 +261,15 @@ export function ThreadList({ variant, className }: ThreadListProps) {
             >
               {emptiable.role === "junk" ? t("folders.emptyJunk") : t("folders.emptyTrash")}
             </Button>
+          )}
+          {labelEntries.length > 0 && (
+            <IconButton
+              icon={Tags}
+              label={groupedByLabel ? t("labels.ungroup") : t("labels.group")}
+              active={groupedByLabel}
+              aria-pressed={groupedByLabel}
+              onClick={() => updateSettings({ groupByLabel: !groupedByLabel })}
+            />
           )}
           <IconButton
             icon={RefreshCw}
@@ -243,6 +357,12 @@ export function ThreadList({ variant, className }: ThreadListProps) {
               onClick={() => runOnChecked(selection.move)}
             />
             <IconButton
+              icon={Tag}
+              size="sm"
+              label={t("labels.pick")}
+              onClick={() => useUi.getState().openLabeling({ threadIds: checked })}
+            />
+            <IconButton
               icon={info.isJunk ? ShieldCheck : ShieldAlert}
               size="sm"
               label={info.isJunk ? t("reader.notSpam") : t("reader.spam")}
@@ -256,6 +376,21 @@ export function ThreadList({ variant, className }: ThreadListProps) {
                 {t(`filter.${item}`)}
               </Pill>
             ))}
+            {chipEntries.length > 0 && <span className="mx-0.5 h-5 w-px shrink-0 self-center bg-line" aria-hidden />}
+            {chipEntries.map((entry) => {
+              const active = chipEntry === entry;
+              return (
+                <Pill
+                  key={`${entry.scope}:${entry.label.id}`}
+                  active={active}
+                  title={entry.label.description || undefined}
+                  onClick={() => setLabelFilter(active ? null : { scope: entry.scope, labelId: entry.label.id })}
+                >
+                  <LabelDot color={entry.label.color} />
+                  {entry.label.name}
+                </Pill>
+              );
+            })}
           </div>
         )}
       </header>
@@ -294,46 +429,30 @@ export function ThreadList({ variant, className }: ThreadListProps) {
           />
         ) : (
           <>
-            {threads.map((thread) => (
-              <ThreadRow
-                key={thread.id}
-                thread={thread}
-                variant={variant}
-                density={density}
-                selected={thread.id === selectedThreadId}
-                accounts={accounts}
-                showAccount={showAccount}
-                actions={threadActions}
-                checked={checked.includes(thread.id)}
-                dragIds={checked.includes(thread.id) ? checked : [thread.id]}
-                inTrash={info.isTrash}
-                inJunk={info.isJunk}
-                onSelect={(event) => {
-                  const anchor = useUi.getState().selectionAnchor ?? selectedThreadId;
-                  if (event.ctrlKey || event.metaKey) {
-                    setChecked(
-                      checked.includes(thread.id) ? checked.filter((id) => id !== thread.id) : [...checked, thread.id],
-                    );
-                    setAnchor(thread.id);
-                  } else if (event.shiftKey && anchor) {
-                    const order = threads.map((item) => item.id);
-                    const start = order.indexOf(anchor);
-                    const end = order.indexOf(thread.id);
-                    if (start >= 0) {
-                      const range = order.slice(Math.min(start, end), Math.max(start, end) + 1);
-                      setChecked([...new Set([...checked, ...range])]);
-                      // Shift+↑/↓ carry on from here.
-                      setAnchor(anchor, thread.id);
-                    }
-                  } else if (info.isDrafts) {
-                    setAnchor(thread.id);
-                    void openDraftThread(thread.id);
-                  } else {
-                    selectThread(thread.id);
-                  }
-                }}
-              />
+            {(sections ?? [{ entry: undefined, items: threads }]).map((section) => (
+              <Fragment
+                key={section.entry ? `${section.entry.scope}:${section.entry.label.id}` : String(section.entry)}
+              >
+                {section.entry !== undefined && <SectionHeading entry={section.entry} count={section.items.length} />}
+                {section.items.map((thread) => renderRow(thread))}
+              </Fragment>
             ))}
+            {rowMenu && (
+              <div
+                className="fixed z-40"
+                style={{ left: rowMenu.x, top: rowMenu.y }}
+                onContextMenu={(event) => event.preventDefault()}
+              >
+                <PopupMenu
+                  open
+                  onOpenChange={(open) => !open && setRowMenu(null)}
+                  align={rowMenu.x > window.innerWidth - 240 ? "end" : "start"}
+                  side={rowMenu.y > window.innerHeight - 300 ? "above" : "below"}
+                  items={rowMenuItems(rowMenu.threadIds)}
+                  trigger={() => <span className="block size-0" />}
+                />
+              </div>
+            )}
             {query.hasNextPage && (
               <div className="flex justify-center p-4">
                 <Button size="sm" busy={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>
@@ -345,5 +464,19 @@ export function ThreadList({ variant, className }: ThreadListProps) {
         )}
       </div>
     </section>
+  );
+}
+
+/** The heading of a section of the list grouped by label. */
+function SectionHeading({ entry, count }: { entry: LabelEntry | null; count: number }) {
+  const { t } = useT();
+  return (
+    <h2 className="sticky top-0 z-[1] flex items-center gap-2 bg-surface px-3 pt-3 pb-1 text-[12px] font-bold tracking-wide text-muted uppercase">
+      {entry ? <LabelDot color={entry.label.color} /> : <Tag className="size-3" aria-hidden />}
+      <span className="min-w-0 truncate tracking-normal normal-case">
+        {entry ? entry.label.name : t("labels.none")}
+      </span>
+      <span className="font-semibold tracking-normal text-faint">{count}</span>
+    </h2>
   );
 }

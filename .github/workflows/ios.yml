@@ -31,6 +31,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -64,9 +66,12 @@ jobs:
       - run: pnpm --filter @uwumail/desktop exec vite build
 
       - name: Xcode project
+        env:
+          SHORT: ${{ steps.version.outputs.short }}
+          BUILD: ${{ steps.version.outputs.build }}
         run: |
-          pnpm tauri ios init --ci --skip-targets-install \
-            --config "{\"version\":\"${{ steps.version.outputs.short }}\",\"bundle\":{\"iOS\":{\"bundleVersion\":\"${{ steps.version.outputs.build }}\"}}}"
+          config=$(jq -nc --arg v "$SHORT" --arg b "$BUILD" '{version: $v, bundle: {iOS: {bundleVersion: $b}}}')
+          pnpm tauri ios init --ci --skip-targets-install --config "$config"
           find apps/desktop/src-tauri/gen/apple -maxdepth 2 -not -path '*/build/*' | sort
 
       - name: Build
@@ -74,7 +79,8 @@ jobs:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
-        run: bash scripts/ios-build.sh "${{ steps.version.outputs.version }}-${{ steps.version.outputs.build }}" out
+          BUILD_VERSION: ${{ steps.version.outputs.version }}-${{ steps.version.outputs.build }}
+        run: bash scripts/ios-build.sh "$BUILD_VERSION" out
 
       - name: Smoke test (simulator)
         run: bash scripts/ios-smoke.sh out/simulator/*.app smoke

@@ -217,9 +217,9 @@ pub async fn sign_in(
     let config = config(provider)?;
     let (redirect_uri, receiver) = match redirect {
         Redirect::Loopback => {
-            let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
-            let port = listener.local_addr()?.port();
-            (format!("http://{}:{port}", config.redirect_host), Receiver::Loopback(listener))
+            let listeners = loopback_listeners().await?;
+            let port = listeners[0].local_addr()?.port();
+            (format!("http://{}:{port}", config.redirect_host), Receiver::Loopback(listeners))
         }
         Redirect::App { uri, incoming } => (uri, Receiver::App(incoming)),
     };
@@ -240,8 +240,8 @@ pub async fn sign_in(
         .extend_pairs(config.extra.iter().copied());
     open_url(authorize.as_str());
 
-    let listener = match receiver {
-        Receiver::Loopback(listener) => listener,
+    let listeners = match receiver {
+        Receiver::Loopback(listeners) => listeners,
         Receiver::App(mut incoming) => {
             let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_app_link(&mut incoming, &state))
                 .await
@@ -249,10 +249,27 @@ pub async fn sign_in(
             return exchange_code(http, &config, code, redirect_uri, verifier).await;
         }
     };
-    let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_loopback(listener, state))
+    let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_loopback(listeners, state))
         .await
         .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
     exchange_code(http, &config, code, redirect_uri, verifier).await
+}
+
+/// Listeners on one port of both loopback addresses. Microsoft's redirect names `localhost`, which a
+/// browser may try as `[::1]` first: with that port taken by UwUMail too, no other program on this
+/// computer can wait there for the code (audit CC-4). Without IPv6 the IPv4 one does alone.
+async fn loopback_listeners() -> Result<Vec<TcpListener>> {
+    for _ in 0..8 {
+        let v4 = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let port = v4.local_addr()?.port();
+        match TcpListener::bind(("::1", port)).await {
+            Ok(v6) => return Ok(vec![v4, v6]),
+            // Somebody else has that port on [::1]: another one.
+            Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => continue,
+            Err(_) => return Ok(vec![v4]),
+        }
+    }
+    Err(Error::internal("No free port for the sign-in on this computer."))
 }
 
 /// How long one connection to the loopback listener may take to send its request.
@@ -261,17 +278,35 @@ const REQUEST_WAIT: Duration = Duration::from_secs(10);
 /// Waits for the browser's redirect with this sign-in's `state`. Every connection is answered on
 /// its own, so one that says nothing, breaks off or sends something else neither holds up nor ends
 /// the sign-in: any program on the device can connect to the port.
-async fn wait_for_loopback(listener: TcpListener, state: String) -> Result<(String, String)> {
+async fn wait_for_loopback(listeners: Vec<TcpListener>, state: String) -> Result<(String, String)> {
     let (found, mut answers) = tokio::sync::mpsc::channel(1);
+    let (accepted_tx, mut accepted) = tokio::sync::mpsc::channel(16);
+    // Dropped on return, which stops them.
+    let mut acceptors = tokio::task::JoinSet::new();
+    for listener in listeners {
+        let accepted_tx = accepted_tx.clone();
+        acceptors.spawn(async move {
+            loop {
+                match listener.accept().await {
+                    Ok((socket, _)) => {
+                        if accepted_tx.send(socket).await.is_err() {
+                            return;
+                        }
+                    }
+                    // Out of file handles, say: give the ones in use a moment to close.
+                    Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
+                }
+            }
+        });
+    }
+    drop(accepted_tx);
     let mut connections = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
             Some(result) = answers.recv() => return result,
-            accepted = listener.accept() => {
-                let Ok((socket, _)) = accepted else {
-                    // Out of file handles, say: give the ones in use a moment to close.
-                    tokio::time::sleep(Duration::from_millis(50)).await;
-                    continue;
+            socket = accepted.recv() => {
+                let Some(socket) = socket else {
+                    return Err(Error::internal("The sign-in stopped listening."));
                 };
                 // Finished ones are let go of, so a flood of connections holds nothing.
                 while connections.try_join_next().is_some() {}
@@ -313,7 +348,7 @@ async fn answer(mut socket: tokio::net::TcpStream, state: &str) -> Option<Result
 }
 
 enum Receiver {
-    Loopback(TcpListener),
+    Loopback(Vec<TcpListener>),
     App(tokio::sync::mpsc::Receiver<String>),
 }
 
@@ -350,17 +385,44 @@ pub async fn refresh(http: &reqwest::Client, provider: OAuthProvider, refresh_to
     request_tokens(http, config.token_url, &form).await
 }
 
-async fn request_tokens(http: &reqwest::Client, url: &str, form: &[(&str, String)]) -> Result<Tokens> {
-    let response = http.post(url).form(form).send().await?;
+/// The client for the token endpoint: no redirects, so the code, its verifier and refresh tokens
+/// only ever go to the provider's own address.
+fn token_client() -> Result<reqwest::Client> {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client.clone());
+    }
+    let client = crate::tls::http_client()?
+        .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION")))
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| Error::internal(format!("HTTP client setup failed: {e}")))?;
+    Ok(CLIENT.get_or_init(|| client).clone())
+}
+
+/// Token answers are small; a bigger one isn't one.
+const MAX_TOKEN_ANSWER: usize = 256 * 1024;
+
+async fn request_tokens(_http: &reqwest::Client, url: &str, form: &[(&str, String)]) -> Result<Tokens> {
+    let mut response = token_client()?.post(url).form(form).send().await?;
     let status = response.status();
-    let body = response.text().await?;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if bytes.len() + chunk.len() > MAX_TOKEN_ANSWER {
+            return Err(Error::auth("The provider's answer to the sign-in is too big."));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let body = String::from_utf8_lossy(&bytes);
     if !status.is_success() {
         let message = serde_json::from_str::<TokenError>(&body)
             .map(|e| e.error_description.unwrap_or(e.error))
             .unwrap_or_else(|_| format!("HTTP {status}"));
         return Err(Error::auth(format!("The provider refused the sign-in: {message}")));
     }
-    let tokens: TokenResponse = serde_json::from_str(&body)?;
+    let tokens: TokenResponse =
+        serde_json::from_str(&body).map_err(|_| Error::auth("The provider's answer to the sign-in isn't readable."))?;
     Ok(Tokens {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -436,7 +498,7 @@ mod tests {
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
-        let waiting = tokio::spawn(wait_for_loopback(listener, "ours".into()));
+        let waiting = tokio::spawn(wait_for_loopback(vec![listener], "ours".into()));
 
         // One that connects and says nothing, one that hangs up, and one with a wrong state.
         let _silent = TcpStream::connect(address).await.unwrap();
@@ -450,6 +512,29 @@ mod tests {
         let mut browser = TcpStream::connect(address).await.unwrap();
         browser.write_all(b"GET /?code=real&state=ours HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
         let result = tokio::time::timeout(Duration::from_secs(5), waiting).await.expect("not held up").unwrap();
+        assert_eq!(result.unwrap(), ("real".to_string(), "ours".to_string()));
+    }
+
+    #[tokio::test]
+    async fn the_sign_in_port_is_taken_on_both_loopback_addresses() {
+        use tokio::net::TcpStream;
+
+        let listeners = loopback_listeners().await.unwrap();
+        let port = listeners[0].local_addr().unwrap().port();
+        let has_v6 = listeners.len() == 2;
+        if has_v6 {
+            assert_eq!(
+                listeners[1].local_addr().unwrap(),
+                std::net::SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port))
+            );
+            assert!(TcpListener::bind(("::1", port)).await.is_err(), "nobody else can wait on [::1]");
+        }
+        let waiting = tokio::spawn(wait_for_loopback(listeners, "ours".into()));
+        // The browser may come on either address; the redirect counts on both.
+        let address = if has_v6 { "[::1]" } else { "127.0.0.1" };
+        let mut browser = TcpStream::connect(format!("{address}:{port}")).await.unwrap();
+        browser.write_all(b"GET /?code=real&state=ours HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(5), waiting).await.expect("answered").unwrap();
         assert_eq!(result.unwrap(), ("real".to_string(), "ours".to_string()));
     }
 

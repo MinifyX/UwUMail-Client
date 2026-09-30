@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AssistAnswer, AssistSpamCheck } from "@/backend/types";
+import type { AssistAnswer, AssistLabelSuggestion, AssistSpamCheck } from "@/backend/types";
 
 /** What the reader shows of the assistant: summaries and spam checks, while the page is open. */
 interface AssistReaderState {
@@ -11,6 +11,10 @@ interface AssistReaderState {
   done: Record<string, { text: string; answer: AssistAnswer | null }>;
   /** Finished spam checks, by mail. */
   spamResults: Record<string, AssistSpamCheck>;
+  /** Mails with "Label again" on screen. */
+  labelChecks: Record<string, true>;
+  /** Finished label suggestions, by mail. */
+  labelResults: Record<string, AssistLabelSuggestion>;
   showSummary: (key: string) => void;
   hideSummary: (key: string) => void;
   showSpamCheck: (emailId: string) => void;
@@ -19,6 +23,9 @@ interface AssistReaderState {
   forget: (key: string) => void;
   rememberSpamCheck: (result: AssistSpamCheck) => void;
   forgetSpamCheck: (emailId: string) => void;
+  showLabelCheck: (emailId: string) => void;
+  hideLabelCheck: (emailId: string) => void;
+  rememberLabelCheck: (result: AssistLabelSuggestion) => void;
 }
 
 const without = <T>(record: Record<string, T>, key: string): Record<string, T> => {
@@ -32,6 +39,8 @@ export const useAssistReader = create<AssistReaderState>()((set) => ({
   spamChecks: {},
   done: {},
   spamResults: {},
+  labelChecks: {},
+  labelResults: {},
   showSummary: (key) => set((state) => ({ summaries: { ...state.summaries, [key]: true } })),
   hideSummary: (key) => set((state) => ({ summaries: without(state.summaries, key) })),
   showSpamCheck: (emailId) => set((state) => ({ spamChecks: { ...state.spamChecks, [emailId]: true } })),
@@ -40,6 +49,14 @@ export const useAssistReader = create<AssistReaderState>()((set) => ({
   forget: (key) => set((state) => ({ done: without(state.done, key) })),
   rememberSpamCheck: (result) => set((state) => ({ spamResults: { ...state.spamResults, [result.emailId]: result } })),
   forgetSpamCheck: (emailId) => set((state) => ({ spamResults: without(state.spamResults, emailId) })),
+  showLabelCheck: (emailId) => set((state) => ({ labelChecks: { ...state.labelChecks, [emailId]: true } })),
+  hideLabelCheck: (emailId) =>
+    set((state) => ({
+      labelChecks: without(state.labelChecks, emailId),
+      labelResults: without(state.labelResults, emailId),
+    })),
+  rememberLabelCheck: (result) =>
+    set((state) => ({ labelResults: { ...state.labelResults, [result.emailId]: result } })),
 }));
 
 export const mailKey = (emailId: string) => `mail:${emailId}`;

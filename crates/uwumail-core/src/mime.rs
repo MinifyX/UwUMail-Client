@@ -38,7 +38,18 @@ pub struct ParsedMessage {
     pub attachments: Vec<ParsedAttachment>,
     pub has_body: bool,
     pub unsubscribe: Option<crate::model::Unsubscribe>,
+    /// The headers labels without a model read (`uwumail_labels::HEADERS`: List-Id, Precedence, …),
+    /// lower-case name and unfolded value.
+    pub label_headers: Vec<(String, String)>,
+    /// A `text/calendar` or `application/ics` part: an invitation.
+    pub calendar: bool,
+    /// The receiving server's `Authentication-Results` vouch for the From address's domain
+    /// ([`crate::assist::signals::from_vouched`]); learned senders only label such mail.
+    pub from_trusted: bool,
 }
+
+/// Characters of a header value kept in [`ParsedMessage::label_headers`].
+const MAX_LABEL_HEADER_CHARS: usize = 2_000;
 
 fn addresses(value: Option<&ParsedAddress>) -> Vec<Address> {
     let Some(value) = value else { return Vec::new() };
@@ -75,6 +86,22 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 /// Parses a full message or just its header block.
+/// Whether the receiving server vouches for the From address (see [`ParsedMessage::from_trusted`]).
+fn from_trusted(message: &mail_parser::Message<'_>) -> bool {
+    let Some(from) = message.from().and_then(|from| from.first()).and_then(|addr| addr.address.as_deref()) else {
+        return false;
+    };
+    let headers: Vec<(String, String)> = message
+        .headers_raw()
+        .filter(|(name, _)| {
+            name.eq_ignore_ascii_case("Received") || name.eq_ignore_ascii_case("Authentication-Results")
+        })
+        .take(10)
+        .map(|(name, value)| (name.to_owned(), value.chars().take(4_000).collect()))
+        .collect();
+    crate::assist::signals::from_vouched(&headers, from)
+}
+
 pub fn parse(raw: &[u8]) -> ParsedMessage {
     let Some(message) = MessageParser::default().parse(raw) else {
         return ParsedMessage::default();
@@ -146,6 +173,24 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
         unsubscribe: message
             .header_raw("List-Unsubscribe")
             .and_then(|value| unsubscribe_options(value, message.header_raw("List-Unsubscribe-Post"))),
+        label_headers: message
+            .headers_raw()
+            .filter(|(name, _)| uwumail_labels::HEADERS.iter().any(|known| known.eq_ignore_ascii_case(name)))
+            .take(20)
+            .map(|(name, value)| {
+                // Kept with the mail and read by every label check: a few lines' worth is enough.
+                let value: String = value.split_whitespace().collect::<Vec<_>>().join(" ");
+                (name.to_ascii_lowercase(), value.chars().take(MAX_LABEL_HEADER_CHARS).collect())
+            })
+            .collect(),
+        from_trusted: from_trusted(&message),
+        calendar: message.parts.iter().any(|part| {
+            part.content_type().is_some_and(|ct| {
+                let subtype = ct.subtype().unwrap_or_default();
+                (ct.ctype().eq_ignore_ascii_case("text") && subtype.eq_ignore_ascii_case("calendar"))
+                    || (ct.ctype().eq_ignore_ascii_case("application") && subtype.eq_ignore_ascii_case("ics"))
+            })
+        }),
     }
 }
 
@@ -251,6 +296,13 @@ pub fn sanitize_html(html: &str) -> String {
         .add_tag_attributes("table", &["background"])
         .url_schemes(HashSet::from(["http", "https", "mailto", "cid", "data"]))
         .link_rel(Some("noopener noreferrer"))
+        .attribute_filter(|element, attribute, value| {
+            // `data:` is for pictures inside the mail; as a link it would open a page the mail
+            // itself wrote (a fake login, say) under an address that names no site.
+            let data = value.trim_start().get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:"));
+            let picture = matches!((element, attribute), ("img", "src") | ("td" | "th" | "table", "background"));
+            (!data || picture).then_some(value.into())
+        })
         .strip_comments(true);
     // The sanitizer drops <body>, and with it the background many newsletters set
     // there. It moves to a wrapper that goes through the sanitizer like the rest.
@@ -469,6 +521,18 @@ Content-Type: text/html; charset=utf-8\r\n\
     }
 
     #[test]
+    fn data_addresses_are_only_kept_for_pictures() {
+        let clean = sanitize_html(
+            "<a href=\" DATA:text/html,<h1>Login</h1>\">x</a><img src=\"data:image/png;base64,AAAA\">\
+             <table background=\"data:image/png;base64,AAAA\"><tr><td>y</td></tr></table><a href=\"https://example.com/\">z</a>",
+        );
+        assert!(!clean.to_ascii_lowercase().contains("data:text"), "{clean}");
+        assert!(clean.contains("<img src=\"data:image/png;base64,AAAA\">"), "{clean}");
+        assert!(clean.contains("background=\"data:image/png;base64,AAAA\""), "{clean}");
+        assert!(clean.contains("href=\"https://example.com/\""), "{clean}");
+    }
+
+    #[test]
     fn winmail_dat_gives_its_body_and_attachments() {
         use crate::tnef::tests::{HEADERS, note, request};
         use uwumail_tnef::builder::mime_with_winmail;
@@ -510,6 +574,42 @@ Content-Type: text/html; charset=utf-8\r\n\
     #[test]
     fn html_to_text_skips_styles_and_decodes_entities() {
         assert_eq!(html_to_text("<style>x{}</style><p>Tom &amp; Jerry</p>").trim(), "Tom & Jerry");
+    }
+
+    #[test]
+    fn damaged_messages_never_panic() {
+        use crate::tnef::tests::{HEADERS, note};
+        let winmail = uwumail_tnef::builder::mime_with_winmail(HEADERS, None, &note());
+        let bases: [&[u8]; 2] = [SAMPLE.as_bytes(), &winmail];
+        // xorshift: the same cuts and flips every run.
+        let mut state: u64 = 0x5eed_0000_0000_0021;
+        let mut next = move |n: usize| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state % n.max(1) as u64) as usize
+        };
+        for round in 0..300 {
+            let mut data = bases[round % 2].to_vec();
+            for _ in 0..=next(6) {
+                match next(3) {
+                    0 => data.truncate(next(data.len() + 1)),
+                    1 if !data.is_empty() => {
+                        let at = next(data.len());
+                        data[at] = next(256) as u8;
+                    }
+                    _ => {
+                        let at = next(data.len() + 1);
+                        let piece: &[u8] =
+                            [&b"<"[..], b"&", b"\r\n\r\n", b"--b\r\n", b"=?UTF-8?B?", b"\xff\xfe"][next(6)];
+                        data.splice(at..at, piece.iter().copied());
+                    }
+                }
+            }
+            let parsed = parse(&data);
+            let _ = html_to_text(parsed.html.as_deref().unwrap_or_default());
+            let _ = draft_parts(&data);
+        }
     }
 
     #[test]

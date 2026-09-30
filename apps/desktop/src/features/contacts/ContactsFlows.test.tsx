@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account, AddressBookInfo, ContactRecord } from "@/backend/types";
+import { ARMING_MS } from "@/components/ui/armed";
 import { i18n } from "@/i18n";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
@@ -155,7 +156,14 @@ describe("contacts flows", () => {
 
     fireEvent.click(within(detail).getByRole("button", { name: "Delete" }));
     const question = await findDialog(/Delete “Otto Beispiel”/);
+    // The click of the gesture that asked doesn't answer (security-audit C-10).
+    const asked = performance.now();
+    const now = vi.spyOn(performance, "now").mockReturnValue(asked + 10);
     fireEvent.click(within(question).getByRole("button", { name: "Delete" }));
+    expect(fake.deleteContact).not.toHaveBeenCalled();
+    now.mockReturnValue(asked + ARMING_MS + 10);
+    fireEvent.click(within(question).getByRole("button", { name: "Delete" }));
+    now.mockRestore();
     await waitFor(() => expect(fake.deleteContact).toHaveBeenCalledWith("k2"));
   });
 

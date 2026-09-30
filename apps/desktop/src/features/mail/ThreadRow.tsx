@@ -8,7 +8,7 @@ import { displayName, formatListDate } from "@/lib/format";
 import type { useThreadActions } from "@/lib/queries";
 import type { ListDensity } from "@/state/settings";
 import { ThreadLabelChips } from "../assist/LabelChips";
-import { THREAD_DRAG_TYPE } from "./selection";
+import { endThreadDrag, startThreadDrag } from "./threadDrag";
 
 interface ThreadRowProps {
   thread: ThreadSummary;
@@ -27,6 +27,7 @@ interface ThreadRowProps {
   inTrash?: boolean;
   /** The row sits in junk, where "spam" means "not spam". */
   inJunk?: boolean;
+  onContextMenu?: (event: React.MouseEvent) => void;
 }
 
 function QuickAction({
@@ -74,6 +75,7 @@ export function ThreadRow({
   dragIds,
   inTrash = false,
   inJunk = false,
+  onContextMenu,
 }: ThreadRowProps) {
   const { t, i18n } = useT();
   const compact = density === "compact";
@@ -92,12 +94,13 @@ export function ThreadRow({
   return (
     <div
       data-thread-id={thread.id}
+      onContextMenu={onContextMenu}
       draggable={dragIds !== undefined}
       onDragStart={(event) => {
         if (!dragIds) return;
-        event.dataTransfer.setData(THREAD_DRAG_TYPE, JSON.stringify(dragIds));
-        event.dataTransfer.effectAllowed = "move";
+        startThreadDrag(event.dataTransfer, dragIds);
       }}
+      onDragEnd={endThreadDrag}
       className={clsx(
         "group relative flex text-left transition-colors",
         compact ? "gap-2.5 rounded-xl py-2 pr-3 pl-1.5" : "gap-3 rounded-2xl py-3 pr-3 pl-1.5",

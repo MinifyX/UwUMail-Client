@@ -9,6 +9,7 @@ import {
   providerCreate,
   providerUpdate,
   toAppliedLabels,
+  toLabelSuggestion,
   toAssistFeaturesOrNull,
   toAssistLabel,
   toAssistLabels,
@@ -30,6 +31,8 @@ import {
   toLocalModelServers,
 } from "./assistConvert";
 import type {
+  LabelCount,
+  LabelRef,
   BlockedSender,
   Account,
   AddressBookInfo,
@@ -270,7 +273,9 @@ export class TauriBackend implements Backend {
   }
 
   mailRules(accountId?: string) {
-    return call<{ script: string | null; active: boolean }>("mail_rules", { accountId: accountId ?? null });
+    return call<{ script: string | null; active: boolean; otherActive?: string | null }>("mail_rules", {
+      accountId: accountId ?? null,
+    });
   }
 
   saveMailRules(script: string, accountId?: string) {
@@ -695,6 +700,13 @@ export class TauriBackend implements Backend {
     await call<void>("assist_undo_labels", { scope, logIds });
   }
 
+  async suggestLabels(messageId: string, language?: string, suggestNew = true) {
+    return toLabelSuggestion(
+      await call<unknown>("assist_suggest_labels", { messageId, language: language ?? null, suggestNew }),
+      messageId,
+    );
+  }
+
   async applyAssistLabels(messageIds: string[]) {
     return toAppliedLabels(await call<unknown>("assist_apply_labels", { messageIds }));
   }
@@ -735,6 +747,10 @@ export class TauriBackend implements Backend {
 
   setKeywords(messageIds: string[], keywords: Record<string, boolean>) {
     return call<void>("set_keywords", { messageIds, keywords });
+  }
+
+  labelCounts(labels: LabelRef[]) {
+    return call<LabelCount[]>("label_counts", { labels });
   }
 
   searchContacts(query: string) {

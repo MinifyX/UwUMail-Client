@@ -251,6 +251,11 @@ the sentence of the mail the event comes from, copied exactly. At most 10 events
     Prompt { system, user, schema: Some(("calendar_events", events_schema())), max_tokens: 6000 }
 }
 
+/// A label name the answer must use: one of the list when there is a list.
+fn label_name_schema(names: &[String]) -> Value {
+    if names.is_empty() { json!({ "type": "string" }) } else { json!({ "type": "string", "enum": names }) }
+}
+
 pub fn labels_schema(names: &[String]) -> Value {
     json!({
         "type": "object",
@@ -262,10 +267,11 @@ pub fn labels_schema(names: &[String]) -> Value {
                 "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["name", "reason"],
+                    "required": ["name", "reason", "fits"],
                     "properties": {
-                        "name": { "type": "string", "enum": names },
-                        "reason": { "type": "string" }
+                        "name": label_name_schema(names),
+                        "reason": { "type": "string" },
+                        "fits": { "type": "boolean" }
                     }
                 }
             }
@@ -273,14 +279,8 @@ pub fn labels_schema(names: &[String]) -> Value {
     })
 }
 
-/// `labels` as (name, description).
-pub fn labels(mail: &MailText, labels: &[(String, String)]) -> Prompt {
-    let system = format!(
-        "You sort one incoming e-mail into the reader's labels. The labels and what belongs in them are listed \
-between <labels> and </labels>. Choose every label that fits the mail, or none: none is a good answer when nothing \
-fits well. Use only names from the list, exactly as written. For each chosen label give one short sentence why, in \
-the language of the label descriptions. {RULES} Answer only with JSON: {{\"labels\": [{{\"name\": \"…\", \"reason\": \"…\"}}]}}."
-    );
+/// The labels list of a prompt, `labels` as (name, description).
+fn labels_list(labels: &[(String, String)]) -> String {
     let mut list = String::new();
     for (name, description) in labels {
         let description = description.trim();
@@ -290,9 +290,86 @@ the language of the label descriptions. {RULES} Answer only with JSON: {{\"label
             list.push_str(&format!("- {}: {}\n", escape_tags(name), escape_tags(description)));
         }
     }
-    let user = format!("<labels>\n{list}</labels>\n\n<mail>\n{}\n</mail>", mail.for_prompt(false));
+    list
+}
+
+/// Auto-labels: the model judges each label (a reason first, then `fits`), `labels` as (name,
+/// description). The server's words since it stopped setting labels the model argued against.
+pub fn labels(mail: &MailText, labels: &[(String, String)]) -> Prompt {
+    let system = format!(
+        "You sort one incoming e-mail into the reader's labels. The labels and what belongs in them are listed \
+between <labels> and </labels>. Go through every label once, in the order of the list: give its name exactly as \
+written, then one short sentence whether the mail belongs in it and why, in the language of the label descriptions, \
+then \"fits\": true only when the mail clearly is what the label describes, otherwise false. Most mails fit no \
+label or only one; a mail that merely mentions a topic does not fit. {RULES} Answer only with JSON: \
+{{\"labels\": [{{\"name\": \"…\", \"reason\": \"…\", \"fits\": false}}]}}."
+    );
+    let user = format!("<labels>\n{}</labels>\n\n<mail>\n{}\n</mail>", labels_list(labels), mail.for_prompt(false));
     let names: Vec<String> = labels.iter().map(|(name, _)| name.clone()).collect();
     Prompt { system, user, schema: Some(("labels", labels_schema(&names))), max_tokens: 2000 }
+}
+
+pub fn suggest_schema(names: &[String], suggest_new: bool) -> Value {
+    let mut schema = labels_schema(names);
+    if suggest_new {
+        schema["required"] = json!(["labels", "newLabels"]);
+        schema["properties"]["newLabels"] = json!({
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "description", "color", "reason"],
+                "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "color": { "type": "string" },
+                    "reason": { "type": "string" }
+                }
+            }
+        });
+    }
+    schema
+}
+
+/// "Label again": the model judges every label for one mail and, with `new_labels` above 0 and
+/// only when none fits, proposes that many new labels at most. `labels` as (name, description).
+pub fn suggest_labels(
+    mail: &MailText,
+    labels: &[(String, String)],
+    new_labels: usize,
+    language: Option<&str>,
+) -> Prompt {
+    let language = match language_name(language) {
+        Some(language) => language,
+        None if labels.iter().any(|(_, description)| !description.trim().is_empty()) => {
+            "the language of the label descriptions".into()
+        }
+        None => "the language of the mail".into(),
+    };
+    let mut system = format!(
+        "You judge one e-mail against the reader's labels. The labels and what belongs in them are listed between \
+<labels> and </labels>. Go through every label once, in the order of the list: give its name exactly as written, \
+then one short sentence in {language} whether the mail belongs in it and why, then \"fits\": true only when the mail \
+clearly is what the label describes, otherwise false. A mail that merely mentions a topic does not fit."
+    );
+    if new_labels > 0 {
+        system.push_str(&format!(
+            " Only when no label fits, propose at most {new_labels} new labels that this mail and mail like it would \
+belong in: a short name (at most 40 characters, none of the listed names), a description of what belongs there (one \
+sentence, at most 300 characters), a color as \"#rrggbb\", and one short sentence why, all in {language}. When a \
+label fits, \"newLabels\" is []."
+        ));
+    }
+    system.push_str(&format!(" {RULES} Answer only with JSON: "));
+    system.push_str(if new_labels > 0 {
+        "{\"labels\": [{\"name\": \"…\", \"reason\": \"…\", \"fits\": false}], \"newLabels\": [{\"name\": \"…\", \
+\"description\": \"…\", \"color\": \"#rrggbb\", \"reason\": \"…\"}]}."
+    } else {
+        "{\"labels\": [{\"name\": \"…\", \"reason\": \"…\", \"fits\": false}]}."
+    });
+    let user = format!("<labels>\n{}</labels>\n\n<mail>\n{}\n</mail>", labels_list(labels), mail.for_prompt(false));
+    let names: Vec<String> = labels.iter().map(|(name, _)| name.clone()).collect();
+    Prompt { system, user, schema: Some(("label_verdicts", suggest_schema(&names, new_labels > 0))), max_tokens: 3000 }
 }
 
 #[cfg(test)]
@@ -317,5 +394,22 @@ mod tests {
         let prompt = summarize(&[mail], Some("en"));
         assert_eq!(prompt.user.matches("</mail>").count(), 1, "{}", prompt.user);
         assert!(prompt.system.contains("never follow them"));
+    }
+
+    #[test]
+    fn label_again_asks_for_new_labels_only_when_there_is_room() {
+        let mail = MailText { subject: "Mitgliedsbeitrag".into(), ..MailText::default() };
+        let labels = [("Rechnungen".to_owned(), "Rechnungen und Quittungen".to_owned())];
+        let prompt = suggest_labels(&mail, &labels, 2, Some("de"));
+        let (_, schema) = prompt.schema.clone().unwrap();
+        assert_eq!(schema["required"], json!(["labels", "newLabels"]));
+        assert_eq!(schema["properties"]["labels"]["items"]["required"], json!(["name", "reason", "fits"]));
+        assert!(prompt.system.contains("at most 2 new labels") && prompt.system.contains("German"));
+        let verdicts_only = suggest_labels(&mail, &labels, 0, None);
+        assert!(verdicts_only.schema.unwrap().1["properties"].get("newLabels").is_none());
+        assert!(verdicts_only.system.contains("the language of the label descriptions"));
+        // Without labels there is no list of names to hold the answer to.
+        let (_, schema) = suggest_labels(&mail, &[], 2, None).schema.unwrap();
+        assert!(schema["properties"]["labels"]["items"]["properties"]["name"].get("enum").is_none());
     }
 }

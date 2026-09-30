@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Check, Plus, Sparkles, Tag, Undo2, X } from "lucide-react";
+import { Check, Plus, Sparkles, Tag, Undo2, Wand2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { AssistLabel, AssistLabelLogEntry, Message } from "@/backend/types";
@@ -10,7 +10,7 @@ import { formatLongDate } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries";
 import { toast } from "@/state/toasts";
-import { chipStyle, labelsOff, labelsOn, setByAssistant } from "./labels";
+import { chipStyle, labelReason, labelsOff, labelsOn, setByAssistant } from "./labels";
 import {
   AssistForAccount,
   assistErrorText,
@@ -223,9 +223,12 @@ function LabelChip({
         className="inline-flex items-center rounded-full focus-visible:shadow-focus focus-visible:outline-none"
       >
         <Chip label={label} />
-        {entry && (
-          <Sparkles className="-ml-1.5 size-3 shrink-0 text-pink" aria-label={t("assist.labels.byAssistant")} />
-        )}
+        {entry &&
+          (entry.source === "ai" ? (
+            <Sparkles className="-ml-1.5 size-3 shrink-0 text-pink" aria-label={t("assist.labels.byAssistant")} />
+          ) : (
+            <Wand2 className="-ml-1.5 size-3 shrink-0 text-pink" aria-label={t("labels.chip.automatic")} />
+          ))}
       </button>
       {open && (
         <div
@@ -249,10 +252,16 @@ function LabelChip({
           {entry ? (
             <div className="flex flex-col gap-1 rounded-xl bg-pink-tint/40 px-3 py-2">
               <p className="flex items-center gap-1.5 text-[12px] font-bold text-pink-ink">
-                <Sparkles className="size-3.5" aria-hidden />
-                {t("assist.labels.byAssistant")}
+                {entry.source === "ai" ? (
+                  <Sparkles className="size-3.5" aria-hidden />
+                ) : (
+                  <Wand2 className="size-3.5" aria-hidden />
+                )}
+                {entry.source === "ai"
+                  ? t("assist.labels.byAssistant")
+                  : t("labels.chip.bySource", { source: t(`labels.source.${entry.source}`) })}
               </p>
-              {entry.reason && <p className="selectable text-[13px]">{entry.reason}</p>}
+              {labelReason(entry, t) && <p className="selectable text-[13px]">{labelReason(entry, t)}</p>}
               <p className="text-[11.5px] text-muted">
                 {[
                   entry.providerName ? providerLabel({ providerName: entry.providerName, model: entry.model }) : null,

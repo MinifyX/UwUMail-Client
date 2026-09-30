@@ -27,7 +27,10 @@ const fake = {
   listAccounts: vi.fn(async () => [{ id: "acc", email: "me@example.org" }]),
   listFolders: vi.fn(async () => []),
   mailRulesAvailable: vi.fn(async () => true),
-  mailRules: vi.fn(async () => ({ script: stored, active: true })),
+  mailRules: vi.fn(async (): Promise<{ script: string | null; active: boolean; otherActive?: string | null }> => ({
+    script: stored,
+    active: true,
+  })),
   validateMailRules: vi.fn(async (): Promise<string | null> => null),
   saveMailRules: vi.fn(async (script: string) => {
     stored = script;
@@ -64,6 +67,20 @@ describe("mail rules settings", () => {
     expect(fake.validateMailRules).toHaveBeenCalledBefore(fake.saveMailRules);
     const saved = parseRulesScript(fake.saveMailRules.mock.calls[0]![0]);
     expect(saved.kind === "rules" && saved.set.rules[0]!.enabled).toBe(false);
+  });
+
+  it("names another app's active script and saves nothing until these rules are chosen (C-11)", async () => {
+    stored = rulesToSieve(RULES);
+    fake.mailRules.mockResolvedValueOnce({ script: stored, active: false, otherActive: "roundcube" });
+    renderRules();
+    expect(await screen.findByText(/Another filter script, “roundcube”/)).toBeTruthy();
+    const toggle = screen.getByRole("switch", { name: "Invoices on or off" });
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(toggle);
+    expect(fake.saveMailRules).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Use these rules instead" }));
+    await waitFor(() => expect(fake.saveMailRules).toHaveBeenCalledTimes(1));
+    expect(fake.saveMailRules.mock.calls[0]![0]).toBe(stored);
   });
 
   it("saves nothing the server refuses", async () => {

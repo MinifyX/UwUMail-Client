@@ -47,6 +47,16 @@ pub const MAX_SIZE_URLS: usize = 200;
 /// The longest line of the picture sizes answer taken.
 const MAX_SIZE_LINE: usize = 16 * 1024;
 const BLOB_TIMEOUT: Duration = Duration::from_secs(300);
+/// The largest API answer taken; read in pieces, so a server can't fill the memory (audit C-14).
+const MAX_ANSWER: usize = 64 * 1024 * 1024;
+/// The largest session resource or discovery answer taken.
+const MAX_SESSION: usize = 4 * 1024 * 1024;
+/// The largest blob downloaded, e.g. a whole message with its attachments.
+pub const MAX_BLOB: usize = 256 * 1024 * 1024;
+/// The largest picture a server fetched for us, as for pictures fetched here (audit EG-3).
+const MAX_PICTURE: usize = 10 * 1024 * 1024;
+/// Of an error answer, only the start is read.
+const MAX_ERROR_TEXT: usize = 16 * 1024;
 /// An EventSource connection lives this long before it's opened again.
 const PUSH_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
 const PUSH_PING_SECONDS: u64 = 60;
@@ -360,16 +370,7 @@ impl Client {
             }
             other => (basic, other?),
         };
-        let session = Session::parse(&document, &base)?;
-        // A session fetched securely must not send the login on over plain HTTP.
-        if base.scheme() == "https"
-            && [&session.api_url, &session.download_url, &session.upload_url]
-                .into_iter()
-                .chain(session.event_source_url.as_ref())
-                .any(|endpoint| !endpoint.starts_with("https://"))
-        {
-            return Err(Error::connection("The JMAP server asked for unencrypted connections. UwUMail refused."));
-        }
+        let session = checked_endpoints(Session::parse(&document, &base)?, &url, &base)?;
         let mut client = Self { http: http.clone(), auth, session, latest_session_state: Default::default() };
 
         // Self-hosted servers often announce a public name that isn't reachable
@@ -473,10 +474,12 @@ impl Client {
             return Err(Error::auth("The mail server didn't accept the login anymore."));
         }
         if !status.is_success() {
-            let detail = response.text().await.unwrap_or_default();
+            let detail = read_start(response, MAX_ERROR_TEXT).await;
             return Err(Error::connection(format!("The mail server answered {status}. {}", short(&detail))));
         }
-        let document: Value = response.json().await.map_err(|e| Error::connection(format!("Bad JMAP answer: {e}")))?;
+        let body = read_limited(response, MAX_ANSWER).await?;
+        let document: Value =
+            serde_json::from_slice(&body).map_err(|e| Error::connection(format!("Bad JMAP answer: {e}")))?;
         if let Some(state) = document.get("sessionState").and_then(Value::as_str) {
             *self.latest_session_state.lock().unwrap() = Some(state.to_string());
         }
@@ -502,6 +505,7 @@ impl Client {
     /// Posts a method to the assistant's stream endpoint with this login; the answer is
     /// `text/event-stream` (docs/jmap-assist.md "Streaming").
     pub async fn post_assist_stream(&self, url: &str, method: &str, arguments: Value) -> Result<reqwest::Response> {
+        self.check_on_site(url)?;
         let body = json!({ "using": [CORE, ASSIST], "method": method, "arguments": arguments });
         let response = self
             .http
@@ -532,6 +536,18 @@ impl Client {
 
     /// Downloads a blob of another account of the login, e.g. the one that keeps its Sieve scripts.
     pub async fn download_for(&self, account_id: &str, blob_id: &str, name: &str, mime_type: &str) -> Result<Vec<u8>> {
+        self.download_within(account_id, blob_id, name, mime_type, MAX_BLOB).await
+    }
+
+    /// Like [`download_for`](Self::download_for), refused as soon as it grows beyond `limit` bytes.
+    pub async fn download_within(
+        &self,
+        account_id: &str,
+        blob_id: &str,
+        name: &str,
+        mime_type: &str,
+        limit: usize,
+    ) -> Result<Vec<u8>> {
         let url = fill(
             &self.session.download_url,
             &[("accountId", account_id), ("blobId", blob_id), ("name", name), ("type", mime_type)],
@@ -549,7 +565,7 @@ impl Client {
         if !response.status().is_success() {
             return Err(Error::connection(format!("Download failed with {}.", response.status())));
         }
-        Ok(response.bytes().await?.to_vec())
+        read_limited(response, limit).await
     }
 
     /// A mail's remote picture, fetched by the server so its sender never sees the reader: its type
@@ -557,13 +573,10 @@ impl Client {
     pub async fn remote_image(&self, url: &str) -> Result<Option<(String, Vec<u8>)>> {
         let Some(template) = &self.session.image_url else { return Ok(None) };
         let target = fill(template, &[("accountId", &self.session.account_id), ("url", url)]);
-        let Some((headers, bytes)) = self.get_from_server(&target).await? else { return Ok(None) };
-        let media_type = headers
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or("application/octet-stream")
-            .to_string();
-        Ok(Some((media_type, bytes)))
+        let Some((_, bytes)) = self.get_from_server(&target).await? else { return Ok(None) };
+        // The type comes from the bytes, never from the server: only pictures reach the reader (EG-2).
+        let Some(media_type) = crate::mail_images::image_media_type(&bytes) else { return Ok(None) };
+        Ok(Some((media_type.to_string(), bytes)))
     }
 
     /// The sizes of a mail's remote pictures, asked of the server before they load
@@ -626,12 +639,7 @@ impl Client {
 
     /// An authenticated GET on the server's own site, never elsewhere: `None` for a 404.
     async fn get_from_server(&self, target: &str) -> Result<Option<(reqwest::header::HeaderMap, Vec<u8>)>> {
-        let (Ok(api), Ok(to)) = (Url::parse(&self.session.api_url), Url::parse(target)) else {
-            return Err(Error::invalid("The server announced an address that is not one."));
-        };
-        if !may_send_credentials(&api, &to) {
-            return Err(Error::invalid("The server announced an address on another site."));
-        }
+        let to = self.check_on_site(target)?;
         let response = self
             .http
             .get(to)
@@ -646,7 +654,18 @@ impl Client {
             return Err(Error::connection(format!("The server answered {}.", response.status())));
         }
         let headers = response.headers().clone();
-        Ok(Some((headers, response.bytes().await?.to_vec())))
+        Ok(Some((headers, read_limited(response, MAX_PICTURE).await?)))
+    }
+
+    /// An address the server announced, if it is on the site of the API, where the login may go.
+    fn check_on_site(&self, target: &str) -> Result<Url> {
+        let (Ok(api), Ok(to)) = (Url::parse(&self.session.api_url), Url::parse(target)) else {
+            return Err(Error::invalid("The server announced an address that is not one."));
+        };
+        if !may_send_credentials(&api, &to) {
+            return Err(Error::invalid("The server announced an address on another site."));
+        }
+        Ok(to)
     }
 
     /// Uploads data and returns its blob id.
@@ -669,7 +688,8 @@ impl Client {
         if !response.status().is_success() {
             return Err(Error::connection(format!("Upload failed with {}.", response.status())));
         }
-        let document: Value = response.json().await?;
+        let document: Value = serde_json::from_slice(&read_limited(response, MAX_SESSION).await?)
+            .map_err(|_| Error::connection("The upload answer had no blob id."))?;
         document
             .get("blobId")
             .and_then(Value::as_str)
@@ -699,6 +719,35 @@ impl Client {
 
 fn short(text: &str) -> String {
     text.chars().take(200).collect()
+}
+
+/// An answer's body, refused as soon as it grows beyond `limit` bytes.
+async fn read_limited(mut response: reqwest::Response, limit: usize) -> Result<Vec<u8>> {
+    let too_big = || Error::connection("The mail server's answer is too big.");
+    if response.content_length().is_some_and(|length| length > limit as u64) {
+        return Err(too_big());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if body.len() + chunk.len() > limit {
+            return Err(too_big());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
+/// The start of an answer's body as text, for an error message; whatever can't be read is left out.
+async fn read_start(mut response: reqwest::Response, limit: usize) -> String {
+    let mut body = Vec::new();
+    while body.len() < limit {
+        match response.chunk().await {
+            Ok(Some(chunk)) => body.extend_from_slice(&chunk),
+            _ => break,
+        }
+    }
+    body.truncate(limit);
+    String::from_utf8_lossy(&body).into_owned()
 }
 
 /// Whether credentials given for `from` may also go to `to`: same site (e.g.
@@ -754,6 +803,35 @@ impl SizeLines {
     }
 }
 
+/// A session whose login goes only where the address the person gave (`asked`) leads: the session
+/// resource on its site, and every endpoint on the site of the session resource (`base`), never from
+/// HTTPS down to HTTP. Endpoints under another name than the session's (a server behind a reverse
+/// proxy announcing its public name) move to the address that answered; any other site is refused
+/// (security audit 2026-09-23, CC-11).
+fn checked_endpoints(session: Session, asked: &Url, base: &Url) -> Result<Session> {
+    if !may_send_credentials(asked, base) {
+        return Err(Error::auth(format!(
+            "The server sent the sign-in to {}, which isn't part of {}. UwUMail didn't send your password there.",
+            base.host_str().unwrap_or("another address"),
+            asked.host_str().unwrap_or("the server"),
+        )));
+    }
+    let on_site = |endpoint: &str| Url::parse(endpoint).is_ok_and(|to| may_send_credentials(base, &to));
+    let mut session = session;
+    if !on_site(&session.api_url)
+        && let (Some(announced), Some(working)) = (origin_of(&session.api_url), origin_of(base.as_str()))
+    {
+        session = session.rebased(&announced, &working);
+    }
+    let endpoints = [&session.api_url, &session.download_url, &session.upload_url];
+    if endpoints.into_iter().chain(session.event_source_url.as_ref()).any(|endpoint| !on_site(endpoint)) {
+        return Err(Error::connection(
+            "The JMAP server named addresses on another site or without encryption for your login. UwUMail refused.",
+        ));
+    }
+    Ok(session)
+}
+
 fn may_send_credentials(from: &Url, to: &Url) -> bool {
     if from.scheme() == "https" && to.scheme() != "https" {
         return false;
@@ -762,8 +840,10 @@ fn may_send_credentials(from: &Url, to: &Url) -> bool {
     if a.eq_ignore_ascii_case(b) {
         return true;
     }
-    let site = |host: &str| psl::domain_str(&host.to_ascii_lowercase()).map(String::from);
-    matches!((site(a), site(b)), (Some(x), Some(y)) if x == y)
+    // An IP address is a site of its own: read as names, 192.0.2.1 and 198.51.100.1 would share "0.1"
+    // (as audit C-9 found for CalDAV).
+    let site = crate::calendar::dav::site;
+    site(a) == site(b) && !site(a).is_empty()
 }
 
 /// GETs the session resource. Redirects that change the host drop the
@@ -801,8 +881,9 @@ async fn fetch_session(http: &reqwest::Client, url: &Url, auth: &Auth) -> Result
         if !status.is_success() {
             return Err(Error::connection(format!("The JMAP server answered {status}.")));
         }
-        let document: Value =
-            response.json().await.map_err(|_| Error::not_supported("There's no JMAP server at this address."))?;
+        let body = read_limited(response, MAX_SESSION).await?;
+        let document: Value = serde_json::from_slice(&body)
+            .map_err(|_| Error::not_supported("There's no JMAP server at this address."))?;
         return Ok((document, landed));
     }
     Err(Error::auth("The user name or password is wrong."))
@@ -936,7 +1017,7 @@ pub async fn discover(http: &reqwest::Client, domain: &str, mail_hosts: &[&str])
 }
 
 /// Whether a discovered session address is an HTTPS address on the site of one of the mail servers.
-fn on_mail_site(url: &str, mail_hosts: &[&str]) -> bool {
+pub fn on_mail_site(url: &str, mail_hosts: &[&str]) -> bool {
     let Ok(url) = Url::parse(url) else { return false };
     let Some(host) = url.host_str().filter(|_| url.scheme() == "https") else { return false };
     let site = crate::calendar::dav::site(host);
@@ -953,7 +1034,8 @@ async fn probe(http: &reqwest::Client, url: &str) -> Option<String> {
         return Some(landed);
     }
     if status.is_success() {
-        let document: Map<String, Value> = response.json().await.ok()?;
+        let body = read_limited(response, MAX_SESSION).await.ok()?;
+        let document: Map<String, Value> = serde_json::from_slice(&body).ok()?;
         return document
             .get("capabilities")
             .and_then(Value::as_object)
@@ -1202,6 +1284,8 @@ mod tests {
         assert!(!may_send_credentials(&url("https://mail.example.com/"), &url("http://mail.example.com/jmap")));
         assert!(!may_send_credentials(&url("https://mail.example.com/"), &url("https://collector.example.net/jmap")));
         assert!(!may_send_credentials(&url("https://a.github.io/"), &url("https://b.github.io/")));
+        assert!(!may_send_credentials(&url("http://192.0.2.1/jmap"), &url("http://198.51.100.1/jmap")));
+        assert!(!may_send_credentials(&url("http://127.0.0.1:8080/"), &url("http://127.0.0.2:8080/")));
     }
 
     #[test]

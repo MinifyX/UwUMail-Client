@@ -6108,7 +6108,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-android"
-version = "0.6.0-beta.4"
+version = "0.7.0-beta.1"
 dependencies = [
  "base64 0.23.1",
  "jni 0.21.1",
@@ -6125,7 +6125,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-core"
-version = "0.6.0-beta.4"
+version = "0.7.0-beta.1"
 dependencies = [
  "ammonia",
  "async-imap",
@@ -6158,17 +6158,19 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+ "uwumail-labels",
  "uwumail-tnef",
  "webpki-roots",
 ]
 
 [[package]]
 name = "uwumail-desktop"
-version = "0.6.0-beta.4"
+version = "0.7.0-beta.1"
 dependencies = [
  "base64 0.23.1",
  "libc",
  "minisign-verify",
+ "rfd",
  "semver",
  "serde",
  "serde_json",
@@ -6190,8 +6192,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "uwumail-labels"
+version = "0.7.0-beta.1"
+dependencies = [
+ "mail-parser",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "uwumail-ocr"
-version = "0.6.0-beta.4"
+version = "0.7.0-beta.1"
 dependencies = [
  "objc2",
  "objc2-foundation",
@@ -6201,7 +6212,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-setup"
-version = "0.6.0-beta.4"
+version = "0.7.0-beta.1"
 dependencies = [
  "libc",
  "semver",
@@ -6219,7 +6230,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-tnef"
-version = "0.6.0-beta.4"
+version = "0.7.0-beta.1"
 dependencies = [
  "encoding_rs",
  "uwumail-tnef",

@@ -8,9 +8,6 @@ import { toast } from "@/state/toasts";
 import { moveBack, rememberUndo } from "@/state/undo";
 import { useUi } from "@/state/ui";
 
-/** Drag data of mail list rows: the thread ids as JSON. */
-export const THREAD_DRAG_TYPE = "application/x-uwumail-threads";
-
 const ids = (messages: Message[]) => messages.map((message) => message.id);
 
 /** Opens "Move to…" for these messages; `onMoved` runs once they moved. */

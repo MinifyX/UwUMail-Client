@@ -13,7 +13,7 @@ name: Release
 #     by the desktop workflow called from here,
 #   - the files only the in-app updater downloads (UwUMail-update-…),
 #   - the Android APK the Android workflow built, signed and smoke-tested for
-#     the same commit,
+#     the push of this tag with the release key,
 #   - the unsigned iPhone IPA the iOS workflow built and tried in the simulator,
 # then updates the feeds on the `updates` branch that installed apps check,
 # and the AUR package uwumail-bin.
@@ -42,7 +42,7 @@ permissions:
   contents: read
 
 env:
-  # The certificate every UwUMail APK is signed with, as in android.yml.
+  # The certificate every released UwUMail APK is signed with, as in android.yml (CI builds use another).
   APK_CERTIFICATE_SHA256: de1cd496582140c9004e05ff087656cdb0b0f575a98dc664e809b5f9b510e301
 
 jobs:
@@ -53,6 +53,8 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - id: meta
         run: |
           version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)
@@ -72,8 +74,12 @@ jobs:
     name: Release (Windows)
     needs: check
     runs-on: windows-latest
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -90,7 +96,16 @@ jobs:
       # The same install, start, update, refuse-older and uninstall as for the other systems.
       - name: Smoke test
         shell: pwsh
-        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-windows-x64-setup.exe" "${{ needs.check.outputs.version }}" x64 smoke
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-windows-x64-setup.exe" "$env:VERSION" x64 smoke
+      # The signing and publishing jobs compare the artifact with this (scripts/artifact-digest.mjs).
+      - name: Digest for the release
+        id: digest
+        shell: bash
+        run: |
+          digest=$(node scripts/artifact-digest.mjs target/release/UwUMail-windows-x64-setup.exe)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-windows
@@ -119,6 +134,8 @@ jobs:
     # Only releases are signed, so no signed test build of an unreleased commit lies around.
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
     env:
       VERSION: ${{ needs.check.outputs.version }}
     steps:
@@ -155,6 +172,21 @@ jobs:
         with:
           name: desktop-linux-arm64
           path: ${{ runner.temp }}/desktop/desktop-linux-arm64
+      # Any job of this run can delete and re-upload another job's artifact by name, but none can
+      # change another job's outputs: each artifact must still be what the job that built it digested.
+      - name: Check that no job replaced another one's artifact
+        env:
+          RELEASE_WINDOWS: ${{ needs.windows.outputs.digest }}
+          WINDOWS_ARM64: ${{ needs.desktop.outputs.digest_windows_arm64 }}
+          MACOS_UNIVERSAL: ${{ needs.desktop.outputs.digest_macos_universal }}
+          LINUX_X64: ${{ needs.desktop.outputs.digest_linux_x64 }}
+          LINUX_ARM64: ${{ needs.desktop.outputs.digest_linux_arm64 }}
+        run: |
+          node scripts/artifact-digest.mjs --check "$RELEASE_WINDOWS" "$RUNNER_TEMP/unpacked/release-windows"
+          node scripts/artifact-digest.mjs --check "$WINDOWS_ARM64" "$RUNNER_TEMP/unpacked/desktop-windows-arm64"
+          node scripts/artifact-digest.mjs --check "$MACOS_UNIVERSAL" "$RUNNER_TEMP/desktop/desktop-macos-universal"
+          node scripts/artifact-digest.mjs --check "$LINUX_X64" "$RUNNER_TEMP/desktop/desktop-linux-x64"
+          node scripts/artifact-digest.mjs --check "$LINUX_ARM64" "$RUNNER_TEMP/desktop/desktop-linux-arm64"
       - name: Take each build's own files
         run: |
           for build in desktop-macos-universal desktop-linux-x64 desktop-linux-arm64; do
@@ -184,6 +216,11 @@ jobs:
       # The same check the feeds get: the key the apps carry, and each signature names its file.
       - name: Check the signatures
         run: node scripts/release-feeds.mjs "$VERSION" "$RUNNER_TEMP/check-feeds" --desktop files
+      - name: Digest for publishing
+        id: digest
+        run: |
+          digest=$(node scripts/artifact-digest.mjs files/*.sig)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-signatures
@@ -198,6 +235,8 @@ jobs:
     permissions:
       actions: read
       contents: read
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       # Like the APK: the iOS workflow builds and tries every push to main in the simulator; the
       # release takes that unsigned IPA. Sideloading tools sign it with the user's own Apple ID.
@@ -237,6 +276,10 @@ jobs:
           mv "${ipas[0]}" "ipa/UwUMail-ios.ipa"
           unzip -l "ipa/UwUMail-ios.ipa" | grep -q 'Payload/.*\.app/Info.plist' \
             || { echo "::error::The IPA holds no app"; exit 1; }
+      # What scripts/artifact-digest.mjs computes for one file, without a checkout here.
+      - name: Digest for publishing
+        id: digest
+        run: echo "digest=$(cd ipa && sha256sum UwUMail-ios.ipa | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-ios
@@ -251,20 +294,24 @@ jobs:
     permissions:
       actions: read
       contents: read
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
-      # The Android workflow builds, signs and smoke-tests every push to main. A release takes that
-      # APK instead of building another one, whose version code would count from a different run.
-      - name: Wait for the tested APK of this commit
+      # The Android workflow builds, signs and smoke-tests every push to main with a CI key, and the
+      # push of this tag with the release key. A release takes the APK of the tag's run instead of
+      # building another one here, whose version code would count from a different run.
+      - name: Wait for the tested APK of this tag
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           for attempt in $(seq 1 120); do
             run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android.yml/runs?head_sha=$GITHUB_SHA&event=push" \
-              --jq '.workflow_runs | sort_by(.created_at) | last // {} | "\(.id) \(.status) \(.conclusion)"')
+              | jq -r --arg tag "$GITHUB_REF_NAME" \
+                '[.workflow_runs[] | select(.head_branch == $tag)] | sort_by(.created_at) | last // {} | "\(.id) \(.status) \(.conclusion)"')
             read -r id status conclusion <<< "$run"
             if [ "$id" = "null" ]; then
               if [ "$attempt" -ge 20 ]; then
-                echo "::error::No Android build for $GITHUB_SHA. Push the release commit to main before tagging it."
+                echo "::error::No Android build for $GITHUB_REF_NAME ($GITHUB_SHA). The Android workflow runs for every pushed v* tag."
                 exit 1
               fi
             elif [ "$status" = "completed" ]; then
@@ -280,6 +327,7 @@ jobs:
           echo "::error::The Android build for this commit didn't finish within an hour"
           exit 1
       - name: Check the APK
+        id: digest
         env:
           VERSION: ${{ needs.check.outputs.version }}
         run: |
@@ -293,6 +341,7 @@ jobs:
           # The release name; the app checks the download by the SHA-256 in its feed.
           mkdir release
           mv "${apks[0]}" release/UwUMail-android.apk
+          echo "digest=$(cd release && sha256sum UwUMail-android.apk | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-android
@@ -354,6 +403,27 @@ jobs:
         with:
           name: desktop-linux-arm64
           path: ${{ runner.temp }}/desktop/desktop-linux-arm64
+      # As in the signing job, and for the APK, the IPA and the signatures too: every artifact must
+      # still be what the job that made it digested.
+      - name: Check that no job replaced another one's artifact
+        env:
+          RELEASE_WINDOWS: ${{ needs.windows.outputs.digest }}
+          WINDOWS_ARM64: ${{ needs.desktop.outputs.digest_windows_arm64 }}
+          MACOS_UNIVERSAL: ${{ needs.desktop.outputs.digest_macos_universal }}
+          LINUX_X64: ${{ needs.desktop.outputs.digest_linux_x64 }}
+          LINUX_ARM64: ${{ needs.desktop.outputs.digest_linux_arm64 }}
+          SIGNATURES: ${{ needs.sign.outputs.digest }}
+          ANDROID: ${{ needs.android.outputs.digest }}
+          IOS: ${{ needs.ios.outputs.digest }}
+        run: |
+          node scripts/artifact-digest.mjs --check "$RELEASE_WINDOWS" "$RUNNER_TEMP/unpacked/release-windows"
+          node scripts/artifact-digest.mjs --check "$WINDOWS_ARM64" "$RUNNER_TEMP/unpacked/desktop-windows-arm64"
+          node scripts/artifact-digest.mjs --check "$MACOS_UNIVERSAL" "$RUNNER_TEMP/desktop/desktop-macos-universal"
+          node scripts/artifact-digest.mjs --check "$LINUX_X64" "$RUNNER_TEMP/desktop/desktop-linux-x64"
+          node scripts/artifact-digest.mjs --check "$LINUX_ARM64" "$RUNNER_TEMP/desktop/desktop-linux-arm64"
+          node scripts/artifact-digest.mjs --check "$SIGNATURES" "$RUNNER_TEMP/unpacked/release-signatures"
+          node scripts/artifact-digest.mjs --check "$ANDROID" "$RUNNER_TEMP/unpacked/release-android"
+          node scripts/artifact-digest.mjs --check "$IOS" "$RUNNER_TEMP/unpacked/release-ios"
       - name: Take each artifact's own files
         run: |
           for build in desktop-macos-universal desktop-linux-x64 desktop-linux-arm64; do
@@ -365,8 +435,7 @@ jobs:
             release-windows desktop-windows-arm64 desktop-macos-universal desktop-linux-x64 desktop-linux-arm64 \
             release-signatures release-android release-ios
           ls -la files
-      # Once more right before publishing: the android job checked the certificate, but its artifact
-      # could have been replaced since by any job of this run.
+      # Once more right before publishing, on top of the digest: the certificate is what counts.
       - name: Check the APK
         run: |
           tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"

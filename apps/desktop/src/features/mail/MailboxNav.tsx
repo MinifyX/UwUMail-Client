@@ -13,7 +13,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { backend } from "@/backend/backend";
 import type { Account, Folder, MailboxView } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
@@ -27,11 +27,13 @@ import { canEmpty, useFolderEdit } from "@/state/folderEdit";
 import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
+import { LabelNav } from "../labels/LabelNav";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { AppSwitch } from "../shell/AppSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
-import { THREAD_DRAG_TYPE, useSelectionActions } from "./selection";
+import { useSelectionActions } from "./selection";
+import { droppedThreads, isThreadDrag } from "./threadDrag";
 import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
 
 const UNIFIED_ROLES = ["inbox", "unread", "flagged", "drafts", "sent"] as const;
@@ -116,7 +118,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   const actions = useMessageActions();
   const [dropping, setDropping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const accepts = (event: React.DragEvent) => folder.selectable && event.dataTransfer.types.includes(THREAD_DRAG_TYPE);
+  const accepts = (event: React.DragEvent) => folder.selectable && isThreadDrag(event.dataTransfer);
 
   return (
     <li role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined} aria-selected={active}>
@@ -136,7 +138,8 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
           setDropping(false);
           if (!accepts(event)) return;
           event.preventDefault();
-          const threadIds = JSON.parse(event.dataTransfer.getData(THREAD_DRAG_TYPE) || "[]") as string[];
+          const threadIds = droppedThreads(event.dataTransfer);
+          if (threadIds.length === 0) return;
           void selection.messagesOf(threadIds).then((messages) => {
             const here = messages.filter((message) => message.accountId === account.id).map((message) => message.id);
             if (here.length === 0) {
@@ -278,7 +281,15 @@ function useNewMailHops() {
   return hops;
 }
 
-export function MailboxNav({ className, workspaceSwitch = false }: { className?: string; workspaceSwitch?: boolean }) {
+export function MailboxNav({
+  className,
+  style,
+  workspaceSwitch = false,
+}: {
+  className?: string;
+  style?: CSSProperties;
+  workspaceSwitch?: boolean;
+}) {
   const { t } = useT();
   const hops = useNewMailHops();
   const { accounts } = useVisibleAccounts();
@@ -300,7 +311,7 @@ export function MailboxNav({ className, workspaceSwitch = false }: { className?:
     : accounts.length > 1 && t("nav.unified");
 
   return (
-    <nav className={clsx("flex h-full flex-col gap-4 px-3 pt-4 pb-3", className)}>
+    <nav className={clsx("flex h-full flex-col gap-4 px-3 pt-4 pb-3", className)} style={style}>
       <div className="flex items-center justify-between px-2">
         <Wordmark className="text-[19px]" hop={hops} />
       </div>
@@ -336,6 +347,8 @@ export function MailboxNav({ className, workspaceSwitch = false }: { className?:
             );
           })}
         </section>
+
+        <LabelNav />
 
         {accounts.map((account) => (
           <AccountSection

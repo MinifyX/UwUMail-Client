@@ -1,4 +1,4 @@
-import { CalendarSearch, FileText, ShieldQuestion, Sparkles, type LucideIcon } from "lucide-react";
+import { CalendarSearch, FileText, ShieldQuestion, Sparkles, Tags, type LucideIcon } from "lucide-react";
 import type { Message } from "@/backend/types";
 import { IconButton } from "@/components/ui/Button";
 import type { MenuItem } from "@/components/ui/Menu";
@@ -8,6 +8,7 @@ import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { useEventSearch } from "../dates/search";
 import { hasOwnPictures } from "../dates/useMailEvents";
 import { EstimateLabel, type EstimateRequest } from "./estimate";
+import { LabelSuggestCard } from "./LabelSuggestCard";
 import { mailKey, threadKey, useAssistReader } from "./readerState";
 import { SpamCheckCard } from "./SpamCheckCard";
 import { SummaryCard } from "./SummaryCard";
@@ -22,6 +23,8 @@ export function useReaderAssist(own: boolean) {
     spamCheck: own && features?.spamCheck === true,
     // Found appointments go into a calendar, so only where there is one.
     events: own && calendars && features?.extractEvents === true,
+    // "Label again" works wherever the model may label this mailbox's mail.
+    labels: own && features?.autoLabels === true,
   };
 }
 
@@ -60,6 +63,14 @@ function eventsEstimate(message: Message): EstimateRequest {
   return { accountId: message.accountId, method: "Assist/extractEvents", args: { emailId: message.id, includeImages } };
 }
 
+function labelsEstimate(message: Message, language: string): EstimateRequest {
+  return {
+    accountId: message.accountId,
+    method: "AssistLabel/suggest",
+    args: { emailId: message.id, language, suggestNew: true },
+  };
+}
+
 /** "Find appointment": the assistant reads the mail for dates now, whatever the automatic setting says. */
 function findEvents(message: Message) {
   useEventSearch.getState().ask(message.id);
@@ -71,6 +82,7 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
   const can = useReaderAssist(own);
   const showSummary = useAssistReader((s) => s.showSummary);
   const showSpamCheck = useAssistReader((s) => s.showSpamCheck);
+  const showLabelCheck = useAssistReader((s) => s.showLabelCheck);
   if (message.flags.draft) return [];
   return [
     ...(can.summarize
@@ -98,6 +110,20 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
               />
             ),
             onSelect: () => showSpamCheck(message.id),
+          },
+        ]
+      : []),
+    ...(can.labels
+      ? [
+          {
+            label: (
+              <ItemLabel
+                icon={Tags}
+                text={t("assist.labelAgain.menu")}
+                estimate={labelsEstimate(message, i18n.language)}
+              />
+            ),
+            onSelect: () => showLabelCheck(message.id),
           },
         ]
       : []),
@@ -130,6 +156,7 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
   const can = useReaderAssist(own);
   const showSummary = useAssistReader((s) => s.showSummary);
   const showSpamCheck = useAssistReader((s) => s.showSpamCheck);
+  const showLabelCheck = useAssistReader((s) => s.showLabelCheck);
   const received = messages.filter((message) => !message.flags.draft && !mine.has(message.from.email.toLowerCase()));
   const newest = received[received.length - 1];
   const last = messages.filter((message) => !message.flags.draft).at(-1);
@@ -189,6 +216,20 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
           },
         ]
       : []),
+    ...(can.labels && newest
+      ? [
+          {
+            label: (
+              <ItemLabel
+                icon={Tags}
+                text={t(messages.length > 1 ? "assist.labelAgain.menuLatest" : "assist.labelAgain.menu")}
+                estimate={labelsEstimate(newest, language)}
+              />
+            ),
+            onSelect: () => showLabelCheck(newest.id),
+          },
+        ]
+      : []),
     ...(can.events && last
       ? [
           {
@@ -226,15 +267,17 @@ export function ThreadSummary({ threadId, count }: { threadId: string; count: nu
   return <SummaryCard kind="thread" id={threadId} count={count} />;
 }
 
-/** One mail's summary and spam check, above its text, while they are asked for. */
+/** One mail's summary, spam check and label suggestions, above its text, while they are asked for. */
 export function MessageAssistCards({ message, inJunk }: { message: Message; inJunk: boolean }) {
   const summary = useAssistReader((s) => s.summaries[mailKey(message.id)] === true);
   const spamCheck = useAssistReader((s) => s.spamChecks[message.id] === true);
-  if (!summary && !spamCheck) return null;
+  const labels = useAssistReader((s) => s.labelChecks[message.id] === true);
+  if (!summary && !spamCheck && !labels) return null;
   return (
     <>
       {summary && <SummaryCard kind="mail" id={message.id} />}
       {spamCheck && <SpamCheckCard message={message} inJunk={inJunk} />}
+      {labels && <LabelSuggestCard message={message} />}
     </>
   );
 }

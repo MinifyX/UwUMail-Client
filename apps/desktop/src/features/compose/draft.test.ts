@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Account, Identity, Message } from "@/backend/types";
+import { withSignature } from "@/lib/signatures";
 import { initialDraft, replyFrom } from "./draft";
 
 const account: Account = {
@@ -62,5 +63,18 @@ describe("replies", () => {
     const draft = initialDraft({ key: 1, mode: "replyAll", source }, [account], identities, t, "de");
     expect([...draft.to, ...draft.cc].map((a) => a.email)).toEqual(["leni@wanders.example", "fee@friends.example"]);
     expect(draft.fromEmail).toBeNull();
+  });
+});
+
+describe("quotes", () => {
+  it("keep no signature marker of the quoted mail, so switching signatures leaves the quote alone (W-42)", () => {
+    const source = {
+      ...message(["mini@uwumail.example"]),
+      bodyHtml: '<p>Hi</p><div data-uwu-signature="theirs"><p>Leni</p></div>',
+    };
+    const draft = initialDraft({ key: 1, mode: "reply", source }, [account], identities, t, "de");
+    expect(draft.html).not.toContain("data-uwu-signature");
+    const signed = withSignature(draft.html, null, "beforeQuote");
+    expect(signed).toContain("<p>Leni</p>");
   });
 });

@@ -141,6 +141,16 @@ export function useLabelLog(emailId: string, enabled: boolean) {
   });
 }
 
+/** The newest entries of the label log of the current scope. */
+export function useLabelLogList(limit: number) {
+  const scope = useAssistScope();
+  return useQuery({
+    queryKey: [...queryKeys.assistLabelLog, scope, "latest", limit],
+    queryFn: () => backend().assistLabelLog(scope, null, limit),
+    staleTime: 30_000,
+  });
+}
+
 export function useAssistUsage(enabled = true) {
   const scope = useAssistScope();
   const { data: options } = useAssistOptions();
