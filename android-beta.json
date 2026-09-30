@@ -1,9 +1,9 @@
 {
-  "version": "0.6.0-beta.3",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.6.0-beta.3/UwUMail-android.apk",
-  "sha256": "de6413547317fedd3a8fb413c959caced343d67adcf70704224fd805eaa88bc6",
+  "version": "0.6.0-beta.4",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.6.0-beta.4/UwUMail-android.apk",
+  "sha256": "62d6fb9e08afea18526a32e77a8204231066141bb6c7caf5a390390e2cf950f4",
   "notes": {
-    "de": "- Behoben: Die Anmeldung mit Microsoft (Microsoft 365, Outlook.com) scheiterte unter Windows mit „Keychain error: … longer than platform limit of 2560 chars“. Die Anmeldung von Microsoft ist länger, als Windows in einem Eintrag speichert; UwUMail teilt sie jetzt auf mehrere Einträge auf",
-    "en": "- Fixed: signing in with Microsoft (Microsoft 365, Outlook.com) failed on Windows with \"Keychain error: … longer than platform limit of 2560 chars\". Microsoft's sign-in is longer than Windows keeps in one entry; UwUMail now splits it over several entries"
+    "de": "- Neu: winmail.dat aus Outlook und Exchange wird geöffnet. Statt einer nutzlosen winmail.dat siehst du die Anhänge (Bilder im Text, angehängte Mails als .eml), den Text und Besprechungsanfragen, Zusagen und Absagen als Einladung. Gilt für alle Postfächer, auch in Suche und Vorschau; ältere Mails werden beim ersten Öffnen neu gelesen\n- Neu: Microsoft Safe Links zeigen, öffnen und kopieren die echte Adresse, mit dem Hinweis „Microsoft Safe Link entfernt“. Alle Link-Prüfungen schauen auf die echte Adresse\n- Neu: Die Kostenschätzung der KI rechnet alles ein, was eine Anfrage kosten kann: Eingabe, Antwort, das „Denken“ von Reasoning-Modellen, den Aufschlag der API und Gebühren. Der Tooltip zeigt den Höchstbetrag und eine kurze Aufschlüsselung, z. B. „≈ 1.250 Tokens · ≈ 0,02 € (max. 0,05 €)“, und lernt aus den letzten 50 echten Aufrufen. Die echten Kosten kommen aus den Angaben des Anbieters",
+    "en": "- New: winmail.dat from Outlook and Exchange is opened. Instead of a useless winmail.dat you see the attachments (pictures in the text, attached mails as .eml), the text, and meeting requests, answers and cancellations as invitations. Works for every mailbox, in search and previews too; older mail is read again the first time it is opened\n- New: Microsoft Safe Links show, open and copy the real address, with a \"Microsoft Safe Link removed\" hint. All link checks look at the real address\n- New: the AI cost estimate counts everything a request can cost: input, answer, the thinking of reasoning models, the API's overhead and fees. The tooltip shows the worst case and a short breakdown, e.g. \"≈ 1,250 tokens · ≈ €0.02 (max €0.05)\", and learns from the last 50 real calls. Real costs follow what the provider reports"
   }
 }
