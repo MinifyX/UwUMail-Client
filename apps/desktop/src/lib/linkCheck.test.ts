@@ -80,6 +80,29 @@ describe("checkLink", () => {
     });
   });
 
+  it("checks, shows and opens the original address of a Microsoft Safe Link", () => {
+    const safe = `https://eur01.safelinks.protection.outlook.com/?url=${encodeURIComponent("https://news.shop.example/deal")}&data=05%7C02&reserved=0`;
+    expect(checkLink(safe, "news.shop.example")).toMatchObject({
+      href: "https://news.shop.example/deal",
+      safeLink: "eur01.safelinks.protection.outlook.com",
+      host: "news.shop.example",
+      misleading: null,
+      redirect: null,
+      rememberable: "shop.example",
+    });
+    expect(checkLink("https://news.shop.example/deal", "")?.safeLink).toBeNull();
+    // The usual checks look at the original: disguised text, plain http and redirects inside.
+    const disguised = `https://eur01.safelinks.protection.outlook.com/?url=${encodeURIComponent("http://evil.example/")}`;
+    expect(checkLink(disguised, "www.bank.example")).toMatchObject({
+      href: "http://evil.example/",
+      insecure: true,
+      misleading: { shown: "bank.example", actual: "evil.example" },
+      rememberable: null,
+    });
+    const tracked = `https://eur01.safelinks.protection.outlook.com/?url=${encodeURIComponent("https://www.google.com/url?q=https://end.example/")}`;
+    expect(checkLink(tracked, "")?.redirect).toMatchObject({ via: ["www.google.com"], target: "https://end.example/" });
+  });
+
   it("carries what a redirect link reveals", () => {
     expect(checkLink("https://www.google.com/url?q=https://end.example/", "")?.redirect?.target).toBe(
       "https://end.example/",

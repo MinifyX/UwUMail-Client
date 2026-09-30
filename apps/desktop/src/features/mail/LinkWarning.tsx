@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertTriangle, Copy, LockOpen, Route } from "lucide-react";
+import { AlertTriangle, Copy, LockOpen, Route, ShieldOff } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import type { Address } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
@@ -120,6 +120,15 @@ export function LinkFacts({ check }: { check: LinkCheck }) {
         <Note tone="warning" icon={LockOpen}>
           {t("link.insecure")}
         </Note>
+      )}
+      {check.safeLink && (
+        <p className="flex w-full items-start gap-2 rounded-xl bg-canvas px-3 py-2 text-left text-[12.5px] text-muted">
+          <ShieldOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span className="min-w-0">
+            <span className="block font-semibold">{t("link.safeLinkRemoved")}</span>
+            {t("link.safeLinkBody", { host: visibleText(check.safeLink) })}
+          </span>
+        </p>
       )}
       {redirect && (
         <div className="flex w-full items-start gap-2 rounded-xl bg-canvas px-3 py-2 text-left text-[12.5px]">

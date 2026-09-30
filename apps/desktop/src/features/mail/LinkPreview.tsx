@@ -1,4 +1,4 @@
-import { AlertTriangle, Route } from "lucide-react";
+import { AlertTriangle, Route, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
@@ -42,6 +42,7 @@ function StatusExtra({ check }: { check: LinkCheck }) {
  * a browser's: the full address with the domain in bold, and whether it goes elsewhere.
  */
 export function LinkStatus() {
+  const { t } = useT();
   const hover = useLinks((s) => s.hover);
   if (!hover) return null;
   const { check, area } = hover;
@@ -63,6 +64,12 @@ export function LinkStatus() {
         )}
       </span>
       {(check.misleading || check.redirect) && <StatusExtra check={check} />}
+      {check.safeLink && (
+        <span className="flex min-w-0 items-center gap-1 text-muted">
+          <ShieldOff className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{t("link.safeLinkRemoved")}</span>
+        </span>
+      )}
     </div>
   );
 }

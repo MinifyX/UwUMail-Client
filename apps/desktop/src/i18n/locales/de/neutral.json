@@ -625,6 +625,8 @@
     "hiddenTarget": "Wohin es danach geht, steht nicht im Link.",
     "otherTarget": "Anderes Ziel als angezeigt",
     "statusRedirect": "leitet weiter zu {{target}}",
+    "safeLinkRemoved": "Microsoft-Safe-Link entfernt",
+    "safeLinkBody": "Microsoft hat diesen Link für seinen Link-Scanner verpackt ({{host}}). UwUMail zeigt und öffnet die ursprüngliche Adresse.",
     "unsupported": "Diese Art Link öffnet UwUMail nicht.",
     "sheetTitle": "Link"
   },

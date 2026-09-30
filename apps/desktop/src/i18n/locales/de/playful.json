@@ -178,6 +178,8 @@
     "hiddenTarget": "Wohin's danach geht, verrät der Link nicht.",
     "otherTarget": "Anderes Ziel als angezeigt",
     "statusRedirect": "hüpft weiter zu {{target}}",
+    "safeLinkRemoved": "Microsoft-Safe-Link ausgepackt ✧",
+    "safeLinkBody": "Microsoft hat diesen Link für seinen Link-Scanner eingepackt ({{host}}). Ich hab ihn ausgepackt, du siehst und öffnest die echte Adresse.",
     "unsupported": "Solche Links mach ich lieber nicht auf (・_・;)",
     "sheetTitle": "Link"
   },
