@@ -1565,7 +1565,21 @@
       "tokens": "≈ {{formatted}} tokens",
       "tokensLeft": "{{formatted}} left today",
       "requestsLeft_one": "{{formatted}} request left today",
-      "requestsLeft_other": "{{formatted}} requests left today"
+      "requestsLeft_other": "{{formatted}} requests left today",
+      "withMax": "{{cost}} (max {{max}})",
+      "pictures_one": "{{formatted}} picture",
+      "pictures_other": "{{formatted}} pictures",
+      "calls_one": "{{formatted}} call",
+      "calls_other": "{{formatted}} calls",
+      "calibrated": "Calibrated from your last calls",
+      "part": {
+        "input": "Input",
+        "pictures": "Pictures",
+        "answer": "Answer",
+        "thinking": "Thinking",
+        "extraCalls": "Extra calls",
+        "fees": "Fees"
+      }
     },
     "local": {
       "title": "Found on this computer",

@@ -279,6 +279,9 @@
     },
     "local": {
       "title": "Guck mal, eine lokale KI auf diesem Computer! ✿"
+    },
+    "estimate": {
+      "calibrated": "An deine letzten Aufrufe angepasst ✧"
     }
   },
   "dates": {

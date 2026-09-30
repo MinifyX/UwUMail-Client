@@ -275,6 +275,7 @@ describe("the usage", () => {
         requests: 3,
         inputTokens: 100,
         outputTokens: 20,
+        reasoningTokens: 0,
         cost: null,
       },
       {
@@ -285,6 +286,7 @@ describe("the usage", () => {
         requests: 1,
         inputTokens: 50,
         outputTokens: 50,
+        reasoningTokens: 0,
         cost: null,
       },
       {
@@ -295,6 +297,7 @@ describe("the usage", () => {
         requests: 2,
         inputTokens: 10,
         outputTokens: 10,
+        reasoningTokens: 0,
         cost: null,
       },
       {
@@ -305,6 +308,7 @@ describe("the usage", () => {
         requests: 9,
         inputTokens: 1,
         outputTokens: 1,
+        reasoningTokens: 0,
         cost: null,
       },
     ],

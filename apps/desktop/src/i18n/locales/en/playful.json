@@ -279,6 +279,9 @@
     },
     "local": {
       "title": "Look, a local AI on this computer! ✿"
+    },
+    "estimate": {
+      "calibrated": "Tuned to your last calls ✧"
     }
   },
   "dates": {

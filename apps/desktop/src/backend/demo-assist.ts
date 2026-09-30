@@ -11,6 +11,7 @@ import {
   type AssistCost,
   type AssistEffective,
   type AssistEstimate,
+  type AssistEstimateCost,
   type AssistEstimateMethod,
   type AssistEvent,
   type AssistEventsResult,
@@ -304,6 +305,7 @@ export class DemoAssist {
         requests,
         inputTokens: requests * 1450,
         outputTokens: requests * (feature === "compose" ? 260 : 90),
+        reasoningTokens: 0,
         cost: null,
       });
       const row = this.usage[this.usage.length - 1]!;
@@ -607,6 +609,7 @@ export class DemoAssist {
       requests: 1,
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
+      reasoningTokens: 0,
       // Kept in USD as it was at the time, like the server does.
       cost: this.costOf(effective.providerId, effective.model, usage.inputTokens, usage.outputTokens, "USD"),
     });
@@ -931,7 +934,37 @@ export class DemoAssist {
         quota?.requestsPerDay,
         used.reduce((sum, entry) => sum + entry.requests, 0),
       ),
-      cost: this.costOf(effective.providerId, effective.model, input, output, currency),
+      cost: this.estimateCost(effective.providerId, effective.model, input, output, currency),
+      reasoningTokens: 0,
+      imageCount: 0,
+      calls: [{ purpose: "main", inputTokens: input, outputTokens: output, reasoningTokens: 0, images: 0, weight: 1 }],
+      calibrated: false,
+    };
+  }
+
+  /** An estimate's cost with its parts, and the worst case: an answer four times as long. */
+  private estimateCost(
+    providerId: string,
+    model: string | null,
+    input: number,
+    output: number,
+    currency: string,
+  ): AssistEstimateCost | null {
+    const cost = this.costOf(providerId, model, input, output, currency);
+    const reading = this.costOf(providerId, model, input, 0, currency);
+    const max = this.costOf(providerId, model, input, output * 4, currency);
+    if (!cost || !reading || !max) return null;
+    return {
+      ...cost,
+      max: { amount: max.amount, usd: max.usd },
+      parts: {
+        input: reading.amount,
+        output: cost.amount - reading.amount,
+        reasoning: 0,
+        images: 0,
+        requests: 0,
+        other: 0,
+      },
     };
   }
 

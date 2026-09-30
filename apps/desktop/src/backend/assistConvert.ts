@@ -13,6 +13,7 @@ import {
   type AssistChoice,
   type AssistEffective,
   type AssistEstimate,
+  type AssistEstimateCost,
   type AssistEstimateMethod,
   type AssistEvent,
   type AssistFeature,
@@ -238,7 +239,50 @@ export function toAssistEstimate(value: unknown, method: AssistEstimateMethod): 
     model: asString(raw.model),
     tokensLeftToday: asAmount(raw.tokensLeftToday),
     requestsLeftToday: asAmount(raw.requestsLeftToday),
-    cost: toAssistCost(raw.cost),
+    cost: toEstimateCost(raw.cost),
+    reasoningTokens: asAmount(raw.reasoningTokens) ?? 0,
+    imageCount: asAmount(raw.imageCount) ?? 0,
+    calls: asObjects(raw.calls)
+      .filter((call) => typeof call.purpose === "string")
+      .map((call) => {
+        const weight = asNumber(call.weight);
+        return {
+          purpose: call.purpose as string,
+          inputTokens: asAmount(call.inputTokens) ?? 0,
+          outputTokens: asAmount(call.outputTokens) ?? 0,
+          reasoningTokens: asAmount(call.reasoningTokens) ?? 0,
+          images: asAmount(call.images) ?? 0,
+          weight: weight === null ? 1 : Math.min(1, Math.max(0, weight)),
+        };
+      }),
+    calibrated: raw.calibrated === true,
+  };
+}
+
+/** An amount of money that can't be negative; 0 when missing. */
+const asMoney = (value: unknown): number => Math.max(0, asNumber(value) ?? 0);
+
+/** An estimate's cost: the plain cost, and its worst case and parts where the server says them. */
+function toEstimateCost(value: unknown): AssistEstimateCost | null {
+  const cost = toAssistCost(value);
+  if (!cost) return null;
+  const raw = asObject(value) ?? {};
+  const max = asObject(raw.max);
+  const maxAmount = max ? asNumber(max.amount) : null;
+  const parts = asObject(raw.parts);
+  return {
+    ...cost,
+    max: max && maxAmount !== null && maxAmount >= 0 ? { amount: maxAmount, usd: asPrice(max.usd) } : null,
+    parts: parts
+      ? {
+          input: asMoney(parts.input),
+          output: asMoney(parts.output),
+          reasoning: asMoney(parts.reasoning),
+          images: asMoney(parts.images),
+          requests: asMoney(parts.requests),
+          other: asMoney(parts.other),
+        }
+      : null,
   };
 }
 
@@ -493,6 +537,7 @@ export function toUsage(value: unknown): AssistUsage {
       requests: asCount(entry.requests),
       inputTokens: asCount(entry.inputTokens),
       outputTokens: asCount(entry.outputTokens),
+      reasoningTokens: asCount(entry.reasoningTokens),
       cost: toAssistCost(entry.cost),
     })),
     today: asObjects(raw.today).map((entry) => ({

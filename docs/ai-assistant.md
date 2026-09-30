@@ -75,20 +75,36 @@ an Ollama or OpenAI-compatible provider with its address.
 
 Hovering an AI button (a long press on the phone) shows a line like
 
-> ≈ 1,200 tokens · ≈ €0.02 · 48,000 left today
+> ≈ 1,250 tokens · ≈ €0.02 (max €0.05) · 48,000 left today
 
-- **Tokens:** what the request would send plus the expected answer, counted at
-  about four characters a token — an estimate, since every provider counts with
-  its own tokenizer. For mailboxes on a UwUMail server the server builds the
-  real prompt and counts it (a server older than 0.19.0 shows no tooltip); for
-  other mailboxes UwUMail counts the same way on the device. The estimate is
-  free and counts against nothing.
+and below it a small breakdown: input, pictures, answer, thinking, extra calls
+and fees, only the lines that aren't zero.
+
+- **Tokens:** everything the request would take: the prompt with what the API
+  adds around it, the expected answer, the thinking of reasoning models (OpenAI's
+  o-series and gpt-5, Gemini 2.5, DeepSeek R1, Qwen 3 …; Claude is never asked
+  to think) and every further call the request makes. Text is counted at about
+  four characters a token — an estimate, since every provider counts with its
+  own tokenizer. For mailboxes on a UwUMail server the server builds the real
+  prompt and counts it (a server older than 0.19.0 shows no tooltip, one older
+  than 0.20.0 no breakdown); for other mailboxes UwUMail counts the same way on
+  the device, where a request is always one call (pictures are read on the
+  device for free). The estimate is free and counts against nothing.
+- **Learning from real calls:** after at least five real requests of a feature
+  with the same provider and model, the estimate follows what the last 50 really
+  took (the median, never less than half or more than three times the rough
+  count). The tooltip then says *Calibrated from your last calls*.
 - **Cost:** always for your own providers; for a server's provider only when
   its admin switched on showing costs. Prices come from LiteLLM's public price
-  list (and OpenRouter's own), converted with the European Central Bank's
-  reference rates, fetched at most once a day and kept for offline use. A price
-  set by hand on a provider (US dollars per million tokens, in and out) comes
-  first; Ollama and local servers are free.
+  list (and OpenRouter's own): input, output, reasoning, cached input, fees per
+  request and per picture, and higher prices above a prompt size. They are
+  converted with the European Central Bank's reference rates, fetched at most
+  once a day and kept for offline use. A price set by hand on a provider (US
+  dollars per million tokens, in and out) comes first; Ollama and local servers
+  are free. *max* is the worst case: every call writing as much as it may.
+- **What it really cost:** after a request, from what the provider reports:
+  cached input at the cache's price, reasoning apart, the request's fee, and
+  OpenRouter's own figure where it gives one.
 - **Left today:** what remains of a server's daily limit; left out when there
   is none.
 - **Currency:** euros; in English you may choose US dollars instead (*Settings →
