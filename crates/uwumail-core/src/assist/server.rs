@@ -126,8 +126,9 @@ pub async fn update_settings(client: &Client, patch: Value) -> Result<()> {
     set(client, "AssistSettings/set", json!({ "update": { "singleton": patch } })).await.map(|_| ())
 }
 
-pub async fn usage(client: &Client, days: u32) -> Result<Value> {
-    call(client, "Assist/usage", json!({ "days": days.clamp(1, 90) })).await
+/// Usage with costs in `currency`; a server from before 0.19 ignores it and answers no costs.
+pub async fn usage(client: &Client, days: u32, currency: &str) -> Result<Value> {
+    call(client, "Assist/usage", json!({ "days": days.clamp(1, 90), "currency": currency })).await
 }
 
 pub async fn labels(client: &Client) -> Result<Value> {

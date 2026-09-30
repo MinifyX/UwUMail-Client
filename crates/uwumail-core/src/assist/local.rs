@@ -6,9 +6,11 @@
 //! keeps only the last four characters to show. They never go to the page or into a log.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 
+use super::prices::{self, Price, PriceTable};
 use super::prompts::Prompt;
 use super::provider::{self, ChatAnswer, ChatMessage, ChatRequest, Endpoint, JsonSchema, ProviderKind, Role};
 use super::validate::label_keyword;
@@ -25,6 +27,8 @@ const MAX_NAME_CHARS: usize = 60;
 const MAX_LABEL_NAME_CHARS: usize = 40;
 const MAX_LABEL_DESCRIPTION_CHARS: usize = 300;
 const MAX_MODEL_CHARS: usize = 200;
+/// A price set by hand, USD per million tokens, at most.
+const MAX_PRICE_PER_MILLION: f64 = 10_000.0;
 /// Labels asked for on new mail per day, at most: auto-labels cost money on most providers.
 pub const AUTO_LABELS_PER_DAY: u64 = 200;
 /// Usage is kept this long.
@@ -90,6 +94,8 @@ pub struct Effective {
 pub struct Device<'a> {
     pub store: &'a Store,
     pub secrets: &'a dyn SecretStore,
+    /// The known prices, as far as they were fetched.
+    pub prices: Option<Arc<PriceTable>>,
 }
 
 impl Device<'_> {
@@ -112,9 +118,22 @@ impl Device<'_> {
             .ok_or_else(|| Error::assist("notFound", "This provider no longer exists."))
     }
 
-    /// A provider as the server's `AssistProvider` object.
-    pub fn provider_json(record: &ProviderRecord) -> Value {
+    /// What a model of a provider costs: set by hand, free when it runs here, else the known price.
+    pub fn price_of(&self, record: &ProviderRecord, model: &str) -> Option<Price> {
+        let kind = Self::kind_of(record)?;
+        prices::price_for(
+            kind,
+            record.base_url.as_deref(),
+            (record.input_price, record.output_price),
+            model,
+            self.prices.as_deref(),
+        )
+    }
+
+    /// A provider as the server's `AssistProvider` object, with the price of its default model.
+    pub fn provider_json(&self, record: &ProviderRecord) -> Value {
         let kind = Self::kind_of(record);
+        let model = record.model.clone().or_else(|| kind.and_then(|k| k.default_models().0).map(String::from));
         json!({
             "id": record.id,
             "name": record.name,
@@ -129,11 +148,14 @@ impl Device<'_> {
             "quota": null,
             "experimental": false,
             "connected": Self::usable(record) && kind.is_some(),
+            "inputPricePerMillion": record.input_price,
+            "outputPricePerMillion": record.output_price,
+            "price": model.and_then(|model| self.price_of(record, &model)),
         })
     }
 
     pub fn providers_json(&self) -> Result<Value> {
-        Ok(Value::Array(self.providers()?.iter().map(Self::provider_json).collect()))
+        Ok(Value::Array(self.providers()?.iter().map(|record| self.provider_json(record)).collect()))
     }
 
     fn text_field(input: &Value, key: &str, max: usize) -> Result<Option<Option<String>>> {
@@ -148,6 +170,20 @@ impl Device<'_> {
                 Ok(Some((!text.is_empty()).then(|| text.to_string())))
             }
             Some(_) => Err(invalid(key, "This must be text.")),
+        }
+    }
+
+    /// A price set by hand: USD per million tokens, or `null` for the known price.
+    fn price_field(input: &Value, key: &str) -> Result<Option<Option<f64>>> {
+        match input.get(key) {
+            None => Ok(None),
+            Some(Value::Null) => Ok(Some(None)),
+            Some(value) => match value.as_f64() {
+                Some(price) if price.is_finite() && (0.0..=MAX_PRICE_PER_MILLION).contains(&price) => {
+                    Ok(Some(Some(price)))
+                }
+                _ => Err(invalid(key, "This must be a price of at least 0.")),
+            },
         }
     }
 
@@ -205,12 +241,14 @@ impl Device<'_> {
             fast_model: Self::text_field(input, "fastModel", MAX_MODEL_CHARS)?.flatten(),
             key_hint,
             created_at: now(),
+            input_price: Self::price_field(input, "inputPricePerMillion")?.flatten(),
+            output_price: Self::price_field(input, "outputPricePerMillion")?.flatten(),
         };
         if let Err(error) = self.store.save_assist_provider(&record) {
             let _ = self.secrets.delete(&secret_id(&record.id));
             return Err(error);
         }
-        Ok(Self::provider_json(&record))
+        Ok(self.provider_json(&record))
     }
 
     /// Changes what the patch names; `apiKey` left out keeps the key, `""` removes it.
@@ -228,6 +266,12 @@ impl Device<'_> {
         }
         if let Some(model) = Self::text_field(patch, "fastModel", MAX_MODEL_CHARS)? {
             record.fast_model = model;
+        }
+        if let Some(price) = Self::price_field(patch, "inputPricePerMillion")? {
+            record.input_price = price;
+        }
+        if let Some(price) = Self::price_field(patch, "outputPricePerMillion")? {
+            record.output_price = price;
         }
         if let Some(key) = patch.get("apiKey").and_then(Value::as_str) {
             record.key_hint = self.store_key(id, key)?;
@@ -505,6 +549,13 @@ impl Device<'_> {
     pub fn record_usage(&self, effective: &Effective, feature: Feature, answer: Option<&ChatAnswer>) -> Result<()> {
         let usage = answer.and_then(|a| a.usage);
         let estimate = answer.map_or(0, |a| a.text.chars().count() as u64 / 4);
+        let input_tokens = usage.map_or(0, |u| u.input_tokens);
+        let output_tokens = usage.map_or(estimate, |u| u.output_tokens);
+        // What it cost, at today's price; unknown when the provider didn't say how much it read.
+        let cost_usd = self
+            .price_of(&effective.provider, &effective.model)
+            .filter(|price| usage.is_some() || price.source == prices::PriceSource::Free)
+            .map(|price| price.usd(input_tokens, output_tokens));
         let day = utc_day(now());
         self.store.add_assist_usage(&UsageRecord {
             day,
@@ -512,8 +563,9 @@ impl Device<'_> {
             provider_name: effective.provider.name.clone(),
             feature: feature.as_str().into(),
             requests: 1,
-            input_tokens: usage.map_or(0, |u| u.input_tokens),
-            output_tokens: usage.map_or(estimate, |u| u.output_tokens),
+            input_tokens,
+            output_tokens,
+            cost_usd,
         })?;
         let _ = self.store.forget_assist_usage_before(&utc_day(now() - USAGE_DAYS * 86_400));
         Ok(())
@@ -531,23 +583,30 @@ impl Device<'_> {
             .sum())
     }
 
-    /// Usage as the server's `Assist/usage` answer; this device has no daily limits.
-    pub fn usage_json(&self, days: u32) -> Result<Value> {
+    /// Usage as the server's `Assist/usage` answer; this device has no daily limits. Costs are in
+    /// `currency` by today's rates, `null` where the price was unknown when the request was made.
+    pub fn usage_json(&self, days: u32, currency: &str) -> Result<Value> {
         let days = i64::from(days.clamp(1, 90));
         let since = utc_day(now() - (days - 1) * 86_400);
         let today = utc_day(now());
         let rows = self.store.assist_usage(&since)?;
-        let mut per_provider: HashMap<String, (String, u64, u64)> = HashMap::new();
+        let none = PriceTable::default();
+        let table = self.prices.as_deref().unwrap_or(&none);
+        let cost = |usd: Option<f64>| table.cost_json(usd, currency);
+        let mut per_provider: HashMap<String, (String, u64, u64, Option<f64>)> = HashMap::new();
         for row in rows.iter().filter(|row| row.day == today) {
-            let entry = per_provider.entry(row.provider_id.clone()).or_insert((row.provider_name.clone(), 0, 0));
+            let entry = per_provider.entry(row.provider_id.clone()).or_insert((row.provider_name.clone(), 0, 0, None));
             entry.1 += row.requests;
             entry.2 += row.input_tokens + row.output_tokens;
+            if let Some(usd) = row.cost_usd {
+                entry.3 = Some(entry.3.unwrap_or(0.0) + usd);
+            }
         }
         let mut today_list: Vec<Value> = per_provider
             .into_iter()
-            .map(|(id, (name, requests, tokens))| {
+            .map(|(id, (name, requests, tokens, usd))| {
                 json!({ "providerId": id, "providerName": name, "requests": requests, "tokens": tokens,
-                        "requestsPerDay": null, "tokensPerDay": null })
+                        "requestsPerDay": null, "tokensPerDay": null, "cost": cost(usd) })
             })
             .collect();
         today_list.sort_by(|a, b| a["providerName"].as_str().cmp(&b["providerName"].as_str()));
@@ -556,7 +615,7 @@ impl Device<'_> {
             .map(|row| {
                 json!({ "day": row.day, "providerId": row.provider_id, "providerName": row.provider_name,
                         "feature": row.feature, "requests": row.requests, "inputTokens": row.input_tokens,
-                        "outputTokens": row.output_tokens })
+                        "outputTokens": row.output_tokens, "cost": cost(row.cost_usd) })
             })
             .collect();
         Ok(json!({ "days": days, "today": today_list }))
@@ -615,7 +674,7 @@ mod tests {
     #[test]
     fn keys_go_to_the_keychain_and_only_a_hint_to_the_page() {
         let (store, secrets) = device();
-        let device = Device { store: &store, secrets: &secrets };
+        let device = Device { store: &store, secrets: &secrets, prices: None };
         let created = device
             .create_provider(&json!({ "name": "Mistral", "kind": "mistral", "apiKey": format!(" {TEST_KEY} ") }))
             .unwrap();
@@ -641,7 +700,7 @@ mod tests {
     #[test]
     fn addresses_kinds_and_limits_are_checked() {
         let (store, secrets) = device();
-        let device = Device { store: &store, secrets: &secrets };
+        let device = Device { store: &store, secrets: &secrets, prices: None };
         let refused = |input: Value| device.create_provider(&input).unwrap_err();
         assert_eq!(refused(json!({ "name": "C", "kind": "chatgpt" })).assist.unwrap().properties, ["kind"]);
         assert_eq!(
@@ -671,7 +730,7 @@ mod tests {
     #[test]
     fn choices_fall_back_like_the_servers() {
         let (store, secrets) = device();
-        let device = Device { store: &store, secrets: &secrets };
+        let device = Device { store: &store, secrets: &secrets, prices: None };
         assert_eq!(device.features().unwrap(), None);
         let local = device
             .create_provider(&json!({ "name": "Ollama", "kind": "ollama", "baseUrl": "http://localhost:11434", "model": "big", "fastModel": "small" }))
@@ -705,7 +764,7 @@ mod tests {
     #[test]
     fn labels_get_keywords_once() {
         let (store, secrets) = device();
-        let device = Device { store: &store, secrets: &secrets };
+        let device = Device { store: &store, secrets: &secrets, prices: None };
         let label = device
             .create_label(&json!({ "name": "Bestellungen & Versand", "description": "Pakete", "color": "#FF66AA" }))
             .unwrap();

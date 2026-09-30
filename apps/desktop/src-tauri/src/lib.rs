@@ -540,8 +540,13 @@ async fn assist_update_settings(engine: State<'_, Engine>, scope: String, patch:
 }
 
 #[tauri::command]
-async fn assist_usage(engine: State<'_, Engine>, scope: String, days: Option<u32>) -> CommandResult<Json> {
-    engine.assist_usage(&scope, days).await
+async fn assist_usage(
+    engine: State<'_, Engine>,
+    scope: String,
+    days: Option<u32>,
+    currency: Option<String>,
+) -> CommandResult<Json> {
+    engine.assist_usage(&scope, days, currency.as_deref()).await
 }
 
 #[tauri::command]
@@ -655,8 +660,9 @@ async fn assist_estimate(
     account_id: String,
     method: String,
     arguments: Json,
+    currency: Option<String>,
 ) -> CommandResult<Option<Json>> {
-    engine.assist_estimate(&account_id, &method, arguments).await
+    engine.assist_estimate(&account_id, &method, arguments, currency.as_deref()).await
 }
 
 /// Ollama and LM Studio running on this computer, with their models.

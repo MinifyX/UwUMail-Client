@@ -183,6 +183,7 @@ mod calendar_ops;
 mod contacts_ops;
 mod folder_ops;
 mod ocr_ops;
+mod price_ops;
 mod push_ops;
 
 impl Engine {

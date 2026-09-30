@@ -198,6 +198,7 @@ ALTER TABLE accounts ADD COLUMN carddav_none_at INTEGER;
 ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
 "#,
     assist::MIGRATION,
+    assist::PRICE_MIGRATION,
 ];
 
 /// What this device remembers about one calendar.

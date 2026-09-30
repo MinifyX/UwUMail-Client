@@ -44,12 +44,20 @@ pub(super) struct AssistState {
     /// New inbox mail of mailboxes without a server assistant, for auto-labels.
     queue: mpsc::UnboundedSender<LabelJob>,
     queue_rx: Mutex<Option<mpsc::UnboundedReceiver<LabelJob>>>,
+    /// The prices of this device's providers.
+    pub(super) prices: super::price_ops::PriceState,
 }
 
 impl AssistState {
     pub(super) fn new() -> Self {
         let (queue, queue_rx) = mpsc::unbounded_channel();
-        Self { streams: Mutex::new(HashMap::new()), http: OnceLock::new(), queue, queue_rx: Mutex::new(Some(queue_rx)) }
+        Self {
+            streams: Mutex::new(HashMap::new()),
+            http: OnceLock::new(),
+            queue,
+            queue_rx: Mutex::new(Some(queue_rx)),
+            prices: super::price_ops::PriceState::new(),
+        }
     }
 }
 
@@ -130,10 +138,16 @@ impl Relay {
 
 impl Engine {
     fn device(&self) -> Device<'_> {
-        Device { store: &self.inner.store, secrets: &*self.inner.secrets }
+        Device { store: &self.inner.store, secrets: &*self.inner.secrets, prices: self.known_prices() }
     }
 
-    fn assist_http(&self) -> Result<&reqwest::Client> {
+    /// This device's assistant with prices fetched when due, for what shows a cost.
+    async fn priced_device(&self) -> Device<'_> {
+        let prices = self.current_prices().await;
+        Device { store: &self.inner.store, secrets: &*self.inner.secrets, prices }
+    }
+
+    pub(super) fn assist_http(&self) -> Result<&reqwest::Client> {
         if let Some(http) = self.inner.assist.http.get() {
             return Ok(http);
         }
@@ -226,7 +240,7 @@ impl Engine {
     pub async fn assist_providers(&self, scope: &str) -> Result<Value> {
         match self.scope_target(scope).await? {
             Target::Server(client) => server::providers(&client).await,
-            Target::Device => self.device().providers_json(),
+            Target::Device => self.priced_device().await.providers_json(),
         }
     }
 
@@ -296,11 +310,13 @@ impl Engine {
         Ok(())
     }
 
-    pub async fn assist_usage(&self, scope: &str, days: Option<u32>) -> Result<Value> {
+    /// Usage per day, provider and feature; costs in `currency` (EUR when not given).
+    pub async fn assist_usage(&self, scope: &str, days: Option<u32>, currency: Option<&str>) -> Result<Value> {
         let days = days.unwrap_or(30).clamp(1, 90);
+        let currency = super::price_ops::currency(currency);
         match self.scope_target(scope).await? {
-            Target::Server(client) => server::usage(&client, days).await,
-            Target::Device => self.device().usage_json(days),
+            Target::Server(client) => server::usage(&client, days, &currency).await,
+            Target::Device => self.priced_device().await.usage_json(days, &currency),
         }
     }
 
@@ -851,7 +867,14 @@ impl Engine {
     /// passes to that call (the app's ids). A UwUMail account asks its server (`Assist/estimate`);
     /// `None` when that server is older and doesn't know the method. Everything else is counted
     /// here with the same prompt, never downloading, reading pictures or asking a model.
-    pub async fn assist_estimate(&self, account_id: &str, method: &str, arguments: Value) -> Result<Option<Value>> {
+    pub async fn assist_estimate(
+        &self,
+        account_id: &str,
+        method: &str,
+        arguments: Value,
+        currency: Option<&str>,
+    ) -> Result<Option<Value>> {
+        let currency = super::price_ops::currency(currency);
         let method =
             Method::parse(method).ok_or_else(|| Error::assist("invalidArguments", "This can't be estimated."))?;
         let message_id = text_arg(&arguments, "emailId").map(String::from);
@@ -914,7 +937,7 @@ impl Engine {
                 match server::call(
                     &client,
                     "Assist/estimate",
-                    json!({ "method": method.as_str(), "arguments": remote }),
+                    json!({ "method": method.as_str(), "arguments": remote, "currency": currency }),
                 )
                 .await
                 {
@@ -926,7 +949,9 @@ impl Engine {
                     Err(error) => Err(error),
                 }
             }
-            Target::Device => self.estimate_on_device(&account, method, &arguments, &messages).await.map(Some),
+            Target::Device => {
+                self.estimate_on_device(&account, method, &arguments, &messages, &currency).await.map(Some)
+            }
         }
     }
 
@@ -936,9 +961,10 @@ impl Engine {
         method: Method,
         arguments: &Value,
         messages: &[Message],
+        currency: &str,
     ) -> Result<Value> {
-        let effective = self
-            .device()
+        let device = self.priced_device().await;
+        let effective = device
             .effective(method.feature())?
             .ok_or_else(|| Error::assist("assistUnavailable", "No provider set up on this device can do this."))?;
         let language = text_arg(arguments, "language");
@@ -981,7 +1007,11 @@ impl Engine {
         };
         let who = (effective.provider.id.as_str(), effective.provider.name.as_str(), effective.model.as_str());
         // This device has no daily limits.
-        Ok(estimate::answer_json(method, estimate::prompt_tokens(&prompt), answer, who, (None, None)))
+        let input = estimate::prompt_tokens(&prompt);
+        let mut out = estimate::answer_json(method, input, answer, who, (None, None));
+        let usd = device.price_of(&effective.provider, &effective.model).map(|price| price.usd(input, answer));
+        out["cost"] = device.prices.as_deref().cloned().unwrap_or_default().cost_json(usd, currency);
+        Ok(out)
     }
 
     /// The text of a mail's pictures as far as it was read already; a guess per picture otherwise.
@@ -1323,7 +1353,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
     async fn estimates_on_this_device_count_the_real_prompt_and_ask_nobody() {
         let (_dir, engine, id) = engine_with_mail();
         let unavailable =
-            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id })).await.unwrap_err();
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id }), None).await.unwrap_err();
         assert_eq!(unavailable.assist_kind(), Some("assistUnavailable"));
         // A provider nobody listens to: an estimate never reaches it.
         engine
@@ -1334,7 +1364,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
             .unwrap();
 
         let summary =
-            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id })).await.unwrap().unwrap();
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id }), None).await.unwrap().unwrap();
         let messages = engine.inner.store.get_thread(&format!("m:{id}"), true).unwrap().messages;
         let (prompt, _) = summarize_prompt(&messages, None);
         assert_eq!(summary["inputTokens"], estimate::prompt_tokens(&prompt));
@@ -1345,16 +1375,20 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         assert!(summary["tokensLeftToday"].is_null() && summary["requestsLeftToday"].is_null());
 
         let thread = messages[0].thread_id.clone();
-        let whole =
-            engine.assist_estimate("acc", "Assist/summarize", json!({ "threadId": thread })).await.unwrap().unwrap();
+        let whole = engine
+            .assist_estimate("acc", "Assist/summarize", json!({ "threadId": thread }), None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(whole["inputTokens"], summary["inputTokens"], "a conversation of one mail");
 
-        let spam = engine.assist_estimate("acc", "Assist/spamCheck", json!({ "emailId": id })).await.unwrap().unwrap();
+        let spam =
+            engine.assist_estimate("acc", "Assist/spamCheck", json!({ "emailId": id }), None).await.unwrap().unwrap();
         assert_eq!(spam["outputTokens"], estimate::TYPICAL_SPAM_TOKENS);
         assert!(spam["inputTokens"].as_u64().unwrap() > 50);
 
         let events = engine
-            .assist_estimate("acc", "Assist/extractEvents", json!({ "emailId": id, "includeImages": true }))
+            .assist_estimate("acc", "Assist/extractEvents", json!({ "emailId": id, "includeImages": true }), None)
             .await
             .unwrap()
             .unwrap();
@@ -1362,29 +1396,131 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         assert!(events["inputTokens"].as_u64().unwrap() > spam["inputTokens"].as_u64().unwrap() / 2);
 
         let write = engine
-            .assist_estimate("acc", "Assist/compose", json!({ "mode": "write", "instruction": "Sag zu" }))
+            .assist_estimate("acc", "Assist/compose", json!({ "mode": "write", "instruction": "Sag zu" }), None)
             .await
             .unwrap()
             .unwrap();
         assert_eq!(write["outputTokens"], estimate::TYPICAL_WRITE_TOKENS);
         let long = "Liebe Mia, danke für die Einladung. ".repeat(40);
         let rewrite = engine
-            .assist_estimate("acc", "Assist/compose", json!({ "mode": "rewrite", "preset": "shorter", "text": long }))
+            .assist_estimate(
+                "acc",
+                "Assist/compose",
+                json!({ "mode": "rewrite", "preset": "shorter", "text": long }),
+                None,
+            )
             .await
             .unwrap()
             .unwrap();
         assert_eq!(rewrite["outputTokens"], estimate::tokens([long.as_str()]));
         assert!(rewrite["inputTokens"].as_u64().unwrap() > rewrite["outputTokens"].as_u64().unwrap());
         // The same checks as the real call.
-        let empty = engine.assist_estimate("acc", "Assist/compose", json!({ "mode": "write" })).await.unwrap_err();
+        let empty =
+            engine.assist_estimate("acc", "Assist/compose", json!({ "mode": "write" }), None).await.unwrap_err();
         assert_eq!(empty.assist_kind(), Some("invalidArguments"));
-        let unknown = engine.assist_estimate("acc", "AssistLabel/apply", json!({})).await.unwrap_err();
+        let unknown = engine.assist_estimate("acc", "AssistLabel/apply", json!({}), None).await.unwrap_err();
         assert_eq!(unknown.assist_kind(), Some("invalidArguments"));
 
         // Nothing was asked, so nothing was counted.
         for feature in Feature::ALL {
             assert_eq!(engine.device().requests_today(feature).unwrap(), 0);
         }
+    }
+
+    #[tokio::test]
+    async fn costs_follow_the_fetched_prices_and_a_price_set_by_hand() {
+        use crate::assist::prices::{Sources, tests as fixtures};
+        use crate::assist::provider::{ChatAnswer, TokenUsage};
+        let (_dir, engine, id) = engine_with_mail();
+        let base = fixtures::serve(vec![("/litellm", 200, fixtures::LITELLM), ("/ecb", 200, fixtures::ECB)]).await;
+        engine.use_price_sources(Sources {
+            litellm: format!("{base}/litellm"),
+            openrouter: format!("{base}/openrouter"),
+            ecb: format!("{base}/ecb"),
+        });
+        let created = engine
+            .assist_create_provider(
+                DEVICE_SCOPE,
+                json!({ "kind": "openai", "name": "OpenAI", "apiKey": "sk-test-1", "model": "gpt-5-mini" }), // gitleaks:allow
+            )
+            .await
+            .unwrap();
+        let provider_id = created["id"].as_str().unwrap().to_string();
+        let providers = engine.assist_providers(DEVICE_SCOPE).await.unwrap();
+        assert_eq!(providers[0]["price"]["source"], "auto", "fetched on first need: {providers}");
+        assert_eq!(providers[0]["price"]["inputPerMillion"], 0.25);
+        assert!(providers[0]["inputPricePerMillion"].is_null());
+        assert!(engine.inner.store.assist_setting("prices").unwrap().is_some(), "kept for offline");
+
+        let spam =
+            engine.assist_estimate("acc", "Assist/spamCheck", json!({ "emailId": id }), None).await.unwrap().unwrap();
+        let (input, output) = (spam["inputTokens"].as_f64().unwrap(), spam["outputTokens"].as_f64().unwrap());
+        let usd = (input * 0.25 + output * 2.0) / 1e6;
+        assert_eq!(spam["cost"]["currency"], "EUR");
+        assert!((spam["cost"]["usd"].as_f64().unwrap() - usd).abs() < 1e-12);
+        assert!((spam["cost"]["amount"].as_f64().unwrap() - usd / 1.17).abs() < 1e-12);
+        let dollars = engine
+            .assist_estimate("acc", "Assist/spamCheck", json!({ "emailId": id }), Some("usd"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(dollars["cost"]["currency"], "USD");
+        assert!((dollars["cost"]["amount"].as_f64().unwrap() - usd).abs() < 1e-12);
+
+        // A price set by hand wins; nonsense is refused.
+        engine
+            .assist_update_provider(
+                DEVICE_SCOPE,
+                &provider_id,
+                json!({ "inputPricePerMillion": 1, "outputPricePerMillion": 4 }),
+            )
+            .await
+            .unwrap();
+        let bad =
+            engine.assist_update_provider(DEVICE_SCOPE, &provider_id, json!({ "inputPricePerMillion": -1 })).await;
+        assert_eq!(bad.unwrap_err().assist_kind(), Some("invalidProperties"));
+        let manual = engine.assist_providers(DEVICE_SCOPE).await.unwrap();
+        assert_eq!(manual[0]["price"]["source"], "manual");
+        assert_eq!(manual[0]["outputPricePerMillion"], 4.0);
+
+        // Usage keeps what each request cost then; a request without token counts has no cost.
+        let device = engine.device();
+        let effective = device.effective(Feature::SpamCheck).unwrap().unwrap();
+        let answer =
+            ChatAnswer { text: "ok".into(), usage: Some(TokenUsage { input_tokens: 1_000_000, output_tokens: 0 }) };
+        device.record_usage(&effective, Feature::SpamCheck, Some(&answer)).unwrap();
+        device
+            .record_usage(&effective, Feature::SpamCheck, Some(&ChatAnswer { text: "ok".into(), usage: None }))
+            .unwrap();
+        device
+            .record_usage(&effective, Feature::Summarize, Some(&ChatAnswer { text: "ok".into(), usage: None }))
+            .unwrap();
+        let usage = engine.assist_usage(DEVICE_SCOPE, Some(7), Some("USD")).await.unwrap();
+        let row =
+            |feature: &str| usage["days"].as_array().unwrap().iter().find(|r| r["feature"] == feature).unwrap().clone();
+        assert_eq!(row("spamCheck")["cost"]["amount"], 1.0);
+        assert!(row("summarize")["cost"].is_null());
+        assert_eq!(usage["today"][0]["cost"]["amount"], 1.0);
+        let euros = engine.assist_usage(DEVICE_SCOPE, Some(7), None).await.unwrap();
+        assert_eq!(euros["today"][0]["cost"]["currency"], "EUR");
+    }
+
+    #[tokio::test]
+    async fn local_models_cost_nothing_even_offline() {
+        let (_dir, engine, id) = engine_with_mail();
+        engine
+            .assist_create_provider(
+                DEVICE_SCOPE,
+                json!({ "kind": "openaiCompatible", "name": "LM Studio", "baseUrl": "http://127.0.0.1:1234/v1", "model": "gemma" }),
+            )
+            .await
+            .unwrap();
+        let providers = engine.assist_providers(DEVICE_SCOPE).await.unwrap();
+        assert_eq!(providers[0]["price"]["source"], "free");
+        let spam =
+            engine.assist_estimate("acc", "Assist/spamCheck", json!({ "emailId": id }), None).await.unwrap().unwrap();
+        assert_eq!(spam["cost"]["amount"], 0.0, "free without any rates");
+        assert_eq!(spam["cost"]["currency"], "EUR");
     }
 
     #[tokio::test]

@@ -12,6 +12,7 @@ pub mod discover;
 pub mod estimate;
 pub mod local;
 pub mod mail;
+pub mod prices;
 pub mod prompts;
 pub mod provider;
 pub mod server;
