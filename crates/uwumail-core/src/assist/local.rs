@@ -277,6 +277,23 @@ impl Device<'_> {
         }))
     }
 
+    /// The models at an address that isn't saved yet: `{ kind, baseUrl, apiKey? }` of an Ollama or
+    /// OpenAI-compatible server. The address passes the same check as a saved one; a key only
+    /// goes along for the question.
+    pub async fn probe_models(&self, http: &reqwest::Client, input: &Value) -> Result<Value> {
+        let kind = input
+            .get("kind")
+            .and_then(Value::as_str)
+            .and_then(ProviderKind::parse)
+            .filter(|kind| kind.base_url_required())
+            .ok_or_else(|| invalid("kind", "Only providers at an own address can be asked before they are saved."))?;
+        let base_url = Self::checked_base_url(kind, Self::text_field(input, "baseUrl", 2048)?.flatten())?;
+        let api_key = Self::text_field(input, "apiKey", 4096)?.flatten();
+        let endpoint = Endpoint { kind, base_url, api_key };
+        let models = provider::models(http, &endpoint).await?;
+        Ok(json!({ "models": models, "model": null, "fastModel": null }))
+    }
+
     // -------------------------------------------------------------- settings
 
     fn choice(&self, key: &str) -> Result<Option<Choice>> {

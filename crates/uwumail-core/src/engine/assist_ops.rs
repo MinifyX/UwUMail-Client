@@ -9,11 +9,13 @@ use serde_json::{Map, Value, json};
 use tokio::sync::mpsc;
 
 use super::*;
+use crate::assist::estimate::{self, Method};
 use crate::assist::local::{self, Device, Effective};
 use crate::assist::mail::{self, MailText};
-use crate::assist::prompts::{self, ComposeRequest, SUBJECT_MARK};
+use crate::assist::prompts::{self, ComposeRequest, Prompt, SUBJECT_MARK};
+use crate::assist::provider::{self, ProviderKind};
 use crate::assist::validate::{self, EventContext};
-use crate::assist::{Feature, Label, StreamEvent, StreamSink, server, signals};
+use crate::assist::{Feature, Label, StreamEvent, StreamSink, discover, server, signals};
 use crate::store::LabelLogRecord;
 
 /// At most this much picture text goes along when the assistant reads a mail's appointments.
@@ -532,7 +534,9 @@ impl Engine {
         self.stoppable(stream_id, work).await
     }
 
-    async fn compose_on_device(&self, account_id: &str, request: &Value, sink: Option<StreamSink>) -> Result<Value> {
+    /// The prompt of a compose request on this device, and whether it asks for a subject. With
+    /// `download`, the mail replied to is fetched when only its preview is stored.
+    async fn compose_prompt(&self, account_id: &str, request: &Value, download: bool) -> Result<(Prompt, bool)> {
         let mode = text_arg(request, "mode").unwrap_or("write");
         if !matches!(mode, "write" | "rewrite" | "adjust") {
             return Err(Error::assist("invalidArguments", "Unknown way of writing."));
@@ -556,7 +560,7 @@ impl Engine {
             _ => {}
         }
         let reply_to = match text_arg(request, "replyToEmailId") {
-            Some(id) => self.stored_mail(id, mail::MAX_MAIL_CHARS).await.ok(),
+            Some(id) => self.stored_mail(id, mail::MAX_MAIL_CHARS, download).await.ok(),
             None => None,
         };
         let account = self.inner.store.account(account_id)?;
@@ -576,6 +580,11 @@ impl Engine {
             sender: &sender,
             today: &today,
         });
+        Ok((prompt, want_subject))
+    }
+
+    async fn compose_on_device(&self, account_id: &str, request: &Value, sink: Option<StreamSink>) -> Result<Value> {
+        let (prompt, want_subject) = self.compose_prompt(account_id, request, true).await?;
         let mut relay = sink.map(|sink| Relay::new(sink, want_subject));
         let streaming = relay.is_some();
         let (answer, effective) = {
@@ -638,10 +647,7 @@ impl Engine {
                     server::stream_or_call(&client, "Assist/summarize", arguments, sink.clone()).await?
                 }
                 Target::Device => {
-                    let start = messages.len().saturating_sub(MAX_THREAD_MAILS);
-                    let mails: Vec<MailText> =
-                        messages[start..].iter().map(|m| MailText::from_stored(m, mail::MAX_MAIL_CHARS)).collect();
-                    let prompt = prompts::summarize(&mails, language.as_deref());
+                    let (prompt, _) = summarize_prompt(&messages, language.as_deref());
                     let mut forward = |piece: &str| {
                         if let Some(sink) = &sink {
                             sink(StreamEvent::Delta { text: piece.to_string() });
@@ -664,8 +670,11 @@ impl Engine {
     }
 
     /// A stored message with its body (downloaded once when it's only a preview), ready for a model.
-    async fn stored_mail(&self, message_id: &str, max_chars: usize) -> Result<MailText> {
-        let detail = self.get_thread(&format!("m:{message_id}"), true).await?;
+    /// Without `download`, only what is stored (for estimates, which never download).
+    async fn stored_mail(&self, message_id: &str, max_chars: usize, download: bool) -> Result<MailText> {
+        let id = format!("m:{message_id}");
+        let detail =
+            if download { self.get_thread(&id, true).await? } else { self.inner.store.get_thread(&id, true)? };
         let message = detail
             .messages
             .into_iter()
@@ -704,7 +713,7 @@ impl Engine {
             .ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
         let raw = self.inner.raw_message(&location).await?;
         let mail = MailText::from_raw(message, &raw, mail::MAX_MAIL_CHARS);
-        let signals = self.spam_signals(message, &mail).await?;
+        let signals = self.spam_signals(message, &mail, true).await?;
         let prompt = prompts::spam_check(&mail, &signals::findings(&signals), language);
         let (answer, effective) = self.device().ask(self.assist_http()?, Feature::SpamCheck, &prompt, None).await?;
         let (verdict, confidence, reasons) = validate::parse_spam(&answer.text)
@@ -717,7 +726,9 @@ impl Engine {
         Ok(Value::Object(out))
     }
 
-    async fn spam_signals(&self, message: &Message, mail: &MailText) -> Result<signals::SpamSignals> {
+    /// What is known about a mail and its sender. Without `contacts`, the address books aren't
+    /// asked (an estimate must not wait for servers).
+    async fn spam_signals(&self, message: &Message, mail: &MailText, contacts: bool) -> Result<signals::SpamSignals> {
         let from = message.from.email.trim().to_lowercase();
         let (spam_score, spam_threshold, tests) = signals::spam_status(&mail.headers);
         let in_junk = self
@@ -727,7 +738,7 @@ impl Engine {
             .first()
             .is_some_and(|(_, _, role)| role.as_deref() == Some("junk"));
         let (earlier, earlier_in_junk, written_to, first) = self.inner.store.sender_history(&from, mail.date)?;
-        let in_contacts = self.address_book().await.iter().any(|(_, email)| *email == from);
+        let in_contacts = contacts && self.address_book().await.iter().any(|(_, email)| *email == from);
         Ok(signals::SpamSignals {
             authentication: signals::authentication(&mail.headers, &from),
             spam_score,
@@ -797,7 +808,7 @@ impl Engine {
     }
 
     async fn events_on_device(&self, message_id: &str, include_images: bool) -> Result<Value> {
-        let mail = self.stored_mail(message_id, mail::MAX_MAIL_CHARS).await?;
+        let mail = self.stored_mail(message_id, mail::MAX_MAIL_CHARS, true).await?;
         // The text read from the mail's own pictures (never the pictures themselves, and never
         // remote ones), bounded like the mail's text; a mail whose pictures can't be read goes
         // without.
@@ -830,18 +841,193 @@ impl Engine {
     /// The texts in a mail's embedded and attached pictures, at most `IMAGE_TEXT_CHARS` together.
     async fn picture_text_for_events(&self, message_id: &str) -> Vec<String> {
         let Ok(result) = self.image_text(message_id, false).await else { return Vec::new() };
-        let mut left = IMAGE_TEXT_CHARS;
-        let mut texts = Vec::new();
-        for image in result.images {
-            let text = image.text.trim();
-            if text.is_empty() || left == 0 {
-                continue;
+        cap_picture_texts(result.images.into_iter().map(|image| image.text))
+    }
+
+    // ---------------------------------------------------------- estimate
+
+    /// What a call would take, for the tooltip on its button: `method` is `Assist/compose`,
+    /// `Assist/summarize`, `Assist/spamCheck` or `Assist/extractEvents`, `arguments` what the page
+    /// passes to that call (the app's ids). A UwUMail account asks its server (`Assist/estimate`);
+    /// `None` when that server is older and doesn't know the method. Everything else is counted
+    /// here with the same prompt, never downloading, reading pictures or asking a model.
+    pub async fn assist_estimate(&self, account_id: &str, method: &str, arguments: Value) -> Result<Option<Value>> {
+        let method =
+            Method::parse(method).ok_or_else(|| Error::assist("invalidArguments", "This can't be estimated."))?;
+        let message_id = text_arg(&arguments, "emailId").map(String::from);
+        let thread_id = text_arg(&arguments, "threadId").map(String::from);
+        // Whose assistant answers: the draft's account, else the mail's, as the call itself does.
+        let messages = match method {
+            Method::Compose => Vec::new(),
+            Method::Summarize if message_id.is_none() => match &thread_id {
+                Some(thread) => self.inner.store.get_thread(thread, true)?.messages,
+                None => return Err(Error::assist("invalidArguments", "Nothing to summarize.")),
+            },
+            _ => {
+                let id = message_id.clone().ok_or_else(|| Error::assist("invalidArguments", "Which mail?"))?;
+                self.inner.store.get_thread(&format!("m:{id}"), true)?.messages
             }
-            let part: String = text.chars().take(left).collect();
-            left -= part.chars().count();
-            texts.push(part);
+        };
+        let account = match messages.last() {
+            Some(last) => last.account_id.clone(),
+            None if method == Method::Compose => account_id.to_string(),
+            None => return Err(Error::assist("notFound", "This mail no longer exists.")),
+        };
+        match self.assist_target(&account).await? {
+            Target::Server(client) => {
+                let mut remote = arguments.clone();
+                match method {
+                    Method::Compose => {
+                        if let Some(reply) = text_arg(&arguments, "replyToEmailId") {
+                            remote["replyToEmailId"] = match self.remote_id(reply) {
+                                Ok((owner, id)) if owner == account => Value::String(id),
+                                _ => Value::Null,
+                            };
+                        }
+                    }
+                    Method::Summarize if message_id.is_none() => {
+                        let last = messages.last().map(|m| m.id.clone()).unwrap_or_default();
+                        let (_, email) = self.remote_id(&last)?;
+                        let responses = client
+                            .call(vec![(
+                                "Email/get",
+                                json!({ "accountId": client.account_id(), "ids": [email], "properties": ["threadId"] }),
+                            )])
+                            .await?;
+                        remote["threadId"] =
+                            responses.get(0, "Email/get")?.pointer("/list/0/threadId").cloned().ok_or_else(|| {
+                                Error::assist("notFound", "The server doesn't know this conversation.")
+                            })?;
+                        remote["emailId"] = Value::Null;
+                    }
+                    _ => {
+                        let (_, email) = self.remote_id(message_id.as_deref().unwrap_or_default())?;
+                        remote["emailId"] = Value::String(email);
+                        if method == Method::Summarize {
+                            remote["threadId"] = Value::Null;
+                        }
+                    }
+                }
+                if let Some(object) = remote.as_object_mut() {
+                    object.remove("accountId");
+                }
+                match server::call(
+                    &client,
+                    "Assist/estimate",
+                    json!({ "method": method.as_str(), "arguments": remote }),
+                )
+                .await
+                {
+                    Ok(answer) => Ok(Some(answer)),
+                    // A server from before 0.19 has no estimates: no tooltip, no error.
+                    Err(error) if matches!(error.assist_kind(), Some("unknownMethod" | "unknownCapability")) => {
+                        Ok(None)
+                    }
+                    Err(error) => Err(error),
+                }
+            }
+            Target::Device => self.estimate_on_device(&account, method, &arguments, &messages).await.map(Some),
         }
-        texts
+    }
+
+    async fn estimate_on_device(
+        &self,
+        account_id: &str,
+        method: Method,
+        arguments: &Value,
+        messages: &[Message],
+    ) -> Result<Value> {
+        let effective = self
+            .device()
+            .effective(method.feature())?
+            .ok_or_else(|| Error::assist("assistUnavailable", "No provider set up on this device can do this."))?;
+        let language = text_arg(arguments, "language");
+        let (prompt, answer) = match method {
+            Method::Compose => {
+                let (prompt, _) = self.compose_prompt(account_id, arguments, false).await?;
+                let answer = match text_arg(arguments, "mode").unwrap_or("write") {
+                    "write" => estimate::Answer::Write,
+                    _ => {
+                        estimate::Answer::Rewrite { text: arguments.get("text").and_then(Value::as_str).unwrap_or("") }
+                    }
+                };
+                let output = estimate::output_tokens(answer, &prompt);
+                (prompt, output)
+            }
+            Method::Summarize => {
+                let (prompt, mails) = summarize_prompt(messages, language);
+                let output = estimate::output_tokens(estimate::Answer::Summary { mails }, &prompt);
+                (prompt, output)
+            }
+            Method::SpamCheck => {
+                let message =
+                    messages.last().ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
+                let mail = MailText::from_stored(message, mail::MAX_MAIL_CHARS);
+                let signals = self.spam_signals(message, &mail, false).await?;
+                let prompt = prompts::spam_check(&mail, &signals::findings(&signals), language);
+                let output = estimate::output_tokens(estimate::Answer::SpamCheck, &prompt);
+                (prompt, output)
+            }
+            Method::ExtractEvents => {
+                let message =
+                    messages.last().ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
+                let mail = MailText::from_stored(message, mail::MAX_MAIL_CHARS);
+                let include_images = arguments.get("includeImages").and_then(Value::as_bool) == Some(true);
+                let image_text = if include_images { self.cached_picture_text(message) } else { Vec::new() };
+                let prompt = prompts::extract_events(&mail, &image_text);
+                let output = estimate::output_tokens(estimate::Answer::Events, &prompt);
+                (prompt, output)
+            }
+        };
+        let who = (effective.provider.id.as_str(), effective.provider.name.as_str(), effective.model.as_str());
+        // This device has no daily limits.
+        Ok(estimate::answer_json(method, estimate::prompt_tokens(&prompt), answer, who, (None, None)))
+    }
+
+    /// The text of a mail's pictures as far as it was read already; a guess per picture otherwise.
+    fn cached_picture_text(&self, message: &Message) -> Vec<String> {
+        let cached = self.inner.image_texts.lock().unwrap().get(&message.id, false);
+        let texts: Vec<String> = match cached {
+            Some(result) => result.images.into_iter().map(|image| image.text).collect(),
+            None => {
+                let pictures = message
+                    .attachments
+                    .iter()
+                    .filter(|a| a.mime_type.to_ascii_lowercase().starts_with("image/"))
+                    .count();
+                estimate::unread_pictures(pictures)
+            }
+        };
+        cap_picture_texts(texts)
+    }
+
+    // ------------------------------------------------------ local models
+
+    /// Ollama and LM Studio running on this computer, with their installed models, and whether
+    /// this device has a provider at that address already.
+    pub async fn assist_local_models(&self) -> Result<Value> {
+        let found = discover::local_models(self.assist_http()?, &discover::CANDIDATES).await;
+        let providers = self.device().providers()?;
+        let list = found
+            .into_iter()
+            .map(|found| {
+                let kind = ProviderKind::parse(found.kind);
+                let address = kind.and_then(|kind| provider::check_base_url(kind, found.base_url).ok());
+                let added =
+                    providers.iter().any(|p| p.kind == found.kind && p.base_url.is_some() && p.base_url == address);
+                let mut value = serde_json::to_value(&found).unwrap_or(Value::Null);
+                value["added"] = Value::Bool(added);
+                value
+            })
+            .collect();
+        Ok(Value::Array(list))
+    }
+
+    /// The models at an address that isn't saved yet (Ollama, OpenAI-compatible), for the model
+    /// list while a provider is being added on this device. The address passes the same check as
+    /// a saved one.
+    pub async fn assist_probe_models(&self, input: Value) -> Result<Value> {
+        self.device().probe_models(self.assist_http()?, &input).await
     }
 
     // ---------------------------------------------------------- keywords
@@ -983,6 +1169,31 @@ impl Engine {
     }
 }
 
+/// The prompt of a summary of these messages (the latest ones of a conversation), and how many
+/// mails it reads.
+fn summarize_prompt(messages: &[Message], language: Option<&str>) -> (Prompt, usize) {
+    let start = messages.len().saturating_sub(MAX_THREAD_MAILS);
+    let mails: Vec<MailText> =
+        messages[start..].iter().map(|m| MailText::from_stored(m, mail::MAX_MAIL_CHARS)).collect();
+    (prompts::summarize(&mails, language), mails.len())
+}
+
+/// Picture texts for a prompt: at most `IMAGE_TEXT_CHARS` together, empty ones left out.
+fn cap_picture_texts(texts: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut left = IMAGE_TEXT_CHARS;
+    let mut out = Vec::new();
+    for text in texts {
+        let text = text.trim();
+        if text.is_empty() || left == 0 {
+            continue;
+        }
+        let part: String = text.chars().take(left).collect();
+        left -= part.chars().count();
+        out.push(part);
+    }
+    out
+}
+
 /// A device label log entry in the server's shape.
 fn log_json(entry: &LabelLogRecord) -> Value {
     json!({
@@ -1054,6 +1265,143 @@ mod tests {
             *got.lock().unwrap(),
             [StreamEvent::Delta { text: "Hä".into() }, StreamEvent::Delta { text: "llo".into() }]
         );
+    }
+
+    /// An engine with one IMAP mailbox and one mail in its inbox; the mail's id.
+    fn engine_with_mail() -> (tempfile::TempDir, Engine, String) {
+        use crate::model::{AccountColor, AuthKind, FolderRole, MessageFlags, Security, ServerSettings};
+        use crate::store::{AccountRecord, FolderInfo};
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::new(EngineOptions {
+            data_dir: dir.path().to_path_buf(),
+            secrets: Arc::new(crate::secrets::MemorySecrets::default()),
+            open_url: Arc::new(|_| {}),
+            recognizer: None,
+        })
+        .unwrap();
+        let store = &engine.inner.store;
+        store
+            .insert_account(&AccountRecord {
+                id: "acc".into(),
+                name: "Test".into(),
+                email: "mini@example.org".into(),
+                display_name: "Mini".into(),
+                color: AccountColor::Pink,
+                auth: AuthKind::Password,
+                username: "mini@example.org".into(),
+                imap: ServerSettings { host: "imap.example.org".into(), port: 993, security: Security::Tls },
+                smtp: ServerSettings { host: "smtp.example.org".into(), port: 465, security: Security::Tls },
+                protocol: Protocol::Imap,
+                jmap_url: None,
+            })
+            .unwrap();
+        let inbox = store
+            .upsert_folder(
+                "acc",
+                &FolderInfo {
+                    path: "INBOX",
+                    name: "INBOX",
+                    role: Some(FolderRole::Inbox),
+                    delimiter: Some("/"),
+                    selectable: true,
+                    parent_ref: None,
+                },
+            )
+            .unwrap();
+        let raw = "From: Mia <mia@example.com>\r\nTo: mini@example.org\r\nSubject: Sommerfest\r\n\
+Date: Tue, 1 Sep 2026 09:00:00 +0200\r\nMessage-ID: <fest@example.com>\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18 Uhr im Park. Kommst du?\r\n";
+        let parsed = crate::mime::parse(raw.as_bytes());
+        let id = store
+            .insert_message("acc", &inbox, 1, MessageFlags::default(), raw.len() as u64, None, &parsed)
+            .unwrap()
+            .unwrap();
+        (dir, engine, id)
+    }
+
+    #[tokio::test]
+    async fn estimates_on_this_device_count_the_real_prompt_and_ask_nobody() {
+        let (_dir, engine, id) = engine_with_mail();
+        let unavailable =
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id })).await.unwrap_err();
+        assert_eq!(unavailable.assist_kind(), Some("assistUnavailable"));
+        // A provider nobody listens to: an estimate never reaches it.
+        engine
+            .device()
+            .create_provider(
+                &json!({ "kind": "ollama", "name": "Ollama", "baseUrl": "http://127.0.0.1:9", "model": "llama3" }),
+            )
+            .unwrap();
+
+        let summary =
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id })).await.unwrap().unwrap();
+        let messages = engine.inner.store.get_thread(&format!("m:{id}"), true).unwrap().messages;
+        let (prompt, _) = summarize_prompt(&messages, None);
+        assert_eq!(summary["inputTokens"], estimate::prompt_tokens(&prompt));
+        assert_eq!(summary["outputTokens"], estimate::TYPICAL_SUMMARY_TOKENS);
+        assert_eq!(summary["totalTokens"], estimate::prompt_tokens(&prompt) + estimate::TYPICAL_SUMMARY_TOKENS);
+        assert_eq!(summary["providerName"], "Ollama");
+        assert_eq!(summary["model"], "llama3");
+        assert!(summary["tokensLeftToday"].is_null() && summary["requestsLeftToday"].is_null());
+
+        let thread = messages[0].thread_id.clone();
+        let whole =
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "threadId": thread })).await.unwrap().unwrap();
+        assert_eq!(whole["inputTokens"], summary["inputTokens"], "a conversation of one mail");
+
+        let spam = engine.assist_estimate("acc", "Assist/spamCheck", json!({ "emailId": id })).await.unwrap().unwrap();
+        assert_eq!(spam["outputTokens"], estimate::TYPICAL_SPAM_TOKENS);
+        assert!(spam["inputTokens"].as_u64().unwrap() > 50);
+
+        let events = engine
+            .assist_estimate("acc", "Assist/extractEvents", json!({ "emailId": id, "includeImages": true }))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(events["outputTokens"], estimate::TYPICAL_EVENTS_TOKENS);
+        assert!(events["inputTokens"].as_u64().unwrap() > spam["inputTokens"].as_u64().unwrap() / 2);
+
+        let write = engine
+            .assist_estimate("acc", "Assist/compose", json!({ "mode": "write", "instruction": "Sag zu" }))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(write["outputTokens"], estimate::TYPICAL_WRITE_TOKENS);
+        let long = "Liebe Mia, danke für die Einladung. ".repeat(40);
+        let rewrite = engine
+            .assist_estimate("acc", "Assist/compose", json!({ "mode": "rewrite", "preset": "shorter", "text": long }))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(rewrite["outputTokens"], estimate::tokens([long.as_str()]));
+        assert!(rewrite["inputTokens"].as_u64().unwrap() > rewrite["outputTokens"].as_u64().unwrap());
+        // The same checks as the real call.
+        let empty = engine.assist_estimate("acc", "Assist/compose", json!({ "mode": "write" })).await.unwrap_err();
+        assert_eq!(empty.assist_kind(), Some("invalidArguments"));
+        let unknown = engine.assist_estimate("acc", "AssistLabel/apply", json!({})).await.unwrap_err();
+        assert_eq!(unknown.assist_kind(), Some("invalidArguments"));
+
+        // Nothing was asked, so nothing was counted.
+        for feature in Feature::ALL {
+            assert_eq!(engine.device().requests_today(feature).unwrap(), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn models_at_an_unsaved_address_pass_the_same_check() {
+        let (_dir, engine, _) = engine_with_mail();
+        let refused = engine
+            .assist_probe_models(json!({ "kind": "ollama", "baseUrl": "http://169.254.169.254" }))
+            .await
+            .unwrap_err();
+        assert_eq!(refused.assist_kind(), Some("invalidProperties"));
+        let refused =
+            engine.assist_probe_models(json!({ "kind": "openai", "baseUrl": "https://api.example.com/v1" })).await;
+        assert_eq!(refused.unwrap_err().assist_kind(), Some("invalidProperties"), "only own addresses");
+        let plain = engine
+            .assist_probe_models(json!({ "kind": "openaiCompatible", "baseUrl": "http://llm.example.com/v1" }))
+            .await;
+        assert_eq!(plain.unwrap_err().assist_kind(), Some("invalidProperties"), "plain http only nearby");
     }
 
     #[test]
