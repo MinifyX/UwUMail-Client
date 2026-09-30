@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { AssistLabel } from "@/backend/types";
+import { LABEL_DEFAULTS } from "@/features/assist/labels";
 import { groupByLabel, labelGroups, labelTerm, matchesLabels, splitLabelSearch, type LabelEntry } from "./labelFilter";
 
 const label = (name: string, keyword: string): AssistLabel => ({
   id: keyword,
   name,
   description: "",
+  ...LABEL_DEFAULTS,
   keyword,
   color: null,
 });

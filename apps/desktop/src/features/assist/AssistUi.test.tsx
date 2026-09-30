@@ -20,6 +20,7 @@ import { useSettings } from "@/state/settings";
 import { useToasts } from "@/state/toasts";
 import { ComposeAssistPanel, type ComposeAssistContext, type ComposeAssistStart } from "./ComposeAssist";
 import { MessageLabels } from "./LabelChips";
+import { LABEL_DEFAULTS } from "./labels";
 import { useAssistReader } from "./readerState";
 import { AssistForAccount, AssistScopeProvider } from "./useAssist";
 import { LabelSettings } from "./settings/LabelSettings";
@@ -34,6 +35,9 @@ const OPTIONS: AssistOptions = {
   maxLabels: 30,
   maxInstructionChars: 2000,
   maxTextChars: 20000,
+  maxLabelConditions: 10,
+  foreignMail: false,
+  foreignServers: [],
 };
 
 const ANSWER = { providerId: "q1", providerName: "Mistral (Server)", model: "mistral-small-latest", usage: null };
@@ -79,7 +83,7 @@ const fake = {
   ),
   assistLabels: vi.fn(async () => labels.map((label) => ({ ...label }))),
   createAssistLabel: vi.fn(async (_scope: string, input: AssistLabelInput) => {
-    const made = { id: `g${labels.length + 1}`, keyword: input.name.toLowerCase(), ...input };
+    const made = { ...LABEL_DEFAULTS, id: `g${labels.length + 1}`, keyword: input.name.toLowerCase(), ...input };
     labels = [...labels, made];
     return made;
   }),
@@ -276,7 +280,9 @@ describe("the assistant's UI", () => {
   });
 
   it("shows why the assistant set a label and undoes it", async () => {
-    labels = [{ id: "g1", name: "Invoices", keyword: "invoices", description: "Bills", color: "#f59e0b" }];
+    labels = [
+      { ...LABEL_DEFAULTS, id: "g1", name: "Invoices", keyword: "invoices", description: "Bills", color: "#f59e0b" },
+    ];
     log = [
       {
         id: "l1",
@@ -284,6 +290,9 @@ describe("the assistant's UI", () => {
         labelId: "g1",
         name: "Invoices",
         keyword: "invoices",
+        source: "ai",
+        code: "ai",
+        params: {},
         reason: "It is an invoice for September.",
         createdAt: "2026-09-28T10:02:00Z",
         undone: false,
@@ -302,7 +311,7 @@ describe("the assistant's UI", () => {
   });
 
   it("puts a label on by hand as a keyword", async () => {
-    labels = [{ id: "g1", name: "Travel", keyword: "travel", description: "", color: null }];
+    labels = [{ ...LABEL_DEFAULTS, id: "g1", name: "Travel", keyword: "travel", description: "", color: null }];
     renderWith(<MessageLabels message={message()} canEdit />);
     fireEvent.click(await screen.findByRole("button", { name: "Add a label" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Travel" }));
@@ -324,7 +333,7 @@ describe("the assistant's UI", () => {
   });
 
   it("checks a new label before saving it", async () => {
-    labels = [{ id: "g1", name: "Travel", keyword: "travel", description: "", color: null }];
+    labels = [{ ...LABEL_DEFAULTS, id: "g1", name: "Travel", keyword: "travel", description: "", color: null }];
     inScope("acc", <LabelSettings options={OPTIONS} />);
     // The list is there (its keyword shows), not only the suggestions.
     await screen.findByText("travel");

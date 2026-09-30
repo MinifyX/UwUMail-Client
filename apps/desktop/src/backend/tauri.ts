@@ -9,6 +9,7 @@ import {
   providerCreate,
   providerUpdate,
   toAppliedLabels,
+  toLabelSuggestion,
   toAssistFeaturesOrNull,
   toAssistLabel,
   toAssistLabels,
@@ -695,6 +696,13 @@ export class TauriBackend implements Backend {
 
   async undoAssistLabels(scope: string, logIds: string[]) {
     await call<void>("assist_undo_labels", { scope, logIds });
+  }
+
+  async suggestLabels(messageId: string, language?: string, suggestNew = true) {
+    return toLabelSuggestion(
+      await call<unknown>("assist_suggest_labels", { messageId, language: language ?? null, suggestNew }),
+      messageId,
+    );
   }
 
   async applyAssistLabels(messageIds: string[]) {

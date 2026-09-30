@@ -9,6 +9,7 @@ import {
   setByAssistant,
   STARTER_LABELS,
   threadKeywords,
+  LABEL_DEFAULTS,
 } from "./labels";
 import {
   emptyProviderForm,
@@ -30,6 +31,7 @@ const label = (id: string, name: string, keyword: string, color: string | null =
   keyword,
   description: "",
   color,
+  ...LABEL_DEFAULTS,
 });
 
 const LABELS = [
@@ -44,7 +46,10 @@ const entry = (patch: Partial<AssistLabelLogEntry>): AssistLabelLogEntry => ({
   labelId: "g1",
   name: "Rechnungen",
   keyword: "rechnungen",
+  source: "ai",
   reason: "An invoice.",
+  code: "ai",
+  params: {},
   createdAt: "2026-09-28T10:00:00Z",
   undone: false,
   providerName: null,

@@ -1108,6 +1108,8 @@ export class DemoBackend implements Backend {
     lang(),
     () => this.messages.filter((message) => message.accountId === DEMO_ACCOUNTS[0]!.id),
     (mail) => this.assistChanged(DEMO_ACCOUNTS[0]!.id, mail),
+    false,
+    () => (this.serverForOthers() ? this.messages.filter((message) => message.accountId !== DEMO_ACCOUNTS[0]!.id) : []),
   );
   private assistDevice = new DemoAssist(
     lang(),
@@ -1126,9 +1128,14 @@ export class DemoBackend implements Backend {
     return scope === DEVICE_ASSIST_SCOPE ? this.assistDevice : this.assistServer;
   }
 
-  /** The demo assistant that serves a mailbox. */
+  /** The other mailboxes use the JMAP account's server for their AI (the device's `serverAssist`). */
+  private serverForOthers(): boolean {
+    return this.assistDevice.getSettings().serverAssist === DEMO_ACCOUNTS[0]!.id;
+  }
+
+  /** The demo assistant whose model answers for a mailbox. */
   private assistFor(accountId: string): DemoAssist {
-    return accountId === DEMO_ACCOUNTS[0]!.id ? this.assistServer : this.assistDevice;
+    return accountId === DEMO_ACCOUNTS[0]!.id || this.serverForOthers() ? this.assistServer : this.assistDevice;
   }
 
   private assistForMessage(messageId: string): DemoAssist {
@@ -1147,7 +1154,11 @@ export class DemoBackend implements Backend {
         kind: "device",
         accountId: null,
         accountIds: others,
-        options: this.assistDevice.options(),
+        options: {
+          ...this.assistDevice.options(),
+          ...(this.serverForOthers() ? { features: this.assistServer.options().features } : {}),
+          foreignServers: [server],
+        },
       },
     ];
   }
@@ -1276,6 +1287,14 @@ export class DemoBackend implements Backend {
   async undoAssistLabels(scope: string, logIds: string[]) {
     await wait(100);
     this.assistOf(scope).undo(logIds);
+  }
+
+  async suggestLabels(messageId: string, _language?: string, suggestNew = true) {
+    const message = this.messages.find((entry) => entry.id === messageId);
+    if (!message) throw new AssistError("notFound", "That mail is gone.");
+    // Labels are the mailbox's own; the model may be its server's.
+    const labels = message.accountId === DEMO_ACCOUNTS[0]!.id ? this.assistServer : this.assistDevice;
+    return labels.suggest(messageId, suggestNew, this.assistFor(message.accountId));
   }
 
   async applyAssistLabels(messageIds: string[]) {

@@ -13,6 +13,7 @@ import type {
   AssistLabel,
   AssistLabelInput,
   AssistLabelLogEntry,
+  AssistLabelSuggestion,
   AssistModels,
   AssistProbeInput,
   AssistProvider,
@@ -389,6 +390,11 @@ export interface Backend {
   assistLabelLog(scope: string, messageIds: string[] | null, limit?: number): Promise<AssistLabelLogEntry[]>;
   /** Takes labels the model set off again, by log entry. */
   undoAssistLabels(scope: string, logIds: string[]): Promise<void>;
+  /**
+   * "Label again": the model judges every label for one mail (also those on it) and, when none
+   * fits, proposes up to two new ones. Changes nothing; the page applies what the person ticks.
+   */
+  suggestLabels(messageId: string, language?: string, suggestNew?: boolean): Promise<AssistLabelSuggestion>;
   /** Asks the model now for these mails (at most 20); label ids per message id. */
   applyAssistLabels(messageIds: string[]): Promise<Record<string, string[]>>;
   /** The newest mails of the scope's inboxes (for labelling mail that came before auto-labels). */

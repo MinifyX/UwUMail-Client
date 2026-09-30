@@ -7,6 +7,17 @@
 import type { CSSProperties } from "react";
 import type { AssistLabel, AssistLabelInput, AssistLabelLogEntry } from "@/backend/types";
 
+/** What a label has unless it says otherwise, as the server makes one. */
+export const LABEL_DEFAULTS = {
+  rules: null,
+  detector: null,
+  learnSenders: true,
+  classifier: true,
+  totalEmails: null,
+  unreadEmails: null,
+  examples: 0,
+} as const satisfies Omit<AssistLabel, "id" | "name" | "description" | "keyword" | "color">;
+
 /** The server's limits for a label. */
 export const LABEL_LIMITS = { name: 40, description: 300 } as const;
 

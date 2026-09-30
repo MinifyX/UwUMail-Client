@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AssistError } from "./backend";
 import {
+  labelUpdate,
+  toLabelSuggestion,
   assistSettingsUpdate,
   MAX_ASSIST_EVENTS,
   toAssistFeaturesOrNull,
@@ -9,6 +11,7 @@ import {
   toEvents,
 } from "./assistConvert";
 import { engineError } from "./tauri";
+import { LABEL_DEFAULTS } from "@/features/assist/labels";
 
 describe("the assistant's answers from the engine", () => {
   it("reads the scopes, a server's and this device's", () => {
@@ -50,9 +53,99 @@ describe("the assistant's answers from the engine", () => {
         { name: "No id" },
       ]),
     ).toEqual([
-      { id: "l1", name: "Travel", description: "", keyword: "travel", color: "#aabbcc" },
-      { id: "l2", name: "Bad", description: "", keyword: "bad", color: null },
+      { ...LABEL_DEFAULTS, id: "l1", name: "Travel", description: "", keyword: "travel", color: "#aabbcc" },
+      { ...LABEL_DEFAULTS, id: "l2", name: "Bad", description: "", keyword: "bad", color: null },
     ]);
+  });
+
+  it("reads a label's rules and detector, and leaves out what it doesn't know", () => {
+    const [label] = toAssistLabels([
+      {
+        id: "g1",
+        name: "Rechnungen",
+        keyword: "rechnungen",
+        rules: {
+          match: "any",
+          conditions: [
+            { field: "from", value: "@stadtwerke.example" },
+            { field: "hasAttachment", value: true },
+            { field: "size", value: "10" },
+          ],
+        },
+        detector: "invoice",
+        learnSenders: false,
+        totalEmails: 12,
+        unreadEmails: 3,
+        examples: 17,
+      },
+    ]);
+    expect(label).toMatchObject({
+      rules: {
+        match: "any",
+        conditions: [
+          { field: "from", value: "@stadtwerke.example" },
+          { field: "hasAttachment", value: "true" },
+        ],
+      },
+      detector: "invoice",
+      learnSenders: false,
+      classifier: true,
+      totalEmails: 12,
+      unreadEmails: 3,
+      examples: 17,
+    });
+    expect(toAssistLabels([{ id: "g2", rules: { conditions: [] }, detector: "spam" }])[0]).toMatchObject({
+      rules: null,
+      detector: null,
+    });
+  });
+
+  it("sends rules trimmed, and none without conditions", () => {
+    expect(
+      labelUpdate({
+        rules: {
+          match: "all",
+          conditions: [
+            { field: "subject", value: "  Rechnung " },
+            { field: "text", value: " " },
+          ],
+        },
+      }),
+    ).toEqual({ rules: { match: "all", conditions: [{ field: "subject", value: "Rechnung" }] } });
+    expect(labelUpdate({ rules: { match: "any", conditions: [] }, detector: null })).toEqual({
+      rules: null,
+      detector: null,
+    });
+  });
+
+  it("keeps only well-formed verdicts and at most two new labels", () => {
+    const suggestion = toLabelSuggestion(
+      {
+        verdicts: [
+          { labelId: "g1", name: "Rechnungen", reason: "Eine Rechnung.", fits: true, isSet: false },
+          { labelId: "g2", reason: "?", fits: "yes" },
+        ],
+        newLabels: [
+          { name: "Strom", description: "Stromanbieter", color: "#AABBCC", reason: "Neu." },
+          { name: "", description: "leer" },
+          { name: "Zwei", color: "red" },
+          { name: "Drei" },
+        ],
+        providerId: "q1",
+        providerName: "Mistral",
+        model: "m",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+      "e1",
+    );
+    expect(suggestion.verdicts).toEqual([
+      { labelId: "g1", name: "Rechnungen", reason: "Eine Rechnung.", fits: true, isSet: false },
+    ]);
+    expect(suggestion.newLabels.map((label) => [label.name, label.color])).toEqual([
+      ["Strom", "#aabbcc"],
+      ["Zwei", null],
+    ]);
+    expect(suggestion).toMatchObject({ emailId: "e1", providerName: "Mistral" });
   });
 
   it("drops events without a start, links that aren't https and more than the limit", () => {
