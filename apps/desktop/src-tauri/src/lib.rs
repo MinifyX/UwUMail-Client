@@ -601,6 +601,17 @@ async fn assist_apply_labels(engine: State<'_, Engine>, message_ids: Vec<String>
     engine.assist_apply_labels(&message_ids).await
 }
 
+/// "Label again": every label's verdict for one mail, and new labels when none fits. Changes nothing.
+#[tauri::command]
+async fn assist_suggest_labels(
+    engine: State<'_, Engine>,
+    message_id: String,
+    language: Option<String>,
+    suggest_new: Option<bool>,
+) -> CommandResult<Json> {
+    engine.assist_suggest_labels(&message_id, language.as_deref(), suggest_new).await
+}
+
 #[tauri::command]
 async fn assist_recent_inbox(engine: State<'_, Engine>, scope: String, limit: u32) -> CommandResult<Vec<String>> {
     engine.assist_recent_inbox(&scope, limit).await
@@ -1115,6 +1126,7 @@ pub fn run() {
             assist_label_log,
             assist_undo_labels,
             assist_apply_labels,
+            assist_suggest_labels,
             assist_recent_inbox,
             assist_compose,
             assist_summarize,
