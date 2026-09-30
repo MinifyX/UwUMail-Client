@@ -355,6 +355,11 @@ fn from_json<T: serde::de::DeserializeOwned + Default>(text: &str) -> T {
     serde_json::from_str(text).unwrap_or_default()
 }
 
+/// Text for a `LIKE … ESCAPE '\'` pattern that matches it literally.
+fn like_escaped(text: &str) -> String {
+    text.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+}
+
 /// Turns user input into an FTS5 prefix query: `leni clip` → `"leni"* "clip"*`.
 fn fts_query(input: &str) -> Option<String> {
     let terms: Vec<String> = input
@@ -366,10 +371,44 @@ fn fts_query(input: &str) -> Option<String> {
     (!terms.is_empty()).then(|| terms.join(" "))
 }
 
+/// Best effort: the data folder 0700, the database and its journal files 0600 (Unix only; elsewhere
+/// the app's data folder belongs to the person anyway).
+#[cfg(unix)]
+fn restrict_permissions(path: &Path) {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let set = |path: &Path, mode: u32| {
+        if let Err(error) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::debug!("Couldn't restrict the permissions of {}: {error}", path.display());
+        }
+    };
+    if let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
+        set(dir, 0o700);
+    }
+    // Made with 0600 from the start, so it is never readable by others for a moment.
+    let _ = std::fs::OpenOptions::new().write(true).create(true).truncate(false).mode(0o600).open(path);
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let mut name = path.as_os_str().to_owned();
+        name.push(suffix);
+        set(Path::new(&name), 0o600);
+    }
+}
+
+#[cfg(not(unix))]
+fn restrict_permissions(_path: &Path) {}
+
 impl Store {
+    /// Opens (or makes) the database. On Unix its folder is the owner's alone (0700), with the mail,
+    /// attachments and pictures in it, and the database files too (0600): the default permissions
+    /// would let every account on the computer read the mail.
     pub fn open(path: &Path) -> Result<Self> {
+        restrict_permissions(path);
         let conn = Connection::open(path)?;
-        Self::init(conn)
+        let store = Self::init(conn)?;
+        // SQLite made the journal files like the database; ones from before are set here.
+        restrict_permissions(path);
+        Ok(store)
     }
 
     pub fn open_in_memory() -> Result<Self> {
@@ -647,6 +686,11 @@ impl Store {
             [id],
         )?;
         conn.execute("DELETE FROM accounts WHERE id = ?1", [id])?;
+        // What the labels of this device noted about its mail goes with it, and so does the choice
+        // of its server for the AI of the other mailboxes.
+        conn.execute("DELETE FROM assist_label_log WHERE account_id = ?1", [id])?;
+        conn.execute("DELETE FROM label_examples WHERE message_id NOT IN (SELECT id FROM messages)", [])?;
+        conn.execute("DELETE FROM assist_settings WHERE key = 'serverAssist' AND value = ?1", [id])?;
         Ok(())
     }
 
@@ -1003,7 +1047,7 @@ impl Store {
                 let mut stmt = tx.prepare(
                     "SELECT DISTINCT thread_id FROM messages
                      WHERE account_id = ?1 AND thread_id != ?2
-                       AND (in_reply_to = ?3 OR (' ' || refs || ' ') LIKE ('% ' || ?3 || ' %'))",
+                       AND (in_reply_to = ?3 OR instr(' ' || refs || ' ', ' ' || ?3 || ' ') > 0)",
                 )?;
                 let rows = stmt.query_map(params![account_id, thread_id, message_id], |row| row.get(0))?;
                 rows.collect::<rusqlite::Result<_>>()?
@@ -1354,7 +1398,9 @@ impl Store {
 
     /// A label on the mail, in one of its mailboxes. Keywords are kept space-separated.
     fn label_clause(label: &LabelRef, values: &mut Vec<Value>) -> String {
-        if label.account_ids.is_empty() || label.keyword.trim().is_empty() {
+        // A keyword is one word: one with a space would match two neighbouring keywords.
+        let keyword = label.keyword.trim();
+        if label.account_ids.is_empty() || keyword.is_empty() || keyword.contains(char::is_whitespace) {
             return "0".into();
         }
         let accounts = Self::placeholders(&label.account_ids, values);
@@ -1793,10 +1839,11 @@ impl Store {
 
     pub fn search_contacts(&self, query: &str, exclude: &[String]) -> Result<Vec<Contact>> {
         let conn = self.conn();
-        let pattern = format!("%{}%", query.trim().replace('%', ""));
+        let pattern = format!("%{}%", like_escaped(query.trim()));
         let mut stmt = conn.prepare(
             "SELECT email, name, times, last_used FROM contacts
-             WHERE email LIKE ?1 OR name LIKE ?1 ORDER BY times DESC, last_used DESC LIMIT 20",
+             WHERE email LIKE ?1 ESCAPE '\\' OR name LIKE ?1 ESCAPE '\\'
+             ORDER BY times DESC, last_used DESC LIMIT 20",
         )?;
         let excluded: HashSet<String> = exclude.iter().map(|e| e.to_lowercase()).collect();
         let rows = stmt.query_map([pattern], |row| {
@@ -1876,6 +1923,29 @@ fn summarize(id: &str, messages: &[Message]) -> Option<ThreadSummary> {
 mod tests {
     use super::*;
     use crate::mime::parse;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_mail_is_the_owners_alone() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("data");
+        std::fs::create_dir(&data).unwrap();
+        std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // A database from before, readable by everyone.
+        let path = data.join("uwumail.db");
+        drop(Store::open(&path).unwrap());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let store = Store::open(&path).unwrap();
+        store.set_sync_state("acc", "Email", Some("s1")).ok();
+        let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&data), 0o700);
+        assert_eq!(mode(&path), 0o600);
+        let wal = data.join("uwumail.db-wal");
+        if wal.exists() {
+            assert_eq!(mode(&wal), 0o600);
+        }
+    }
 
     fn store_with_account() -> (Store, String, String, String) {
         let store = Store::open_in_memory().unwrap();
@@ -2094,6 +2164,82 @@ mod tests {
         assert!(store.list_threads(&query(inbox_view, vec![vec![label.clone()], vec![]])).unwrap().threads.is_empty());
 
         assert_eq!(store.label_counts(std::slice::from_ref(&label)).unwrap(), [LabelCount { total: 2, unread: 2 }]);
+    }
+
+    #[test]
+    fn a_message_id_with_wildcards_joins_no_conversation() {
+        let (store, _, inbox, _) = store_with_account();
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let first = insert(&store, &inbox, 1, &raw("a@x", "Clip", "Leni <leni@x.example>", None, "", date)).unwrap();
+        let reply =
+            insert(&store, &inbox, 2, &raw("b@x", "Re: Clip", "Mia <mia@x.example>", Some("a@x"), "", date)).unwrap();
+        let thread = |id: &str| store.messages_by_ids(&[id.to_string()]).unwrap().pop().unwrap().thread_id;
+        assert_eq!(thread(&reply), thread(&first));
+        for (uid, id) in [(3, "%"), (4, "_@x"), (5, "%@x")] {
+            let odd = insert(&store, &inbox, uid, &raw(id, "Hallo", "Tom <tom@x.example>", None, "", date)).unwrap();
+            assert_ne!(thread(&first), thread(&odd), "{id}");
+            assert_eq!(thread(&reply), thread(&first), "{id}");
+        }
+    }
+
+    #[test]
+    fn contacts_search_takes_wildcards_literally() {
+        let (store, _, inbox, _) = store_with_account();
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        insert(&store, &inbox, 1, &raw("a@x", "Hi", "Leni <leni@x.example>", None, "", date));
+        insert(&store, &inbox, 2, &raw("b@x", "Hi", "Tom <to_m@x.example>", None, "", date));
+        let found =
+            |query: &str| store.search_contacts(query, &[]).unwrap().into_iter().map(|c| c.email).collect::<Vec<_>>();
+        assert_eq!(found("o_m"), ["to_m@x.example"]);
+        assert!(found("l_ni").is_empty());
+        assert!(found("%").is_empty() && found("\\").is_empty());
+        assert_eq!(found("leni").len(), 1);
+    }
+
+    #[test]
+    fn a_label_keyword_is_one_word() {
+        let (store, _, inbox, _) = store_with_account();
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let id = insert(&store, &inbox, 1, &raw("a@x", "Hi", "Leni <leni@x.example>", None, "", date)).unwrap();
+        store.set_keywords(&id, &["privat".into(), "rechnungen".into()]).unwrap();
+        let count = |keyword: &str| {
+            store.label_counts(&[LabelRef { keyword: keyword.into(), account_ids: vec!["acc".into()] }]).unwrap()[0]
+                .total
+        };
+        assert_eq!(count("privat"), 1);
+        assert_eq!(count("privat rechnungen"), 0);
+        assert_eq!(count("priv"), 0);
+    }
+
+    #[test]
+    fn a_removed_account_takes_its_label_notes_and_server_choice_along() {
+        let (store, _, inbox, _) = store_with_account();
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let id = insert(&store, &inbox, 1, &raw("a@x", "Hi", "Leni <leni@x.example>", None, "", date)).unwrap();
+        store.learn_label_example(&id, &[1, 2], Some(("g1", true)), 1, 10).unwrap();
+        store
+            .insert_label_log(&crate::store::LabelLogRecord {
+                id: "l1".into(),
+                account_id: "acc".into(),
+                message_id: id.clone(),
+                label_id: "g1".into(),
+                name: "R".into(),
+                keyword: "r".into(),
+                reason: String::new(),
+                source: "rule".into(),
+                code: "rule".into(),
+                params: "{}".into(),
+                provider_name: None,
+                model: None,
+                created_at: 1,
+                undone: false,
+            })
+            .unwrap();
+        store.set_assist_setting("serverAssist", Some("acc")).unwrap();
+        store.delete_account("acc").unwrap();
+        assert!(store.label_log(None, 10).unwrap().is_empty());
+        assert!(store.label_examples().unwrap().is_empty());
+        assert_eq!(store.assist_setting("serverAssist").unwrap(), None);
     }
 
     #[test]

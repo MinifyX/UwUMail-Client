@@ -14,7 +14,7 @@ use super::estimate::{self, Call, Estimate, Sample};
 use super::prices::{self, Price, PriceTable};
 use super::prompts::Prompt;
 use super::provider::{self, ChatAnswer, ChatMessage, ChatRequest, Endpoint, JsonSchema, ProviderKind, Role};
-use super::validate::label_keyword;
+use super::validate::{is_reserved_keyword, label_keyword};
 use super::{Feature, Label};
 use crate::error::{Error, Result};
 use crate::secrets::{Secret, SecretStore};
@@ -565,6 +565,9 @@ impl Device<'_> {
         self.check_label(&label, None)?;
         let taken = |keyword: &str| labels.iter().any(|l| l.keyword == keyword);
         let mut keyword = label_keyword(&label.name);
+        if is_reserved_keyword(&keyword) {
+            keyword = format!("label-{keyword}");
+        }
         if keyword.is_empty() || taken(&keyword) {
             keyword = (1..).map(|n| format!("label-{n}")).find(|k| !taken(k)).unwrap_or_default();
         }
@@ -884,6 +887,9 @@ mod tests {
             .unwrap();
         assert_eq!((label.keyword.as_str(), label.color.as_deref()), ("bestellungen-versand", Some("#ff66aa")));
         assert_eq!(device.create_label(&json!({ "name": "旅行" })).unwrap().keyword, "label-1");
+        // A name other programs read as a mark gets a keyword of its own.
+        assert_eq!(device.create_label(&json!({ "name": "Junk" })).unwrap().keyword, "label-junk");
+        assert_eq!(device.create_label(&json!({ "name": "Deleted" })).unwrap().keyword, "label-deleted");
         assert!(device.create_label(&json!({ "name": "bestellungen & versand" })).is_err(), "names are unique");
         assert!(device.create_label(&json!({ "name": "X", "color": "red" })).is_err());
         device.update_label(&label.id, &json!({ "name": "Pakete" })).unwrap();

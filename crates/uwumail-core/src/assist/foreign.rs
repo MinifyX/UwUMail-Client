@@ -22,6 +22,9 @@ const MAX_HEADER_NAME_CHARS: usize = 100;
 const MAX_HEADER_VALUE_CHARS: usize = 2_000;
 const MAX_LABEL_NAME_CHARS: usize = 40;
 const MAX_LABEL_DESCRIPTION_CHARS: usize = 300;
+/// The headers the server's spam check reads (its `signals`); no other header leaves the device,
+/// so `Received` lines, addresses and ids of the other provider stay here.
+const SPAM_HEADERS: [&str; 2] = ["Authentication-Results", "X-Spam-Status"];
 
 fn cut(text: &str, max: usize) -> String {
     text.chars().take(max).collect()
@@ -45,8 +48,9 @@ fn addresses(list: &[Address]) -> Value {
     )
 }
 
-/// One foreign mail. `spam` is `Some(in_junk)` for the spam check, which also gets the headers
-/// (the first 100 whose name fits, values cut to 2,000 characters); every other call gets neither.
+/// One foreign mail. `spam` is `Some(in_junk)` for the spam check, which also gets the headers it
+/// reads ([`SPAM_HEADERS`], at most 100, values cut to 2,000 characters); every other call gets
+/// neither.
 pub fn mail(mail: &MailText, spam: Option<bool>) -> Value {
     let mut out = json!({
         "from": addresses(&mail.from),
@@ -61,8 +65,8 @@ pub fn mail(mail: &MailText, spam: Option<bool>) -> Value {
             .headers
             .iter()
             .filter(|(name, _)| {
-                let chars = name.chars().count();
-                chars > 0 && chars <= MAX_HEADER_NAME_CHARS
+                name.chars().count() <= MAX_HEADER_NAME_CHARS
+                    && SPAM_HEADERS.iter().any(|wanted| wanted.eq_ignore_ascii_case(name.trim()))
             })
             .take(MAX_HEADERS)
             .map(|(name, value)| json!({ "name": name, "value": cut(value, MAX_HEADER_VALUE_CHARS) }))
@@ -114,7 +118,16 @@ mod tests {
             date: 0,
             text: "t".repeat(250_000),
             links: Vec::new(),
-            headers: (0..150).map(|n| (format!("X-H{n}"), "v".repeat(3000))).collect(),
+            headers: (0..150)
+                .flat_map(|n| {
+                    [
+                        (format!("X-H{n}"), "v".repeat(3000)),
+                        ("Received".to_string(), format!("from mx{n}.example.net (192.0.2.{n})")),
+                        ("Authentication-Results".to_string(), "v".repeat(3000)),
+                    ]
+                })
+                .chain(std::iter::once(("x-spam-status".to_string(), "No, score=1.2".to_string())))
+                .collect(),
         };
         let plain = mail(&text, None);
         assert_eq!(plain["to"].as_array().unwrap().len(), 50);
@@ -129,6 +142,23 @@ mod tests {
         let spam = mail(&MailText { date: 1_790_000_000, ..text.clone() }, Some(true));
         assert_eq!(spam["headers"].as_array().unwrap().len(), 100);
         assert_eq!(spam["headers"][0]["value"].as_str().unwrap().len(), 2000);
+        let names: Vec<&str> =
+            spam["headers"].as_array().unwrap().iter().map(|h| h["name"].as_str().unwrap()).collect();
+        assert!(names.iter().all(|name| *name == "Authentication-Results"), "only what the spam check reads");
+        let few = MailText {
+            headers: vec![
+                ("Received".into(), "from mx.example.net".into()),
+                ("X-Spam-Status".into(), "No".into()),
+                ("Authentication-Results".into(), "mx.example.net; spf=pass".into()),
+            ],
+            ..text.clone()
+        };
+        let sent = mail(&few, Some(false));
+        assert_eq!(
+            sent["headers"],
+            json!([{ "name": "X-Spam-Status", "value": "No" },
+                   { "name": "Authentication-Results", "value": "mx.example.net; spf=pass" }])
+        );
         assert_eq!(spam["inJunk"], true);
         assert!(spam["date"].as_str().unwrap().ends_with('Z'));
 

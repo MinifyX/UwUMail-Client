@@ -145,6 +145,9 @@ pub(super) fn keywords_list(text: &str) -> Vec<String> {
 
 /// Own keywords kept per message, at most.
 const MAX_KEYWORDS: usize = 30;
+/// Senders a label learned by hand, at most, and the longest address counted.
+pub const MAX_LABEL_SENDERS: usize = 5_000;
+const MAX_SENDER_CHARS: usize = 320;
 
 /// A provider set up on this device.
 #[derive(Debug, Clone, PartialEq)]
@@ -564,9 +567,31 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Counts one more hand-labeling of a sender's mail.
+    /// Counts one more hand-labeling of a sender's mail. A label remembers at most
+    /// [`MAX_LABEL_SENDERS`] senders: a new one pushes out the one counted least (the oldest of
+    /// those). Addresses longer than an address can be are not counted.
     pub fn count_label_sender(&self, label_id: &str, address: &str) -> Result<()> {
-        self.conn().execute(
+        self.count_label_sender_within(label_id, address, MAX_LABEL_SENDERS)
+    }
+
+    fn count_label_sender_within(&self, label_id: &str, address: &str, max: usize) -> Result<()> {
+        if address.is_empty() || address.len() > MAX_SENDER_CHARS {
+            return Ok(());
+        }
+        let conn = self.conn();
+        let known: bool = conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM label_senders WHERE label_id = ?1 AND address = ?2)",
+            params![label_id, address],
+            |row| row.get(0),
+        )?;
+        if !known {
+            conn.execute(
+                "DELETE FROM label_senders WHERE rowid IN (SELECT rowid FROM label_senders WHERE label_id = ?1
+                     ORDER BY count, rowid LIMIT max(0, (SELECT COUNT(*) FROM label_senders WHERE label_id = ?1) - ?2))",
+                params![label_id, i64::try_from(max.saturating_sub(1)).unwrap_or(i64::MAX)],
+            )?;
+        }
+        conn.execute(
             "INSERT INTO label_senders (label_id, address, count) VALUES (?1, ?2, 1)
              ON CONFLICT (label_id, address) DO UPDATE SET count = count + 1",
             params![label_id, address],
@@ -681,13 +706,29 @@ impl Store {
         Ok(out)
     }
 
-    /// Messages that carry a keyword, with their account: to take a deleted label off.
-    pub fn messages_with_keyword(&self, keyword: &str) -> Result<Vec<String>> {
+    /// Messages of these accounts that carry a keyword (the whole keyword, ignoring case), at most
+    /// `limit`: to take a deleted label off all its mail.
+    pub fn messages_with_keyword(&self, keyword: &str, account_ids: &[String], limit: usize) -> Result<Vec<String>> {
+        let keyword = keyword.trim().to_lowercase();
+        if keyword.is_empty() || keyword.contains(char::is_whitespace) || account_ids.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
         let conn = self.conn();
-        let mut stmt = conn.prepare("SELECT id FROM messages WHERE (' ' || keywords || ' ') LIKE ?1")?;
-        let pattern = format!("% {} %", keyword.replace(['%', '_'], ""));
-        let rows = stmt.query_map([pattern], |row| row.get(0))?;
-        Ok(rows.collect::<rusqlite::Result<_>>()?)
+        let mut stmt = conn.prepare(
+            "SELECT id FROM messages WHERE account_id = ?1 AND instr(' ' || keywords || ' ', ?2) > 0
+             ORDER BY rowid LIMIT ?3",
+        )?;
+        let needle = format!(" {keyword} ");
+        let mut out: Vec<String> = Vec::new();
+        for account_id in account_ids {
+            let left = i64::try_from(limit - out.len()).unwrap_or(i64::MAX);
+            let rows = stmt.query_map(params![account_id, needle, left], |row| row.get(0))?;
+            out.extend(rows.collect::<rusqlite::Result<Vec<String>>>()?);
+            if out.len() >= limit {
+                break;
+            }
+        }
+        Ok(out)
     }
 
     // ----------------------------------------------------------- label log
@@ -763,9 +804,17 @@ impl Store {
         Ok(())
     }
 
-    /// Log entries older than `before` (unix seconds) go.
-    pub fn forget_label_log_before(&self, before: i64) -> Result<usize> {
-        Ok(self.conn().execute("DELETE FROM assist_label_log WHERE created_at < ?1", [before])?)
+    /// Log entries older than `before` (unix seconds) go, and all older than the newest `keep`
+    /// (entries of the same second as the last one kept stay too).
+    pub fn forget_label_log_before(&self, before: i64, keep: usize) -> Result<usize> {
+        let conn = self.conn();
+        let old = conn.execute("DELETE FROM assist_label_log WHERE created_at < ?1", [before])?;
+        let beyond = conn.execute(
+            "DELETE FROM assist_label_log WHERE created_at <
+                (SELECT created_at FROM assist_label_log ORDER BY created_at DESC LIMIT 1 OFFSET ?1)",
+            [i64::try_from(keep.saturating_sub(1)).unwrap_or(i64::MAX)],
+        )?;
+        Ok(old + beyond)
     }
 
     // --------------------------------------------------------------- usage
@@ -953,8 +1002,59 @@ mod tests {
         store.change_keyword(std::slice::from_ref(&id), "privat", true).unwrap();
         let thread = store.get_thread(&message.thread_id, true).unwrap().thread;
         assert_eq!(thread.keywords, ["privat", "rechnungen"]);
-        assert_eq!(store.messages_with_keyword("privat").unwrap(), std::slice::from_ref(&id));
-        assert!(store.messages_with_keyword("priv").unwrap().is_empty());
+        let acc = ["acc".to_string()];
+        assert_eq!(store.messages_with_keyword("privat", &acc, 10).unwrap(), std::slice::from_ref(&id));
+        assert_eq!(store.messages_with_keyword(" Privat ", &acc, 10).unwrap(), std::slice::from_ref(&id));
+        for none in ["priv", "%", "_rivat", "privat rechnungen", ""] {
+            assert!(store.messages_with_keyword(none, &acc, 10).unwrap().is_empty(), "{none}");
+        }
+        assert!(store.messages_with_keyword("privat", &["other".to_string()], 10).unwrap().is_empty());
+        assert!(store.messages_with_keyword("privat", &acc, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn learning_stays_bounded() {
+        let (store, _) = store();
+        for n in 0..5 {
+            store.count_label_sender_within("g1", &format!("p{n}@example.org"), 3).unwrap();
+        }
+        store.count_label_sender_within("g1", "p4@example.org", 3).unwrap();
+        store.count_label_sender_within("g2", "p0@example.org", 3).unwrap();
+        let kept = |address: &str| store.label_senders(address).unwrap().get("g1").copied();
+        // The ones counted least and oldest went; the label counted twice stays.
+        assert_eq!((kept("p0@example.org"), kept("p1@example.org")), (None, None));
+        assert_eq!(
+            (kept("p2@example.org"), kept("p3@example.org"), kept("p4@example.org")),
+            (Some(1), Some(1), Some(2))
+        );
+        assert_eq!(store.label_senders("p0@example.org").unwrap().get("g2"), Some(&1), "per label");
+        let long = format!("{}@example.org", "x".repeat(400));
+        store.count_label_sender("g1", &long).unwrap();
+        assert!(store.label_senders(&long).unwrap().is_empty());
+
+        // The log keeps the newest entries only.
+        for n in 0..6 {
+            let entry = LabelLogRecord {
+                id: format!("l{n}"),
+                account_id: "acc".into(),
+                message_id: "m".into(),
+                label_id: "g1".into(),
+                name: "R".into(),
+                keyword: "r".into(),
+                reason: String::new(),
+                source: "rule".into(),
+                code: "rule".into(),
+                params: "{}".into(),
+                provider_name: None,
+                model: None,
+                created_at: 1000 + n,
+                undone: false,
+            };
+            store.insert_label_log(&entry).unwrap();
+        }
+        assert_eq!(store.forget_label_log_before(1001, 3).unwrap(), 3);
+        let left: Vec<String> = store.label_log(None, 10).unwrap().into_iter().map(|e| e.id).collect();
+        assert_eq!(left, ["l5", "l4", "l3"]);
     }
 
     #[test]

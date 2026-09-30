@@ -30,8 +30,15 @@ const SERVER_WAIT: Duration = Duration::from_secs(10);
 const LABELS_AT_ONCE: usize = 20;
 /// Mails a conversation's summary reads, at most (the latest, oldest first).
 const MAX_THREAD_MAILS: usize = 20;
-/// Label log entries are kept this long.
+/// Label log entries are kept this long, and at most this many.
 const LOG_DAYS: i64 = 400;
+const LOG_KEPT: usize = 20_000;
+/// A deleted label comes off at most this many mails, this many at a time, each batch given this
+/// long and all of them together about as long as the last.
+const UNLABEL_AT_MOST: usize = 20_000;
+const UNLABEL_BATCH: usize = 200;
+const UNLABEL_BATCH_WAIT: Duration = Duration::from_secs(60);
+const UNLABEL_WAIT: Duration = Duration::from_secs(300);
 
 /// New inbox mail of one account: (account id, message ids).
 type LabelJob = (String, Vec<String>);
@@ -176,7 +183,7 @@ impl Engine {
     /// to, or this device's providers.
     async fn ai_target(&self, account_id: &str) -> Result<Target> {
         match self.assist_target(account_id).await? {
-            Target::Device => Ok(match self.foreign_server().await {
+            Target::Device => Ok(match self.foreign_server().await? {
                 Some(client) => Target::Foreign(client),
                 None => Target::Device,
             }),
@@ -185,12 +192,17 @@ impl Engine {
     }
 
     /// The UwUMail server that does the AI of this device's mailboxes: the person's choice
-    /// (`serverAssist`) while that server allows foreign mail. Nobody is asked while it is unset.
-    async fn foreign_server(&self) -> Option<Arc<JmapClient>> {
-        let account_id = self.device().server_assist().ok().flatten()?;
+    /// (`serverAssist`) while that server allows foreign mail; `None` while it is unset. A chosen
+    /// server that can't be asked now, or no longer allows foreign mail, is `assistUnavailable`:
+    /// the mail then goes nowhere, neither to another server nor to this device's providers.
+    async fn foreign_server(&self) -> Result<Option<Arc<JmapClient>>> {
+        let Some(account_id) = self.device().server_assist()? else { return Ok(None) };
         match tokio::time::timeout(SERVER_WAIT, self.assist_target(&account_id)).await {
-            Ok(Ok(Target::Server(client))) if server::foreign_mail(&client) => Some(client),
-            _ => None,
+            Ok(Ok(Target::Server(client))) if server::foreign_mail(&client) => Ok(Some(client)),
+            _ => Err(Error::assist(
+                "assistUnavailable",
+                "The UwUMail server chosen for the AI of your other mailboxes can't do it now.",
+            )),
         }
     }
 
@@ -243,9 +255,11 @@ impl Engine {
             })
             .collect();
         if !device.is_empty() {
+            // A chosen server that can't do it now offers nothing, rather than this device's providers.
             let features = match self.foreign_server().await {
-                Some(client) => server::features(&client),
-                None => self.device().features()?,
+                Ok(Some(client)) => server::features(&client),
+                Ok(None) => self.device().features()?,
+                Err(_) => None,
             };
             let features = features.unwrap_or_else(|| {
                 Value::Object(Feature::ALL.iter().map(|f| (f.as_str().to_string(), Value::Bool(false))).collect())
@@ -263,8 +277,13 @@ impl Engine {
         match self.ai_target(account_id).await {
             Ok(Target::Server(client) | Target::Foreign(client)) => Ok(server::features(&client)),
             Ok(Target::Device) => self.device().features(),
-            // A server that can't be reached right now: nothing to offer.
-            Err(error) if error.code == ErrorCode::ConnectionFailed => Ok(None),
+            // A server that can't be reached right now, or the chosen one that can't do it now:
+            // nothing to offer.
+            Err(error)
+                if error.code == ErrorCode::ConnectionFailed || error.assist_kind() == Some("assistUnavailable") =>
+            {
+                Ok(None)
+            }
             Err(error) => Err(error),
         }
     }
@@ -426,8 +445,9 @@ impl Engine {
         Ok(())
     }
 
-    /// Deletes a label. On this device its keyword comes off the mail it was put on by itself (as
-    /// far as the servers take that), and its log, learned senders and examples go. That teaches
+    /// Deletes a label. On this device its keyword comes off every mail of the mailboxes this
+    /// device serves that carries it (as far as the servers take that, in batches, at most
+    /// [`UNLABEL_AT_MOST`] mails), and its log, learned senders and examples go. That teaches
     /// nothing.
     pub async fn assist_delete_label(&self, scope: &str, label_id: &str) -> Result<()> {
         match self.scope_target(scope).await? {
@@ -439,18 +459,22 @@ impl Engine {
                     .into_iter()
                     .find(|l| l.id == label_id)
                     .ok_or_else(|| Error::assist("notFound", "This label no longer exists."))?;
-                let labelled: Vec<String> = self
-                    .inner
-                    .store
-                    .label_log(None, 500)?
-                    .into_iter()
-                    .filter(|entry| entry.label_id == label.id && !entry.undone)
-                    .map(|entry| entry.message_id)
-                    .collect();
-                if !labelled.is_empty()
-                    && let Err(error) = self.apply_keywords(&labelled, &[(label.keyword.clone(), false)].into()).await
-                {
-                    tracing::debug!("Couldn't take a deleted label off: {error}");
+                // Only mailboxes whose labels are this device's: a UwUMail account's label of the
+                // same keyword is another label.
+                let accounts = self.assist_split().await?.1;
+                let labelled = self.inner.store.messages_with_keyword(&label.keyword, &accounts, UNLABEL_AT_MOST)?;
+                let off: HashMap<String, bool> = [(label.keyword.clone(), false)].into();
+                let started = std::time::Instant::now();
+                for batch in labelled.chunks(UNLABEL_BATCH) {
+                    if started.elapsed() > UNLABEL_WAIT {
+                        tracing::debug!("A deleted label stays on some mail: taking it off took too long");
+                        break;
+                    }
+                    match tokio::time::timeout(UNLABEL_BATCH_WAIT, self.apply_keywords(batch, &off)).await {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => tracing::debug!("Couldn't take a deleted label off some mail: {error}"),
+                        Err(_) => tracing::debug!("Taking a deleted label off some mail took too long"),
+                    }
                 }
                 self.inner.store.delete_assist_label(&label.id)?;
             }
@@ -575,9 +599,15 @@ impl Engine {
         Ok(Value::Object(out))
     }
 
-    /// The newest mails of a scope's inboxes.
+    /// The newest mails of a scope's inboxes: this device's mailboxes, or one UwUMail account with
+    /// its server's assistant (any other id is no scope).
     pub async fn assist_recent_inbox(&self, scope: &str, limit: u32) -> Result<Vec<String>> {
-        let accounts = if scope == DEVICE_SCOPE { self.assist_split().await?.1 } else { vec![scope.to_string()] };
+        let accounts = if scope == DEVICE_SCOPE {
+            self.assist_split().await?.1
+        } else {
+            self.scope_target(scope).await?;
+            vec![scope.to_string()]
+        };
         self.inner.store.recent_inbox(&accounts, limit)
     }
 
@@ -639,17 +669,30 @@ impl Engine {
     /// along as `foreignMails` instead of its id (left out when it can't be read). With `download`,
     /// it is fetched when only its preview is stored.
     async fn foreign_compose_arguments(&self, request: &Value, download: bool) -> Value {
-        let mut arguments = request.clone();
-        if let Some(object) = arguments.as_object_mut() {
-            object.remove("replyToEmailId");
-            object.remove("accountId");
-        }
-        if let Some(reply) = text_arg(request, "replyToEmailId")
-            && let Ok(mail) = self.stored_mail(reply, mail::MAX_MAIL_CHARS, download).await
-        {
+        // What the page may pass on; nothing else of the request goes to the server.
+        const KEPT: [&str; 8] =
+            ["mode", "instruction", "preset", "targetLanguage", "text", "subject", "wantSubject", "language"];
+        let mut arguments: Value = KEPT
+            .iter()
+            .filter_map(|key| request.get(*key).map(|value| (key.to_string(), value.clone())))
+            .collect::<Map<String, Value>>()
+            .into();
+        if let Some(mail) = self.device_reply_mail(request, download).await {
             arguments["foreignMails"] = json!([foreign::mail(&mail, None)]);
         }
         arguments
+    }
+
+    /// The mail a draft replies to (`replyToEmailId`), for this device's AI: only mail of a
+    /// mailbox whose AI is this device's too. A UwUMail account's mail stays with its own server's
+    /// assistant, whatever id the page passes; `None` then, or when it can't be read.
+    async fn device_reply_mail(&self, request: &Value, download: bool) -> Option<MailText> {
+        let reply = text_arg(request, "replyToEmailId")?;
+        let owner = self.inner.store.locations(&[reply.to_string()]).ok()?.pop()?.account_id;
+        if !matches!(self.assist_target(&owner).await, Ok(Target::Device)) {
+            return None;
+        }
+        self.stored_mail(reply, mail::MAX_MAIL_CHARS, download).await.ok()
     }
 
     /// The prompt of a compose request on this device, and whether it asks for a subject. With
@@ -677,10 +720,7 @@ impl Engine {
             }
             _ => {}
         }
-        let reply_to = match text_arg(request, "replyToEmailId") {
-            Some(id) => self.stored_mail(id, mail::MAX_MAIL_CHARS, download).await.ok(),
-            None => None,
-        };
+        let reply_to = self.device_reply_mail(request, download).await;
         let account = self.inner.store.account(account_id)?;
         let sender = mail::addresses(&[sender(&account)]);
         let today = chrono::Utc::now().format("%A, %Y-%m-%d").to_string();
@@ -1465,7 +1505,7 @@ impl Engine {
         reason: String,
         who: Option<(String, String)>,
     ) -> Result<()> {
-        let _ = self.inner.store.forget_label_log_before(now_secs() - LOG_DAYS * 86_400);
+        let _ = self.inner.store.forget_label_log_before(now_secs() - LOG_DAYS * 86_400, LOG_KEPT);
         let (provider_name, model) = who.unzip();
         self.inner.store.insert_label_log(&LabelLogRecord {
             id: format!("l{}", uuid::Uuid::new_v4().simple()),
@@ -1602,9 +1642,11 @@ impl Engine {
         let Ok(Target::Device) = self.assist_target(account_id).await else { return };
         let mut ai = match ai_on {
             true => match self.foreign_server().await {
-                Some(client) => Some(Target::Foreign(client)),
-                None if device.effective(Feature::AutoLabels).ok().flatten().is_some() => Some(Target::Device),
-                None => None,
+                Ok(Some(client)) => Some(Target::Foreign(client)),
+                Ok(None) if device.effective(Feature::AutoLabels).ok().flatten().is_some() => Some(Target::Device),
+                // Unset without a provider, or the chosen server can't do it now: labels without a
+                // model only.
+                _ => None,
             },
             false => None,
         };
@@ -2463,6 +2505,34 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         assert!(engine.inner.store.label_example_counts().unwrap().is_empty());
     }
 
+    #[tokio::test]
+    async fn a_deleted_label_comes_off_all_its_mail_not_only_the_logged() {
+        let (_dir, engine, first) = engine_with_mail();
+        engine.inner.store.unlink_for_tests(&first);
+        let label = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Verein" })).await.unwrap();
+        let keep = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Privat" })).await.unwrap();
+        let mut mails = vec![first];
+        mails.extend((2..6).map(|uid| add_mail(&engine, uid, "Leni <leni@example.com>", "Hallo", "x", &[], None)));
+        // Put on by hand, by the engine and by other programs: none of it is in the log.
+        engine.set_keywords(&mails[..2], &[("verein".to_string(), true)].into()).await.unwrap();
+        engine.apply_keywords(&mails[2..], &[("verein".to_string(), true)].into()).await.unwrap();
+        engine.apply_keywords(&mails[..1], &[("privat".to_string(), true)].into()).await.unwrap();
+        assert!(engine.inner.store.label_log(None, 500).unwrap().is_empty());
+        let before = engine.inner.store.messages_with_keyword("verein", &["acc".to_string()], 100).unwrap();
+        assert_eq!(before.len(), mails.len());
+
+        engine.assist_delete_label(DEVICE_SCOPE, label["id"].as_str().unwrap()).await.unwrap();
+        for id in &mails[1..] {
+            assert!(keywords(&engine, id).is_empty(), "{id}");
+        }
+        assert_eq!(keywords(&engine, &mails[0]), ["privat"], "other labels stay");
+        let labels = engine.assist_labels(DEVICE_SCOPE).await.unwrap();
+        assert_eq!(labels.as_array().unwrap().len(), 1);
+        assert_eq!(labels[0]["id"], keep["id"]);
+        let gone = engine.assist_delete_label(DEVICE_SCOPE, label["id"].as_str().unwrap()).await.unwrap_err();
+        assert_eq!(gone.assist_kind(), Some("notFound"));
+    }
+
     #[test]
     fn the_classifier_learns_from_examples() {
         let mut labels = vec![Label::named("g1", "Verein", "verein"), Label::named("g2", "Aus", "aus")];
@@ -2742,6 +2812,97 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         assert_eq!(local["providerName"], "Ollama");
         assert_eq!(local["outputTokens"], 2 * estimate::TYPICAL_VERDICT_TOKENS + estimate::TYPICAL_NEW_LABELS_TOKENS);
         assert_eq!(foreign(&calls), before);
+    }
+
+    #[tokio::test]
+    async fn a_chosen_server_that_cannot_do_it_is_no_reason_to_ask_anyone_else() {
+        // Chosen while it allowed foreign mail; now it doesn't.
+        let (_dir, engine, id, calls) = engine_with_uwumail(false, server_answers).await;
+        engine
+            .device()
+            .create_provider(
+                &json!({ "kind": "ollama", "name": "Ollama", "baseUrl": "http://127.0.0.1:9", "model": "llama3" }),
+            )
+            .unwrap();
+        engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Feiern" })).await.unwrap();
+        engine.inner.store.set_assist_setting("serverAssist", Some("uwu")).unwrap();
+        engine.assist_update_settings(DEVICE_SCOPE, json!({ "autoLabels": true })).await.unwrap();
+
+        let refused =
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id }), None).await.unwrap_err();
+        assert_eq!(refused.assist_kind(), Some("assistUnavailable"), "not this device's Ollama");
+        let refused = engine.assist_summarize(json!({ "emailId": id }), None, None).await.unwrap_err();
+        assert_eq!(refused.assist_kind(), Some("assistUnavailable"));
+        let refused = engine.assist_suggest_labels(&id, None, None).await.unwrap_err();
+        assert_eq!(refused.assist_kind(), Some("assistUnavailable"));
+        let refused = engine.assist_spam_check(&id, None).await.unwrap_err();
+        assert_eq!(refused.assist_kind(), Some("assistUnavailable"));
+        let refused = engine.assist_compose("acc", json!({ "mode": "write", "instruction": "Sag zu" }), None, None);
+        assert_eq!(refused.await.unwrap_err().assist_kind(), Some("assistUnavailable"));
+        assert_eq!(engine.assist_features("acc").await.unwrap(), None);
+        let scopes = engine.assist_scopes().await.unwrap();
+        let device = scopes.as_array().unwrap().iter().find(|s| s["id"] == DEVICE_SCOPE).unwrap().clone();
+        assert!(device["options"]["features"].as_object().unwrap().values().all(|on| on == false));
+        engine.auto_label("acc", vec![id.clone()]).await;
+        assert!(keywords(&engine, &id).is_empty());
+        for feature in Feature::ALL {
+            assert_eq!(engine.device().requests_today(feature).unwrap(), 0, "no device provider asked");
+        }
+        assert!(calls.lock().unwrap().iter().all(|(_, args)| !args.to_string().contains("foreignMails")));
+
+        // A chosen mailbox that is gone: nobody either.
+        engine.inner.store.set_assist_setting("serverAssist", Some("removed")).unwrap();
+        let refused =
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id }), None).await.unwrap_err();
+        assert_eq!(refused.assist_kind(), Some("assistUnavailable"));
+        // Removing the chosen mailbox switches the choice off: this device's providers again.
+        engine.inner.store.set_assist_setting("serverAssist", Some("uwu")).unwrap();
+        engine.remove_account("uwu").await.unwrap();
+        assert_eq!(engine.assist_settings(DEVICE_SCOPE).await.unwrap()["serverAssist"], Value::Null);
+        let local =
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id }), None).await.unwrap().unwrap();
+        assert_eq!(local["providerName"], "Ollama");
+    }
+
+    #[tokio::test]
+    async fn a_draft_takes_along_only_mail_whose_ai_is_this_devices() {
+        use crate::model::{FolderRole, MessageFlags};
+        use crate::store::FolderInfo;
+        let (_dir, engine, id, _) = engine_with_uwumail(true, server_answers).await;
+        let store = &engine.inner.store;
+        let inbox = store
+            .upsert_folder(
+                "uwu",
+                &FolderInfo {
+                    path: "Inbox",
+                    name: "Inbox",
+                    role: Some(FolderRole::Inbox),
+                    delimiter: Some("/"),
+                    selectable: true,
+                    parent_ref: None,
+                },
+            )
+            .unwrap();
+        let raw = "From: Leni <leni@example.com>\r\nTo: mini@uwu.test\r\nSubject: Geheim\r\n\
+Message-ID: <geheim@example.com>\r\nContent-Type: text/plain\r\n\r\nNur fuer den Server.\r\n";
+        let own = store
+            .insert_message("uwu", &inbox, 1, MessageFlags::default(), 10, None, &crate::mime::parse(raw.as_bytes()))
+            .unwrap()
+            .unwrap();
+        let other = engine.device_reply_mail(&json!({ "replyToEmailId": own }), false).await;
+        assert!(other.is_none(), "a UwUMail account's mail stays with its server");
+        let mine = engine.device_reply_mail(&json!({ "replyToEmailId": id }), false).await.unwrap();
+        assert_eq!(mine.subject, "Sommerfest");
+
+        // To the chosen server, only the compose fields and the mail it may have.
+        let sent = engine
+            .foreign_compose_arguments(
+                &json!({ "mode": "write", "instruction": "Sag zu", "replyToEmailId": own, "accountId": "uwu",
+                         "foreignMails": [{ "text": "untergeschoben" }], "extra": 1 }),
+                false,
+            )
+            .await;
+        assert_eq!(sent, json!({ "mode": "write", "instruction": "Sag zu" }));
     }
 
     #[tokio::test]

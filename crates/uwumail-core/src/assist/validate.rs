@@ -434,6 +434,33 @@ pub fn label_keyword(name: &str) -> String {
     keyword
 }
 
+/// Keywords other mail programs and servers read as more than a word (Thunderbird's and some
+/// servers' junk marks without `$`, and the names of system flags without their `\` or `$`): a
+/// label named like one gets `label-<keyword>` instead, so labelling a mail never marks it junk,
+/// read or deleted anywhere.
+const RESERVED_KEYWORDS: [&str; 14] = [
+    "junk",
+    "nonjunk",
+    "notjunk",
+    "phishing",
+    "seen",
+    "answered",
+    "flagged",
+    "deleted",
+    "draft",
+    "recent",
+    "forwarded",
+    "mdnsent",
+    "submitpending",
+    "submitted",
+];
+
+/// Whether a label's keyword would look like a mark other mail programs act on
+/// ([`RESERVED_KEYWORDS`]), ignoring case.
+pub fn is_reserved_keyword(keyword: &str) -> bool {
+    RESERVED_KEYWORDS.iter().any(|reserved| reserved.eq_ignore_ascii_case(keyword))
+}
+
 /// Whether a keyword may be set by hand or by a label: an own keyword (no `$` or `\` system flag),
 /// 1 to 64 printable ASCII characters an IMAP atom takes.
 pub fn is_own_keyword(keyword: &str) -> bool {
@@ -547,6 +574,10 @@ mod tests {
         for bad in ["", "$junk", "\\Seen", "a b", "x(y", "a\"b", &"k".repeat(65)] {
             assert!(!is_own_keyword(bad), "{bad}");
         }
+        for reserved in ["junk", "NonJunk", "notjunk", "seen", "Deleted", "flagged"] {
+            assert!(is_reserved_keyword(reserved), "{reserved}");
+        }
+        assert!(!is_reserved_keyword("rechnungen") && !is_reserved_keyword("junk-mail"));
     }
 
     #[test]
