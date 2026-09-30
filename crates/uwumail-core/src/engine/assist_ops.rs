@@ -12,6 +12,7 @@ use super::*;
 use crate::assist::estimate::{self, Method};
 use crate::assist::local::{self, Device, Effective};
 use crate::assist::mail::{self, MailText};
+use crate::assist::prices::PriceTable;
 use crate::assist::prompts::{self, ComposeRequest, Prompt, SUBJECT_MARK};
 use crate::assist::provider::{self, ProviderKind};
 use crate::assist::validate::{self, EventContext};
@@ -610,7 +611,8 @@ impl Engine {
                 }
             };
             let on_delta: Option<&mut (dyn FnMut(&str) + Send)> = if streaming { Some(&mut forward) } else { None };
-            self.device().ask(self.assist_http()?, Feature::Compose, &prompt, on_delta).await?
+            let typical = estimate::output_tokens(compose_answer(request), &prompt);
+            self.device().ask(self.assist_http()?, Feature::Compose, &prompt, typical, on_delta).await?
         };
         if let Some(relay) = relay.as_mut() {
             relay.flush();
@@ -663,7 +665,8 @@ impl Engine {
                     server::stream_or_call(&client, "Assist/summarize", arguments, sink.clone()).await?
                 }
                 Target::Device => {
-                    let (prompt, _) = summarize_prompt(&messages, language.as_deref());
+                    let (prompt, mails) = summarize_prompt(&messages, language.as_deref());
+                    let typical = estimate::output_tokens(estimate::Answer::Summary { mails }, &prompt);
                     let mut forward = |piece: &str| {
                         if let Some(sink) = &sink {
                             sink(StreamEvent::Delta { text: piece.to_string() });
@@ -672,7 +675,7 @@ impl Engine {
                     let on_delta: Option<&mut (dyn FnMut(&str) + Send)> =
                         if sink.is_some() { Some(&mut forward) } else { None };
                     let (answer, effective) =
-                        self.device().ask(self.assist_http()?, Feature::Summarize, &prompt, on_delta).await?;
+                        self.device().ask(self.assist_http()?, Feature::Summarize, &prompt, typical, on_delta).await?;
                     let mut out = local::answer_json(&effective, &answer);
                     out.insert("summary".into(), json!(answer.text.trim()));
                     Value::Object(out)
@@ -731,7 +734,9 @@ impl Engine {
         let mail = MailText::from_raw(message, &raw, mail::MAX_MAIL_CHARS);
         let signals = self.spam_signals(message, &mail, true).await?;
         let prompt = prompts::spam_check(&mail, &signals::findings(&signals), language);
-        let (answer, effective) = self.device().ask(self.assist_http()?, Feature::SpamCheck, &prompt, None).await?;
+        let typical = estimate::output_tokens(estimate::Answer::SpamCheck, &prompt);
+        let (answer, effective) =
+            self.device().ask(self.assist_http()?, Feature::SpamCheck, &prompt, typical, None).await?;
         let (verdict, confidence, reasons) = validate::parse_spam(&answer.text)
             .ok_or_else(|| Error::assist("providerFailed", "The model's answer wasn't a verdict."))?;
         let mut out = local::answer_json(&effective, &answer);
@@ -830,7 +835,9 @@ impl Engine {
         // without.
         let image_text = if include_images { self.picture_text_for_events(message_id).await } else { Vec::new() };
         let prompt = prompts::extract_events(&mail, &image_text);
-        let (answer, effective) = self.device().ask(self.assist_http()?, Feature::ExtractEvents, &prompt, None).await?;
+        let typical = estimate::output_tokens(estimate::Answer::Events, &prompt);
+        let (answer, effective) =
+            self.device().ask(self.assist_http()?, Feature::ExtractEvents, &prompt, typical, None).await?;
         let parsed = validate::json_answer(&answer.text)
             .ok_or_else(|| Error::assist("providerFailed", "The model's answer had no dates in the asked form."))?;
         let mut people: Vec<(String, String)> = mail
@@ -971,13 +978,7 @@ impl Engine {
         let (prompt, answer) = match method {
             Method::Compose => {
                 let (prompt, _) = self.compose_prompt(account_id, arguments, false).await?;
-                let answer = match text_arg(arguments, "mode").unwrap_or("write") {
-                    "write" => estimate::Answer::Write,
-                    _ => {
-                        estimate::Answer::Rewrite { text: arguments.get("text").and_then(Value::as_str).unwrap_or("") }
-                    }
-                };
-                let output = estimate::output_tokens(answer, &prompt);
+                let output = estimate::output_tokens(compose_answer(arguments), &prompt);
                 (prompt, output)
             }
             Method::Summarize => {
@@ -1006,11 +1007,13 @@ impl Engine {
             }
         };
         let who = (effective.provider.id.as_str(), effective.provider.name.as_str(), effective.model.as_str());
+        let planned = device.estimate(&effective, method.feature(), &prompt, answer)?;
         // This device has no daily limits.
-        let input = estimate::prompt_tokens(&prompt);
-        let mut out = estimate::answer_json(method, input, answer, who, (None, None));
-        let usd = device.price_of(&effective.provider, &effective.model).map(|price| price.usd(input, answer));
-        out["cost"] = device.prices.as_deref().cloned().unwrap_or_default().cost_json(usd, currency);
+        let mut out = estimate::answer_json(method, &planned, who, (None, None));
+        let cost = device
+            .price_of(&effective.provider, &effective.model)
+            .map(|price| (planned.cost(&price), planned.max_cost(&price)));
+        out["cost"] = estimate::cost_json(device.prices.as_deref().unwrap_or(&PriceTable::default()), cost, currency);
         Ok(out)
     }
 
@@ -1110,7 +1113,9 @@ impl Engine {
         let mail = MailText::from_stored(&message, mail::LABEL_MAIL_CHARS);
         let list: Vec<(String, String)> = labels.iter().map(|l| (l.name.clone(), l.description.clone())).collect();
         let prompt = prompts::labels(&mail, &list);
-        let (answer, effective) = self.device().ask(self.assist_http()?, Feature::AutoLabels, &prompt, None).await?;
+        let typical = estimate::output_tokens(estimate::Answer::Labels, &prompt);
+        let (answer, effective) =
+            self.device().ask(self.assist_http()?, Feature::AutoLabels, &prompt, typical, None).await?;
         let Some(parsed) = validate::json_answer(&answer.text) else {
             return Err(Error::assist("providerFailed", "The model's answer had no labels in the asked form."));
         };
@@ -1201,6 +1206,14 @@ impl Engine {
 
 /// The prompt of a summary of these messages (the latest ones of a conversation), and how many
 /// mails it reads.
+/// The answer a compose request expects: a new mail, or the draft changed.
+fn compose_answer(request: &Value) -> estimate::Answer<'_> {
+    match text_arg(request, "mode").unwrap_or("write") {
+        "write" => estimate::Answer::Write,
+        _ => estimate::Answer::Rewrite { text: request.get("text").and_then(Value::as_str).unwrap_or("") },
+    }
+}
+
 fn summarize_prompt(messages: &[Message], language: Option<&str>) -> (Prompt, usize) {
     let start = messages.len().saturating_sub(MAX_THREAD_MAILS);
     let mails: Vec<MailText> =
@@ -1367,9 +1380,16 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
             engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id }), None).await.unwrap().unwrap();
         let messages = engine.inner.store.get_thread(&format!("m:{id}"), true).unwrap().messages;
         let (prompt, _) = summarize_prompt(&messages, None);
-        assert_eq!(summary["inputTokens"], estimate::prompt_tokens(&prompt));
+        let input = estimate::prompt_tokens(&prompt) + estimate::framing_tokens(ProviderKind::Ollama, &prompt);
+        assert_eq!(summary["inputTokens"], input, "the prompt and what the API adds around it");
         assert_eq!(summary["outputTokens"], estimate::TYPICAL_SUMMARY_TOKENS);
-        assert_eq!(summary["totalTokens"], estimate::prompt_tokens(&prompt) + estimate::TYPICAL_SUMMARY_TOKENS);
+        assert_eq!(summary["reasoningTokens"], 0, "llama3 doesn't think");
+        assert_eq!(summary["totalTokens"], input + estimate::TYPICAL_SUMMARY_TOKENS);
+        assert_eq!(summary["calls"].as_array().unwrap().len(), 1, "one call on this device");
+        assert_eq!(summary["calls"][0]["purpose"], "main");
+        assert_eq!((summary["imageCount"].as_u64(), summary["calibrated"].as_bool()), (Some(0), Some(false)));
+        assert_eq!(summary["cost"]["amount"], 0.0, "Ollama is free");
+        assert_eq!(summary["cost"]["max"]["amount"], 0.0);
         assert_eq!(summary["providerName"], "Ollama");
         assert_eq!(summary["model"], "llama3");
         assert!(summary["tokensLeftToday"].is_null() && summary["requestsLeftToday"].is_null());
@@ -1455,7 +1475,13 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         let spam =
             engine.assist_estimate("acc", "Assist/spamCheck", json!({ "emailId": id }), None).await.unwrap().unwrap();
         let (input, output) = (spam["inputTokens"].as_f64().unwrap(), spam["outputTokens"].as_f64().unwrap());
-        let usd = (input * 0.25 + output * 2.0) / 1e6;
+        let reasoning = spam["reasoningTokens"].as_f64().unwrap();
+        assert!(reasoning > 0.0, "gpt-5-mini thinks before it answers");
+        let usd = (input * 0.25 + (output + reasoning) * 2.0) / 1e6;
+        let parts = &spam["cost"]["parts"];
+        assert!((parts["reasoning"].as_f64().unwrap() - reasoning * 2.0 / 1e6 / 1.17).abs() < 1e-12);
+        let max = spam["cost"]["max"]["usd"].as_f64().unwrap();
+        assert!((max - (input * 0.25 + 4000.0 * 2.0) / 1e6).abs() < 1e-12, "every token it may write: {max}");
         assert_eq!(spam["cost"]["currency"], "EUR");
         assert!((spam["cost"]["usd"].as_f64().unwrap() - usd).abs() < 1e-12);
         assert!((spam["cost"]["amount"].as_f64().unwrap() - usd / 1.17).abs() < 1e-12);
@@ -1486,15 +1512,12 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         // Usage keeps what each request cost then; a request without token counts has no cost.
         let device = engine.device();
         let effective = device.effective(Feature::SpamCheck).unwrap().unwrap();
-        let answer =
-            ChatAnswer { text: "ok".into(), usage: Some(TokenUsage { input_tokens: 1_000_000, output_tokens: 0 }) };
-        device.record_usage(&effective, Feature::SpamCheck, Some(&answer)).unwrap();
-        device
-            .record_usage(&effective, Feature::SpamCheck, Some(&ChatAnswer { text: "ok".into(), usage: None }))
-            .unwrap();
-        device
-            .record_usage(&effective, Feature::Summarize, Some(&ChatAnswer { text: "ok".into(), usage: None }))
-            .unwrap();
+        let usage = TokenUsage { input_tokens: 1_000_000, output_tokens: 0, ..TokenUsage::default() };
+        let answer = ChatAnswer { text: "ok".into(), usage: Some(usage), calls: 1 };
+        device.record_usage(&effective, Feature::SpamCheck, Some(&answer), None).unwrap();
+        let silent = ChatAnswer { text: "ok".into(), usage: None, calls: 1 };
+        device.record_usage(&effective, Feature::SpamCheck, Some(&silent), None).unwrap();
+        device.record_usage(&effective, Feature::Summarize, Some(&silent), None).unwrap();
         let usage = engine.assist_usage(DEVICE_SCOPE, Some(7), Some("USD")).await.unwrap();
         let row =
             |feature: &str| usage["days"].as_array().unwrap().iter().find(|r| r["feature"] == feature).unwrap().clone();
@@ -1503,6 +1526,59 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         assert_eq!(usage["today"][0]["cost"]["amount"], 1.0);
         let euros = engine.assist_usage(DEVICE_SCOPE, Some(7), None).await.unwrap();
         assert_eq!(euros["today"][0]["cost"]["currency"], "EUR");
+    }
+
+    #[tokio::test]
+    async fn estimates_learn_from_the_last_real_calls() {
+        use crate::assist::provider::{ChatAnswer, TokenUsage};
+        let (_dir, engine, id) = engine_with_mail();
+        engine
+            .device()
+            .create_provider(
+                &json!({ "kind": "ollama", "name": "Ollama", "baseUrl": "http://127.0.0.1:9", "model": "qwen3" }),
+            )
+            .unwrap();
+        let ask = || engine.assist_estimate("acc", "Assist/spamCheck", json!({ "emailId": id }), None);
+        let before = ask().await.unwrap().unwrap();
+        assert_eq!(before["calibrated"], false);
+        assert!(before["reasoningTokens"].as_u64().unwrap() > 0, "qwen3 thinks");
+
+        // Real calls read twice as much as expected, answered half as long and thought 90 tokens.
+        let device = engine.device();
+        let effective = device.effective(Feature::SpamCheck).unwrap().unwrap();
+        let expected = crate::assist::estimate::Call {
+            purpose: "main",
+            input: 1000,
+            output: 200,
+            reasoning: 400,
+            images: 0,
+            weight: 1.0,
+            max_output: 4000,
+        };
+        let usage =
+            TokenUsage { input_tokens: 2000, output_tokens: 100, reasoning_tokens: 90, ..TokenUsage::default() };
+        let answer = ChatAnswer { text: "{}".into(), usage: Some(usage), calls: 1 };
+        for n in 0..estimate::MIN_CALIBRATION_SAMPLES {
+            if n + 1 == estimate::MIN_CALIBRATION_SAMPLES {
+                assert_eq!(ask().await.unwrap().unwrap()["calibrated"], false, "four aren't enough");
+            }
+            device.record_usage(&effective, Feature::SpamCheck, Some(&answer), Some(&expected)).unwrap();
+        }
+        // A fresh estimate (the page caches them for a minute; the engine doesn't).
+        let after = ask().await.unwrap().unwrap();
+        assert_eq!(after["calibrated"], true);
+        let heuristic = before["inputTokens"].as_u64().unwrap();
+        assert_eq!(after["inputTokens"], heuristic * 2);
+        assert_eq!(after["outputTokens"], estimate::TYPICAL_SPAM_TOKENS / 2);
+        assert_eq!(after["reasoningTokens"], 90);
+        // Other features and models learn apart.
+        let summary =
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id }), None).await.unwrap().unwrap();
+        assert_eq!(summary["calibrated"], false);
+        // The usage view counts the thinking too.
+        let usage = engine.assist_usage(DEVICE_SCOPE, Some(1), None).await.unwrap();
+        assert_eq!(usage["days"][0]["reasoningTokens"], 450);
+        assert_eq!(usage["today"][0]["tokens"], 5 * (2000 + 100 + 90));
     }
 
     #[tokio::test]

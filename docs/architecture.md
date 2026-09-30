@@ -39,6 +39,7 @@ and reused (CLI, future sync server).
 | `sync` | Per-account task: incremental header sync (CONDSTORE when available, otherwise UIDNEXT + flag window), body prefetch, change events |
 | `smtp` | Send through submission (465 TLS / 587 STARTTLS), then store in the Sent folder |
 | `mime` | Parse with `mail-parser`, build with `mail-builder`, sanitize HTML with `ammonia` |
+| `tnef` | winmail.dat: decoded with `crates/uwumail-tnef` (copied as it is from UwUMail Server) whenever a mail is read (see [winmail.dat](#winmaildat)) |
 | `threading` | Conversation grouping (Message-ID / In-Reply-To / References, Gmail thread IDs when present) |
 | `store` | SQLite (WAL) with migrations and an FTS5 index for instant search |
 | `contacts` | Address books over JMAP Contacts or CardDAV; recipient suggestions also learn from sent and received mail |
@@ -308,6 +309,25 @@ thin bar over the mail counts them in. Own fetching is kept fair: 3.5 s to
 connect, 9 s per picture, at most 8 requests at once and 3 per host, so one slow
 host never holds up the rest, and a host that didn't answer is left alone for a
 minute. Dark mode recolors a picture only once its real one has loaded.
+
+### winmail.dat
+
+Outlook and Exchange sometimes pack a mail's body, attachments and meeting into
+one `application/ms-tnef` part (`winmail.dat`). The mail stays as it came; the
+engine decodes the part (at most four per mail, bounded by the decoder's
+limits) whenever it reads the mail, for every kind of account, since it parses
+the raw message itself: the attachments inside take its place in the list, in
+their order and numbered like that for opening, with the meeting first as
+`invite.ics` (`text/calendar` with METHOD REQUEST, CANCEL or REPLY, shown like
+any invitation; a real `text/calendar` part of the mail wins), pictures the HTML
+shows by `cid:` inline, and attached messages as `.eml` files. The TNEF body is
+the mail's body when the MIME has none, so the reader, the preview and search
+see it. Mail stored before this was read shows the TNEF part itself; it is read
+again (once per run) when it is opened and the server can be reached.
+
+Microsoft Safe Links (`*.safelinks.protection.outlook.com/?url=…`) are shown,
+opened and copied as the links they wrap (`lib/safeLinks.ts`); the preview and
+the search index read them that way too.
 
 ### Dates in mail
 

@@ -32,6 +32,7 @@ pub mod secrets;
 pub mod smtp;
 pub mod store;
 pub mod tls;
+pub mod tnef;
 
 pub use engine::{Engine, EngineOptions};
 pub use error::{Error, ErrorCode, Result};

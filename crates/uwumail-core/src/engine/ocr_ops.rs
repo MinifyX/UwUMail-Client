@@ -164,9 +164,10 @@ impl Engine {
         let raw = self.inner.raw_message(location).await?;
         let parsed =
             MessageParser::default().parse(&raw).ok_or_else(|| Error::internal("The message couldn't be read."))?;
-        for (index, part) in parsed.attachments().enumerate() {
-            if missing.contains(&index) && part.contents().len() as u64 <= ocr::MAX_BYTES {
-                found.insert(index, part.contents().to_vec());
+        let decoded = crate::tnef::decode(&parsed);
+        for (index, part) in crate::tnef::attachment_parts(&parsed, &decoded).into_iter().enumerate() {
+            if missing.contains(&index) && part.data.len() as u64 <= ocr::MAX_BYTES {
+                found.insert(index, part.data.into_owned());
             }
         }
         Ok(found)

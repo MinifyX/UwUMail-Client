@@ -12,7 +12,7 @@ use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
 
 mod assist;
-pub use assist::{LabelLogRecord, ProviderRecord, UsageRecord};
+pub use assist::{CalibrationRecord, LabelLogRecord, ProviderRecord, UsageRecord};
 
 const MIGRATIONS: &[&str] = &[
     r#"
@@ -199,6 +199,7 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
 "#,
     assist::MIGRATION,
     assist::PRICE_MIGRATION,
+    assist::COST_MIGRATION,
 ];
 
 /// What this device remembers about one calendar.
@@ -1070,6 +1071,8 @@ impl Store {
             .clone()
             .or_else(|| parsed.html.as_deref().map(crate::mime::html_to_text))
             .unwrap_or_else(|| parsed.snippet.clone());
+        // Microsoft Safe Links are found by the links they wrap.
+        let body = uwumail_tnef::safelinks::unwrap_in_text(&body);
         tx.execute("DELETE FROM messages_fts WHERE rowid = ?1", [rowid])?;
         tx.execute(
             "INSERT INTO messages_fts (rowid, subject, sender, recipients, body) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -2161,6 +2164,25 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         assert_eq!(query("snack").len(), 1);
         assert_eq!(query("konto").first().map(|t| t.subject.as_str()), Some("Rechnung"));
         assert!(query("\"unbalanced").is_empty());
+
+        // The text inside a winmail.dat, and the links inside Safe Links.
+        let tnef = uwumail_tnef::builder::mime_with_winmail(
+            crate::tnef::tests::HEADERS,
+            Some(""),
+            &crate::tnef::tests::note(),
+        );
+        insert(&store, &inbox, 3, &tnef);
+        assert_eq!(query("bericht").first().map(|t| t.subject.as_str()), Some("Umzug"));
+        let safe = raw(
+            "c@x",
+            "Clip",
+            "leni@x.example",
+            None,
+            "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwanders.example%2Fclip&amp;data=05",
+            "Mon, 14 Sep 2026 07:00:00 +0000",
+        );
+        insert(&store, &inbox, 4, &safe);
+        assert_eq!(query("wanders").first().map(|t| t.subject.as_str()), Some("Clip"));
     }
 
     #[test]

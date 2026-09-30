@@ -6,6 +6,7 @@ import type { MailtoDraft } from "@/backend/types";
 import { isIpAddress, isLookalikeHost, isPunycodeHost, isSharedHost, registrableDomain, unicodeHost } from "./domains";
 import { parseMailto } from "./mailto";
 import { detectRedirect, type Redirect } from "./redirects";
+import { unwrapSafeLink } from "./safeLinks";
 
 const DOMAIN = /^(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?::\d+)?(?:[/?#]\S*)?$/i;
 const EMAIL = /^(?:mailto:)?([^\s@<>]+@((?:[a-z0-9-]+\.)+[a-z]{2,}))$/i;
@@ -158,8 +159,13 @@ function decodeSafely(text: string) {
 
 /** Everything the app knows about a link from a mail before it opens. */
 export interface LinkCheck {
-  /** The link as written in the mail; this is what opens. */
+  /**
+   * The link as written in the mail, or the original address of a Microsoft Safe Link; this is
+   * what shows, opens and gets copied.
+   */
   href: string;
+  /** Host of the Microsoft Safe Links wrapper that was taken off, or null. */
+  safeLink: string | null;
   kind: "web" | "mail";
   /** Lower-case ASCII (xn--) host of a web link. */
   host: string | null;
@@ -181,14 +187,19 @@ export interface LinkCheck {
 }
 
 export function checkLink(href: string, text: string): LinkCheck | null {
-  const trimmed = href.trim();
-  if (!isOpenableLink(trimmed)) return null;
+  const written = href.trim();
+  if (!isOpenableLink(written)) return null;
+  // Every check below looks at the original address, not at Microsoft's wrapper around it.
+  const safe = unwrapSafeLink(written);
+  const trimmed = safe?.url ?? written;
+  const safeLink = safe?.wrapper ?? null;
   const misleading = misleadingLink(trimmed, text);
   if (/^mailto:/i.test(trimmed)) {
     const mailto = parseMailto(trimmed);
     if (!mailto) return null;
     return {
       href: trimmed,
+      safeLink,
       kind: "mail",
       host: null,
       unicodeHost: null,
@@ -229,6 +240,7 @@ export function checkLink(href: string, text: string): LinkCheck | null {
       : null;
   return {
     href: trimmed,
+    safeLink,
     kind: "web",
     host,
     unicodeHost: punycode ? unicodeHost(host) : null,

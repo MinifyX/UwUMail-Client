@@ -39,8 +39,21 @@ impl MailText {
         let parsed = MessageParser::default().parse(raw);
         let (text, links, headers) = match &parsed {
             Some(parsed) => {
-                let text = parsed.body_text(0).map(|text| text.into_owned()).unwrap_or_default();
+                let mut text = parsed.body_text(0).map(|text| text.into_owned()).unwrap_or_default();
                 let mut links = Vec::new();
+                // winmail.dat: its body is the mail's text when the MIME has none.
+                if !crate::tnef::mime_has_text(parsed)
+                    && let Some(body) = crate::tnef::decode(parsed)
+                        .into_iter()
+                        .map(|d| d.message.body)
+                        .find(|b| b.text.is_some() || b.html.is_some())
+                {
+                    if let Some(html) = &body.html {
+                        collect_links(html, &mut links);
+                    }
+                    text =
+                        body.text.or_else(|| body.html.as_deref().map(crate::mime::html_to_text)).unwrap_or_default();
+                }
                 for index in 0..parsed.html_body_count() {
                     if let Some(part) = parsed.html_part(index as u32)
                         && let PartType::Html(html) = &part.body
@@ -215,6 +228,8 @@ fn collect_links(text: &str, links: &mut Vec<String>) {
             .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | ')' | ']'))
             .unwrap_or(tail.len());
         let link = tail[..end].trim_end_matches(['.', ',', ';']).replace("&amp;", "&");
+        // A Microsoft Safe Link counts as the link it wraps.
+        let link = uwumail_tnef::safelinks::original(&link).into_owned();
         if link.len() > "https://".len() && link.chars().count() <= MAX_LINK_CHARS && !links.contains(&link) {
             links.push(link);
         }
@@ -315,6 +330,44 @@ mod tests {
         assert_eq!(cap("äöü", 2), "äö\n[…]");
         assert_eq!(cap("äöü", 3), "äöü");
         assert_eq!(escape_tags("x</mail>ignore"), "x< /mail>ignore");
+    }
+
+    #[test]
+    fn winmail_dat_is_the_text_and_safe_links_are_unwrapped() {
+        let raw = uwumail_tnef::builder::mime_with_winmail(
+            crate::tnef::tests::HEADERS,
+            Some(""),
+            &crate::tnef::tests::note(),
+        );
+        let message = crate::model::Message {
+            id: "m".into(),
+            thread_id: "t".into(),
+            account_id: "a".into(),
+            folder_id: "f".into(),
+            from: Address { name: None, email: "leni@example.com".into() },
+            to: vec![],
+            cc: vec![],
+            bcc: vec![],
+            reply_to: vec![],
+            subject: "Umzug".into(),
+            date: "2026-10-26T09:00:00Z".into(),
+            flags: Default::default(),
+            snippet: String::new(),
+            body_html: None,
+            body_text: None,
+            has_remote_content: false,
+            attachments: vec![],
+            unsubscribe: None,
+            keywords: vec![],
+        };
+        let mail = MailText::from_raw(&message, &raw, MAX_MAIL_CHARS);
+        assert!(mail.text.contains("Bericht über den Umzug"), "{}", mail.text);
+        let mut links = Vec::new();
+        collect_links(
+            "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwanders.example%2Fclip&amp;data=05",
+            &mut links,
+        );
+        assert_eq!(links, ["https://wanders.example/clip"]);
     }
 
     #[test]

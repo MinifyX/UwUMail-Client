@@ -18,7 +18,7 @@ import { Menu } from "@/components/ui/Menu";
 import { i18n } from "@/i18n";
 import { useSettings } from "@/state/settings";
 import { composeEstimate } from "./ComposeAssist";
-import { EstimateLabel, EstimateTip, estimateKey, estimateText, LONG_PRESS_MS } from "./estimate";
+import { EstimateLabel, EstimateTip, estimateDetails, estimateKey, estimateText, LONG_PRESS_MS } from "./estimate";
 import { useEventSearch } from "../dates/search";
 import { ThreadAssistButton } from "./ReaderAssist";
 import { ProviderSettings } from "./settings/ProviderSettings";
@@ -45,6 +45,10 @@ const ESTIMATE: AssistEstimate = {
   tokensLeftToday: 48000,
   requestsLeftToday: 190,
   cost: null,
+  reasoningTokens: 0,
+  imageCount: 0,
+  calls: [],
+  calibrated: false,
 };
 
 let local: LocalModelServer[] = [];
@@ -113,13 +117,80 @@ describe("the estimate's words", () => {
     expect(estimateText({ ...ESTIMATE, totalTokens: 347, tokensLeftToday: null }, t, "en")).toBe(
       "≈ 350 tokens · 190 requests left today",
     );
-    const cost = { amount: 0.0214, currency: "EUR", usd: 0.025 };
+    const cost = { amount: 0.0214, currency: "EUR", usd: 0.025, max: null, parts: null };
     expect(estimateText({ ...ESTIMATE, cost, totalTokens: 1200 }, t, "en")).toBe(
       "≈ 1,200 tokens · ≈ €0.021 · 48,000 left today",
     );
     const german = estimateText({ ...ESTIMATE, cost, totalTokens: 1200 }, i18n.getFixedT("de", "neutral"), "de");
     // Intl puts a non-breaking space before the euro sign.
     expect(german.replace(/\u00a0/g, " ")).toBe("≈ 1.200 Tokens · ≈ 0,021 € · heute noch 48.000 übrig");
+  });
+
+  it("adds the worst case and a small breakdown when the server says them", () => {
+    const rich = toAssistEstimate(
+      {
+        method: "Assist/extractEvents",
+        inputTokens: 900,
+        outputTokens: 150,
+        reasoningTokens: 200,
+        totalTokens: 1250,
+        imageCount: 2,
+        calibrated: true,
+        calls: [
+          { purpose: "main", inputTokens: 700, outputTokens: 150, reasoningTokens: 200, images: 2, weight: 1 },
+          { purpose: "retry", inputTokens: 400, outputTokens: 0, reasoningTokens: 0, images: 0, weight: 0.5 },
+        ],
+        tokensLeftToday: 48000,
+        requestsLeftToday: null,
+        cost: {
+          amount: 0.02,
+          currency: "EUR",
+          usd: 0.023,
+          max: { amount: 0.05, usd: 0.058 },
+          parts: { input: 0.004, output: 0.006, reasoning: 0.008, images: 0.002, requests: 0, other: 0 },
+        },
+      },
+      "Assist/extractEvents",
+    )!;
+    expect(estimateText(rich, t, "en")).toBe("≈ 1,300 tokens · ≈ €0.02 (max €0.05) · 48,000 left today");
+    expect(estimateDetails(rich, t, "en")).toEqual([
+      "Input: ≈ 900 tokens · ≈ €0.004",
+      "Pictures: 2 pictures · ≈ €0.002",
+      "Answer: ≈ 150 tokens · ≈ €0.006",
+      "Thinking: ≈ 200 tokens · ≈ €0.008",
+      "Extra calls: 1 call · ≈ 200 tokens",
+      "Calibrated from your last calls",
+    ]);
+    const german = estimateText(rich, i18n.getFixedT("de", "neutral"), "de").replace(/\u00a0/g, " ");
+    expect(german).toBe("≈ 1.300 Tokens · ≈ 0,02 € (max. 0,05 €) · heute noch 48.000 übrig");
+    // Only lines that aren't zero; fees where there are some.
+    const plain = {
+      ...rich,
+      imageCount: 0,
+      reasoningTokens: 0,
+      calibrated: false,
+      calls: rich.calls.slice(0, 1),
+      cost: { ...rich.cost!, parts: { ...rich.cost!.parts!, images: 0, reasoning: 0, requests: 0.001 } },
+    };
+    expect(estimateDetails(plain, t, "en")).toEqual([
+      "Input: ≈ 900 tokens · ≈ €0.004",
+      "Answer: ≈ 150 tokens · ≈ €0.006",
+      "Fees: ≈ €0.001",
+    ]);
+    // No worst case above the cost: no "max".
+    const flat = { ...rich, cost: { ...rich.cost!, max: { amount: 0.02, usd: 0.023 } } };
+    expect(estimateText(flat, t, "en")).toBe("≈ 1,300 tokens · ≈ €0.02 · 48,000 left today");
+  });
+
+  it("says today's words for an older server", () => {
+    const old = toAssistEstimate(
+      { inputTokens: 1100, outputTokens: 150, tokensLeftToday: 48000, cost: { amount: 0.02, currency: "EUR" } },
+      "Assist/summarize",
+    )!;
+    expect(old).toMatchObject({ reasoningTokens: 0, imageCount: 0, calls: [], calibrated: false });
+    expect(old.cost).toMatchObject({ max: null, parts: null });
+    expect(estimateText(old, t, "en")).toBe("≈ 1,300 tokens · ≈ €0.02 · 48,000 left today");
+    expect(estimateDetails(old, t, "en")).toEqual([]);
   });
 
   it("keeps one cache entry per call, whatever the order of its arguments", () => {

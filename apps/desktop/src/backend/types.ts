@@ -773,16 +773,44 @@ export type AssistEstimateMethod = "Assist/compose" | "Assist/summarize" | "Assi
  */
 export interface AssistEstimate {
   method: AssistEstimateMethod;
+  /** Every call's prompt tokens together. */
   inputTokens: number;
   outputTokens: number;
+  /** Thinking of reasoning models; 0 from an older server. */
+  reasoningTokens: number;
+  /** Input, output and reasoning of every call. */
   totalTokens: number;
+  /** Pictures sent to the model. */
+  imageCount: number;
+  /** Every call to a model the request makes; empty from an older server. */
+  calls: AssistEstimateCall[];
+  /** Corrected by what recent real calls took. */
+  calibrated: boolean;
   providerId: string | null;
   providerName: string | null;
   model: string | null;
   tokensLeftToday: number | null;
   requestsLeftToday: number | null;
   /** About what it costs; null where the price is unknown or hidden (or an older server). */
-  cost: AssistCost | null;
+  cost: AssistEstimateCost | null;
+}
+
+/** One call to a model of an estimated request. */
+export interface AssistEstimateCall {
+  /** `main`, `pictures`, `chunk`, `retry`, … */
+  purpose: string;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  images: number;
+  /** How likely the call is made, 0 to 1. */
+  weight: number;
+}
+
+/** What an estimated request costs, with its worst case and parts (in `currency`) where known. */
+export interface AssistEstimateCost extends AssistCost {
+  max: { amount: number; usd: number | null } | null;
+  parts: { input: number; output: number; reasoning: number; images: number; requests: number; other: number } | null;
 }
 
 /** OpenAI's device-code login for a `chatgpt` provider (experimental). */
@@ -1016,6 +1044,8 @@ export interface AssistUsageDay {
   requests: number;
   inputTokens: number;
   outputTokens: number;
+  /** Thinking, apart from the answer; 0 from an older server. */
+  reasoningTokens: number;
   /** Null where the price was unknown or is hidden (or an older server). */
   cost: AssistCost | null;
 }

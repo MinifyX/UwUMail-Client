@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/uwumail-core", "crates/uwumail-android", "crates/uwumail-ocr", "apps/desktop/src-tauri", "apps/setup/src-tauri"]
+members = ["crates/uwumail-core", "crates/uwumail-android", "crates/uwumail-ocr", "crates/uwumail-tnef", "apps/desktop/src-tauri", "apps/setup/src-tauri"]
 
 [workspace.package]
-version = "0.6.0-beta.3"
+version = "0.6.0-beta.4"
 edition = "2024"
 license = "GPL-3.0-only"
 repository = "https://github.com/MinifyX/UwUMail-Client"
@@ -13,6 +13,8 @@ rust-version = "1.88"
 uwumail-core = { path = "crates/uwumail-core" }
 uwumail-android = { path = "crates/uwumail-android" }
 uwumail-ocr = { path = "crates/uwumail-ocr" }
+# Decoder for winmail.dat, copied as it is from UwUMail Server (crates/uwumail-tnef there).
+uwumail-tnef = { path = "crates/uwumail-tnef" }
 
 ammonia = "4"
 async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
@@ -21,10 +23,13 @@ base64 = "0.23"
 calcard = "0.3"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 chrono-tz = "0.10"
+# Text in Windows code pages (uwumail-tnef).
+encoding_rs = "0.8"
 futures = "0.3"
 hickory-resolver = "0.26"
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native-async-persistent", "tokio", "crypto-rust"] }
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "pool", "tokio1-rustls", "aws-lc-rs"] }
+mail-builder = "1"
 mail-parser = "0.11"
 # The system's text recognition (crates/uwumail-ocr): Vision on macOS and iOS, Windows.Media.Ocr on
 # Windows. Same versions as Tauri's, so nothing is built twice.

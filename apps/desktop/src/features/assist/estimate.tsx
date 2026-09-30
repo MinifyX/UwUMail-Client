@@ -1,5 +1,6 @@
 /**
- * "≈ 1,200 tokens · ≈ 0.02 € · 48,000 left today" on the assistant's buttons: what a call would take, asked
+ * "≈ 1,250 tokens · ≈ 0.02 € (max 0.05 €) · 48,000 left today" on the assistant's buttons, with a
+ * small breakdown below: what a call would take, asked
  * for the first time the pointer rests on the button (or a finger holds it), then kept per call
  * and arguments. A UwUMail server answers with `Assist/estimate`; other mailboxes count on this
  * device. An older server, or any error, simply means no tooltip.
@@ -69,15 +70,27 @@ export function roughly(tokens: number): number {
 }
 
 /**
- * The tooltip's text: "≈ 1,200 tokens · ≈ 0.02 € · 48,000 left today", the cost where it is known,
- * what is left where the provider has a limit.
+ * The tooltip's text: "≈ 1,250 tokens · ≈ 0.02 € (max 0.05 €) · 48,000 left today", the cost (and
+ * its worst case) where it is known, what is left where the provider has a limit.
  */
 export function estimateText(estimate: AssistEstimate, t: TFunction, locale: string): string {
   const number = new Intl.NumberFormat(locale);
   const total = roughly(estimate.totalTokens);
   const parts = [t("assist.estimate.tokens", { formatted: number.format(total) })];
   // A server from before prices has no cost, and one whose admin keeps them to themselves says null.
-  if (estimate.cost) parts.push(formatCost(estimate.cost, locale, t, true));
+  const cost = estimate.cost;
+  if (cost) {
+    const about = formatCost(cost, locale, t, true);
+    const max = cost.max;
+    parts.push(
+      max && max.amount > cost.amount
+        ? t("assist.estimate.withMax", {
+            cost: about,
+            max: formatCost({ amount: max.amount, currency: cost.currency }, locale, t),
+          })
+        : about,
+    );
+  }
   if (estimate.tokensLeftToday !== null) {
     parts.push(t("assist.estimate.tokensLeft", { formatted: number.format(estimate.tokensLeftToday) }));
   } else if (estimate.requestsLeftToday !== null) {
@@ -89,6 +102,52 @@ export function estimateText(estimate: AssistEstimate, t: TFunction, locale: str
     );
   }
   return parts.join(" · ");
+}
+
+/**
+ * The small breakdown under the estimate: input, pictures, answer, thinking, extra calls and fees,
+ * only the lines that aren't zero, and a hint when recent calls corrected it. Empty for an older
+ * server, which says none of it.
+ */
+export function estimateDetails(estimate: AssistEstimate, t: TFunction, locale: string): string[] {
+  if (estimate.calls.length === 0) return [];
+  const number = new Intl.NumberFormat(locale);
+  const parts = estimate.cost?.parts ?? null;
+  const currency = estimate.cost?.currency ?? "EUR";
+  const tokens = (count: number) => t("assist.estimate.tokens", { formatted: number.format(roughly(count)) });
+  const money = (amount: number | undefined) =>
+    amount && amount > 0 ? formatCost({ amount, currency }, locale, t, true) : null;
+  const line = (label: string, values: (string | null)[]) => {
+    const shown = values.filter((value): value is string => value !== null);
+    return shown.length > 0 ? `${t(`assist.estimate.part.${label}`)}: ${shown.join(" · ")}` : null;
+  };
+  const extra = estimate.calls.filter((call) => call.purpose !== "main");
+  const extraCount = Math.ceil(extra.reduce((sum, call) => sum + call.weight, 0));
+  const extraTokens = extra.reduce(
+    (sum, call) => sum + (call.inputTokens + call.outputTokens + call.reasoningTokens) * call.weight,
+    0,
+  );
+  const fees = (parts?.requests ?? 0) + (parts?.other ?? 0);
+  const lines = [
+    line("input", [estimate.inputTokens > 0 ? tokens(estimate.inputTokens) : null, money(parts?.input)]),
+    line("pictures", [
+      estimate.imageCount > 0
+        ? t("assist.estimate.pictures", { count: estimate.imageCount, formatted: number.format(estimate.imageCount) })
+        : null,
+      money(parts?.images),
+    ]),
+    line("answer", [estimate.outputTokens > 0 ? tokens(estimate.outputTokens) : null, money(parts?.output)]),
+    line("thinking", [estimate.reasoningTokens > 0 ? tokens(estimate.reasoningTokens) : null, money(parts?.reasoning)]),
+    extraCount > 0
+      ? line("extraCalls", [
+          t("assist.estimate.calls", { count: extraCount, formatted: number.format(extraCount) }),
+          extraTokens > 0 ? tokens(extraTokens) : null,
+        ])
+      : null,
+    line("fees", [money(fees)]),
+  ].filter((entry): entry is string => entry !== null);
+  if (estimate.calibrated) lines.push(t("assist.estimate.calibrated"));
+  return lines;
 }
 
 /** The estimate of one call, asked for only once `wanted`. */
@@ -162,6 +221,7 @@ function useEstimateTip(source: EstimateSource, hint?: string): Tip {
   };
 
   const estimate = data ? estimateText(data, t, i18n.language) : null;
+  const details = data ? estimateDetails(data, t, i18n.language) : [];
   const text = [hint, estimate].filter(Boolean).join("\n");
   const tooltip =
     position && text
@@ -173,6 +233,9 @@ function useEstimateTip(source: EstimateSource, hint?: string): Tip {
             className="pointer-events-none fixed z-50 w-max max-w-[min(320px,calc(100vw-16px))] animate-fade rounded-lg bg-ink px-2.5 py-1 text-[12px] font-medium whitespace-pre-line text-canvas shadow-float"
           >
             {text}
+            {details.length > 0 && (
+              <span className="mt-0.5 block text-[11px] leading-snug font-normal opacity-75">{details.join("\n")}</span>
+            )}
           </span>,
           document.body,
         )

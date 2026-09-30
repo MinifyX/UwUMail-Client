@@ -775,24 +775,31 @@ impl Engine {
             .filter(|m| !self.inner.store.has_body(&m.id).unwrap_or(true))
             .map(|m| m.id.clone())
             .collect();
-        if missing.is_empty() {
+        // Mail stored before winmail.dat was read lists the TNEF part itself: read once more, when
+        // the server can be reached.
+        let stale: Vec<String> = detail
+            .messages
+            .iter()
+            .filter(|m| !missing.contains(&m.id) && m.attachments.iter().any(is_tnef_file))
+            .filter(|m| reread_tnef().lock().unwrap().insert(m.id.clone()))
+            .map(|m| m.id.clone())
+            .collect();
+        if missing.is_empty() && stale.is_empty() {
             return Ok(detail);
         }
-        for location in self.inner.store.locations(&missing)? {
-            let raw = match &location.blob_id {
-                Some(blob) => {
-                    let client = self.inner.jmap_client(&location.account_id).await?;
-                    client.download(blob, "message.eml", "message/rfc822").await?
+        let wanted: Vec<String> = missing.iter().chain(&stale).cloned().collect();
+        for location in self.inner.store.locations(&wanted)? {
+            let raw = self.inner.raw_message(&location).await;
+            let raw = match raw {
+                Ok(raw) => raw,
+                Err(error) if stale.contains(&location.id) => {
+                    tracing::debug!("Couldn't read a winmail.dat mail again: {error}");
+                    continue;
                 }
-                None => {
-                    let Ok(uid) = u32::try_from(location.uid) else { continue };
-                    with_session!(self.inner, &location.account_id, |session| imap::fetch_body(
-                        session,
-                        &location.folder_path,
-                        uid
-                    ))?
-                }
+                Err(error) => return Err(error),
             };
+            // Attachments extracted from an earlier reading may be numbered differently.
+            self.inner.attachments.remove_message(&location.id);
             self.inner.store.set_body(&location.id, &mime::parse(&raw))?;
         }
         self.inner.store.get_thread(thread_id, conversations)
@@ -2286,6 +2293,21 @@ fn unsubscribe_mail(mailto: &str) -> Option<UnsubscribeMail> {
         .filter(|subject| !subject.is_empty())
         .unwrap_or_else(|| "unsubscribe".to_string());
     Some(UnsubscribeMail { address, subject })
+}
+
+/// A winmail.dat as a stored attachment: mail stored before winmail.dat was read.
+fn is_tnef_file(attachment: &Attachment) -> bool {
+    let kind = attachment.mime_type.to_ascii_lowercase();
+    kind == "application/ms-tnef"
+        || kind == "application/vnd.ms-tnef"
+        || attachment.filename.trim().eq_ignore_ascii_case("winmail.dat")
+}
+
+/// Mails read once more this run for their winmail.dat; one that still has it (a damaged one)
+/// isn't asked for again.
+fn reread_tnef() -> &'static Mutex<HashSet<String>> {
+    static READ: std::sync::OnceLock<Mutex<HashSet<String>>> = std::sync::OnceLock::new();
+    READ.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
 #[cfg(test)]

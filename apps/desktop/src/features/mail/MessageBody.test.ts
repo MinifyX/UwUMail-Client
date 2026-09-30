@@ -5,6 +5,7 @@ import {
   buildPrintDocument,
   fixViewportHeightUnits,
   isRunaway,
+  readableBody,
   resolveAppearance,
   ROOT_ID,
 } from "./MessageBody";
@@ -30,6 +31,32 @@ function message(patch: Partial<Message>): Message {
     ...patch,
   };
 }
+
+describe("Microsoft Safe Links", () => {
+  const wrapped =
+    "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwanders.example%2Fclip%3Fv%3D2&data=05%7C02&reserved=0";
+
+  it("read as the address they wrap, while the link stays as written", () => {
+    const html = readableBody(
+      message({ bodyHtml: `<p><a href="${wrapped}">${wrapped}</a> und <a href="${wrapped}">Lenis Clip</a></p>` }),
+    );
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const links = [...doc.querySelectorAll("a")];
+    expect(links.map((link) => link.textContent)).toEqual(["https://wanders.example/clip?v=2", "Lenis Clip"]);
+    expect(links.every((link) => link.getAttribute("href") === wrapped)).toBe(true);
+  });
+
+  it("in plain-text mail too", () => {
+    const html = readableBody(message({ bodyText: `Hier: ${wrapped}\nBis bald` }));
+    const link = new DOMParser().parseFromString(html, "text/html").querySelector("a")!;
+    expect(link.textContent).toBe("https://wanders.example/clip?v=2");
+    expect(link.getAttribute("href")).toBe(wrapped);
+    const plain = readableBody(message({ bodyText: "Siehe https://wanders.example/a?b=1&c=2" }));
+    expect(plain).toContain(
+      '<a href="https://wanders.example/a?b=1&amp;c=2">https://wanders.example/a?b=1&amp;c=2</a>',
+    );
+  });
+});
 
 describe("buildDocument", () => {
   it("keeps a newsletter's leading <style> block", () => {

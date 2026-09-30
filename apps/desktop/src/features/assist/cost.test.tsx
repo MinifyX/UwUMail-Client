@@ -44,7 +44,11 @@ const ESTIMATE: AssistEstimate = {
   model: "mistral-small-latest",
   tokensLeftToday: 48000,
   requestsLeftToday: null,
-  cost: { amount: 0.0213, currency: "EUR", usd: 0.0248 },
+  cost: { amount: 0.0213, currency: "EUR", usd: 0.0248, max: null, parts: null },
+  reasoningTokens: 0,
+  imageCount: 0,
+  calls: [],
+  calibrated: false,
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -58,6 +62,7 @@ const USAGE: AssistUsage = {
       requests: 3,
       inputTokens: 3000,
       outputTokens: 300,
+      reasoningTokens: 0,
       cost: { amount: 1.5, currency: "EUR", usd: 1.74 },
     },
     {
@@ -68,6 +73,7 @@ const USAGE: AssistUsage = {
       requests: 1,
       inputTokens: 100,
       outputTokens: 100,
+      reasoningTokens: 0,
       // An older row, from before prices.
       cost: null,
     },
@@ -290,7 +296,7 @@ describe("the demo's prices", () => {
     device.updateProvider(openai.id, { inputPricePerMillion: 1 });
     expect(device.listProviders().find((entry) => entry.id === openai.id)!.price?.source).toBe("manual");
     const free = device.estimate("Assist/compose", { mode: "write", instruction: "Say yes" }, "JPY");
-    expect(free.cost).toEqual({ amount: 0, currency: "JPY", usd: 0 });
+    expect(free.cost).toMatchObject({ amount: 0, currency: "JPY", usd: 0, max: { amount: 0 } });
     const report = device.usageReport(30, "USD");
     expect(report.days.every((day) => day.cost === null || day.cost.currency === "USD")).toBe(true);
   });

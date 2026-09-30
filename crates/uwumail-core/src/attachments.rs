@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use mail_parser::{MessageParser, MimeHeaders};
+use mail_parser::MessageParser;
 use serde::Serialize;
 
 use crate::error::{Error, Result};
@@ -335,20 +335,18 @@ impl AttachmentCache {
     pub fn store_from_raw(&self, message_id: &str, index: usize, raw: &[u8]) -> Result<AttachmentFile> {
         let message =
             MessageParser::default().parse(raw).ok_or_else(|| Error::internal("The message couldn't be read."))?;
-        let part =
-            message.attachments().nth(index).ok_or_else(|| Error::not_found("This attachment no longer exists."))?;
-        let filename = clean_display_name(part.attachment_name().unwrap_or("attachment"));
-        let mime_type = part
-            .content_type()
-            .map(|ct| match ct.subtype() {
-                Some(sub) => format!("{}/{}", ct.ctype(), sub),
-                None => ct.ctype().to_string(),
-            })
-            .unwrap_or_else(|| "application/octet-stream".into());
+        // Numbered like the list: a winmail.dat part stands for what it holds.
+        let decoded = crate::tnef::decode(&message);
+        let part = crate::tnef::attachment_parts(&message, &decoded)
+            .into_iter()
+            .nth(index)
+            .ok_or_else(|| Error::not_found("This attachment no longer exists."))?;
+        let filename = part.filename;
+        let mime_type = part.mime_type;
         let folder = self.folder(message_id);
         std::fs::create_dir_all(&folder).map_err(|e| Error::internal(format!("Couldn't create the cache: {e}")))?;
         let path = folder.join(format!("{index}-{}", safe_filename(&filename)));
-        let contents = part.contents();
+        let contents = part.data.as_ref();
         std::fs::write(&path, contents).map_err(|e| Error::internal(format!("Couldn't save the attachment: {e}")))?;
         mark_from_internet(&path);
         self.trim();
@@ -513,6 +511,21 @@ Content-Transfer-Encoding: base64\r\n\r\nSGFsbG8gZGEh\r\n--x--\r\n";
             let mark = quarantine::get(&file.path).expect("the attachment carries the quarantine attribute");
             assert!(mark.starts_with("0081;") && mark.ends_with(";UwUMail;"), "{mark}");
         }
+    }
+
+    #[test]
+    fn opens_what_a_winmail_dat_holds_by_its_number_in_the_list() {
+        use uwumail_tnef::builder::mime_with_winmail;
+        let dir = tempfile::tempdir().unwrap();
+        let cache = AttachmentCache::new(dir.path());
+        let raw = mime_with_winmail(crate::tnef::tests::HEADERS, Some(""), &crate::tnef::tests::note());
+        let pdf = cache.store_from_raw("m1", 0, &raw).unwrap();
+        assert_eq!((pdf.filename.as_str(), pdf.mime_type.as_str()), ("Quartalsbericht 2026.pdf", "application/pdf"));
+        assert_eq!(std::fs::read(&pdf.path).unwrap(), b"%PDF-1.7 fake");
+        let picture = cache.store_from_raw("m1", 1, &raw).unwrap();
+        assert!(std::fs::read(&picture.path).unwrap().starts_with(b"\x89PNG"));
+        assert_eq!(cache.store_from_raw("m1", 2, &raw).unwrap().mime_type, "message/rfc822");
+        assert!(cache.store_from_raw("m1", 3, &raw).is_err());
     }
 
     #[test]

@@ -178,6 +178,8 @@
     "hiddenTarget": "The link doesn't tell where it hops after that.",
     "otherTarget": "Different target than shown",
     "statusRedirect": "hops on to {{target}}",
+    "safeLinkRemoved": "Microsoft Safe Link unwrapped ✧",
+    "safeLinkBody": "Microsoft wrapped this link for its link scanner ({{host}}). I unwrapped it, so you see and open the real address.",
     "unsupported": "I'd rather not open links like that (・_・;)",
     "sheetTitle": "Link"
   },
@@ -277,6 +279,9 @@
     },
     "local": {
       "title": "Look, a local AI on this computer! ✿"
+    },
+    "estimate": {
+      "calibrated": "Tuned to your last calls ✧"
     }
   },
   "dates": {

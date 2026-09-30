@@ -625,6 +625,8 @@
     "hiddenTarget": "Wohin es danach geht, steht nicht im Link.",
     "otherTarget": "Anderes Ziel als angezeigt",
     "statusRedirect": "leitet weiter zu {{target}}",
+    "safeLinkRemoved": "Microsoft-Safe-Link entfernt",
+    "safeLinkBody": "Microsoft hat diesen Link für seinen Link-Scanner verpackt ({{host}}). UwUMail zeigt und öffnet die ursprüngliche Adresse.",
     "unsupported": "Diese Art Link öffnet UwUMail nicht.",
     "sheetTitle": "Link"
   },
@@ -1563,7 +1565,21 @@
       "tokens": "≈ {{formatted}} Tokens",
       "tokensLeft": "heute noch {{formatted}} übrig",
       "requestsLeft_one": "heute noch {{formatted}} Anfrage",
-      "requestsLeft_other": "heute noch {{formatted}} Anfragen"
+      "requestsLeft_other": "heute noch {{formatted}} Anfragen",
+      "withMax": "{{cost}} (max. {{max}})",
+      "pictures_one": "{{formatted}} Bild",
+      "pictures_other": "{{formatted}} Bilder",
+      "calls_one": "{{formatted}} Aufruf",
+      "calls_other": "{{formatted}} Aufrufe",
+      "calibrated": "Anhand deiner letzten Aufrufe angepasst",
+      "part": {
+        "input": "Eingabe",
+        "pictures": "Bilder",
+        "answer": "Antwort",
+        "thinking": "Nachdenken",
+        "extraCalls": "Zusätzliche Aufrufe",
+        "fees": "Gebühren"
+      }
     },
     "local": {
       "title": "Auf diesem Computer gefunden",

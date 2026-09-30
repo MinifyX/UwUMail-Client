@@ -42,6 +42,9 @@ const MAX_URL_CHARS: usize = 2048;
 /// How much of a provider's own error text is shown.
 const MAX_DETAIL_CHARS: usize = 200;
 const ANTHROPIC_VERSION: &str = "2023-06-01";
+/// What Anthropic's instructions get before the answer's JSON schema (it has no answer format).
+pub(crate) const SCHEMA_INSTRUCTION: &str =
+    "Answer only with one JSON value that matches this JSON schema, with no other text before or after it:\n";
 
 /// The two API shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,6 +143,10 @@ impl ProviderKind {
     }
 
     /// The API shape this kind speaks.
+    pub(crate) fn uses_messages_api(self) -> bool {
+        self.shape() == Shape::Messages
+    }
+
     fn shape(self) -> Shape {
         if self == Self::Anthropic { Shape::Messages } else { Shape::Chat }
     }
@@ -290,11 +297,26 @@ pub struct ChatRequest {
     pub temperature: Option<f32>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// What a call took, as the provider reported it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenUsage {
+    /// Every prompt token, cached ones included.
     pub input_tokens: u64,
+    /// The answer, without reasoning.
     pub output_tokens: u64,
+    /// Thinking before the answer (OpenAI's `reasoning_tokens`, Gemini's thoughts).
+    #[serde(default)]
+    pub reasoning_tokens: u64,
+    /// Of the input, read from the provider's cache.
+    #[serde(default)]
+    pub cached_tokens: u64,
+    /// Of the input, written to the provider's cache.
+    #[serde(default, skip_serializing)]
+    pub cache_write_tokens: u64,
+    /// What the provider says the call cost, USD (OpenRouter); taken as the truth.
+    #[serde(default, skip_serializing)]
+    pub cost_usd: Option<f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -302,6 +324,9 @@ pub struct ChatAnswer {
     pub text: String,
     /// What the provider reported; `None` when it reported nothing.
     pub usage: Option<TokenUsage>,
+    /// Requests sent for the answer: one more for each the provider refused for a request field
+    /// (refused ones cost nothing).
+    pub calls: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -465,9 +490,7 @@ fn messages_body(request: &ChatRequest, stream: bool) -> Value {
         if !system.is_empty() {
             system.push_str("\n\n");
         }
-        system.push_str(
-            "Answer only with one JSON value that matches this JSON schema, with no other text before or after it:\n",
-        );
+        system.push_str(SCHEMA_INSTRUCTION);
         system.push_str(&schema.schema.to_string());
     }
     let mut body = json!({
@@ -586,7 +609,9 @@ async fn chat_completions(
     let mut schema = request.json_schema.is_some();
     let mut stream_options = stream;
     // Every retry leaves out one more of the two, so there are three tries at most.
+    let mut calls = 0;
     loop {
+        calls += 1;
         let body = chat_body(endpoint.kind, request, stream, schema, stream_options);
         let post = http.post(&url).headers(headers.clone()).header(ACCEPT, accept(stream)).json(&body);
         let response = match send(post).await? {
@@ -601,11 +626,12 @@ async fn chat_completions(
                 continue;
             }
         };
-        return if stream {
+        let answer = if stream {
             stream_chat(response, on_delta.take(), key).await
         } else {
             parse_chat(&read_json(response).await?, key)
         };
+        return answer.map(|answer| ChatAnswer { calls, ..answer });
     }
 }
 
@@ -621,7 +647,7 @@ fn parse_chat(value: &Value, key: Option<&str>) -> Result<ChatAnswer> {
         return Err(refused());
     }
     let text = message.and_then(|message| message.get("content")).map(content_text).unwrap_or_default();
-    let usage = value.get("usage").and_then(|usage| usage_of(usage, "prompt_tokens", "completion_tokens"));
+    let usage = value.get("usage").and_then(chat_usage);
     answer(cap(&text), usage, finish == Some("length"))
 }
 
@@ -652,7 +678,7 @@ async fn stream_chat(
         if let Some(error) = value.get("error").filter(|error| !error.is_null()) {
             return Err(provider_said(error, key));
         }
-        if let Some(reported) = value.get("usage").and_then(|u| usage_of(u, "prompt_tokens", "completion_tokens")) {
+        if let Some(reported) = value.get("usage").and_then(chat_usage) {
             usage = Some(reported);
         }
         // Ollama's own NDJSON (`/api/chat`), for a server that answers that way.
@@ -723,11 +749,15 @@ async fn messages(
 
 fn anthropic_usage(usage: &Value) -> Option<TokenUsage> {
     let number = |name: &str| usage.get(name).and_then(Value::as_u64).unwrap_or(0);
+    // Thinking, which this app never asks Claude for, would be in `output_tokens`.
     usage.is_object().then(|| TokenUsage {
         input_tokens: number("input_tokens")
             + number("cache_read_input_tokens")
             + number("cache_creation_input_tokens"),
         output_tokens: number("output_tokens"),
+        cached_tokens: number("cache_read_input_tokens"),
+        cache_write_tokens: number("cache_creation_input_tokens"),
+        ..TokenUsage::default()
     })
 }
 
@@ -852,14 +882,40 @@ fn answer(text: String, usage: Option<TokenUsage>, cut_off: bool) -> Result<Chat
         };
         return Err(Error::assist("providerFailed", message));
     }
-    Ok(ChatAnswer { text, usage })
+    Ok(ChatAnswer { text, usage, calls: 1 })
 }
 
 fn usage_of(usage: &Value, input: &str, output: &str) -> Option<TokenUsage> {
     let input = usage.get(input).and_then(Value::as_u64);
     let output = usage.get(output).and_then(Value::as_u64);
-    (input.is_some() || output.is_some())
-        .then(|| TokenUsage { input_tokens: input.unwrap_or(0), output_tokens: output.unwrap_or(0) })
+    (input.is_some() || output.is_some()).then(|| TokenUsage {
+        input_tokens: input.unwrap_or(0),
+        output_tokens: output.unwrap_or(0),
+        ..TokenUsage::default()
+    })
+}
+
+/// Chat Completions' `usage`: OpenAI counts reasoning inside `completion_tokens`
+/// (`completion_tokens_details.reasoning_tokens`), Gemini reports its thoughts beside them
+/// (`total_tokens` then adds all three), OpenRouter adds what the call cost (`cost`, USD).
+pub(crate) fn chat_usage(usage: &Value) -> Option<TokenUsage> {
+    let mut found = usage_of(usage, "prompt_tokens", "completion_tokens")?;
+    let number = |pointer: &str| usage.pointer(pointer).and_then(Value::as_u64);
+    let reasoning = number("/completion_tokens_details/reasoning_tokens")
+        .or_else(|| number("/thoughts_token_count"))
+        .or_else(|| number("/thoughtsTokenCount"))
+        .unwrap_or(0);
+    let beside = number("/total_tokens")
+        .is_some_and(|total| reasoning > 0 && total == found.input_tokens + found.output_tokens + reasoning);
+    if !beside {
+        found.output_tokens = found.output_tokens.saturating_sub(reasoning);
+    }
+    found.reasoning_tokens = reasoning;
+    found.cached_tokens = number("/prompt_tokens_details/cached_tokens").unwrap_or(0).min(found.input_tokens);
+    found.cache_write_tokens =
+        number("/prompt_tokens_details/cache_write_tokens").unwrap_or(0).min(found.input_tokens - found.cached_tokens);
+    found.cost_usd = usage.get("cost").and_then(Value::as_f64).filter(|cost| cost.is_finite() && *cost >= 0.0);
+    Some(found)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1156,7 +1212,7 @@ mod tests {
         let (answer, _) = ask(&endpoint(ProviderKind::OpenAi, &server.base), &request(true), false).await;
         let answer = answer.unwrap();
         assert_eq!(answer.text, "Hi there");
-        assert_eq!(answer.usage, Some(TokenUsage { input_tokens: 12, output_tokens: 3 }));
+        assert_eq!(answer.usage, Some(TokenUsage { input_tokens: 12, output_tokens: 3, ..TokenUsage::default() }));
         let sent = &server.requests()[0];
         assert_eq!((sent.method.as_str(), sent.path.as_str()), ("POST", "/v1/chat/completions"));
         assert_eq!(sent.header("authorization"), Some(format!("Bearer {KEY}").as_str()));
@@ -1192,13 +1248,45 @@ mod tests {
         let answer = answer.unwrap();
         assert_eq!(answer.text, "Hallo ✓");
         assert_eq!(pieces, ["Hal", "lo ✓"]);
-        assert_eq!(answer.usage, Some(TokenUsage { input_tokens: 5, output_tokens: 2 }));
+        assert_eq!(answer.usage, Some(TokenUsage { input_tokens: 5, output_tokens: 2, ..TokenUsage::default() }));
         let sent = &server.requests()[0];
         assert_eq!(sent.header("accept"), Some("text/event-stream"));
         let body = sent.json();
         assert_eq!(body["stream"], true);
         assert_eq!(body["stream_options"], json!({ "include_usage": true }));
         assert!(body.get("response_format").is_none());
+    }
+
+    #[test]
+    fn usage_counts_reasoning_cache_and_reported_costs() {
+        // OpenAI: reasoning is part of the completion.
+        let openai = json!({ "prompt_tokens": 100, "completion_tokens": 300, "total_tokens": 400,
+            "completion_tokens_details": { "reasoning_tokens": 200 }, "prompt_tokens_details": { "cached_tokens": 64 } });
+        assert_eq!(
+            chat_usage(&openai),
+            Some(TokenUsage {
+                input_tokens: 100,
+                output_tokens: 100,
+                reasoning_tokens: 200,
+                cached_tokens: 64,
+                ..TokenUsage::default()
+            })
+        );
+        // Gemini: thoughts beside the answer, the total adds all three.
+        let gemini = json!({ "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 230,
+            "completion_tokens_details": { "reasoning_tokens": 80 } });
+        let found = chat_usage(&gemini).unwrap();
+        assert_eq!((found.output_tokens, found.reasoning_tokens), (50, 80));
+        // OpenRouter says what the call cost.
+        let openrouter = json!({ "prompt_tokens": 10, "completion_tokens": 5, "cost": 0.00042,
+            "prompt_tokens_details": { "cached_tokens": 4, "cache_write_tokens": 3 } });
+        let found = chat_usage(&openrouter).unwrap();
+        assert_eq!((found.cost_usd, found.cached_tokens, found.cache_write_tokens), (Some(0.00042), 4, 3));
+        assert_eq!(chat_usage(&json!({ "total_tokens": 5 })), None);
+        let odd = json!({ "prompt_tokens": 5, "completion_tokens": 1, "cost": -1,
+            "prompt_tokens_details": { "cached_tokens": 50 } });
+        let found = chat_usage(&odd).unwrap();
+        assert_eq!((found.cost_usd, found.cached_tokens), (None, 5), "nonsense is bounded");
     }
 
     #[tokio::test]
@@ -1212,7 +1300,9 @@ mod tests {
         ])
         .await;
         let (answer, _) = ask(&endpoint(ProviderKind::Mistral, &server.base), &request(true), false).await;
-        assert_eq!(answer.unwrap().text, "{\"spam\":true}");
+        let answer = answer.unwrap();
+        assert_eq!(answer.text, "{\"spam\":true}");
+        assert_eq!(answer.calls, 2, "the refused request is counted, though it costs nothing");
         let sent = server.requests();
         assert_eq!(sent.len(), 2);
         let (first, second) = (sent[0].json(), sent[1].json());
@@ -1289,7 +1379,10 @@ mod tests {
         let (answer, _) = ask(&endpoint(ProviderKind::Anthropic, &server.base), &request(true), false).await;
         let answer = answer.unwrap();
         assert_eq!(answer.text, "{\"spam\":false}");
-        assert_eq!(answer.usage, Some(TokenUsage { input_tokens: 12, output_tokens: 4 }));
+        assert_eq!(
+            answer.usage,
+            Some(TokenUsage { input_tokens: 12, output_tokens: 4, cached_tokens: 2, ..TokenUsage::default() })
+        );
         let sent = &server.requests()[0];
         assert_eq!((sent.method.as_str(), sent.path.as_str()), ("POST", "/v1/messages"));
         assert_eq!(sent.header("x-api-key"), Some(KEY));
@@ -1320,7 +1413,7 @@ mod tests {
         let answer = answer.unwrap();
         assert_eq!(answer.text, "Guten Tag");
         assert_eq!(pieces, ["Guten", " Tag"]);
-        assert_eq!(answer.usage, Some(TokenUsage { input_tokens: 9, output_tokens: 7 }));
+        assert_eq!(answer.usage, Some(TokenUsage { input_tokens: 9, output_tokens: 7, ..TokenUsage::default() }));
         let body = server.requests()[0].json();
         assert_eq!(body["stream"], true);
         assert_eq!(body["system"], "Be brief.");
@@ -1486,7 +1579,7 @@ mod tests {
         let (answer, pieces) = ask(&local, &request(false), true).await;
         let answer = answer.unwrap();
         assert_eq!((answer.text.as_str(), pieces.len()), ("Moin!", 2));
-        assert_eq!(answer.usage, Some(TokenUsage { input_tokens: 6, output_tokens: 2 }));
+        assert_eq!(answer.usage, Some(TokenUsage { input_tokens: 6, output_tokens: 2, ..TokenUsage::default() }));
         assert!(server.requests()[0].header("authorization").is_none());
     }
 

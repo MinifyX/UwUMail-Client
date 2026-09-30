@@ -26,7 +26,7 @@ export function dailyTotals(usage: AssistUsage, days: number, today = new Date()
     const sum = sums.get(entry.day) ?? { day: entry.day, requests: 0, tokens: 0, cost: null };
     sum.cost = sumCosts([sum.cost, entry.cost]);
     sum.requests += entry.requests;
-    sum.tokens += entry.inputTokens + entry.outputTokens;
+    sum.tokens += entry.inputTokens + entry.outputTokens + entry.reasoningTokens;
     sums.set(entry.day, sum);
   }
   const base = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
@@ -43,7 +43,7 @@ export function featureTotals(usage: AssistUsage): FeatureTotal[] {
     const sum = sums.get(entry.feature) ?? { feature: entry.feature, requests: 0, tokens: 0, cost: null };
     sum.cost = sumCosts([sum.cost, entry.cost]);
     sum.requests += entry.requests;
-    sum.tokens += entry.inputTokens + entry.outputTokens;
+    sum.tokens += entry.inputTokens + entry.outputTokens + entry.reasoningTokens;
     sums.set(entry.feature, sum);
   }
   return [...sums.values()].sort((a, b) => b.requests - a.requests || a.feature.localeCompare(b.feature));
