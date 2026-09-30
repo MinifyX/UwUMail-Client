@@ -1596,6 +1596,25 @@
       "free": "free",
       "below": "< {{amount}}",
       "about": "≈ {{amount}}"
+    },
+    "labelAgain": {
+      "menu": "Label again",
+      "title": "Labels for this mail",
+      "again": "Ask again",
+      "close": "Close label suggestions",
+      "fits": "Fits",
+      "fitsNot": "Doesn't fit",
+      "isSet": "on now",
+      "noLabels": "There are no labels for this mailbox yet.",
+      "newTitle": "New label ideas",
+      "create": "Create and add",
+      "created": "Added",
+      "decide": "Nothing changes until you apply. Your ticks also teach the automatic labels.",
+      "apply_one": "Apply {{count}} change",
+      "apply_other": "Apply {{count}} changes",
+      "nothing": "No changes",
+      "applied_one": "{{count}} label changed",
+      "applied_other": "{{count}} labels changed"
     }
   },
   "labels": {

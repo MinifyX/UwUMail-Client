@@ -28,6 +28,8 @@ export function useLabelActions() {
     void client.invalidateQueries({ queryKey: queryKeys.threads });
     void client.invalidateQueries({ queryKey: queryKeys.thread });
     void client.invalidateQueries({ queryKey: queryKeys.folders });
+    // A label's totals change with it, and a label made on the way joins the directory.
+    void client.invalidateQueries({ queryKey: queryKeys.assistLabels });
   };
 
   /** Returns how many messages changed; 0 when none of them can carry the label. */

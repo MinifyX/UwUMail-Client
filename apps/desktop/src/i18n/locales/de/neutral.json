@@ -1596,6 +1596,25 @@
       "free": "kostenlos",
       "below": "< {{amount}}",
       "about": "≈ {{amount}}"
+    },
+    "labelAgain": {
+      "menu": "Neu labeln",
+      "title": "Labels für diese Mail",
+      "again": "Nochmal fragen",
+      "close": "Label-Vorschläge schließen",
+      "fits": "Passt",
+      "fitsNot": "Passt nicht",
+      "isSet": "gerade gesetzt",
+      "noLabels": "Für dieses Postfach gibt es noch keine Labels.",
+      "newTitle": "Ideen für neue Labels",
+      "create": "Anlegen und setzen",
+      "created": "Gesetzt",
+      "decide": "Erst mit „Übernehmen“ ändert sich etwas. Deine Häkchen lernen auch die automatischen Labels.",
+      "apply_one": "{{count}} Änderung übernehmen",
+      "apply_other": "{{count}} Änderungen übernehmen",
+      "nothing": "Keine Änderungen",
+      "applied_one": "{{count}} Label geändert",
+      "applied_other": "{{count}} Labels geändert"
     }
   },
   "labels": {
