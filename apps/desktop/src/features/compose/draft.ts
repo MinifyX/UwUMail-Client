@@ -27,7 +27,7 @@ function withoutMe(addresses: Address[], accounts: Account[], identities: Identi
 }
 
 function quoted(message: Message) {
-  return message.bodyHtml ? quotableHtml(message.bodyHtml) : textToHtml(message.bodyText ?? "");
+  return message.bodyHtml ? quotableHtml(message.bodyHtml, { foreign: true }) : textToHtml(message.bodyText ?? "");
 }
 
 /**

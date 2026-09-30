@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToPlainText, isEmbeddedSource, isSafeLinkTarget, quotableHtml } from "./safeHtml";
+import { foreignHtml, htmlToPlainText, isEmbeddedSource, isSafeLinkTarget, quotableHtml } from "./safeHtml";
 
 describe("quotableHtml", () => {
   it("drops styles (inline too), remote images and scripts but keeps the text", () => {
@@ -39,6 +39,15 @@ describe("quotableHtml", () => {
     const cleaned = quotableHtml(html);
     expect(cleaned).not.toMatch(/tracker\.example|\/assets\//);
     expect(cleaned).not.toMatch(/<img|background=/i);
+  });
+
+  it("takes the app's own markers out of markup from elsewhere, and keeps them in the draft (W-42)", () => {
+    const html = '<div data-uwu-signature="s1" data-other="x"><p>Grüße</p></div>';
+    expect(quotableHtml(html)).toContain('data-uwu-signature="s1"');
+    const foreign = foreignHtml(html);
+    expect(foreign).not.toContain("data-uwu-");
+    expect(foreign).toContain('data-other="x"');
+    expect(quotableHtml(html, { foreign: true })).toBe(foreign);
   });
 
   it("keeps pictures that carry their content or point into the mail", () => {

@@ -47,6 +47,13 @@ function dropMathLinks(node: Element) {
   node.removeAttributeNS("http://www.w3.org/1999/xlink", "href");
 }
 
+/** `data-uwu-*` marks mean something to the reader (dates, pictures); a mail doesn't get to set them. */
+function dropOwnMarkers(node: Element) {
+  for (const name of node.getAttributeNames()) {
+    if (name.toLowerCase().startsWith("data-uwu-")) node.removeAttribute(name);
+  }
+}
+
 /**
  * The engine already sanitizes HTML. We sanitize again here because the demo
  * backend and future addons can also produce message bodies.
@@ -56,6 +63,7 @@ function sanitize(html: string) {
   purify.addHook("afterSanitizeAttributes", (node) => {
     unwrapLinkText(node);
     dropMathLinks(node);
+    dropOwnMarkers(node);
   });
   return purify.sanitize(html, {
     WHOLE_DOCUMENT: false,

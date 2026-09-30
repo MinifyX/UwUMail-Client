@@ -92,7 +92,7 @@ export function signatureTravels(signature: Signature): boolean {
  * pictures only as embedded images.
  */
 export function cleanSyncedSignature(html: string): string {
-  const doc = new DOMParser().parseFromString(`<body>${quotableHtml(html)}</body>`, "text/html");
+  const doc = new DOMParser().parseFromString(`<body>${quotableHtml(html, { foreign: true })}</body>`, "text/html");
   for (const image of doc.body.querySelectorAll("img")) {
     if (!/^data:image\/(png|jpeg|gif|webp);/i.test(image.getAttribute("src") ?? "")) image.remove();
   }

@@ -171,7 +171,7 @@ export interface Backend {
   /** Whether the mailbox's server runs mail rules (see ruleAccounts); without an id, whether any does. */
   mailRulesAvailable(accountId?: string): Promise<boolean>;
   /** The Sieve script "UwUMail" and whether the server runs it; the first rules account when `accountId` is left out. */
-  mailRules(accountId?: string): Promise<{ script: string | null; active: boolean }>;
+  mailRules(accountId?: string): Promise<{ script: string | null; active: boolean; otherActive?: string | null }>;
   /** Uploads the script as "UwUMail" and makes it the active one. */
   saveMailRules(script: string, accountId?: string): Promise<void>;
   /** What the server finds wrong with the script (error text), or null when it can run it. */

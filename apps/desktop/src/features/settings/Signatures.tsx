@@ -8,7 +8,7 @@ import { Select, TextInput, Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { pictureAsDataUrl } from "@/lib/images";
 import { queryKeys, useIdentities, useSignatures } from "@/lib/queries";
-import { isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
+import { foreignHtml, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { toast } from "@/state/toasts";
 import { signaturesChangedHere, useAccountSync } from "@/state/accountSync";
 import { useUi } from "@/state/ui";
@@ -244,7 +244,7 @@ function SignatureEditor({
             const html = event.clipboardData.getData("text/html");
             if (!html) return;
             event.preventDefault();
-            document.execCommand("insertHTML", false, quotableHtml(html));
+            document.execCommand("insertHTML", false, foreignHtml(html));
           }}
           onDragStart={() => {
             draggingInside.current = true;
@@ -253,7 +253,7 @@ function SignatureEditor({
             draggingInside.current = false;
           }}
           onDrop={(event) => {
-            if (!draggingInside.current) insertDroppedHtml(event, quotableHtml);
+            if (!draggingInside.current) insertDroppedHtml(event, foreignHtml);
           }}
           className="min-h-28 px-3 py-2 text-[14px] leading-relaxed outline-none empty:before:pointer-events-none empty:before:text-faint empty:before:content-[attr(data-placeholder)] [&_a]:text-pink-ink [&_a]:underline [&_img]:inline-block [&_img]:max-w-full [&_p]:min-h-[1.4em]"
         />
@@ -272,7 +272,7 @@ function SignatureEditor({
             await onSave({
               ...signature,
               name: name.trim() || t("settings.signatureUntitled"),
-              html: quotableHtml(editor.current?.innerHTML ?? ""),
+              html: foreignHtml(editor.current?.innerHTML ?? ""),
               forNew,
               forReplies,
             });

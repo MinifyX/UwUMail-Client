@@ -29,7 +29,7 @@ export function withSignature(html: string, signature: Signature | null, placeme
   block.setAttribute(SIGNATURE_ATTRIBUTE, signature.id);
   // The composer writes the result straight into its editor, in the app's own page: stored or
   // synced signature HTML goes through the composer's cleaner first (security-audit CS-8).
-  block.innerHTML = quotableHtml(signature.html);
+  block.innerHTML = quotableHtml(signature.html, { foreign: true });
   if (current) {
     current.replaceWith(block);
   } else if (placement === "beforeQuote" && body.firstElementChild) {

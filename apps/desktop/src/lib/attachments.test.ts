@@ -24,6 +24,9 @@ describe("attachmentKind", () => {
     expect(isDangerous("Rechnung_2026.pdf.exe")).toBe(true);
     expect(isDangerous("makro.XLSM")).toBe(true);
     expect(isDangerous("rechnung.pdf")).toBe(false);
+    // XHTML and XSLT open as web pages; plain xml (e-invoices) doesn't warn (W-44).
+    for (const name of ["seite.xht", "rechnung.XSL", "style.xslt"]) expect(isDangerous(name)).toBe(true);
+    expect(isDangerous("xrechnung.xml")).toBe(false);
   });
 
   it("flags a name whose only dot is first, and more lure formats (W-6, W-7)", () => {

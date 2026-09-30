@@ -91,6 +91,11 @@ const DANGEROUS: &[&str] = &[
     "html",
     "htm",
     "xhtml",
+    // XHTML and XSLT render (and script) like a web page when opened in a browser. Plain xml is
+    // left out: e-invoices (XRechnung, ZUGFeRD) come as .xml every day (webmail W-44).
+    "xht",
+    "xsl",
+    "xslt",
     "shtml",
     "mht",
     "mhtml",
@@ -196,10 +201,20 @@ fn is_bidi_control(c: char) -> bool {
     matches!(c, '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
-/// An attachment name as it should be shown and stored: no invisible direction tricks, and no line
-/// breaks or other control characters that could make a warning dialog say something else.
+/// Characters that show nothing and could hide part of a name: zero-width space, word joiner and
+/// the invisible operators, the byte order mark. Joiners inside emoji stay.
+fn is_invisible(c: char) -> bool {
+    matches!(c, '\u{200B}' | '\u{2060}'..='\u{2064}' | '\u{FEFF}')
+}
+
+/// An attachment name as it should be shown and stored: no invisible direction tricks or hidden
+/// characters, and no line breaks or other control characters that could make a warning dialog
+/// say something else.
 pub fn clean_display_name(name: &str) -> String {
-    name.chars().filter(|c| !is_bidi_control(*c)).map(|c| if c.is_control() { ' ' } else { c }).collect()
+    name.chars()
+        .filter(|c| !is_bidi_control(*c) && !is_invisible(*c))
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
 }
 
 fn extension(filename: &str) -> Option<String> {
@@ -518,6 +533,17 @@ mod tests {
         assert!(is_dangerous(".exe"));
         assert!(is_dangerous("\u{202E}.exe"));
         assert!(is_dangerous("\u{200E}.html"));
+        assert_eq!(clean_display_name("rechnung.pdf\u{200B}\u{2060}\u{FEFF}.exe"), "rechnung.pdf.exe");
+        // Emoji sequences keep their joiner.
+        assert_eq!(
+            clean_display_name("familie\u{1F468}\u{200D}\u{1F467}.jpg"),
+            "familie\u{1F468}\u{200D}\u{1F467}.jpg"
+        );
+        // XHTML and XSLT open as web pages; plain xml (e-invoices) doesn't warn.
+        for name in ["seite.xht", "rechnung.XSL", "style.xslt"] {
+            assert!(is_dangerous(name), "{name}");
+        }
+        assert!(!is_dangerous("xrechnung.xml"));
         assert!(!is_dangerous(".pdf"));
         for name in ["login.svg", "logo.SVGZ", "remote.rdp", "sandbox.wsb", "flyer.pub", "start.desktop"] {
             assert!(is_dangerous(name), "{name}");

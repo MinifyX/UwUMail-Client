@@ -136,6 +136,18 @@ describe("remote pictures in the reader", () => {
     expect(doc).toContain("img-src data: cid: blob: uwuimg: http://uwuimg.localhost;");
   });
 
+  it("keeps the reader's own date marks when pictures load, and none a mail brings (W-41)", () => {
+    const dated = message({
+      bodyHtml: '<p>Hello <span data-uwu-date="7" data-uwu-src="x">you</span></p><img src="https://cdn.example/a.jpg">',
+    });
+    const mark = { from: 0, to: 5, index: 0, label: "Termin" };
+    const doc = buildDocument(dated, true, "light", new Map(), proxy, [mark], true);
+    expect(doc).toContain('data-uwu-date="0"');
+    expect(doc).not.toContain('data-uwu-date="7"');
+    expect(doc).not.toContain('data-uwu-src="x"');
+    expect(readableBody(dated)).not.toContain("data-uwu-");
+  });
+
   it("defers nothing while remote pictures are blocked, or without being asked to", () => {
     const blocked = buildDocument(mail, false, "light", new Map(), proxy, [], true);
     expect(blocked).not.toContain("data-uwu-");

@@ -30,6 +30,7 @@ import { mobile, nativeAndroid, nativeIos, nativeMobile } from "@/backend/mobile
 import type { Account, Protocol } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
+import { ArmedButton } from "@/components/ui/ArmedButton";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -443,6 +444,17 @@ function Accounts() {
   const businessAccounts = useSettings((s) => s.businessAccounts);
   const setAccountWorkspace = useSettings((s) => s.setAccountWorkspace);
   const [switching, setSwitching] = useState<string | null>(null);
+  /** The account whose removal is being asked about. */
+  const [removing, setRemoving] = useState<Account | null>(null);
+
+  const remove = async (account: Account) => {
+    setRemoving(null);
+    await backend().removeAccount(account.id);
+    setAccountWorkspace(account.id, "private");
+    await client.invalidateQueries();
+    // Another account may carry the settings now.
+    if (useAccountSync.getState().accountId === account.id) void startAccountSync();
+  };
 
   const switchProtocol = async (account: Account, protocol: Protocol) => {
     const name = PROTOCOL_NAMES[protocol];
@@ -489,18 +501,7 @@ function Accounts() {
                   {t("settings.protocolSwitchTo", { protocol: PROTOCOL_NAMES[other] })}
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={async () => {
-                  if (!window.confirm(t("settings.removeAccountConfirm", { email: account.email }))) return;
-                  await backend().removeAccount(account.id);
-                  setAccountWorkspace(account.id, "private");
-                  await client.invalidateQueries();
-                  // Another account may carry the settings now.
-                  if (useAccountSync.getState().accountId === account.id) void startAccountSync();
-                }}
-              >
+              <Button size="sm" variant="danger" onClick={() => setRemoving(account)}>
                 {t("settings.removeAccount")}
               </Button>
               {workspaces && (
@@ -522,6 +523,25 @@ function Accounts() {
       <Button icon={Plus} onClick={() => setAddAccountOpen(true)} className="self-start">
         {t("nav.addAccount")}
       </Button>
+      {/* In the app, not the system's question: that one answers to the Enter that opened it, and
+          "Remove" only answers once the gesture that asked is over (security-audit C-10). */}
+      <Dialog open={removing !== null} onClose={() => setRemoving(null)} width="sm">
+        {removing && (
+          <div className="flex flex-col items-center gap-3 px-6 pt-6 pb-6 text-center">
+            <p className="text-[15px] font-semibold text-balance break-words">
+              {t("settings.removeAccountConfirm", { email: removing.email })}
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 pt-1">
+              <Button variant="ghost" autoFocus onClick={() => setRemoving(null)}>
+                {t("common.cancel")}
+              </Button>
+              <ArmedButton variant="danger" onClick={() => void remove(removing)}>
+                {t("settings.removeAccount")}
+              </ArmedButton>
+            </div>
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 }

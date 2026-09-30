@@ -28,6 +28,24 @@ describe("proxyRemoteImages", () => {
     expect(out).toContain(" 2x");
   });
 
+  it("sends an SVG filter's picture through the server too", () => {
+    const out = proxyRemoteImages(
+      '<svg><filter id="f"><feImage href="https://cdn.example/f.png"></feImage></filter></svg>',
+      proxy,
+    );
+    expect(out).toContain(through("https://cdn.example/f.png"));
+  });
+
+  it("loads nothing from an app picture address the mail wrote itself (W-40)", () => {
+    const own = "uwuimg://localhost/picture?account=other&url=https%3A%2F%2Fcdn.example%2Fx.png";
+    const out = proxyRemoteImages(
+      `<img src="${own}"><img src=" UWUIMG:x" srcset="${own} 2x"><div style="background:url('${own}')">x</div>`,
+      proxy,
+    );
+    expect(out.toLowerCase()).not.toContain("uwuimg:");
+    expect(out).toContain("url(&quot;&quot;)");
+  });
+
   it("leaves embedded pictures and links alone", () => {
     const html = '<a href="https://shop.example/"><img src="cid:logo@shop"></a><img src="data:image/gif;base64,R0lG">';
     const out = proxyRemoteImages(html, proxy);

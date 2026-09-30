@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { EventDeleteScope } from "@/backend/types";
+import { ARMING_MS } from "@/components/ui/armed";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
@@ -19,11 +20,18 @@ export function DeleteScopeQuestion() {
 function ScopeChoice({ title, onCancel }: { title: string; onCancel: () => void }) {
   const { t } = useT();
   const [scope, setScope] = useState<EventDeleteScope>("occurrence");
+  // Enter on the focused choice submits: the key that opened the question, held down, must not
+  // also answer it (security-audit C-10).
+  const [shownAt] = useState(() => performance.now());
   return (
     <form
       className="flex flex-col gap-4 px-6 pt-5 pb-6"
+      onKeyDown={(event) => {
+        if (event.repeat && event.key === "Enter") event.preventDefault();
+      }}
       onSubmit={(event) => {
         event.preventDefault();
+        if (performance.now() - shownAt < ARMING_MS) return;
         answerDeleteScope(scope);
       }}
     >

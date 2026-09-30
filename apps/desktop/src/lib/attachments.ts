@@ -69,6 +69,9 @@ const DANGEROUS = new Set(
     // svg renders script and foreignObject when opened from disk; rdp/wsb/pub/desktop start a
     // connection, run a command or launch a program (webmail security audit W-7).
     "svg svgz rdp wsb pub desktop",
+    // XHTML and XSLT render (and script) like a web page when opened in a browser. Plain xml is
+    // left out: e-invoices (XRechnung, ZUGFeRD) come as .xml every day (webmail W-44).
+    "xht xsl xslt",
     // Installer, theme and search-connector files, add-ins and Access databases with macros.
     "appinstaller theme themepack deskthemepack searchconnector-ms website ws xbap vsto vsix cab accde mdb mde adp ade",
     // macOS files that run a command or open another file or address, more Windows macro and installer formats.

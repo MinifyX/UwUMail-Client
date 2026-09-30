@@ -19,8 +19,18 @@ const REMOTE = /^\s*https?:\/\//i;
  */
 const CSS_URL = /url\((?=(\s*))\1(?:"([^"]*)"|'([^']*)'|([^\s"'()]*))(?=(\s*))\5\)/gi;
 
-/** One address through the proxy when it points at the web; anything else as it is. */
+/**
+ * The app's own picture address. The reader frame may load from it once pictures are allowed, so
+ * a mail that names it itself would pick the account (and so the server) a picture goes through;
+ * such addresses load nothing (webmail W-40). Relative and other app addresses stay as they are:
+ * the frame's CSP never allows the app's origin.
+ */
+// eslint-disable-next-line no-control-regex
+const APP_PICTURE = /^[\u0000- ]*uwuimg:/i;
+
+/** One address through the proxy when it points at the web; the app's own as nothing; anything else as it is. */
 export function proxyAddress(url: string, proxy: ImageProxy): string {
+  if (APP_PICTURE.test(url)) return "";
   return REMOTE.test(url) ? proxy(url.trim()) : url;
 }
 
@@ -29,6 +39,7 @@ export function proxyCss(css: string, proxy: ImageProxy): string {
   return css.replace(CSS_URL, (whole, _space: string, double?: string, single?: string, bare?: string) => {
     const url = double ?? single ?? bare ?? "";
     // The proxy's address is percent-encoded throughout, so it needs no escaping inside quotes.
+    if (APP_PICTURE.test(url)) return 'url("")';
     return REMOTE.test(url) ? `url("${proxy(url.trim())}")` : whole;
   });
 }
@@ -49,6 +60,8 @@ export function proxySrcset(srcset: string, proxy: ImageProxy): string {
 }
 
 const ADDRESSES = ["src", "background", "poster", "href", "xlink:href"] as const;
+/** SVG elements whose `href` is a picture to load, not a link. */
+const PICTURE_LINKS = new Set(["image", "feImage", "feimage"]);
 
 /**
  * Sends the remote pictures of an already sanitized mail body through `proxy`. Parsed in a
@@ -59,8 +72,8 @@ export function proxyRemoteImages(html: string, proxy: ImageProxy): string {
   template.innerHTML = html;
   for (const element of Array.from(template.content.querySelectorAll("*"))) {
     for (const name of ADDRESSES) {
-      // Links stay links; only an SVG <image> loads what its href names.
-      if ((name === "href" || name === "xlink:href") && element.localName !== "image") continue;
+      // Links stay links; only an SVG <image> or <feImage> loads what its href names.
+      if ((name === "href" || name === "xlink:href") && !PICTURE_LINKS.has(element.localName)) continue;
       const value = element.getAttribute(name);
       if (value !== null) element.setAttribute(name, proxyAddress(value, proxy));
     }

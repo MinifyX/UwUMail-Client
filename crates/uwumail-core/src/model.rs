@@ -495,6 +495,10 @@ pub struct MailRules {
     pub script: Option<String>,
     /// Whether it's the script the server runs.
     pub active: bool,
+    /// The name of another script the server runs instead (written in another app), if any.
+    /// Saving activates "UwUMail" and so switches that one off (security-audit C-11).
+    #[serde(default)]
+    pub other_active: Option<String>,
 }
 
 /// A calendar of one account. Its id starts with the account id, so ids are unique across accounts.

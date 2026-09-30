@@ -38,6 +38,16 @@ pub fn find_script(arguments: &Value) -> Option<(String, String, bool)> {
     })
 }
 
+/// The name of an active script other than "UwUMail" in a `SieveScript/get` answer. The server
+/// runs one script, so saving the rules (which activates "UwUMail") switches that one off.
+pub fn other_active_script(arguments: &Value) -> Option<String> {
+    arguments.get("list")?.as_array()?.iter().find_map(|script| {
+        let name = script.get("name").and_then(Value::as_str).unwrap_or_default();
+        let active = script.get("isActive").and_then(Value::as_bool).unwrap_or(false);
+        (active && name != SCRIPT_NAME).then(|| name.chars().filter(|c| !c.is_control()).take(200).collect())
+    })
+}
+
 /// A problem with the script from a `SetError`, as a person can read it.
 fn script_problem(error: &MethodError) -> String {
     match error.kind.as_str() {
@@ -59,20 +69,28 @@ fn set_error(value: &Value) -> MethodError {
     }
 }
 
-async fn existing(client: &Client) -> Result<Option<(String, String, bool)>> {
+/// Every script's id, name, blob and whether it's active (`SieveScript/get`).
+async fn scripts(client: &Client) -> Result<Value> {
     let responses = client
         .call(vec![(
             "SieveScript/get",
             json!({ "accountId": account(client)?, "ids": null, "properties": ["id", "name", "blobId", "isActive"] }),
         )])
         .await?;
-    Ok(find_script(responses.get(0, "SieveScript/get")?))
+    Ok(responses.get(0, "SieveScript/get")?.clone())
 }
 
-/// The "UwUMail" script and whether it is the active one; no script yet is `None`.
+async fn existing(client: &Client) -> Result<Option<(String, String, bool)>> {
+    Ok(find_script(&scripts(client).await?))
+}
+
+/// The "UwUMail" script and whether it is the active one (no script yet is `None`), and another
+/// app's script the server runs instead.
 pub async fn load(client: &Client) -> Result<MailRules> {
-    let Some((_, blob_id, active)) = existing(client).await? else {
-        return Ok(MailRules { script: None, active: false });
+    let list = scripts(client).await?;
+    let other_active = other_active_script(&list);
+    let Some((_, blob_id, active)) = find_script(&list) else {
+        return Ok(MailRules { script: None, active: false, other_active });
     };
     // Read only as far as rules may go: a bigger one stops arriving (audit C-14).
     let bytes = client
@@ -85,7 +103,7 @@ pub async fn load(client: &Client) -> Result<MailRules> {
             _ => error,
         })?;
     let script = String::from_utf8(bytes).map_err(|_| Error::invalid("The mail rules on the server aren't text."))?;
-    Ok(MailRules { script: Some(script), active })
+    Ok(MailRules { script: Some(script), active, other_active })
 }
 
 fn check_size(script: &str) -> Result<()> {
@@ -152,6 +170,21 @@ mod tests {
         assert_eq!(find_script(&answer), Some(("s2".into(), "b2".into(), true)));
         assert_eq!(find_script(&json!({ "list": [{ "id": "s1", "name": "uwumail" }] })), None);
         assert_eq!(find_script(&json!({})), None);
+    }
+
+    #[test]
+    fn names_another_app_s_active_script() {
+        let answer = json!({
+            "list": [
+                { "id": "s1", "name": "roundcube", "blobId": "b1", "isActive": true },
+                { "id": "s2", "name": "UwUMail", "blobId": "b2", "isActive": false },
+            ]
+        });
+        assert_eq!(other_active_script(&answer).as_deref(), Some("roundcube"));
+        let ours = json!({ "list": [{ "id": "s2", "name": "UwUMail", "isActive": true }, { "name": "old" }] });
+        assert_eq!(other_active_script(&ours), None);
+        let odd = json!({ "list": [{ "name": "a\nb", "isActive": true }] });
+        assert_eq!(other_active_script(&odd).as_deref(), Some("ab"));
     }
 
     #[test]
