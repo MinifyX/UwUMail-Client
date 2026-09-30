@@ -3,9 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSizeProbe, Message } from "@/backend/types";
 import { useT } from "@/i18n";
 import { markMail, type Mark } from "@/lib/dates";
-import { textToHtml } from "@/lib/format";
+import { escapeHtml, textToHtml } from "@/lib/format";
 import { replaceContentIds } from "@/lib/inlineImages";
 import { proxyRemoteImages, type ImageProxy } from "@/lib/remoteImages";
+import { unwrappedText } from "@/lib/safeLinks";
 import type { MailAppearance } from "@/state/settings";
 import { hideLinkStatus, watchLinks } from "./linkEvents";
 import { darkenImages, type RemoteImageLoader } from "./darkImages";
@@ -16,8 +17,22 @@ import { deferRemotePictures, loadRemotePictures, PICTURE_STYLES, type PicturePr
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)"'\]]/g;
 
+/**
+ * Web addresses in plain text as links. A Microsoft Safe Link reads as the address it wraps; the
+ * link itself stays as written (opening it unwraps it too, see lib/links).
+ */
 function linkify(html: string) {
-  return html.replace(URL_PATTERN, (url) => `<a href="${url}">${url}</a>`);
+  return html.replace(URL_PATTERN, (url) => {
+    const original = unwrappedText(url.replace(/&amp;/g, "&"));
+    return `<a href="${url}">${original === null ? url : escapeHtml(original)}</a>`;
+  });
+}
+
+/** A link whose whole text is a Microsoft Safe Link reads as the address it wraps. */
+function unwrapLinkText(node: Element) {
+  if (node.tagName !== "A" || node.children.length > 0) return;
+  const original = unwrappedText(node.textContent ?? "");
+  if (original !== null) node.textContent = original;
 }
 
 /**
@@ -25,7 +40,9 @@ function linkify(html: string) {
  * backend and future addons can also produce message bodies.
  */
 function sanitize(html: string) {
-  return DOMPurify.sanitize(html, {
+  const purify = DOMPurify();
+  purify.addHook("afterSanitizeAttributes", unwrapLinkText);
+  return purify.sanitize(html, {
     WHOLE_DOCUMENT: false,
     FORBID_TAGS: [
       "script",

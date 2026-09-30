@@ -54,3 +54,13 @@ export function unwrapSafeLink(href: string): SafeLink | null {
   if (current === outer) return null;
   return { url: current.href, wrapper: outer.hostname.toLowerCase() };
 }
+
+/**
+ * What a link's visible text should read: the original address where the text is itself a Safe
+ * Link (Outlook writes the wrapped address out in plain-text mail), else null to keep the text.
+ */
+export function unwrappedText(text: string): string | null {
+  const trimmed = text.trim();
+  if (!/^https?:\/\/\S+$/i.test(trimmed)) return null;
+  return unwrapSafeLink(trimmed)?.url ?? null;
+}
