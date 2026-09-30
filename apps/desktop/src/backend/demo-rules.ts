@@ -27,7 +27,7 @@ export function demoRulesScript(lang: Lang): string {
       match: "any",
       conditions: [
         { field: "subject", op: "startsWith", value: "[Bug]" },
-        { field: "listId", op: "contains", value: "bugs.uwumail.dev" },
+        { field: "listId", op: "contains", value: "bugs.uwumail.example" },
       ],
       actions: [
         { type: "flag" },

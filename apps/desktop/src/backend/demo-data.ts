@@ -35,7 +35,7 @@ interface SampleThread {
   messages: SampleMessage[];
 }
 
-export const ME_PRIVATE: Address = { name: "Mini", email: "mini@uwumail.dev" };
+export const ME_PRIVATE: Address = { name: "Mini", email: "mini@uwumail.example" };
 export const ME_STUDIO: Address = { name: "Mini", email: "mini@pixelstudio.example" };
 
 const leni: Address = { name: "Leni Wanders", email: "leni@wanders.example" };
@@ -537,7 +537,7 @@ export function buildMessages(lang: Lang, now = Date.now()): Message[] {
 }
 
 export function welcomeMessage(lang: Lang, id: string): Message {
-  const from: Address = { name: "UwUMail", email: "hello@uwumail.dev" };
+  const from: Address = { name: "UwUMail", email: "hello@uwumail.example" };
   const subject = lang === "de" ? "Willkommen bei UwUMail (◕‿◕✿)" : "Welcome to UwUMail (◕‿◕✿)";
   const text =
     lang === "de"
