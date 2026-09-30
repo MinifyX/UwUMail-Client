@@ -273,6 +273,13 @@
     },
     "labels": {
       "startersTitle": "Magst du mit ein paar Labels anfangen? (｀・ω・´)"
+    },
+    "local": {
+      "title": "Guck mal, eine lokale KI auf diesem Computer! ✿"
     }
+  },
+  "dates": {
+    "searching": "Nyu sucht nach Terminen … (・ω・)",
+    "noneFound": "Nyu hat überall geschaut: hier steht kein anstehender Termin ( ˘ω˘ )"
   }
 }

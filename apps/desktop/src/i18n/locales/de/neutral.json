@@ -645,7 +645,10 @@
     "over": "Schon vorbei.",
     "notesQuote": "„{{quote}}“",
     "notesFrom": "Aus der Mail „{{subject}}“ von {{sender}}",
-    "noSubject": "(kein Betreff)"
+    "noSubject": "(kein Betreff)",
+    "findAppointment": "Termin suchen",
+    "searching": "Suche Termine in dieser Mail …",
+    "noneFound": "In dieser Mail steht kein anstehender Termin."
   },
   "density": {
     "relaxed": "Entspannt",
@@ -1496,7 +1499,11 @@
         "urlScheme": "Die Adresse muss mit http:// oder https:// beginnen.",
         "urlLogin": "Lass Benutzername und Passwort aus der Adresse weg.",
         "keyMissing": "Dieser Anbieter braucht einen API-Schlüssel."
-      }
+      },
+      "pickModel": "Aus der Liste wählen: {{field}}",
+      "modelsLoading": "Lade Modelle …",
+      "modelsFailed": "Der Anbieter hat keine Modelle genannt. Du kannst eins eintippen.",
+      "modelsNone": "Keine Modelle gefunden. Du kannst eins eintippen."
     },
     "chatgpt": {
       "warningTitle": "Experimentell und inoffiziell",
@@ -1531,6 +1538,19 @@
       "lastDays_one": "Letzter Tag",
       "lastDays_other": "Letzte {{count}} Tage",
       "nothing": "In dieser Zeit nichts verbraucht."
+    },
+    "estimate": {
+      "tokens": "≈ {{formatted}} Tokens",
+      "tokensLeft": "heute noch {{formatted}} übrig",
+      "requestsLeft_one": "heute noch {{formatted}} Anfrage",
+      "requestsLeft_other": "heute noch {{formatted}} Anfragen"
+    },
+    "local": {
+      "title": "Auf diesem Computer gefunden",
+      "description": "Hier läuft eine lokale KI. Mit einem Klick hinzufügen – deine Mails verlassen dafür diesen Computer nicht.",
+      "model": "Modell für {{name}}",
+      "noModels": "Noch keine Modelle installiert",
+      "add": "Hinzufügen"
     }
   }
 }

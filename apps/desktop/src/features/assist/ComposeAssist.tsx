@@ -19,6 +19,7 @@ import { ASSIST_PRESETS, type AssistComposeRequest, type AssistPreset } from "@/
 import { Button, IconButton } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
 import { useT } from "@/i18n";
+import { EstimateLabel, EstimateTip, type EstimateRequest, useSettled } from "./estimate";
 import {
   assistErrorDetail,
   assistErrorText,
@@ -46,32 +47,88 @@ export interface ComposeAssistContext {
 /** Languages offered for translating, as tags; their names come from the browser. */
 const TARGET_LANGUAGES = ["en", "de", "fr", "nl", "es", "it", "pt", "pl", "tr", "uk", "ja", "zh"];
 
+/** The language a translation goes to first: English, or German for someone who reads English. */
+export function firstTargetLanguage(language: string): string {
+  return language === "en" ? "de" : "en";
+}
+
+/** What the panel asks the assistant, from what is typed and picked there. */
+export function composeRequest(
+  ask: { mode: AssistComposeRequest["mode"]; preset: AssistPreset | null; base: string },
+  typed: { instruction: string; targetLanguage: string; wantSubject: boolean },
+  context: ComposeAssistContext,
+): AssistComposeRequest {
+  return {
+    mode: ask.mode,
+    instruction: typed.instruction.trim() || null,
+    preset: ask.mode === "rewrite" ? ask.preset : null,
+    targetLanguage: ask.preset === "translate" ? typed.targetLanguage : null,
+    text: ask.mode === "write" ? null : ask.base,
+    subject: context.subject || null,
+    replyToEmailId: context.replyToEmailId,
+    wantSubject: ask.mode === "write" && typed.wantSubject,
+    language: context.language,
+  };
+}
+
+/**
+ * The estimate of a menu item, before anything is typed: the instruction still to come counts as
+ * a word, the rest is what the panel would send.
+ */
+export function composeEstimate(
+  accountId: string,
+  start: ComposeAssistStart,
+  context: ComposeAssistContext,
+): EstimateRequest {
+  const mode = start.kind === "write" ? "write" : start.kind === "adjust" ? "adjust" : "rewrite";
+  const request = composeRequest(
+    { mode, preset: start.kind === "rewrite" ? start.preset : null, base: context.source.text },
+    {
+      instruction: mode === "rewrite" ? "" : "…",
+      targetLanguage: firstTargetLanguage(context.language),
+      wantSubject: mode === "write" && !context.subject,
+    },
+    context,
+  );
+  return { accountId, method: "Assist/compose", args: { ...request } };
+}
+
 /** The ✨ button in the composer's toolbar with what the assistant can do there. */
-export function ComposeAssistButton({ onPick }: { onPick: (start: ComposeAssistStart) => void }) {
+export function ComposeAssistButton({
+  onPick,
+  estimate,
+}: {
+  onPick: (start: ComposeAssistStart) => void;
+  /** The call an item would make, read from the draft when its tooltip is wanted. */
+  estimate?: (start: ComposeAssistStart) => EstimateRequest | null;
+}) {
   const { t } = useT();
   const rewrite = t("assist.compose.rewriteGroup");
+  const label = (start: ComposeAssistStart, icon: typeof Sparkles, text: string) => {
+    const content = <MenuLabel icon={icon} text={text} />;
+    return estimate ? <EstimateLabel request={() => estimate(start)}>{content}</EstimateLabel> : content;
+  };
   return (
     <Menu
       side="above"
       align="end"
       items={[
         {
-          label: <MenuLabel icon={Sparkles} text={t("assist.compose.write")} />,
+          label: label({ kind: "write" }, Sparkles, t("assist.compose.write")),
           onSelect: () => onPick({ kind: "write" }),
         },
         ...ASSIST_PRESETS.map((preset) => ({
           group: rewrite,
-          label: (
-            <MenuLabel
-              icon={preset === "translate" ? Languages : preset === "proofread" ? Check : Wand2}
-              text={t(`assist.preset.${preset}`)}
-            />
+          label: label(
+            { kind: "rewrite", preset },
+            preset === "translate" ? Languages : preset === "proofread" ? Check : Wand2,
+            t(`assist.preset.${preset}`),
           ),
           onSelect: () => onPick({ kind: "rewrite", preset }),
         })),
         {
           group: t("assist.compose.moreGroup"),
-          label: <MenuLabel icon={SlidersHorizontal} text={t("assist.compose.adjust")} />,
+          label: label({ kind: "adjust" }, SlidersHorizontal, t("assist.compose.adjust")),
           onSelect: () => onPick({ kind: "adjust" }),
         },
       ]}
@@ -146,7 +203,7 @@ export function ComposeAssistPanel({
   const needsInput = ask.mode !== "rewrite" || ask.preset === "translate";
   const [asking, setAsking] = useState(needsInput);
   const [instruction, setInstruction] = useState("");
-  const [targetLanguage, setTargetLanguage] = useState(() => (context.language === "en" ? "de" : "en"));
+  const [targetLanguage, setTargetLanguage] = useState(() => firstTargetLanguage(context.language));
   const [wantSubject, setWantSubject] = useState(subjectEmpty);
   const [subjectTaken, setSubjectTaken] = useState(false);
   const [lastRequest, setLastRequest] = useState<AssistComposeRequest | null>(null);
@@ -174,17 +231,18 @@ export function ComposeAssistPanel({
     );
   };
 
-  const request = (): AssistComposeRequest => ({
-    mode: ask.mode,
-    instruction: instruction.trim() || null,
-    preset: ask.mode === "rewrite" ? ask.preset : null,
-    targetLanguage: ask.preset === "translate" ? targetLanguage : null,
-    text: ask.mode === "write" ? null : ask.base,
-    subject: context.subject || null,
-    replyToEmailId: context.replyToEmailId,
-    wantSubject: ask.mode === "write" && wantSubject,
-    language: context.language,
-  });
+  const request = (): AssistComposeRequest =>
+    composeRequest(ask, { instruction, targetLanguage, wantSubject }, context);
+  // The send button's estimate follows the instruction once typing pauses.
+  const settledInstruction = useSettled(instruction);
+  const estimate: EstimateRequest | null =
+    accountId && (settledInstruction.trim() || ask.preset === "translate")
+      ? {
+          accountId,
+          method: "Assist/compose",
+          args: { ...composeRequest(ask, { instruction: settledInstruction, targetLanguage, wantSubject }, context) },
+        }
+      : null;
 
   // A preset needs nothing more: it starts at once (a tick later, so a mount that is undone at
   // once, as in React's strict mode, asks only once).
@@ -330,20 +388,21 @@ export function ComposeAssistPanel({
                   {t("assist.compose.wantSubject")}
                 </label>
               )}
-              <Button
-                type="submit"
-                size="sm"
-                variant="primary"
-                icon={Sparkles}
-                className="ml-auto"
-                disabled={ask.preset !== "translate" && !instruction.trim()}
-              >
-                {ask.mode === "write"
-                  ? t("assist.compose.go")
-                  : ask.preset === "translate"
-                    ? t("assist.compose.translate")
-                    : t("assist.compose.apply")}
-              </Button>
+              <EstimateTip request={estimate} className="ml-auto">
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="primary"
+                  icon={Sparkles}
+                  disabled={ask.preset !== "translate" && !instruction.trim()}
+                >
+                  {ask.mode === "write"
+                    ? t("assist.compose.go")
+                    : ask.preset === "translate"
+                      ? t("assist.compose.translate")
+                      : t("assist.compose.apply")}
+                </Button>
+              </EstimateTip>
             </div>
           </form>
         )}

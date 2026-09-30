@@ -4,12 +4,15 @@ import type {
   AddressBookInfo,
   AssistComposeRequest,
   AssistComposeResult,
+  AssistEstimate,
+  AssistEstimateMethod,
   AssistEventsResult,
   AssistFeatures,
   AssistLabel,
   AssistLabelInput,
   AssistLabelLogEntry,
   AssistModels,
+  AssistProbeInput,
   AssistProvider,
   AssistProviderInput,
   AssistScope,
@@ -45,6 +48,7 @@ import type {
   Identity,
   ImageSizeProbe,
   ImageTextResult,
+  LocalModelServer,
   MailtoDraft,
   MovedMessage,
   NewAccount,
@@ -345,6 +349,20 @@ export interface Backend {
   deleteAssistProvider(scope: string, id: string): Promise<void>;
   /** Asks the provider for its models; doubles as a test of the key. */
   assistModels(scope: string, providerId: string): Promise<AssistModels>;
+  /** The models at an Ollama or OpenAI-compatible address not saved yet (this device's scope only). */
+  assistProbeModels(input: AssistProbeInput): Promise<AssistModels>;
+  /** Ollama and LM Studio running on this computer, with their installed models. */
+  assistLocalModels(): Promise<LocalModelServer[]>;
+  /**
+   * What a call to the assistant would take, for the tooltip on its button. `args` are what the
+   * call itself gets (the app's ids); `accountId` the draft's or the mail's mailbox. Null when the
+   * mailbox's UwUMail server is too old to say.
+   */
+  assistEstimate(
+    accountId: string,
+    method: AssistEstimateMethod,
+    args: Record<string, unknown>,
+  ): Promise<AssistEstimate | null>;
   /** Starts the device-code sign-in of a server scope's `chatgpt` provider (experimental; not on this device). */
   chatgptLogin(scope: string, providerId: string): Promise<ChatgptLogin>;
   /** Whether that sign-in went through; ask every `interval` seconds while `pending`. */

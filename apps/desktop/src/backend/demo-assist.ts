@@ -9,6 +9,8 @@ import {
   type AssistComposeRequest,
   type AssistComposeResult,
   type AssistEffective,
+  type AssistEstimate,
+  type AssistEstimateMethod,
   type AssistEvent,
   type AssistEventsResult,
   type AssistFeature,
@@ -749,6 +751,77 @@ export class DemoAssist {
     }
     await thinking(700);
     return { events, answer: this.answer("extractEvents", text, JSON.stringify(events)) };
+  }
+
+  /**
+   * What a call would take, like the server's `Assist/estimate`: the text it would read, the fixed
+   * instructions and a typical answer; nothing is counted. The server's provider has daily limits.
+   */
+  estimate(method: AssistEstimateMethod, args: Record<string, unknown>): AssistEstimate {
+    const feature: AssistFeature =
+      method === "Assist/compose"
+        ? "compose"
+        : method === "Assist/summarize"
+          ? "summarize"
+          : method === "Assist/spamCheck"
+            ? "spamCheck"
+            : "extractEvents";
+    const effective = this.effective(feature);
+    if (!effective) throw new AssistError("assistUnavailable", "No provider may do that.");
+    const text = (key: string) => (typeof args[key] === "string" ? (args[key] as string) : "");
+    let input = 350;
+    let output: number;
+    if (method === "Assist/compose") {
+      if ((text("mode") === "write" || text("mode") === "adjust") && !text("instruction").trim()) {
+        throw new AssistError("invalidArguments", "An instruction is needed.");
+      }
+      input += tokens(text("instruction")) + tokens(text("text"));
+      output = text("mode") === "write" ? 400 : Math.max(100, tokens(text("text")));
+    } else if (method === "Assist/summarize" && text("threadId")) {
+      const thread = this.messages()
+        .filter((message) => message.threadId === text("threadId"))
+        .slice(-20);
+      input += thread.reduce((sum, message) => sum + tokens(this.text(message)), 0);
+      output = Math.min(600, 150 + 50 * Math.max(0, thread.length - 1));
+    } else {
+      input += tokens(this.text(this.message(text("emailId"))));
+      output = method === "Assist/summarize" ? 150 : method === "Assist/spamCheck" ? 150 : 250;
+    }
+    const provider = this.providers.find((entry) => entry.id === effective.providerId);
+    const today = new Date().toISOString().slice(0, 10);
+    const used = this.usage.filter((entry) => entry.day === today && entry.providerId === effective.providerId);
+    const quota = provider?.scope === "server" ? provider.quota : null;
+    const left = (limit: number | null | undefined, spent: number) =>
+      limit === null || limit === undefined ? null : Math.max(0, limit - spent);
+    return {
+      method,
+      inputTokens: input,
+      outputTokens: output,
+      totalTokens: input + output,
+      providerId: effective.providerId,
+      providerName: effective.providerName,
+      model: effective.model,
+      tokensLeftToday: left(
+        quota?.tokensPerDay,
+        used.reduce((sum, entry) => sum + entry.inputTokens + entry.outputTokens, 0),
+      ),
+      requestsLeftToday: left(
+        quota?.requestsPerDay,
+        used.reduce((sum, entry) => sum + entry.requests, 0),
+      ),
+    };
+  }
+
+  /** The models at an address not saved yet: the demo's made-up local ones. */
+  probeModels(kind: AssistProvider["kind"], baseUrl: string): AssistModels {
+    this.checkBaseUrl(kind, baseUrl);
+    return { models: (DEMO_MODELS[kind] ?? []).map((id) => ({ id, name: id })), model: null, fastModel: null };
+  }
+
+  /** Whether a provider at this address exists already. */
+  hasAddress(baseUrl: string): boolean {
+    const plain = (url: string | null) => (url ?? "").replace(/\/v1\/?$/, "").replace(/\/$/, "");
+    return this.providers.some((provider) => plain(provider.baseUrl) === plain(baseUrl));
   }
 
   usageReport(days: number): AssistUsage {

@@ -645,7 +645,10 @@
     "over": "Already over.",
     "notesQuote": "“{{quote}}”",
     "notesFrom": "From the mail “{{subject}}” by {{sender}}",
-    "noSubject": "(no subject)"
+    "noSubject": "(no subject)",
+    "findAppointment": "Find appointment",
+    "searching": "Looking for appointments in this mail…",
+    "noneFound": "No upcoming appointment found in this mail."
   },
   "density": {
     "relaxed": "Relaxed",
@@ -1496,7 +1499,11 @@
         "urlScheme": "The address has to start with http:// or https://.",
         "urlLogin": "Leave user name and password out of the address.",
         "keyMissing": "This provider needs an API key."
-      }
+      },
+      "pickModel": "Pick from the list: {{field}}",
+      "modelsLoading": "Loading models…",
+      "modelsFailed": "The provider didn't list its models. You can still type one.",
+      "modelsNone": "No models found. You can still type one."
     },
     "chatgpt": {
       "warningTitle": "Experimental and unofficial",
@@ -1531,6 +1538,19 @@
       "lastDays_one": "Last day",
       "lastDays_other": "Last {{count}} days",
       "nothing": "Nothing used in this time."
+    },
+    "estimate": {
+      "tokens": "≈ {{formatted}} tokens",
+      "tokensLeft": "{{formatted}} left today",
+      "requestsLeft_one": "{{formatted}} request left today",
+      "requestsLeft_other": "{{formatted}} requests left today"
+    },
+    "local": {
+      "title": "Found on this computer",
+      "description": "A local AI is running here. Add it with one click, and your mail never leaves this computer for it.",
+      "model": "Model for {{name}}",
+      "noModels": "No models installed yet",
+      "add": "Add"
     }
   }
 }

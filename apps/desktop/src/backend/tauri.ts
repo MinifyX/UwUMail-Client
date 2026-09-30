@@ -12,6 +12,7 @@ import {
   toAssistFeaturesOrNull,
   toAssistLabel,
   toAssistLabels,
+  toAssistEstimate,
   toAssistModels,
   toAssistProvider,
   toAssistProviders,
@@ -26,6 +27,7 @@ import {
   toSummaryText,
   toUsage,
   type Raw,
+  toLocalModelServers,
 } from "./assistConvert";
 import type {
   BlockedSender,
@@ -33,6 +35,8 @@ import type {
   AddressBookInfo,
   AssistComposeRequest,
   AssistComposeResult,
+  AssistEstimateMethod,
+  AssistProbeInput,
   AssistEventsResult,
   AssistLabelInput,
   AssistProviderInput,
@@ -616,6 +620,22 @@ export class TauriBackend implements Backend {
 
   async assistModels(scope: string, providerId: string) {
     return toAssistModels(await call<unknown>("assist_models", { scope, providerId }));
+  }
+
+  async assistProbeModels(input: AssistProbeInput) {
+    return toAssistModels(
+      await call<unknown>("assist_probe_models", {
+        input: { kind: input.kind, baseUrl: input.baseUrl, apiKey: input.apiKey ?? null },
+      }),
+    );
+  }
+
+  async assistLocalModels() {
+    return toLocalModelServers(await call<unknown>("assist_local_models"));
+  }
+
+  async assistEstimate(accountId: string, method: AssistEstimateMethod, args: Record<string, unknown>) {
+    return toAssistEstimate(await call<unknown>("assist_estimate", { accountId, method, arguments: args }), method);
   }
 
   async chatgptLogin(scope: string, providerId: string) {

@@ -13,9 +13,11 @@ import type {
   BlockedSender,
   Account,
   AssistComposeRequest,
+  AssistEstimateMethod,
   AssistEventsResult,
   AssistFeatures,
   AssistLabelInput,
+  AssistProbeInput,
   AssistProviderInput,
   AssistScope,
   AssistSettingsPatch,
@@ -41,6 +43,7 @@ import type {
   Identity,
   ImageSizeProbe,
   ImageTextResult,
+  LocalModelServer,
   MailtoDraft,
   MovedMessage,
   Message,
@@ -1178,6 +1181,33 @@ export class DemoBackend implements Backend {
   async assistModels(scope: string, providerId: string) {
     await wait(400);
     return this.assistOf(scope).models(providerId);
+  }
+
+  async assistProbeModels(input: AssistProbeInput) {
+    await wait(300);
+    return this.assistDevice.probeModels(input.kind, input.baseUrl);
+  }
+
+  /** The demo pretends an Ollama runs on this computer. */
+  async assistLocalModels(): Promise<LocalModelServer[]> {
+    await wait(200);
+    const baseUrl = "http://127.0.0.1:11434";
+    return [
+      {
+        kind: "ollama",
+        name: "Ollama",
+        baseUrl,
+        models: ["gemma3:4b", "llama3.2:3b", "qwen3:8b"].map((id) => ({ id, name: id })),
+        added: this.assistDevice.hasAddress(baseUrl),
+      },
+    ];
+  }
+
+  async assistEstimate(accountId: string, method: AssistEstimateMethod, args: Record<string, unknown>) {
+    await wait(60);
+    const emailId = typeof args.emailId === "string" ? args.emailId : null;
+    const assist = method === "Assist/compose" || !emailId ? this.assistFor(accountId) : this.assistForMessage(emailId);
+    return assist.estimate(method, args);
   }
 
   async chatgptLogin(scope: string, providerId: string) {

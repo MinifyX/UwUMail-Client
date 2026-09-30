@@ -722,6 +722,44 @@ export interface AssistModels {
   fastModel: string | null;
 }
 
+/** A model server running on this computer (Ollama, LM Studio), found on its default port. */
+export interface LocalModelServer {
+  kind: "ollama" | "openaiCompatible";
+  /** The program's own name, shown as it is in every language. */
+  name: string;
+  /** The address a provider for it gets. */
+  baseUrl: string;
+  models: AssistModel[];
+  /** This device has a provider at that address already. */
+  added: boolean;
+}
+
+/** An address not saved as a provider yet, asked for its models. */
+export interface AssistProbeInput {
+  kind: AssistProviderKind;
+  baseUrl: string;
+  apiKey?: string | null;
+}
+
+/** The calls whose cost can be estimated before they are made. */
+export type AssistEstimateMethod = "Assist/compose" | "Assist/summarize" | "Assist/spamCheck" | "Assist/extractEvents";
+
+/**
+ * What one call would take, before it is made: `Assist/estimate` of the UwUMail server, or counted
+ * on this device for other mailboxes. `*LeftToday` are null without a daily limit.
+ */
+export interface AssistEstimate {
+  method: AssistEstimateMethod;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  providerId: string | null;
+  providerName: string | null;
+  model: string | null;
+  tokensLeftToday: number | null;
+  requestsLeftToday: number | null;
+}
+
 /** OpenAI's device-code login for a `chatgpt` provider (experimental). */
 export interface ChatgptLogin {
   userCode: string;

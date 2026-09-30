@@ -754,7 +754,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             />
           )}
         />
-        {assist.available && <ComposeAssistButton onPick={assist.start} />}
+        {assist.available && <ComposeAssistButton onPick={assist.start} estimate={assist.estimateFor} />}
         <input
           ref={fileInput}
           type="file"

@@ -12,6 +12,8 @@ import {
   type AssistAnswer,
   type AssistChoice,
   type AssistEffective,
+  type AssistEstimate,
+  type AssistEstimateMethod,
   type AssistEvent,
   type AssistFeature,
   type AssistFeatures,
@@ -31,6 +33,7 @@ import {
   type AssistVerdict,
   type ChatgptLogin,
   type ChatgptPoll,
+  type LocalModelServer,
 } from "./types";
 
 export type Raw = Record<string, unknown>;
@@ -163,6 +166,54 @@ export function toAssistModels(value: unknown): AssistModels {
     model: asString(raw.model),
     fastModel: asString(raw.fastModel),
   };
+}
+
+const ESTIMATE_METHODS: readonly AssistEstimateMethod[] = [
+  "Assist/compose",
+  "Assist/summarize",
+  "Assist/spamCheck",
+  "Assist/extractEvents",
+];
+
+/** A count of tokens or requests: a whole number, never below zero; null when missing. */
+const asAmount = (value: unknown): number | null => {
+  const number = asNumber(value);
+  return number === null ? null : Math.max(0, Math.round(number));
+};
+
+/**
+ * `Assist/estimate`'s answer; null when it isn't one (an older server's, or nothing), so the
+ * button just goes without its tooltip.
+ */
+export function toAssistEstimate(value: unknown, method: AssistEstimateMethod): AssistEstimate | null {
+  const raw = asObject(value);
+  if (!raw) return null;
+  const input = asAmount(raw.inputTokens);
+  const output = asAmount(raw.outputTokens);
+  if (input === null || output === null) return null;
+  const named = asString(raw.method);
+  return {
+    method: named && (ESTIMATE_METHODS as readonly string[]).includes(named) ? (named as AssistEstimateMethod) : method,
+    inputTokens: input,
+    outputTokens: output,
+    totalTokens: asAmount(raw.totalTokens) ?? input + output,
+    providerId: asString(raw.providerId),
+    providerName: asString(raw.providerName),
+    model: asString(raw.model),
+    tokensLeftToday: asAmount(raw.tokensLeftToday),
+    requestsLeftToday: asAmount(raw.requestsLeftToday),
+  };
+}
+
+/** Ollama and LM Studio found on this computer; anything of another shape is left out. */
+export function toLocalModelServers(value: unknown): LocalModelServer[] {
+  return asObjects(value).flatMap((raw) => {
+    const kind = raw.kind === "ollama" || raw.kind === "openaiCompatible" ? raw.kind : null;
+    const name = asString(raw.name);
+    const baseUrl = asString(raw.baseUrl);
+    if (!kind || !name || !baseUrl || !/^http:\/\/127\.0\.0\.1:\d+(\/|$)/.test(baseUrl)) return [];
+    return [{ kind, name, baseUrl, models: toAssistModels({ models: raw.models }).models, added: raw.added === true }];
+  });
 }
 
 export function toChatgptLogin(value: unknown): ChatgptLogin {

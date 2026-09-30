@@ -2,8 +2,9 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n";
 import { escapeHtml } from "@/lib/format";
 import { toast } from "@/state/toasts";
-import type { ComposeAssistContext, ComposeAssistStart } from "./ComposeAssist";
+import { composeEstimate, type ComposeAssistContext, type ComposeAssistStart } from "./ComposeAssist";
 import { appendToOwnText, ownText, replaceOwnText } from "./draftText";
+import type { EstimateRequest } from "./estimate";
 import { useAssistFeature } from "./useAssist";
 
 /** Writes the editor's content; its own function, as the editor belongs to the composer. */
@@ -61,22 +62,33 @@ export function useComposeAssist({
       ? range
       : null;
 
-  const start = (what: ComposeAssistStart) => {
+  /** What the draft gives the assistant now: the marked text, or the person's own part. */
+  const contextNow = () => {
     const html = editor.current?.innerHTML ?? body.current;
     const range = liveRange(lastRange.current);
     const marked = range && !range.collapsed ? range.toString().trim() : "";
+    const context: ComposeAssistContext = {
+      source: marked ? { scope: "selection", text: marked } : { scope: "own", text: ownText(html) },
+      subject,
+      replyToEmailId,
+      language: i18n.language,
+    };
+    return { context, range };
+  };
+
+  const start = (what: ComposeAssistStart) => {
+    const { context, range } = contextNow();
     setOpen((current) => ({
       key: (current?.key ?? 0) + 1,
       start: what,
       range: range?.cloneRange() ?? null,
-      context: {
-        source: marked ? { scope: "selection", text: marked } : { scope: "own", text: ownText(html) },
-        subject,
-        replyToEmailId,
-        language: i18n.language,
-      },
+      context,
     }));
   };
+
+  /** The call a menu item would make with the draft as it is now, for its estimate. */
+  const estimateFor = (what: ComposeAssistStart): EstimateRequest | null =>
+    composeEstimate(accountId, what, contextNow().context);
 
   /** Puts the assistant's text into the draft, with the editor's undo where it can. */
   const apply = (how: "insert" | "replace", text: string) => {
@@ -106,5 +118,5 @@ export function useComposeAssist({
     toast(t("assist.compose.applied"), "success");
   };
 
-  return { available, open, start, apply, close: () => setOpen(null) };
+  return { available, open, start, estimateFor, apply, close: () => setOpen(null) };
 }
