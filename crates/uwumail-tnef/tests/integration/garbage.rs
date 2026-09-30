@@ -138,3 +138,19 @@ fn random_links() {
         let _ = safelinks::unwrap(&text);
     }
 }
+
+#[test]
+fn html_text_stays_linear() {
+    // Every `<style>` and every `&` once looked through all the rest of the document.
+    let styles = "<style></style>x".repeat(60_000);
+    let text = uwumail_tnef::html_to_text(&styles);
+    assert_eq!(text.len(), 60_000);
+    let ampersands = "&".repeat(1 << 20);
+    assert_eq!(uwumail_tnef::html_to_text(&ampersands).len(), 1 << 20);
+    let mut rng = Rng(0x5eed_1234_abcd_0005);
+    let base = "<p>A&amp;B &#x263A;</p><STYLE>p{}</STYLE><!-- c --><br>ä &bogus; <scrIpt>x</script";
+    for _ in 0..3_000 {
+        let data = mutate(&mut rng, base.as_bytes());
+        let _ = uwumail_tnef::html_to_text(&String::from_utf8_lossy(&data));
+    }
+}
