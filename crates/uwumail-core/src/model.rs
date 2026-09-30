@@ -187,8 +187,36 @@ pub enum UnifiedRole {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", rename_all_fields = "camelCase")]
 pub enum MailboxView {
-    Unified { role: UnifiedRole },
-    Folder { account_id: String, folder_id: String },
+    Unified {
+        role: UnifiedRole,
+    },
+    Folder {
+        account_id: String,
+        folder_id: String,
+    },
+    /// Mail with a label in every folder but trash and junk, in the mailboxes the label belongs to.
+    Label {
+        keyword: String,
+        account_ids: Vec<String>,
+    },
+}
+
+/// A label as a filter: its keyword, on mail of the mailboxes whose label it is (labels live per
+/// UwUMail account, or on this device for the other mailboxes, so the same keyword may mean
+/// different labels elsewhere).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LabelRef {
+    pub keyword: String,
+    pub account_ids: Vec<String>,
+}
+
+/// How much mail carries a label, like a folder's counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LabelCount {
+    pub total: u32,
+    pub unread: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -214,6 +242,10 @@ pub struct ThreadQuery {
     #[serde(default)]
     pub cursor: Option<String>,
     pub limit: u32,
+    /// Label filters that must all hold; each holds when any of its labels is on the mail (a
+    /// label chip, `label:<name>` in the search).
+    #[serde(default)]
+    pub labels: Vec<Vec<LabelRef>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

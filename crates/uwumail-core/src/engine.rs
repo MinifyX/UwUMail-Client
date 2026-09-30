@@ -691,6 +691,11 @@ impl Engine {
         self.inner.store.list_threads(query)
     }
 
+    /// Per label, how much mail outside trash and junk carries it; unread of that.
+    pub fn label_counts(&self, labels: &[LabelRef]) -> Result<Vec<LabelCount>> {
+        self.inner.store.label_counts(labels)
+    }
+
     /// Keeps mail from the last `days` complete and older mail as previews
     /// (sender, subject, preview; the body loads when opened). `None` keeps
     /// everything. Bodies already stored that are now too old are dropped.
@@ -717,7 +722,8 @@ impl Engine {
             let folder_view = match &query.view {
                 MailboxView::Folder { account_id, folder_id } if *account_id == account.id => Some(folder_id.clone()),
                 MailboxView::Folder { .. } => continue,
-                MailboxView::Unified { .. } => None,
+                MailboxView::Label { account_ids, .. } if !account_ids.contains(&account.id) => continue,
+                MailboxView::Unified { .. } | MailboxView::Label { .. } => None,
             };
             let result = if account.protocol == Protocol::Jmap {
                 self.search_jmap(&account.id, text, folder_view.as_deref()).await

@@ -1338,7 +1338,53 @@ impl Store {
                 values.push(Value::Text(folder_id.clone()));
                 format!("m.folder_id = ?{}", values.len())
             }
+            MailboxView::Label { keyword, account_ids } => format!(
+                "COALESCE(f.role, '') NOT IN ('trash', 'junk') AND {}",
+                Self::label_clause(&LabelRef { keyword: keyword.clone(), account_ids: account_ids.clone() }, values)
+            ),
         }
+    }
+
+    /// A label on the mail, in one of its mailboxes. Keywords are kept space-separated.
+    fn label_clause(label: &LabelRef, values: &mut Vec<Value>) -> String {
+        if label.account_ids.is_empty() || label.keyword.trim().is_empty() {
+            return "0".into();
+        }
+        let accounts = Self::placeholders(&label.account_ids, values);
+        values.push(Value::Text(format!(" {} ", label.keyword.trim().to_lowercase())));
+        format!("(m.account_id IN ({accounts}) AND instr(' ' || m.keywords || ' ', ?{}) > 0)", values.len())
+    }
+
+    /// Any of these labels.
+    fn any_label_clause(labels: &[LabelRef], values: &mut Vec<Value>) -> String {
+        if labels.is_empty() {
+            return "0".into();
+        }
+        let parts: Vec<String> = labels.iter().take(50).map(|label| Self::label_clause(label, values)).collect();
+        format!("({})", parts.join(" OR "))
+    }
+
+    /// Per label, how much mail outside trash and junk carries it, and how much of that is unread.
+    pub fn label_counts(&self, labels: &[LabelRef]) -> Result<Vec<LabelCount>> {
+        let conn = self.conn();
+        let mut out = Vec::with_capacity(labels.len());
+        for label in labels.iter().take(200) {
+            let mut values = Vec::new();
+            let clause = Self::label_clause(label, &mut values);
+            let (total, unread): (i64, i64) = conn.query_row(
+                &format!(
+                    "SELECT COUNT(*), COALESCE(SUM(m.seen = 0), 0) FROM messages m JOIN folders f ON f.id = m.folder_id
+                     WHERE COALESCE(f.role, '') NOT IN ('trash', 'junk') AND {clause}"
+                ),
+                params_from_iter(values.iter()),
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            out.push(LabelCount {
+                total: u32::try_from(total).unwrap_or(u32::MAX),
+                unread: u32::try_from(unread).unwrap_or(u32::MAX),
+            });
+        }
+        Ok(out)
     }
 
     /// Whether a view is an account's trash folder.
@@ -1378,8 +1424,17 @@ impl Store {
         let mut clauses = Vec::new();
         match only {
             Some([]) => return nothing(),
-            Some(ids) => clauses.push(format!("m.id IN ({})", Self::placeholders(ids, &mut values))),
+            Some(ids) => {
+                clauses.push(format!("m.id IN ({})", Self::placeholders(ids, &mut values)));
+                // Server search results of a label's view stay within that label.
+                if matches!(query.view, MailboxView::Label { .. }) {
+                    clauses.push(Self::view_clause(&query.view, &mut values));
+                }
+            }
             None => clauses.push(Self::view_clause(&query.view, &mut values)),
+        }
+        for any in query.labels.iter().take(10) {
+            clauses.push(Self::any_label_clause(any, &mut values));
         }
         match query.account_ids.as_deref() {
             Some([]) => return nothing(),
@@ -1988,6 +2043,53 @@ mod tests {
     }
 
     #[test]
+    fn labels_show_across_folders_and_filter_the_list() {
+        let (store, _, inbox, sent) = store_with_account();
+        let trash = folder(&store, "Trash", Some(FolderRole::Trash), ".");
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let bill = insert(&store, &inbox, 1, &raw("r@x", "Rechnung", "Shop <shop@x.example>", None, "12 €", date));
+        let sent_bill =
+            insert(&store, &sent, 2, &raw("s@x", "Deine Rechnung", "Mini <mini@uwumail.example>", None, "", date));
+        let gone = insert(&store, &trash, 3, &raw("t@x", "Alte Rechnung", "Shop <shop@x.example>", None, "", date));
+        let other = insert(&store, &inbox, 4, &raw("o@x", "Hallo", "Leni <leni@x.example>", None, "", date));
+        for id in [&bill, &sent_bill, &gone] {
+            store.set_keywords(id.as_ref().unwrap(), &["rechnungen".into()]).unwrap();
+        }
+        store.set_keywords(other.as_ref().unwrap(), &["rechnungen-alt".into()]).unwrap();
+        let label = LabelRef { keyword: "rechnungen".into(), account_ids: vec!["acc".into()] };
+        let query = |view: MailboxView, labels: Vec<Vec<LabelRef>>| ThreadQuery {
+            view,
+            filter: ListFilter::All,
+            search: None,
+            conversations: false,
+            account_ids: None,
+            cursor: None,
+            limit: 50,
+            labels,
+        };
+        let subjects = |page: ThreadPage| page.threads.into_iter().map(|t| t.subject).collect::<Vec<_>>();
+
+        // The label's view: every folder but trash, and only the whole keyword.
+        let view = MailboxView::Label { keyword: "rechnungen".into(), account_ids: vec!["acc".into()] };
+        let mut found = subjects(store.list_threads(&query(view, Vec::new())).unwrap());
+        found.sort();
+        assert_eq!(found, ["Deine Rechnung", "Rechnung"]);
+        // Another mailbox's label of the same keyword is a different label.
+        let elsewhere = MailboxView::Label { keyword: "rechnungen".into(), account_ids: vec!["other".into()] };
+        assert!(store.list_threads(&query(elsewhere, Vec::new())).unwrap().threads.is_empty());
+
+        // As a filter on the inbox.
+        let inbox_view = MailboxView::Unified { role: UnifiedRole::Inbox };
+        assert_eq!(
+            subjects(store.list_threads(&query(inbox_view.clone(), vec![vec![label.clone()]])).unwrap()),
+            ["Rechnung"]
+        );
+        assert!(store.list_threads(&query(inbox_view, vec![vec![label.clone()], vec![]])).unwrap().threads.is_empty());
+
+        assert_eq!(store.label_counts(std::slice::from_ref(&label)).unwrap(), [LabelCount { total: 2, unread: 2 }]);
+    }
+
+    #[test]
     fn groups_replies_into_conversations_even_out_of_order() {
         let (store, _, inbox, sent) = store_with_account();
         // The reply arrives before the message it answers.
@@ -2020,6 +2122,7 @@ mod tests {
                 account_ids: None,
                 cursor: None,
                 limit: 50,
+                labels: Vec::new(),
             })
             .unwrap();
         assert_eq!(page.threads.len(), 1);
@@ -2049,6 +2152,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                 account_ids: None,
                 cursor: None,
                 limit: 50,
+                labels: Vec::new(),
             })
             .unwrap();
         let detail = store.get_thread(&page.threads[0].id, true).unwrap();
@@ -2096,6 +2200,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                     account_ids: None,
                     cursor: None,
                     limit: 50,
+                    labels: Vec::new(),
                 })
                 .unwrap()
                 .threads
@@ -2157,6 +2262,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                     account_ids: None,
                     cursor: None,
                     limit: 50,
+                    labels: Vec::new(),
                 })
                 .unwrap()
                 .threads
@@ -2236,6 +2342,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                 account_ids,
                 cursor: None,
                 limit: 50,
+                labels: Vec::new(),
             };
             store.list_threads(&query).unwrap().threads.into_iter().map(|t| t.subject).collect()
         };

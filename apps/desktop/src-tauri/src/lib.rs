@@ -359,6 +359,12 @@ fn list_threads(engine: State<'_, Engine>, query: ThreadQuery) -> CommandResult<
     engine.list_threads(&query)
 }
 
+/// Per label, how much mail outside trash and junk carries it; unread of that.
+#[tauri::command]
+fn label_counts(engine: State<'_, Engine>, labels: Vec<LabelRef>) -> CommandResult<Vec<LabelCount>> {
+    engine.label_counts(&labels)
+}
+
 /// Searches on the servers too, including mail that was never downloaded.
 #[tauri::command]
 async fn search_server(engine: State<'_, Engine>, query: ThreadQuery) -> CommandResult<ThreadPage> {
@@ -1119,6 +1125,7 @@ pub fn run() {
             assist_local_models,
             assist_probe_models,
             set_keywords,
+            label_counts,
             get_attachment,
             open_attachment,
             save_attachment,
