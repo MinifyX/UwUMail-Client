@@ -1,6 +1,6 @@
 {
   "name": "@uwumail/desktop",
-  "version": "0.6.0-beta.4",
+  "version": "0.7.0-beta.1",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-only",
@@ -23,7 +23,7 @@
     "@tauri-apps/plugin-opener": "^2.5.5",
     "@uwumail/addon-sdk": "workspace:*",
     "clsx": "^2.1.1",
-    "dompurify": "^3.4.15",
+    "dompurify": "^3.4.16",
     "i18next": "^26.4.2",
     "lucide-react": "^1.45.0",
     "react": "^19.3.0",
