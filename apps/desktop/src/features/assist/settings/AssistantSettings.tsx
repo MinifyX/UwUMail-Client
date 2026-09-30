@@ -26,7 +26,6 @@ import {
   useAssistScopes,
   useAssistSettings,
 } from "../useAssist";
-import { LabelSettings } from "./LabelSettings";
 import { ModelInput, Note, Section } from "./common";
 import { ProviderSettings } from "./ProviderSettings";
 import { UsageSettings } from "./UsageSettings";
@@ -92,7 +91,6 @@ function ScopeSettings({ scope, name }: { scope: AssistScope; name: string }) {
       )}
       <ChoiceSettings options={options} />
       <ProviderSettings options={options} />
-      <LabelSettings options={options} />
       <UsageSettings />
     </section>
   );

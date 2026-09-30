@@ -10,7 +10,9 @@ import {
   STARTER_LABELS,
   threadKeywords,
   LABEL_DEFAULTS,
+  labelReason,
 } from "./labels";
+import { translate } from "@/i18n";
 import {
   emptyProviderForm,
   insecureUrl,
@@ -346,5 +348,39 @@ describe("the usage", () => {
     });
     expect(todayShare({ ...base, requestsPerDay: null, tokensPerDay: null }).max).toBeNull();
     expect(todayShare({ ...base, requestsPerDay: 10, tokensPerDay: null }).max).toBe(1);
+  });
+});
+
+describe("labelReason", () => {
+  const t = (key: string, options?: Record<string, unknown>) => translate(key, { ...options, lng: "en" });
+  const reason = (code: string, params: Record<string, unknown>) =>
+    labelReason({ code, params, reason: "Fallback." }, t);
+
+  it("says why in the person's words", () => {
+    expect(
+      reason("rule", {
+        match: "any",
+        conditions: [
+          { field: "subject", value: "Rechnung" },
+          { field: "hasAttachment", value: "true" },
+        ],
+      }),
+    ).toBe("Matches the label's conditions: subject contains “Rechnung” or has an attachment");
+    expect(reason("sender", { address: "leni@example.org", count: 3 })).toBe(
+      "leni@example.org got this label by hand 3 times",
+    );
+    expect(reason("invoice", { word: "Rechnung", amount: "49,90 €" })).toBe(
+      "Looks like an invoice: “Rechnung” in the subject, 49,90 €",
+    );
+    expect(reason("shipping", { carrier: "DHL", tracking: null })).toBe("Looks like a shipment: DHL");
+    expect(reason("classifier", { probability: 0.9946, examples: 23 })).toBe(
+      "Similar to the 23 mails with this label (99.4 % sure)",
+    );
+  });
+
+  it("falls back to the entry's own sentence", () => {
+    expect(reason("ai", {})).toBe("Fallback.");
+    expect(reason("somethingNew", { x: 1 })).toBe("Fallback.");
+    expect(reason("invoice", {})).toBe("Fallback.");
   });
 });

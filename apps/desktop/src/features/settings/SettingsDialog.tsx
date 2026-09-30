@@ -13,12 +13,14 @@ import {
   Plus,
   Puzzle,
   Sparkles,
+  Tags,
   Upload,
   Users,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AssistantSettings } from "../assist/settings/AssistantSettings";
+import { LabelsSettings } from "../labels/LabelsSettings";
 import { useAssistScopes } from "../assist/useAssist";
 import { lazy, Suspense, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -70,6 +72,7 @@ const SECTIONS: { id: SettingsSection; icon: LucideIcon; phoneOnly?: boolean }[]
   { id: "mail", icon: Mail },
   { id: "compose", icon: PenLine },
   { id: "rules", icon: ListFilter },
+  { id: "labels", icon: Tags },
   { id: "assistant", icon: Sparkles },
   { id: "security", icon: Lock, phoneOnly: true },
   { id: "accounts", icon: Users },
@@ -644,7 +647,7 @@ export function SettingsDialog() {
     (item) =>
       (!item.phoneOnly || nativeMobile) &&
       (item.id !== "rules" || rulesAccounts.length > 0) &&
-      (item.id !== "assistant" || assistScopes.length > 0),
+      ((item.id !== "assistant" && item.id !== "labels") || assistScopes.length > 0),
   );
 
   const requestClose = () => {
@@ -699,6 +702,7 @@ export function SettingsDialog() {
                 <MailRules />
               </Suspense>
             )}
+            {section === "labels" && <LabelsSettings />}
             {section === "assistant" && <AssistantSettings />}
             {section === "security" && <Security />}
             {section === "accounts" && <Accounts />}

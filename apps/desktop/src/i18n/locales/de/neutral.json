@@ -1619,6 +1619,107 @@
     "pick": "Labels …",
     "group": "Nach Label gruppieren",
     "ungroup": "Nicht mehr nach Label gruppieren",
-    "none": "Ohne Label"
+    "none": "Ohne Label",
+    "settings": {
+      "title": "Labels",
+      "intro": "Deine eigenen Wörter für Arten von Mails, in der Liste und in anderen Mail-Apps (als Schlagwörter). Sie kommen über ihre Bedingungen, Erkennungen und das, was sie von dir gelernt haben, auf neue Mails, ganz ohne KI; der Assistent kann weitere setzen, wenn du ihn einschaltest.",
+      "device": "Andere Postfächer (dieses Gerät)",
+      "deviceDesc": "Labels aller Postfächer, die kein UwUMail-Konto sind. Sie bleiben auf diesem Gerät und werden hier gesetzt.",
+      "serverDesc": "Auf deinem UwUMail-Server gespeichert und dort gesetzt, auch wenn diese App geschlossen ist.",
+      "listTitle": "Deine Labels",
+      "description": "Neue Mails bekommen Labels zuerst über Bedingungen, Erkennungen und Gelerntes; danach beurteilt das Modell die noch fehlenden. Es verschiebt, löscht oder beantwortet nie eine Mail.",
+      "descriptionManual": "Neue Mails bekommen Labels über Bedingungen, Erkennungen und Gelerntes. Von Hand setzt du sie in der Leseansicht, per Rechtsklick in der Liste oder mit L.",
+      "nonAi": "Neue Mails ohne KI labeln",
+      "nonAiDesc": "Bedingungen, Erkennungen, gelernte Absender und der Klassifikator setzen Labels auf neue Mails. Dafür verlässt nichts dieses Gerät oder deinen Server.",
+      "automaticTitle": "Automatisch auf neue Mails setzen",
+      "automaticDesc": "Das Erste, was davon zutrifft, setzt das Label; ganz ohne KI.",
+      "detector": "Erkennung",
+      "detectorHint": "Eingebaute Erkennung häufiger Arten von Mails.",
+      "detectorNone": "Keine",
+      "rules": "Bedingungen",
+      "match": "Wie Bedingungen zusammenwirken",
+      "matchAll": "Alle müssen zutreffen",
+      "matchAny": "Eine genügt",
+      "noRules": "Keine Bedingungen.",
+      "field": "Was geprüft wird",
+      "value": "Wert",
+      "fields": {
+        "from": "Absender oder Domain",
+        "subject": "Betreff enthält",
+        "text": "Text enthält",
+        "hasAttachment": "Anhang"
+      },
+      "placeholders": {
+        "from": "rechnung@shop.example oder shop.example",
+        "subject": "Rechnung",
+        "text": "Bestellnummer",
+        "hasAttachment": ""
+      },
+      "withAttachment": "hat einen Anhang",
+      "withoutAttachment": "hat keinen Anhang",
+      "addCondition": "Bedingung hinzufügen",
+      "removeCondition": "Bedingung entfernen",
+      "problem": {
+        "tooLong": "Höchstens {{max}} Zeichen.",
+        "control": "Zeilenumbrüche und Steuerzeichen gehen nicht."
+      },
+      "learnSenders": "Absender lernen",
+      "learnSendersDesc": "Ein Absender, dessen Mails du zweimal von Hand dieses Label gegeben hast, bekommt es auf neue Mails. Nimmst du es wieder ab, wird der Absender vergessen.",
+      "learnsSenders": "lernt Absender",
+      "classifier": "Aus deinem Labeln lernen",
+      "classifierDesc": "Kennt es 15 Mails, die du von Hand gelabelt hast, bekommen sehr ähnliche neue Mails das Label. Bisher: {{count}} von {{needed}}.",
+      "classifierOn": "Klassifikator aktiv ({{count}} Beispiele)",
+      "classifierLearning": "Klassifikator lernt ({{count}}/{{needed}})",
+      "count_one": "{{count}} Mail, {{unread}} ungelesen",
+      "count_other": "{{count}} Mails, {{unread}} ungelesen"
+    },
+    "detector": {
+      "invoice": "Rechnungen",
+      "appointment": "Termine",
+      "newsletter": "Newsletter",
+      "shipping": "Versand"
+    },
+    "source": {
+      "ai": "KI",
+      "rule": "Bedingung",
+      "sender": "Gelernter Absender",
+      "detector": "Erkennung",
+      "classifier": "Klassifikator"
+    },
+    "reason": {
+      "from": "Absender ist {{value}}",
+      "subject": "Betreff enthält „{{value}}“",
+      "text": "Text enthält „{{value}}“",
+      "attachment": "hat einen Anhang",
+      "noAttachment": "hat keinen Anhang",
+      "and": " und ",
+      "or": " oder ",
+      "rule": "Passt zu den Bedingungen des Labels: {{conditions}}",
+      "sender_one": "{{address}} hat dieses Label einmal von Hand bekommen",
+      "sender_other": "{{address}} hat dieses Label schon {{count}}× von Hand bekommen",
+      "invoiceAttachment": "Sieht nach einer Rechnung aus: PDF-Anhang „{{name}}“",
+      "invoiceAmount": "Sieht nach einer Rechnung aus: „{{word}}“ im Betreff, {{amount}}",
+      "invoiceWord": "Sieht nach einer Rechnung aus: „{{word}}“ im Betreff",
+      "appointmentCalendar": "Sieht nach einem Termin aus: eine Kalendereinladung",
+      "appointment": "Sieht nach einem Termin aus: „{{word}}“ am {{date}} um {{time}}",
+      "newsletter": "Sieht nach einem Newsletter aus: mit List-Unsubscribe und {{header}}",
+      "shipping": "Sieht nach einer Sendung aus: {{details}}",
+      "shippingPlain": "Sieht nach einer Sendung aus",
+      "tracking": "Sendungsnummer {{number}}",
+      "classifier_one": "Ähnlich wie die Mail mit diesem Label ({{percent, number(maximumFractionDigits: 1)}} % sicher)",
+      "classifier_other": "Ähnlich wie die {{count}} Mails mit diesem Label ({{percent, number(maximumFractionDigits: 1)}} % sicher)"
+    },
+    "log": {
+      "title": "Zuletzt gesetzt",
+      "description": "Labels, die von selbst dazukamen, und warum. Rückgängig nimmt eins ab und bringt es dem Label bei.",
+      "empty": "Noch nichts.",
+      "undone": "rückgängig gemacht",
+      "open": "Mail öffnen",
+      "more": "Mehr zeigen"
+    },
+    "chip": {
+      "automatic": "Automatisch gesetzt",
+      "bySource": "Automatisch gesetzt ({{source}})"
+    }
   }
 }

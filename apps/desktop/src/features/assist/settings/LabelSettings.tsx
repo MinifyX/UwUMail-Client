@@ -1,16 +1,27 @@
 import clsx from "clsx";
-import { Check, Pencil, Plus, Sparkles, Tags, Trash, Wand2 } from "lucide-react";
+import { Check, Pencil, Plus, Sparkles, Tags, Trash, Wand2, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { AssistError, backend } from "@/backend/backend";
-import type { AssistLabel, AssistLabelInput, AssistOptions } from "@/backend/types";
+import {
+  LABEL_DETECTORS,
+  type AssistLabel,
+  type AssistLabelInput,
+  type AssistOptions,
+  type LabelConditionField,
+  type LabelDetector,
+  type LabelRules,
+} from "@/backend/types";
 import { NyuThinking } from "@/components/nyu/NyuThinking";
 import { Button, IconButton, Spinner } from "@/components/ui/Button";
-import { Field, TextInput, Toggle } from "@/components/ui/Field";
+import { Field, Select, TextInput, Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import {
   chipStyle,
+  CONDITION_MAX_CHARS,
+  conditionProblems,
+  conditionText,
   LABEL_COLORS,
   LABEL_LIMITS,
   labelPatch,
@@ -78,8 +89,8 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
 
   return (
     <Section
-      title={t("assist.labels.title")}
-      description={auto ? t("assist.labels.description") : t("assist.labels.descriptionManual")}
+      title={t("labels.settings.listTitle")}
+      description={auto ? t("labels.settings.description") : t("labels.settings.descriptionManual")}
       action={
         room &&
         editing !== "new" && (
@@ -89,6 +100,18 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
         )
       }
     >
+      {settings && (
+        <Toggle
+          checked={settings.nonAiLabels}
+          onChange={(nonAiLabels) =>
+            void backend()
+              .updateAssistSettings(scope, { nonAiLabels })
+              .catch((error: unknown) => toast(assistErrorText(error), "error"))
+          }
+          label={t("labels.settings.nonAi")}
+          description={t("labels.settings.nonAiDesc")}
+        />
+      )}
       {auto && settings && (
         <Toggle
           checked={settings.autoLabels}
@@ -105,7 +128,14 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
         <Note tone="warning">{t("assist.labels.noProvider")}</Note>
       )}
 
-      {editing === "new" && <LabelEditor label={null} labels={labels} onDone={() => setEditing(null)} />}
+      {editing === "new" && (
+        <LabelEditor
+          label={null}
+          labels={labels}
+          maxConditions={options.maxLabelConditions}
+          onDone={() => setEditing(null)}
+        />
+      )}
 
       {starters.length > 0 && editing !== "new" && (
         <div className="flex flex-col gap-2 rounded-2xl bg-pink-tint/35 px-3.5 py-3">
@@ -147,7 +177,12 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
           {labels.map((label) =>
             editing === label.id ? (
               <li key={label.id}>
-                <LabelEditor label={label} labels={labels} onDone={() => setEditing(null)} />
+                <LabelEditor
+                  label={label}
+                  labels={labels}
+                  maxConditions={options.maxLabelConditions}
+                  onDone={() => setEditing(null)}
+                />
               </li>
             ) : (
               <LabelRow key={label.id} label={label} onEdit={() => setEditing(label.id)} />
@@ -211,6 +246,7 @@ function LabelRow({ label, onEdit }: { label: AssistLabel; onEdit: () => void })
           <p className="text-[12.5px] break-words text-muted">
             {label.description || <span className="italic">{t("assist.labels.noDescription")}</span>}
           </p>
+          <LabelAutomatic label={label} />
         </div>
         <IconButton icon={Pencil} size="sm" label={t("assist.labels.edit", { name: label.name })} onClick={onEdit} />
         <IconButton
@@ -238,18 +274,36 @@ function LabelRow({ label, onEdit }: { label: AssistLabel; onEdit: () => void })
 function LabelEditor({
   label,
   labels,
+  maxConditions,
   onDone,
 }: {
   label: AssistLabel | null;
   labels: AssistLabel[];
+  maxConditions: number;
   onDone: () => void;
 }) {
   const { t } = useT();
   const scope = useAssistScope();
   const [form, setForm] = useState<AssistLabelInput>(() =>
     label
-      ? { name: label.name, description: label.description, color: label.color }
-      : { name: "", description: "", color: LABEL_COLORS[labels.length % LABEL_COLORS.length]! },
+      ? {
+          name: label.name,
+          description: label.description,
+          color: label.color,
+          rules: label.rules,
+          detector: label.detector,
+          learnSenders: label.learnSenders,
+          classifier: label.classifier,
+        }
+      : {
+          name: "",
+          description: "",
+          color: LABEL_COLORS[labels.length % LABEL_COLORS.length]!,
+          rules: null,
+          detector: null,
+          learnSenders: true,
+          classifier: true,
+        },
   );
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -267,7 +321,7 @@ function LabelEditor({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setTouched(true);
-    if (Object.keys(problems).length > 0) return;
+    if (Object.keys(problems).length > 0 || conditionProblems(form.rules ?? null).some(Boolean)) return;
     setBusy(true);
     const work = label
       ? backend().updateAssistLabel(scope, label.id, labelPatch(label, form))
@@ -349,6 +403,13 @@ function LabelEditor({
           ))}
         </div>
       </div>
+      <AutomaticEditor
+        form={form}
+        change={change}
+        touched={touched}
+        maxConditions={maxConditions}
+        examples={label?.examples ?? 0}
+      />
       {failure && (
         <p role="alert" className="rounded-xl bg-danger-tint px-3 py-2 text-[13px] text-danger">
           {failure}
@@ -363,5 +424,191 @@ function LabelEditor({
         </Button>
       </div>
     </form>
+  );
+}
+
+/** What puts a label on new mail by itself, in one line under its description. */
+function LabelAutomatic({ label }: { label: AssistLabel }) {
+  const { t } = useT();
+  const parts = [
+    label.detector && t(`labels.detector.${label.detector}`),
+    label.rules &&
+      label.rules.conditions
+        .map((condition) => conditionText(condition, t))
+        .join(label.rules.match === "any" ? t("labels.reason.or") : t("labels.reason.and")),
+    label.learnSenders && t("labels.settings.learnsSenders"),
+    label.classifier &&
+      (label.examples >= CLASSIFIER_MIN
+        ? t("labels.settings.classifierOn", { count: label.examples })
+        : t("labels.settings.classifierLearning", { count: label.examples, needed: CLASSIFIER_MIN })),
+  ].filter(Boolean);
+  const count =
+    label.totalEmails !== null
+      ? t("labels.settings.count", { count: label.totalEmails, unread: label.unreadEmails ?? 0 })
+      : null;
+  if (parts.length === 0 && !count) return null;
+  return <p className="mt-0.5 text-[11.5px] break-words text-faint">{[count, ...parts].filter(Boolean).join(" · ")}</p>;
+}
+
+/** Examples the classifier needs before it puts a label on (docs/labels.md of UwUMail Server). */
+const CLASSIFIER_MIN = 15;
+
+const FIELDS: LabelConditionField[] = ["from", "subject", "text", "hasAttachment"];
+
+/** The part of the label form that puts it on new mail by itself: detector, rules, learning. */
+function AutomaticEditor({
+  form,
+  change,
+  touched,
+  maxConditions,
+  examples,
+}: {
+  form: AssistLabelInput;
+  change: (patch: Partial<AssistLabelInput>) => void;
+  touched: boolean;
+  maxConditions: number;
+  examples: number;
+}) {
+  const { t } = useT();
+  const rules: LabelRules = form.rules ?? { match: "all", conditions: [] };
+  const problems = conditionProblems(rules);
+  const setRules = (next: LabelRules) => change({ rules: next });
+  const setCondition = (index: number, patch: Partial<LabelRules["conditions"][number]>) =>
+    setRules({
+      ...rules,
+      conditions: rules.conditions.map((condition, at) => (at === index ? { ...condition, ...patch } : condition)),
+    });
+
+  return (
+    <fieldset className="flex flex-col gap-3 rounded-2xl bg-surface/70 px-3.5 py-3">
+      <legend className="sr-only">{t("labels.settings.automaticTitle")}</legend>
+      <div>
+        <p className="text-[13px] font-bold">{t("labels.settings.automaticTitle")}</p>
+        <p className="text-[12.5px] text-muted">{t("labels.settings.automaticDesc")}</p>
+      </div>
+      <Field label={t("labels.settings.detector")} hint={t("labels.settings.detectorHint")}>
+        {(id) => (
+          <Select
+            id={id}
+            value={form.detector ?? ""}
+            onChange={(event) => change({ detector: (event.target.value || null) as LabelDetector | null })}
+          >
+            <option value="">{t("labels.settings.detectorNone")}</option>
+            {LABEL_DETECTORS.map((detector) => (
+              <option key={detector} value={detector}>
+                {t(`labels.detector.${detector}`)}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-muted">
+          <span>{t("labels.settings.rules")}</span>
+          {rules.conditions.length > 1 && (
+            <Select
+              aria-label={t("labels.settings.match")}
+              value={rules.match}
+              onChange={(event) => setRules({ ...rules, match: event.target.value === "any" ? "any" : "all" })}
+              className="w-auto"
+            >
+              <option value="all">{t("labels.settings.matchAll")}</option>
+              <option value="any">{t("labels.settings.matchAny")}</option>
+            </Select>
+          )}
+        </div>
+        {rules.conditions.length === 0 && <p className="text-[12.5px] text-muted">{t("labels.settings.noRules")}</p>}
+        <ul className="flex flex-col gap-2">
+          {rules.conditions.map((condition, index) => {
+            const problem = touched ? problems[index] : null;
+            return (
+              <li key={index} className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    aria-label={t("labels.settings.field")}
+                    value={condition.field}
+                    onChange={(event) => {
+                      const field = event.target.value as LabelConditionField;
+                      setCondition(index, {
+                        field,
+                        value:
+                          field === "hasAttachment"
+                            ? "true"
+                            : condition.field === "hasAttachment"
+                              ? ""
+                              : condition.value,
+                      });
+                    }}
+                    className="w-[min(100%,12rem)]"
+                  >
+                    {FIELDS.map((field) => (
+                      <option key={field} value={field}>
+                        {t(`labels.settings.fields.${field}`)}
+                      </option>
+                    ))}
+                  </Select>
+                  {condition.field === "hasAttachment" ? (
+                    <Select
+                      aria-label={t("labels.settings.value")}
+                      value={condition.value === "false" ? "false" : "true"}
+                      onChange={(event) => setCondition(index, { value: event.target.value })}
+                      className="min-w-0 flex-1"
+                    >
+                      <option value="true">{t("labels.settings.withAttachment")}</option>
+                      <option value="false">{t("labels.settings.withoutAttachment")}</option>
+                    </Select>
+                  ) : (
+                    <TextInput
+                      aria-label={t("labels.settings.value")}
+                      value={condition.value}
+                      maxLength={CONDITION_MAX_CHARS + 20}
+                      placeholder={t(`labels.settings.placeholders.${condition.field}`)}
+                      onChange={(event) => setCondition(index, { value: event.target.value })}
+                      className="min-w-[10rem] flex-1"
+                    />
+                  )}
+                  <IconButton
+                    icon={X}
+                    size="sm"
+                    label={t("labels.settings.removeCondition")}
+                    onClick={() => setRules({ ...rules, conditions: rules.conditions.filter((_, at) => at !== index) })}
+                  />
+                </div>
+                {problem && (
+                  <p role="alert" className="text-[12.5px] text-danger">
+                    {t(`labels.settings.problem.${problem}`, { max: CONDITION_MAX_CHARS })}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {rules.conditions.length < maxConditions && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Plus}
+            className="self-start"
+            onClick={() => setRules({ ...rules, conditions: [...rules.conditions, { field: "from", value: "" }] })}
+          >
+            {t("labels.settings.addCondition")}
+          </Button>
+        )}
+      </div>
+
+      <Toggle
+        checked={form.learnSenders ?? true}
+        onChange={(learnSenders) => change({ learnSenders })}
+        label={t("labels.settings.learnSenders")}
+        description={t("labels.settings.learnSendersDesc")}
+      />
+      <Toggle
+        checked={form.classifier ?? true}
+        onChange={(classifier) => change({ classifier })}
+        label={t("labels.settings.classifier")}
+        description={t("labels.settings.classifierDesc", { count: examples, needed: CLASSIFIER_MIN })}
+      />
+    </fieldset>
   );
 }
