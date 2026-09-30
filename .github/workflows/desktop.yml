@@ -26,6 +26,17 @@ on:
         required: false
       UWUMAIL_GOOGLE_CLIENT_SECRET:
         required: false
+    # The digest of each artifact (scripts/artifact-digest.mjs), which the release compares before
+    # it signs or publishes anything: another job of the run could replace an artifact, but not these.
+    outputs:
+      digest_macos_universal:
+        value: ${{ jobs.build.outputs.digest_macos_universal }}
+      digest_linux_x64:
+        value: ${{ jobs.build.outputs.digest_linux_x64 }}
+      digest_linux_arm64:
+        value: ${{ jobs.build.outputs.digest_linux_arm64 }}
+      digest_windows_arm64:
+        value: ${{ jobs.windows-arm64.outputs.digest }}
 
 concurrency:
   # github.workflow is the caller's name when the release workflow runs this one, so a release
@@ -64,8 +75,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     outputs:
       version: ${{ steps.version.outputs.version }}
+      # One output per build: the others leave theirs empty, which doesn't overwrite it. Keyed by
+      # matrix.id here, so no build can set another one's digest whatever its steps write.
+      digest_macos_universal: ${{ matrix.id == 'macos-universal' && steps.digest.outputs.digest || '' }}
+      digest_linux_x64: ${{ matrix.id == 'linux-x64' && steps.digest.outputs.digest || '' }}
+      digest_linux_arm64: ${{ matrix.id == 'linux-arm64' && steps.digest.outputs.digest || '' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: |
@@ -99,17 +117,28 @@ jobs:
 
       - name: Smoke test
         if: runner.os == 'macOS'
-        run: bash scripts/desktop-smoke.sh target/setup "${{ steps.version.outputs.version }}" smoke
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash scripts/desktop-smoke.sh target/setup "$VERSION" smoke
 
       # The update programs have to stay executable, which a plain artifact zip forgets. Only the
       # files this build makes, by name; the release takes nothing else from it either.
       - name: Pack for the next jobs
+        env:
+          BUILD: desktop-${{ matrix.id }}
         run: |
-          names=$(node scripts/release-files.mjs --names "desktop-${{ matrix.id }}")
+          names=$(node scripts/release-files.mjs --names "$BUILD")
           cd target/setup
           # One name per line, none with spaces.
           # shellcheck disable=SC2086
-          COPYFILE_DISABLE=1 tar -cf "$RUNNER_TEMP/desktop-${{ matrix.id }}.tar" $names
+          COPYFILE_DISABLE=1 tar -cf "$RUNNER_TEMP/$BUILD.tar" $names
+      - name: Digest for the release
+        id: digest
+        env:
+          BUILD: desktop-${{ matrix.id }}
+        run: |
+          digest=$(node scripts/artifact-digest.mjs "$RUNNER_TEMP/$BUILD.tar")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.id }}
@@ -138,6 +167,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - name: A desktop's basics
         run: |
           sudo apt-get update
@@ -151,9 +182,13 @@ jobs:
       # The per-user setup only exists for x64, for the copies it installed before.
       - name: Setup
         if: matrix.arch == 'x64'
-        run: bash scripts/desktop-smoke.sh setup "${{ needs.build.outputs.version }}" smoke/setup
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: bash scripts/desktop-smoke.sh setup "$VERSION" smoke/setup
       - name: Packages and portable folder
-        run: bash scripts/linux-packages-smoke.sh setup "${{ needs.build.outputs.version }}" smoke/packages
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: bash scripts/linux-packages-smoke.sh setup "$VERSION" smoke/packages
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -169,12 +204,16 @@ jobs:
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-macos-universal
           path: ${{ runner.temp }}
       - run: mkdir setup && tar -xf "$RUNNER_TEMP/desktop-macos-universal.tar" -C setup
-      - run: bash scripts/desktop-smoke.sh setup "${{ needs.build.outputs.version }}" smoke
+      - run: bash scripts/desktop-smoke.sh setup "$VERSION" smoke
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -188,8 +227,12 @@ jobs:
   windows-arm64:
     name: Build and smoke test (Windows on ARM)
     runs-on: windows-11-arm
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -215,7 +258,16 @@ jobs:
 
       - name: Smoke test
         shell: pwsh
-        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-windows-arm64-setup.exe" "${{ steps.version.outputs.version }}" arm64 smoke
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-windows-arm64-setup.exe" "$env:VERSION" arm64 smoke
+
+      - name: Digest for the release
+        id: digest
+        shell: bash
+        run: |
+          digest=$(node scripts/artifact-digest.mjs target/release/UwUMail-windows-arm64-setup.exe)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

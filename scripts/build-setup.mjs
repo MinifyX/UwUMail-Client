@@ -63,6 +63,8 @@ delete process.env.TAURI_SIGNING_PRIVATE_KEY;
 delete process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
 
 const { version } = JSON.parse(readFileSync(join(root, "apps/desktop/src-tauri/tauri.conf.json"), "utf8"));
+// It ends up in file names and, on Windows, in a shell command line (signForUpdater).
+if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(version)) throw new Error(`Unexpected version ${version}`);
 const targetDir = process.env.CARGO_TARGET_DIR || join(root, "target");
 const option = (name) => {
   const index = process.argv.indexOf(name);
