@@ -46,7 +46,9 @@ const t = (key: string) => key;
 describe("replies", () => {
   it("come from the alias the mail was sent to", () => {
     expect(replyFrom(message(["HALLO@uwumail.example"]), identities)).toBe("hallo@uwumail.example");
-    expect(replyFrom(message(["leni@wanders.example"], ["hallo@uwumail.example"]), identities)).toBe("hallo@uwumail.example");
+    expect(replyFrom(message(["leni@wanders.example"], ["hallo@uwumail.example"]), identities)).toBe(
+      "hallo@uwumail.example",
+    );
   });
 
   it("use the mailbox's own address otherwise", () => {
