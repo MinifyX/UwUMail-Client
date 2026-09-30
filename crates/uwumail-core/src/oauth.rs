@@ -31,6 +31,10 @@ struct ProviderConfig {
     extra: &'static [(&'static str, &'static str)],
 }
 
+/// The app's own link that phones come back to after signing in. Registered with Microsoft next to
+/// `http://localhost` (docs/oauth.md), and with the system: Android's manifest, iOS' Info.plist.
+pub const APP_LINK: &str = "app.uwumail://oauth";
+
 fn config(provider: OAuthProvider) -> Result<ProviderConfig> {
     let missing = || {
         Error::oauth_not_configured(
@@ -182,6 +186,16 @@ const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8><title>UwUMail</titl
 <body style=\"font-family:system-ui;background:#f8f4f6;color:#1c1420;display:grid;place-items:center;height:100vh;margin:0\">\
 <div style=\"text-align:center\"><h1 style=\"color:#e11d74\">(◕‿◕✿)</h1><p>All done! You can close this tab and go back to UwUMail.</p>\
 <p>Fertig! Du kannst diesen Tab schließen und zu UwUMail zurückkehren.</p></div>";
+
+/// Whether signing in with `provider` can come back through the app's own link. Microsoft takes it
+/// for "Mobile and desktop applications"; Google can't: its desktop clients only allow the loopback, so a phone signs in to Google through the loopback as
+/// well, which works while the app keeps running behind the browser.
+pub fn takes_app_link(provider: OAuthProvider) -> bool {
+    match provider {
+        OAuthProvider::Microsoft => true,
+        OAuthProvider::Google => false,
+    }
+}
 
 /// Where the provider sends the browser back to.
 pub enum Redirect {
@@ -379,6 +393,13 @@ mod tests {
         assert_eq!(code, "abc/123");
         assert_eq!(state, "xyz");
         assert!(parse_redirect("GET /?error=access_denied HTTP/1.1\r\n").is_err());
+    }
+
+    #[test]
+    fn only_microsoft_comes_back_through_the_app_link() {
+        assert!(takes_app_link(OAuthProvider::Microsoft));
+        assert!(!takes_app_link(OAuthProvider::Google), "Google's desktop clients only take the loopback");
+        assert_eq!(url::Url::parse(APP_LINK).unwrap().scheme(), "app.uwumail");
     }
 
     #[test]

@@ -59,6 +59,9 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
             recognizer: crate::ocr::recognizer(),
         })
     })?;
+    // Signing in with Microsoft comes back through `app.uwumail://oauth` (CFBundleURLTypes in
+    // Info.ios.plist): iOS pauses the app while Safari is in front, so no loopback listener would answer.
+    engine.use_oauth_app_link(uwumail_core::oauth::APP_LINK);
     engine.start()?;
     // Shows up in Xcode's console when the app is run from there.
     println!("UwUMail: engine running");
@@ -89,7 +92,17 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
     }
 }
 
-pub fn on_run_event<R: Runtime>(_app: &AppHandle<R>, _event: RunEvent) {}
+/// Links UwUMail was opened with. Only the sign-in link counts: the engine hands it to the sign-in
+/// that is waiting, which checks `state` and its PKCE verifier, so a link from anywhere else changes
+/// nothing. The link itself is never logged, it carries the authorization code.
+pub fn on_run_event<R: Runtime>(app: &AppHandle<R>, event: RunEvent) {
+    let RunEvent::Opened { urls } = event else { return };
+    let Some(engine) = app.try_state::<Engine>() else { return };
+    for url in urls {
+        let accepted = engine.finish_sign_in(url.as_str());
+        println!("UwUMail: {}", if accepted { "sign-in link handed over" } else { "link ignored" });
+    }
+}
 
 /// Profiles, apps and shortcuts from a mail never reach iOS, whatever the mail
 /// claims the file is. Saving them to the Files app still works.

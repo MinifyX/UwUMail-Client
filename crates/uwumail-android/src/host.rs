@@ -30,7 +30,7 @@ const PUSH_SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(30);
 const PUSH_MAINTAIN_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Where the provider sends the browser after signing in. Registered in the OAuth apps too (docs/oauth.md).
-const OAUTH_REDIRECT: &str = "app.uwumail://oauth";
+const OAUTH_REDIRECT: &str = uwumail_core::oauth::APP_LINK;
 
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 static ENGINE: OnceLock<Engine> = OnceLock::new();
@@ -93,8 +93,8 @@ pub(crate) fn start_engine(data_dir: PathBuf, cache_dir: PathBuf) -> Result<()> 
         open_url,
         recognizer: Some(Arc::new(crate::ocr::MlKit)),
     })?;
-    // Signing in with Microsoft or Google comes back through this link (see AndroidManifest.xml),
-    // because a phone browser can't reach a listener on the phone's localhost.
+    // Signing in with Microsoft comes back through this link (see AndroidManifest.xml): the app may
+    // be paused while the browser is in front. Google only takes the loopback (oauth::takes_app_link).
     engine.use_oauth_app_link(OAUTH_REDIRECT);
     // Phones keep the last 90 days complete unless Settings say otherwise.
     let days =

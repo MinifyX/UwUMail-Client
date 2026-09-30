@@ -49,7 +49,8 @@ tied to an account.
 
 ## What works, and what iOS doesn't allow
 
-Working: the mail engine, accounts, IMAP and JMAP sync, sending, offline store
+Working: the mail engine, accounts, sign-in with Microsoft (Outlook.com and
+Microsoft 365), IMAP and JMAP sync, sending, offline store
 and search, the phone layout, swipe actions, Face ID as the app lock, haptics,
 notifications for mail that arrives while UwUMail runs, passwords in the iOS
 keychain, attachments saved into UwUMail's folder in the Files app.
@@ -68,8 +69,10 @@ Not there:
   ("On My iPhone → UwUMail").
 - **No printing.** The web view on the phone can't; that will come with the
   share sheet.
-- **No sign-in with Microsoft or Google.** The redirect back from the browser
-  needs a URL scheme the app doesn't register yet. Password accounts work.
+- **Google sign-in only with luck.** Microsoft comes back to the app through
+  `app.uwumail://oauth` ([oauth.md](oauth.md#phones)); Google only allows a
+  loopback redirect, and iOS pauses UwUMail while Safari is in front. Add Gmail
+  with an app password.
 - **No in-app updates.** A new version comes from wherever you installed the
   app, which with a free Apple ID you do every 7 days anyway.
 - **Profiles and apps from mail are refused.** `.mobileconfig`, `.ipa`,
