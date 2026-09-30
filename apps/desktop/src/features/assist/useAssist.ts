@@ -149,6 +149,8 @@ export function useAssistUsage(enabled = true) {
     queryKey: [...queryKeys.assistUsage, scope, currency],
     queryFn: () => backend().assistUsage(scope, 30, currency),
     enabled: enabled && Boolean(options),
+    // Every request changes it; the global cache time would show old numbers for a while.
+    staleTime: 0,
   });
 }
 
