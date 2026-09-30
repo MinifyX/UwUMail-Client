@@ -22,6 +22,7 @@ const base: SyncedSettings = {
   senderPictures: true,
   undoSendSeconds: 10,
   linkConfirm: true,
+  assistCurrency: "EUR",
   assistRefineEvents: false,
   detectEvents: true,
   nyuAnimations: "on",
@@ -119,6 +120,7 @@ describe("settings as keys", () => {
   it("covers every synced field of the defaults", () => {
     expect(Object.keys(settingsToValues(DEFAULT_SETTINGS)).sort()).toEqual(
       [
+        "assist.currency",
         "assist.refineEvents",
         "conversations",
         "darkImages",
