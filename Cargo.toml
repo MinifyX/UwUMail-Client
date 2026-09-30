@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/uwumail-core", "crates/uwumail-android", "crates/uwumail-ocr", "crates/uwumail-tnef", "apps/desktop/src-tauri", "apps/setup/src-tauri"]
+members = ["crates/uwumail-core", "crates/uwumail-android", "crates/uwumail-ocr", "crates/uwumail-tnef", "crates/uwumail-labels", "apps/desktop/src-tauri", "apps/setup/src-tauri"]
 
 [workspace.package]
 version = "0.6.0-beta.4"
@@ -15,6 +15,9 @@ uwumail-android = { path = "crates/uwumail-android" }
 uwumail-ocr = { path = "crates/uwumail-ocr" }
 # Decoder for winmail.dat, copied as it is from UwUMail Server (crates/uwumail-tnef there).
 uwumail-tnef = { path = "crates/uwumail-tnef" }
+# Labels without a model (rules, detectors, learned senders, classifier), copied as it is from
+# UwUMail Server (crates/uwumail-labels there), so device labels decide like the server.
+uwumail-labels = { path = "crates/uwumail-labels" }
 
 ammonia = "4"
 async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }

@@ -6158,6 +6158,7 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+ "uwumail-labels",
  "uwumail-tnef",
  "webpki-roots",
 ]
@@ -6187,6 +6188,15 @@ dependencies = [
  "uwumail-android",
  "uwumail-core",
  "uwumail-ocr",
+]
+
+[[package]]
+name = "uwumail-labels"
+version = "0.6.0-beta.4"
+dependencies = [
+ "mail-parser",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
