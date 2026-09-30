@@ -24,6 +24,7 @@ const base: SyncedSettings = {
   linkConfirm: true,
   assistRefineEvents: false,
   detectEvents: true,
+  nyuAnimations: "on",
   trustedSenders: [],
   senderAppearance: {},
   linkDomains: [],
@@ -43,6 +44,8 @@ describe("keys the server takes", () => {
     expect(isSyncable("listDensity", "compact")).toBe(false);
     expect(isSyncable("assist.refineEvents", true)).toBe(true);
     expect(isSyncable("assist.refineEvents", "on")).toBe(false);
+    expect(isSyncable("nyu.animations", "reduced")).toBe(true);
+    expect(isSyncable("nyu.animations", "wild")).toBe(false);
     expect(isSyncable("assistRefineEvents", true)).toBe(false);
   });
 
@@ -123,6 +126,7 @@ describe("settings as keys", () => {
         "linkConfirm",
         "mail.detectEvents",
         "mailAppearance",
+        "nyu.animations",
         "remoteImages",
         "senderPictures",
         "theme",
@@ -162,6 +166,8 @@ describe("settings as keys", () => {
     expect(settingsToValues({ ...base, assistRefineEvents: true })).toMatchObject({ "assist.refineEvents": true });
     expect(applyToSettings(base, { "assist.refineEvents": true })).toEqual({ assistRefineEvents: true });
     expect(applyToSettings(base, { "assist.refineEvents": false })).toEqual({});
+    expect(applyToSettings(base, { "nyu.animations": "off" })).toEqual({ nyuAnimations: "off" });
+    expect(settingsToValues({ ...base, nyuAnimations: "reduced" })).toMatchObject({ "nyu.animations": "reduced" });
   });
 
   it("keeps finding dates in mail under its namespaced key", () => {

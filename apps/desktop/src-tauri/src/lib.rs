@@ -231,10 +231,11 @@ async fn set_default_address_book(engine: State<'_, Engine>, address_book_id: St
     engine.set_default_address_book(&address_book_id).await
 }
 
-/// Every contact card (JSContact) of every account.
+/// Every contact card (JSContact) of every account. With `look: false` only from accounts whose
+/// address books are known, without searching for a CardDAV server.
 #[tauri::command]
-async fn list_contact_cards(engine: State<'_, Engine>) -> CommandResult<Vec<ContactCardEntry>> {
-    engine.contact_cards().await
+async fn list_contact_cards(engine: State<'_, Engine>, look: Option<bool>) -> CommandResult<Vec<ContactCardEntry>> {
+    if look == Some(false) { engine.known_contact_cards().await } else { engine.contact_cards().await }
 }
 
 #[tauri::command]

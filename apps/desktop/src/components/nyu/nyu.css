@@ -131,3 +131,151 @@
     transform: translate(170px, -120px) rotate(24deg) scale(0.7);
   }
 }
+
+/* ---- Nyu thinking while the AI works (NyuThinking.tsx) ---- */
+
+.nyu-think-bob {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: nyu-think-bob 1.6s ease-in-out infinite;
+}
+
+.nyu-thinking .nyu-eyes {
+  animation: nyu-think-eyes 3.2s ease-in-out infinite;
+}
+
+.nyu-think-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nyu-think-dot 1.2s ease-in-out infinite both;
+}
+
+@keyframes nyu-think-bob {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg) translateY(-3%);
+  }
+}
+
+@keyframes nyu-think-eyes {
+  0%,
+  30%,
+  100% {
+    transform: translate(10px, -8px);
+  }
+  45%,
+  70% {
+    transform: translate(-6px, -10px);
+  }
+}
+
+@keyframes nyu-think-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.15) translateY(-2px);
+  }
+}
+
+/* ---- Small idle movements in the empty-state scenes (scenes.tsx) ---- */
+
+.nyu-zzz,
+.nyu-steam,
+.nyu-sweep,
+.nyu-wonder {
+  transform-box: fill-box;
+}
+
+.nyu-zzz {
+  animation: nyu-zzz 3.2s ease-in-out infinite;
+}
+
+.nyu-steam {
+  animation: nyu-steam 2.8s ease-in-out infinite;
+}
+
+.nyu-sweep {
+  transform-origin: 0% 100%;
+  animation: nyu-sweep 3.6s ease-in-out infinite;
+}
+
+.nyu-wonder {
+  transform-origin: 50% 100%;
+  animation: nyu-wonder 2.6s ease-in-out infinite;
+}
+
+@keyframes nyu-zzz {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translate(0, 4px);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(4px, -4px);
+  }
+}
+
+@keyframes nyu-steam {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  40% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes nyu-sweep {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  30% {
+    transform: rotate(-12deg);
+  }
+  60% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes nyu-wonder {
+  0%,
+  60%,
+  100% {
+    transform: rotate(0);
+  }
+  70% {
+    transform: rotate(-12deg);
+  }
+  82% {
+    transform: rotate(10deg);
+  }
+}
+
+/* ---- Settings → Appearance → Nyu animations, resolved in level.ts ---- */
+
+/* Reduced: Nyu stays still everywhere (cameos show as still pictures). Off: no cameos at all. */
+[data-nyu="reduced"] .nyu-host,
+[data-nyu="reduced"] .nyu-host *,
+[data-nyu="off"] .nyu-host,
+[data-nyu="off"] .nyu-host * {
+  animation: none !important;
+}
+
+[data-nyu="reduced"] .nyu-flyer,
+[data-nyu="off"] .nyu-flyer {
+  display: none;
+}

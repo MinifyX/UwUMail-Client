@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { useApplyNyuLevel } from "@/components/nyu/level";
+import { NyuStage } from "@/components/nyu/NyuStage";
 import { Toaster } from "@/components/ui/Toaster";
 import { MailShell } from "@/features/shell/MailShell";
 import { Onboarding } from "@/features/onboarding/Onboarding";
@@ -18,6 +20,7 @@ export function App() {
   const onboarded = useSettings((s) => s.onboarded);
   const language = useSettings((s) => s.language);
   useApplyTheme();
+  useApplyNyuLevel();
   useMobileBridge();
   useUpdateSettings();
 
@@ -37,6 +40,7 @@ export function App() {
         <LinkStatus />
         <DeleteForeverQuestion />
         <FolderDialogs />
+        <NyuStage />
         <Toaster />
       </BehindLock>
       <AppLock />

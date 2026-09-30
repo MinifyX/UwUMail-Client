@@ -418,6 +418,11 @@ export class TauriBackend implements Backend {
     return entries.map((entry) => toContactRecord(entry.card, entry.accountId));
   }
 
+  async knownContacts() {
+    const entries = await call<{ accountId: string; card: JmapCard }[]>("list_contact_cards", { look: false });
+    return entries.map((entry) => toContactRecord(entry.card, entry.accountId));
+  }
+
   createContact(input: ContactInput) {
     return call<string>("create_contact_card", { addressBookId: input.addressBookId, card: cardFromInput(input) });
   }

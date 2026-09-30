@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
+import { isLateNight, NyuHat } from "./hats";
 import { Nyu, NYU, Paw, Sticker } from "./Nyu";
 
 // Every scene is drawn on a 320 × 220 canvas. Nyu sits at about 0.4 scale,
@@ -50,7 +51,7 @@ function Drop({ x, y }: { x: number; y: number }) {
   return <path d={`M${x} ${y} q-6 9 0 13 q6 -4 0 -13Z`} fill={NYU.tear} stroke={NYU.ink} strokeWidth={3} />;
 }
 
-/** Inbox zero: Nyu naps on a cushion next to a cup of tea. */
+/** Inbox zero: Nyu naps on a cushion next to a cup of tea; in its nightcap late at night. */
 function Inbox() {
   return (
     <>
@@ -64,7 +65,14 @@ function Inbox() {
         <path d="M268 146 q-6 -8 0 -16 q6 -8 0 -16" />
         <path d="M281 146 q-6 -8 0 -16 q6 -8 0 -16" />
       </g>
-      <Nyu mood="sleepy" x={146} y={116} scale={0.4} tilt={-4} />
+      <Nyu
+        mood="sleepy"
+        x={146}
+        y={116}
+        scale={0.4}
+        tilt={-4}
+        front={isLateNight(new Date()) ? <NyuHat hat="nightcap" /> : undefined}
+      />
       <Sticker edge={12}>
         <g fill="none" stroke={NYU.ink} className="nyu-zzz">
           <path d="M214 48 h12 l-12 12 h12" strokeWidth={4} />
@@ -81,11 +89,15 @@ function Search() {
     <>
       <Shadow cx={150} />
       <Sticker edge={EDGE}>
-        <path d="M214 118 L196 142" stroke={NYU.ink} strokeWidth={14} />
-        <circle cx="236" cy="90" r="30" fill={NYU.sky} {...S} />
-        <path d="M220 78 q7 -9 18 -9" fill="none" stroke={NYU.paper} strokeWidth={5} />
-        <path d="M44 42 q0 -15 15 -15 q15 0 15 13 q0 9 -12 13 v7" fill="none" stroke={NYU.ink} strokeWidth={7} />
-        <circle cx="62" cy="75" r="4.5" fill={NYU.ink} />
+        <g className="nyu-sweep">
+          <path d="M214 118 L196 142" stroke={NYU.ink} strokeWidth={14} />
+          <circle cx="236" cy="90" r="30" fill={NYU.sky} {...S} />
+          <path d="M220 78 q7 -9 18 -9" fill="none" stroke={NYU.paper} strokeWidth={5} />
+        </g>
+        <g className="nyu-wonder">
+          <path d="M44 42 q0 -15 15 -15 q15 0 15 13 q0 9 -12 13 v7" fill="none" stroke={NYU.ink} strokeWidth={7} />
+          <circle cx="62" cy="75" r="4.5" fill={NYU.ink} />
+        </g>
       </Sticker>
       <Nyu mood="puzzled" x={130} y={122} scale={0.4} tilt={-6} front={<Paw x={420} y={302} />} />
       <Sticker edge={EDGE}>
@@ -256,13 +268,19 @@ function Done() {
   );
 }
 
-/** A message failed to load: Nyu got tangled in a cable. */
+/** A message failed to load: Nyu got tangled in a cable and wonders how. */
 function LoadError() {
   const cable = "M34 190 C66 160 90 208 124 176 S206 118 210 160 S140 180 182 198 S246 194 256 176";
   return (
     <>
       <Shadow cx={150} />
-      <Nyu mood="sad" x={146} y={114} scale={0.4} tilt={6} />
+      <Nyu mood="puzzled" x={146} y={114} scale={0.4} tilt={6} />
+      <Sticker edge={12}>
+        <g className="nyu-wonder">
+          <path d="M238 26 q0 -13 13 -13 q13 0 13 11 q0 8 -10 11 v6" fill="none" stroke={NYU.ink} strokeWidth={6} />
+          <circle cx="254" cy="54" r="4" fill={NYU.ink} />
+        </g>
+      </Sticker>
       <Sticker edge={16}>
         <path d={cable} fill="none" stroke={NYU.ink} strokeWidth={12} />
       </Sticker>

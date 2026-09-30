@@ -1,7 +1,8 @@
 import clsx from "clsx";
 import { CalendarPlus, CalendarSearch, ChevronDown, ImageIcon, MapPin, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useId, useState } from "react";
-import { Button, IconButton } from "@/components/ui/Button";
+import { NyuThinking } from "@/components/nyu/NyuThinking";
+import { Button, IconButton, Spinner } from "@/components/ui/Button";
 import { useT } from "@/i18n";
 import type { DetectedEvent } from "@/lib/dates";
 import { toast } from "@/state/toasts";
@@ -90,7 +91,14 @@ export function EventsBar({ messageId, accountId, found, onAdd }: EventsBarProps
 
   const refine = found.canRefine && !found.refined && (
     <EstimateTip request={estimate} hint={t("dates.refineHint")}>
-      <Button size="sm" variant="ghost" icon={Sparkles} busy={found.refining} onClick={found.refine}>
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={Sparkles}
+        busy={found.refining}
+        busyIndicator={<NyuThinking size="sm" fallback={<Spinner />} />}
+        onClick={found.refine}
+      >
         {found.refineFailed ? t("dates.refineAgain") : t("dates.refine")}
       </Button>
     </EstimateTip>
