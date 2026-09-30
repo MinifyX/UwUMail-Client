@@ -1470,6 +1470,15 @@
       "currencies": {
         "EUR": "Euro (€)",
         "USD": "US-Dollar ($)"
+      },
+      "serverAssist": {
+        "title": "KI von deinem UwUMail-Server",
+        "use": "KI eines UwUMail-Servers für diese Postfächer nutzen",
+        "useOne": "KI von {{server}} für diese Postfächer nutzen",
+        "description": "Zusammenfassungen, Spam-Prüfungen, Termine und Labels für deine anderen Postfächer kommen dann von diesem Server statt von den hier eingerichteten Anbietern. Dafür wird der Inhalt der Mails (Absender, Betreff und Text) an diesen Server geschickt.",
+        "which": "Server",
+        "sentTitle": "Mails deiner anderen Postfächer gehen für die KI an {{server}}",
+        "sentBody": "Nur wenn die KI gefragt wird, und nur was sie braucht. Es gelten die Anbieter, Grenzen und die Nutzung dieses Servers; die hier eingerichteten Anbieter werden für diese Postfächer nicht genutzt, solange das an ist."
       }
     },
     "providers": {

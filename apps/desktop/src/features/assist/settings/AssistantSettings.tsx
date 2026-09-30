@@ -89,6 +89,9 @@ function ScopeSettings({ scope, name }: { scope: AssistScope; name: string }) {
           <p>{scope.kind === "device" ? t("assist.settings.deviceNoneBody") : t("assist.settings.noneBody")}</p>
         </Note>
       )}
+      {scope.kind === "device" && options.foreignServers.length > 0 && (
+        <ServerAssistSetting servers={options.foreignServers} />
+      )}
       <ChoiceSettings options={options} />
       <ProviderSettings options={options} />
       <UsageSettings />
@@ -103,6 +106,58 @@ function useSaveSettings() {
     backend()
       .updateAssistSettings(scope, patch)
       .catch((error: unknown) => toast(assistErrorText(error), "error"));
+}
+
+/**
+ * This device's other mailboxes may use a UwUMail server's assistant instead of providers set up
+ * here, when that server allows it. Off until chosen: their mail then goes to that server.
+ */
+export function ServerAssistSetting({ servers }: { servers: string[] }) {
+  const { t } = useT();
+  const { data: settings } = useAssistSettings();
+  const { data: accounts = [] } = useAccounts();
+  const saveSettings = useSaveSettings();
+  if (!settings) return null;
+  const nameOf = (accountId: string) => accounts.find((account) => account.id === accountId)?.email ?? accountId;
+  const chosen = settings.serverAssist;
+  return (
+    <Section title={t("assist.settings.serverAssist.title")}>
+      <Toggle
+        checked={chosen !== null}
+        onChange={(on) => void saveSettings({ serverAssist: on ? (servers[0] ?? null) : null })}
+        label={
+          servers.length === 1
+            ? t("assist.settings.serverAssist.useOne", { server: nameOf(servers[0]!) })
+            : t("assist.settings.serverAssist.use")
+        }
+        description={t("assist.settings.serverAssist.description")}
+      />
+      {chosen !== null && servers.length > 1 && (
+        <Field label={t("assist.settings.serverAssist.which")}>
+          {(id) => (
+            <Select
+              id={id}
+              value={chosen}
+              onChange={(event) => void saveSettings({ serverAssist: event.target.value })}
+            >
+              {!servers.includes(chosen) && <option value={chosen}>{nameOf(chosen)}</option>}
+              {servers.map((server) => (
+                <option key={server} value={server}>
+                  {nameOf(server)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      )}
+      {chosen !== null && (
+        <Note tone="warning">
+          <p className="font-semibold">{t("assist.settings.serverAssist.sentTitle", { server: nameOf(chosen) })}</p>
+          <p>{t("assist.settings.serverAssist.sentBody")}</p>
+        </Note>
+      )}
+    </Section>
+  );
 }
 
 /** Which provider and model: one for everything, and per feature where wanted. */

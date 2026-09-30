@@ -1470,6 +1470,15 @@
       "currencies": {
         "EUR": "Euro (€)",
         "USD": "US dollar ($)"
+      },
+      "serverAssist": {
+        "title": "AI from your UwUMail server",
+        "use": "Use a UwUMail server's AI for these mailboxes",
+        "useOne": "Use the AI of {{server}} for these mailboxes",
+        "description": "Summaries, spam checks, appointments and labels for your other mailboxes then come from that server instead of the providers set up here. The mail's content (sender, subject and text) is sent to that server for this.",
+        "which": "Server",
+        "sentTitle": "Mail of your other mailboxes goes to {{server}} for the AI",
+        "sentBody": "Only when the AI is asked, and only what it needs. That server's providers, limits and usage apply; the providers set up here are not used for these mailboxes while this is on."
       }
     },
     "providers": {
