@@ -282,6 +282,14 @@
     },
     "estimate": {
       "calibrated": "Tuned to your last calls ✧"
+    },
+    "spam": {
+      "certainty": {
+        "unsure": "not so sure (・_・;)",
+        "fairly": "pretty sure (・ω・)",
+        "sure": "totally sure ✿"
+      },
+      "modelVerdict": "The model thought “{{verdict}}”, but the server disagrees: sender verified, spam filter calm, you two go way back (｀・ω・´)"
     }
   },
   "dates": {

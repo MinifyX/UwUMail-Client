@@ -1325,7 +1325,13 @@
         "spam": "Höchstwahrscheinlich unerwünschte Werbung oder Massenmail.",
         "phishing": "Vermutlich ein Versuch, an dein Passwort, Geld oder deine Daten zu kommen. Klick keine Links an und öffne keine Anhänge."
       },
-      "confidence": "{{percent}} % sicher",
+      "confidenceLabel": "Wie sicher sich das Modell ist",
+      "certainty": {
+        "unsure": "unsicher",
+        "fairly": "ziemlich sicher",
+        "sure": "sicher"
+      },
+      "modelVerdict": "Das Modell meinte „{{verdict}}“, das widerspricht aber den Prüfungen des Servers (Absender bestätigt, Spamfilter unauffällig, schon öfter geschrieben).",
       "serverTitle": "Was der Server festgestellt hat",
       "auth": "Absenderprüfung",
       "authNone": "Nicht geprüft: Die Mail kam nicht von einem anderen Server.",

@@ -488,7 +488,13 @@ Nothing is ever sent by the assistant.
 **Spam check.** The model's verdict comes with local signals: the
 `Authentication-Results` added by the own server (SPF, DKIM, DMARC; only the
 one above the second `Received`), `X-Spam-Status`, how often the sender wrote
-before and ended in junk, whether they are in the contacts.
+before and ended in junk, whether they are in the contacts. The model gives
+its reasons before the verdict. When these facts clearly speak for the mail
+(known sender, DMARC passed, 0 points or less, not in junk), "spam" or
+"phishing" becomes "suspicious", at most half sure, and `modelVerdict` keeps
+what the model said (`null` otherwise; the same rule as UwUMail Server's).
+Schemas go out with their properties in the order of `required`, since
+providers make the model write them in that order.
 
 **Labels.** A label is a keyword on the mail (`messages.keywords`), set with
 JMAP `Email/set` or IMAP `STORE +FLAGS`, the latter only where the folder's

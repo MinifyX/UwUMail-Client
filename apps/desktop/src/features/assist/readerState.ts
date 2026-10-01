@@ -98,3 +98,12 @@ export function scoreShare(score: number | null, threshold: number | null): numb
 export function percent(confidence: number): number {
   return Math.round(Math.min(1, Math.max(0, confidence)) * 100);
 }
+
+export type Certainty = "unsure" | "fairly" | "sure";
+
+/** A model's confidence of 0 to 1 in words: its numbers are no real probabilities. */
+export function certainty(confidence: number): Certainty {
+  if (confidence < 0.6) return "unsure";
+  if (confidence < 0.85) return "fairly";
+  return "sure";
+}

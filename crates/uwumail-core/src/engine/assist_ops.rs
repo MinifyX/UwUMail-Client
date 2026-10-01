@@ -905,10 +905,12 @@ impl Engine {
             self.device().ask(self.assist_http()?, Feature::SpamCheck, &prompt, typical, None).await?;
         let (verdict, confidence, reasons) = validate::parse_spam(&answer.text)
             .ok_or_else(|| Error::assist("providerFailed", "The model's answer wasn't a verdict."))?;
+        let (verdict, confidence, model_verdict) = signals::held_to_facts(verdict, confidence, &signals);
         let mut out = local::answer_json(&effective, &answer);
         out.insert("verdict".into(), json!(verdict));
         out.insert("confidence".into(), json!(confidence));
         out.insert("reasons".into(), json!(reasons));
+        out.insert("modelVerdict".into(), json!(model_verdict));
         out.insert("signals".into(), serde_json::to_value(&signals)?);
         Ok(Value::Object(out))
     }

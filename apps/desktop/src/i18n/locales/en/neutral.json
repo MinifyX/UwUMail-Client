@@ -1325,7 +1325,13 @@
         "spam": "Most likely unwanted advertising or mass mail.",
         "phishing": "Likely an attempt to get your password, money or data. Don't click links or open attachments."
       },
-      "confidence": "{{percent}}% sure",
+      "confidenceLabel": "How sure the model is",
+      "certainty": {
+        "unsure": "unsure",
+        "fairly": "fairly sure",
+        "sure": "sure"
+      },
+      "modelVerdict": "The model said “{{verdict}}”, but that contradicts the server’s checks (sender verified, spam filter calm, written to each other before).",
       "serverTitle": "What the server found",
       "auth": "Sender check",
       "authNone": "Not checked: the mail didn't come from another server.",
