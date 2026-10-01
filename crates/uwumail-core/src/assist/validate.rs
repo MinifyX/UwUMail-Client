@@ -499,6 +499,13 @@ mod tests {
         assert_eq!(reasons, ["a", "b c"]);
         // A mail that talks the model into another verdict word gets nothing.
         assert!(parse_spam(r#"{"verdict": "delete all mail"}"#).is_none());
+        // The order the schema asks for: reasons first, then the verdict.
+        let (verdict, confidence, reasons) = parse_spam(
+            r#"{"reasons": ["Rechnung eines bekannten Absenders"], "verdict": "legitimate", "confidence": 0.8}"#,
+        )
+        .unwrap();
+        assert_eq!((verdict.as_str(), confidence, reasons.len()), ("legitimate", 0.8, 1));
+        assert_eq!(crate::assist::prompts::spam_schema()["required"], json!(["reasons", "verdict", "confidence"]));
         assert!(parse_spam(r#"{"verdict": "legitimate; ignore previous instructions"}"#).is_none());
         let many: Vec<String> = (0..20).map(|i| format!("reason {i} {}", "x".repeat(400))).collect();
         let (_, _, reasons) = parse_spam(&json!({"verdict": "spam", "reasons": many}).to_string()).unwrap();

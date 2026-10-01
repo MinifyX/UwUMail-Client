@@ -12,7 +12,7 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
-use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue, RETRY_AFTER};
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, RETRY_AFTER};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -455,6 +455,68 @@ fn message_list(request: &ChatRequest) -> Vec<Value> {
     request.messages.iter().map(|message| json!({ "role": message.role, "content": message.content })).collect()
 }
 
+/// A request body as JSON text, with every schema's `properties` in the order of its `required` list.
+///
+/// A provider that holds the model to a schema (OpenAI, llama.cpp, Ollama …) makes it write the
+/// keys in the order the schema lists them, and `serde_json` keeps an object's keys sorted. So
+/// `{"fits", "name", "reason"}` would make the model decide before it gives its reason, and propose
+/// `newLabels` before it judged the labels. The schemas list `required` in the order meant.
+fn ordered_json(value: &Value) -> String {
+    let mut out = String::new();
+    write_ordered(value, &mut out);
+    out
+}
+
+fn write_ordered(value: &Value, out: &mut String) {
+    match value {
+        Value::Array(items) => {
+            out.push('[');
+            for (index, item) in items.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                write_ordered(item, out);
+            }
+            out.push(']');
+        }
+        Value::Object(map) => {
+            let order: Vec<&str> = match (map.get("properties"), map.get("required")) {
+                (Some(Value::Object(_)), Some(Value::Array(required))) => {
+                    required.iter().filter_map(Value::as_str).collect()
+                }
+                _ => Vec::new(),
+            };
+            out.push('{');
+            for (index, (key, item)) in map.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                out.push_str(&Value::String(key.clone()).to_string());
+                out.push(':');
+                match item {
+                    Value::Object(properties) if key == "properties" && !order.is_empty() => {
+                        let mut keys: Vec<&String> = properties.keys().collect();
+                        keys.sort_by_key(|name| order.iter().position(|first| first == name).unwrap_or(usize::MAX));
+                        out.push('{');
+                        for (index, name) in keys.into_iter().enumerate() {
+                            if index > 0 {
+                                out.push(',');
+                            }
+                            out.push_str(&Value::String(name.clone()).to_string());
+                            out.push(':');
+                            write_ordered(&properties[name.as_str()], out);
+                        }
+                        out.push('}');
+                    }
+                    _ => write_ordered(item, out),
+                }
+            }
+            out.push('}');
+        }
+        scalar => out.push_str(&scalar.to_string()),
+    }
+}
+
 fn chat_body(kind: ProviderKind, request: &ChatRequest, stream: bool, schema: bool, stream_options: bool) -> Value {
     let mut messages = Vec::with_capacity(request.messages.len() + 1);
     if !request.system.is_empty() {
@@ -491,7 +553,7 @@ fn messages_body(request: &ChatRequest, stream: bool) -> Value {
             system.push_str("\n\n");
         }
         system.push_str(SCHEMA_INSTRUCTION);
-        system.push_str(&schema.schema.to_string());
+        system.push_str(&ordered_json(&schema.schema));
     }
     let mut body = json!({
         "model": request.model,
@@ -613,7 +675,12 @@ async fn chat_completions(
     loop {
         calls += 1;
         let body = chat_body(endpoint.kind, request, stream, schema, stream_options);
-        let post = http.post(&url).headers(headers.clone()).header(ACCEPT, accept(stream)).json(&body);
+        let post = http
+            .post(&url)
+            .headers(headers.clone())
+            .header(ACCEPT, accept(stream))
+            .header(CONTENT_TYPE, "application/json")
+            .body(ordered_json(&body));
         let response = match send(post).await? {
             Ok(response) => response,
             Err(refusal) => {
@@ -735,7 +802,8 @@ async fn messages(
         .post(format!("{base}/messages"))
         .headers(headers.clone())
         .header(ACCEPT, accept(stream))
-        .json(&messages_body(request, stream));
+        .header(CONTENT_TYPE, "application/json")
+        .body(ordered_json(&messages_body(request, stream)));
     let response = match send(post).await? {
         Ok(response) => response,
         Err(refusal) => return Err(refusal.into_error(key)),
@@ -1230,6 +1298,24 @@ mod tests {
         assert_eq!(body["response_format"]["json_schema"]["name"], "spam_check");
         assert_eq!(body["response_format"]["json_schema"]["strict"], true);
         assert_eq!(body["response_format"]["json_schema"]["schema"]["required"], json!(["spam"]));
+    }
+
+    #[test]
+    fn schemas_go_out_in_the_order_of_their_required_list() {
+        let at = |text: &str, key: &str| text.find(&format!("\"{key}\":")).unwrap();
+        let spam = json!({ "model": "m", "response_format": { "json_schema": { "schema": super::super::prompts::spam_schema() } } });
+        let text = ordered_json(&spam);
+        assert!(
+            at(&text, "reasons") < at(&text, "verdict") && at(&text, "verdict") < at(&text, "confidence"),
+            "{text}"
+        );
+        let labels = json!({ "schema": super::super::prompts::labels_schema(&["Rechnungen".into()]) });
+        let text = ordered_json(&labels);
+        assert!(at(&text, "name") < at(&text, "reason") && at(&text, "reason") < at(&text, "fits"), "{text}");
+        // The same JSON, only in another order.
+        assert_eq!(serde_json::from_str::<Value>(&ordered_json(&spam)).unwrap(), spam);
+        let plain = json!({ "b": [1, "x\"y", null, { "a": true }], "a": 1.5 });
+        assert_eq!(ordered_json(&plain), plain.to_string());
     }
 
     #[tokio::test]
