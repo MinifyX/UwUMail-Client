@@ -222,35 +222,39 @@ export function looksLikePdf(bytes: Uint8Array) {
 }
 
 /**
- * The attachment file server guesses types from content and falls back to
- * HTML, so a "PDF" could really be a web page. It is only shown in a frame
- * after the file proves to be a PDF and is served as one.
+ * The file may come labelled application/octet-stream (senders label PDFs that way), and the
+ * attachment file server guesses types from content and falls back to HTML, so a "PDF" could
+ * really be a web page. The frame therefore never gets the file itself: only when its bytes are
+ * a PDF does it get a copy of them typed application/pdf.
  */
 function PdfPreview({ file }: { file: AttachmentContent }) {
   const { t } = useT();
-  const [state, setState] = useState<{ url: string; ok: boolean }>();
+  const [state, setState] = useState<{ url: string; pdf: string | null }>();
   useEffect(() => {
     let cancelled = false;
+    let pdf: string | null = null;
     fetch(file.url)
-      .then(async (response) => {
-        const type = response.headers.get("content-type") ?? "";
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        return type.toLowerCase().startsWith("application/pdf") && looksLikePdf(bytes);
+      .then((response) => response.arrayBuffer())
+      .then((buffer) => {
+        const bytes = new Uint8Array(buffer);
+        if (cancelled || !looksLikePdf(bytes)) return;
+        pdf = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
       })
-      .catch(() => false)
-      .then((ok) => {
-        if (!cancelled) setState({ url: file.url, ok });
+      .catch(() => {})
+      .then(() => {
+        if (!cancelled) setState({ url: file.url, pdf });
       });
     return () => {
       cancelled = true;
+      if (pdf) URL.revokeObjectURL(pdf);
     };
   }, [file.url]);
 
   if (state?.url !== file.url) return <p className="p-6 text-[13px] text-muted">{t("attachment.loading")}</p>;
-  if (!state.ok) return <p className="p-6 text-center text-[13px] text-muted">{t("attachment.notPdf")}</p>;
+  if (!state.pdf) return <p className="p-6 text-center text-[13px] text-muted">{t("attachment.notPdf")}</p>;
   return (
     <div className="flex h-full flex-col">
-      <iframe src={file.url} title={file.filename} className="min-h-0 w-full flex-1 border-0 bg-white" />
+      <iframe src={state.pdf} title={file.filename} className="min-h-0 w-full flex-1 border-0 bg-white" />
       <p className="px-4 py-2 text-center text-[12px] text-muted">{t("attachment.pdfHint")}</p>
     </div>
   );
