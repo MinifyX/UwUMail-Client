@@ -109,6 +109,16 @@ describe("the demo's assistant", () => {
     expect(check.signals.sender).toMatchObject({ earlierMessages: 0, inContacts: false, firstSeen: null });
   });
 
+  it("lowers the model's spam to suspicious for a sale mail from a known shop", async () => {
+    const { assist, messages } = setup();
+    const mail = messages.find((message) => message.subject.startsWith("Pixel Days"))!;
+    const checking = assist.spamCheck(mail.id);
+    await vi.runAllTimersAsync();
+    const check = await checking;
+    expect(check).toMatchObject({ verdict: "suspicious", modelVerdict: "spam" });
+    expect(check.signals.sender.earlierMessages).toBeGreaterThan(0);
+  });
+
   it("uses an own provider once chosen, and forgets the choice with the provider", () => {
     const { assist } = setup();
     const own = assist.createProvider({ name: "Mein OpenAI", kind: "openai", apiKey: "sk-demo-1234" });

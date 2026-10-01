@@ -401,7 +401,9 @@ describe("the assistant's UI", () => {
     renderWith(<SpamCheckCard message={message()} inJunk={false} />);
     expect(await screen.findByText("Phishing")).toBeTruthy();
     expect(fake.assistSpamCheck).toHaveBeenCalledWith("e1", "en");
-    expect(screen.getAllByText("90% sure").length).toBeGreaterThan(0);
+    expect(screen.getByText("sure")).toBeTruthy();
+    expect(screen.queryByText(/%/)).toBeNull();
+    expect(screen.queryByText(/The model said/)).toBeNull();
     expect(screen.getByText("Asks to confirm a password through a link")).toBeTruthy();
     expect(screen.getByText("4.2 of 5.0 points")).toBeTruthy();
     expect(screen.getByText("First mail from this address")).toBeTruthy();
@@ -409,5 +411,23 @@ describe("the assistant's UI", () => {
     fireEvent.click(screen.getByRole("button", { name: "Spam" }));
     await waitFor(() => expect(fake.markSpam).toHaveBeenCalledWith(["e1"], true));
     expect(useAssistReader.getState().spamChecks.e1).toBeUndefined();
+  });
+
+  it("says how sure the model is in words and when the server lowered its verdict", async () => {
+    const result = await fake.assistSpamCheck("e1");
+    fake.assistSpamCheck.mockResolvedValueOnce({
+      ...result,
+      verdict: "suspicious",
+      modelVerdict: "spam",
+      confidence: 0.7,
+    });
+    act(() => useAssistReader.getState().showSpamCheck("e1"));
+    renderWith(<SpamCheckCard message={message()} inJunk={false} />);
+    expect(await screen.findByText("Suspicious")).toBeTruthy();
+    expect(screen.getByText("fairly sure")).toBeTruthy();
+    expect(screen.getByRole("meter", { name: "How sure the model is" }).getAttribute("aria-valuetext")).toBe(
+      "fairly sure",
+    );
+    expect(screen.getByText(/The model said “Spam”, but that contradicts the server’s checks/)).toBeTruthy();
   });
 });

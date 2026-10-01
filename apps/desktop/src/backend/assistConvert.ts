@@ -529,11 +529,14 @@ export function toSpamCheck(value: unknown, emailId: string): AssistSpamCheck {
   const auth = asObject(signals.authentication) ?? {};
   const sender = asObject(signals.sender) ?? {};
   const confidence = asNumber(raw.confidence) ?? 0;
+  // `modelVerdict` comes as null from the device's own check when nothing was lowered.
+  const modelVerdict = VERDICTS.find((verdict) => verdict === raw.modelVerdict);
   return {
     ...answerOf(raw),
     emailId: asString(raw.emailId) ?? emailId,
     verdict: VERDICTS.includes(raw.verdict as AssistVerdict) ? (raw.verdict as AssistVerdict) : "suspicious",
     confidence: Math.min(1, Math.max(0, confidence)),
+    ...(modelVerdict ? { modelVerdict } : {}),
     reasons: asStrings(raw.reasons).slice(0, 6),
     signals: {
       authentication: {

@@ -817,7 +817,9 @@ export class DemoAssist {
     const risky = message.attachments.some((attachment) => /\.(exe|scr|js|bat|cmd)$/i.test(attachment.filename));
     const pushy = /24 (stunden|hours)|sofort|immediately|konto gesperrt|verify/i.test(this.text(message));
     const newsletter = (message.keywords ?? []).some((keyword) => keyword.startsWith("newsletter"));
-    const verdict: AssistVerdict = risky ? "phishing" : pushy ? "suspicious" : "legitimate";
+    // A sale mail from a shop that wrote before: the model's "spam" the server lowers.
+    const advert = !risky && !pushy && earlier.length > 0 && /\d\s?%/.test(message.subject);
+    const verdict: AssistVerdict = risky ? "phishing" : pushy || advert ? "suspicious" : "legitimate";
     const reasons = risky
       ? de
         ? [
@@ -834,22 +836,31 @@ export class DemoAssist {
         ? de
           ? ["Die Mail drängt zu schnellem Handeln.", "Der Absender ist unbekannt."]
           : ["The mail pushes for quick action.", "The sender is unknown."]
-        : de
-          ? [
-              earlier.length > 0 ? "Der Absender hat schon öfter geschrieben." : "Der Inhalt passt zum Absender.",
-              newsletter ? "Ein üblicher Newsletter mit Abmeldelink." : "Keine Aufforderung zu Zahlungen oder Logins.",
-            ]
-          : [
-              earlier.length > 0 ? "The sender has written before." : "The content fits the sender.",
-              newsletter ? "An ordinary newsletter with an unsubscribe link." : "No request for payments or logins.",
-            ];
+        : advert
+          ? de
+            ? ["Reine Werbung mit Rabatten.", "Lockt mit zeitlich begrenzten Angeboten."]
+            : ["Pure advertising with discounts.", "Lures with limited-time offers."]
+          : de
+            ? [
+                earlier.length > 0 ? "Der Absender hat schon öfter geschrieben." : "Der Inhalt passt zum Absender.",
+                newsletter
+                  ? "Ein üblicher Newsletter mit Abmeldelink."
+                  : "Keine Aufforderung zu Zahlungen oder Logins.",
+              ]
+            : [
+                earlier.length > 0 ? "The sender has written before." : "The content fits the sender.",
+                newsletter ? "An ordinary newsletter with an unsubscribe link." : "No request for payments or logins.",
+              ];
     await thinking(900);
     const answer = this.answer("spamCheck", this.text(message), reasons.join(" "));
     return {
       ...answer,
       emailId,
       verdict,
-      confidence: risky ? 0.93 : pushy ? 0.64 : 0.86,
+      confidence: risky ? 0.93 : pushy ? 0.64 : advert ? 0.78 : 0.86,
+      // Like the server: the model calls the advert spam, but a known sender whose mail passed
+      // every check is only "suspicious".
+      ...(advert ? { modelVerdict: "spam" as const } : {}),
       reasons,
       signals: {
         authentication: risky

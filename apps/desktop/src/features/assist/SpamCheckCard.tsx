@@ -26,7 +26,7 @@ import { formatLongDate } from "@/lib/format";
 import { useMessageActions } from "@/lib/queries";
 import { useUi } from "@/state/ui";
 import { Thinking } from "./ComposeAssist";
-import { authTone, percent, scoreShare, useAssistReader, type SignalTone } from "./readerState";
+import { authTone, certainty, percent, scoreShare, useAssistReader, type SignalTone } from "./readerState";
 import { assistErrorDetail, assistErrorText, isAbort, providerLabel } from "./useAssist";
 
 const VERDICT_LOOK: Record<AssistVerdict, { icon: LucideIcon; className: string; bar: string }> = {
@@ -168,6 +168,7 @@ function Verdict({ result }: { result: AssistSpamCheck }) {
   const look = VERDICT_LOOK[result.verdict];
   const Icon = look.icon;
   const share = percent(result.confidence);
+  const sure = t(`assist.spam.certainty.${certainty(result.confidence)}`);
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-center gap-3">
@@ -187,14 +188,20 @@ function Verdict({ result }: { result: AssistSpamCheck }) {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={share}
-            aria-label={t("assist.spam.confidence", { percent: share })}
+            aria-valuetext={sure}
+            aria-label={t("assist.spam.confidenceLabel")}
           >
             <span className={clsx("block h-full rounded-full", look.bar)} style={{ width: `${share}%` }} />
           </span>
-          {t("assist.spam.confidence", { percent: share })}
+          {sure}
         </span>
       </div>
       <p className="text-[12.5px] text-muted">{t(`assist.spam.verdictHint.${result.verdict}`)}</p>
+      {result.modelVerdict && result.modelVerdict !== result.verdict && (
+        <p className="rounded-xl bg-surface px-3 py-2 text-[12.5px] text-muted">
+          {t("assist.spam.modelVerdict", { verdict: t(`assist.spam.verdict.${result.modelVerdict}`) })}
+        </p>
+      )}
       {result.reasons.length > 0 && (
         <ul className="selectable flex flex-col gap-1 text-[13.5px]">
           {result.reasons.map((reason, index) => (

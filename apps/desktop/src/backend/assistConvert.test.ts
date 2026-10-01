@@ -9,6 +9,7 @@ import {
   toAssistLabels,
   toAssistScopes,
   toEvents,
+  toSpamCheck,
 } from "./assistConvert";
 import { engineError } from "./tauri";
 import { LABEL_DEFAULTS } from "@/features/assist/labels";
@@ -146,6 +147,17 @@ describe("the assistant's answers from the engine", () => {
       ["Zwei", null],
     ]);
     expect(suggestion).toMatchObject({ emailId: "e1", providerName: "Mistral" });
+  });
+
+  it("keeps the model's own spam verdict only when it was lowered", () => {
+    expect(toSpamCheck({ verdict: "suspicious", modelVerdict: "spam" }, "e1")).toMatchObject({
+      verdict: "suspicious",
+      modelVerdict: "spam",
+    });
+    expect(toSpamCheck({ verdict: "suspicious", modelVerdict: "phishing" }, "e1").modelVerdict).toBe("phishing");
+    for (const modelVerdict of [null, undefined, "scam"]) {
+      expect(toSpamCheck({ verdict: "suspicious", modelVerdict }, "e1")).not.toHaveProperty("modelVerdict");
+    }
   });
 
   it("drops events without a start, links that aren't https and more than the limit", () => {
