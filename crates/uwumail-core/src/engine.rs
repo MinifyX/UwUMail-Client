@@ -1742,7 +1742,7 @@ impl Inner {
         let holder = self.secret_holder(&account.id);
         match self.secrets.get(&holder)? {
             Secret::Password { password } => Ok(Credential::Password(password)),
-            Secret::OAuth { refresh_token } => {
+            Secret::OAuth { .. } => {
                 let provider =
                     if account.auth == AuthKind::Microsoft { OAuthProvider::Microsoft } else { OAuthProvider::Google };
                 // Every token goes to these two servers; an account saved before this check must not
@@ -1754,7 +1754,14 @@ impl Inner {
                 {
                     return Ok(Credential::Token(token.clone()));
                 }
-                let fresh = oauth::refresh(&self.http, provider, &refresh_token).await?;
+                // Read under the lock: a refresh that finished while this waited (mail of a shared
+                // mailbox, a Graph token) may have replaced the refresh token, and Microsoft may
+                // refuse the old one.
+                let Secret::OAuth { refresh_token } = self.secrets.get(&holder)? else {
+                    return Err(Error::auth("No saved sign-in for this mailbox."));
+                };
+                let endpoint = self.cloud.endpoints.lock().unwrap().token_endpoint(provider)?;
+                let fresh = oauth::refresh_at(&endpoint, &refresh_token, oauth::mail_scopes(provider), false).await?;
                 if let Some(rotated) = &fresh.refresh_token
                     && *rotated != refresh_token
                 {

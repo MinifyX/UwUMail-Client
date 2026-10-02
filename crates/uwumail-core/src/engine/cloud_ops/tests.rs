@@ -294,7 +294,7 @@ async fn shared_mailboxes_use_their_own_path() {
     assert_eq!(created.json()["emailAddresses"], json!([{ "address": "neu@example.org", "name": "neu@example.org" }]));
     let changed = seen.iter().find(|r| r.method == "PATCH").unwrap();
     assert_eq!(changed.json()["emailAddresses"][0]["address"], "mina@example.net");
-    assert_eq!(changed.json()["birthday"], "1990-05-01T11:59:00Z", "the rest stays");
+    assert_eq!(changed.json().as_object().unwrap().len(), 1, "only what changed: {}", changed.body);
     assert!(seen.iter().any(|r| r.method == "DELETE" && r.path().ends_with("/contacts/C-1")));
 }
 
@@ -447,8 +447,13 @@ async fn google_calendars_and_contacts() {
 
     let cards = s.engine.contact_cards().await.unwrap();
     assert_eq!(cards[0].card["id"], "m:people/c1");
+    // The full name alone doesn't change Google's structured name: nothing to send.
     let mut patch = Map::new();
     patch.insert("name/full".into(), json!("Mina S."));
+    s.engine.update_contact_card("m:people/c1", patch).await.unwrap();
+    assert_eq!(s.server.count("PATCH", "/people/"), 0);
+    let mut patch = Map::new();
+    patch.insert("emails/e1/address".into(), json!("mina@example.net"));
     s.engine.update_contact_card("m:people/c1", patch).await.unwrap();
     assert_eq!(
         s.engine.create_contact_card("m:contacts", json!({ "name": { "full": "Otto" } })).await.unwrap(),
@@ -471,8 +476,9 @@ async fn google_calendars_and_contacts() {
     assert_eq!(deleted.path(), "/gcal/calendars/mini%40example.com/events/yoga", "the whole series");
     let updated = seen.iter().find(|r| r.method == "PATCH" && r.path().starts_with("/people/")).unwrap();
     assert_eq!(updated.json()["etag"], "e1");
-    assert_eq!(updated.json()["names"], json!([{ "givenName": "Mina", "middleName": "", "familyName": "Sommer" }]));
-    assert!(updated.query("updatePersonFields").unwrap().contains("emailAddresses"));
+    assert_eq!(updated.json()["emailAddresses"], json!([{ "value": "mina@example.net", "type": "home" }]));
+    assert!(updated.json().get("names").is_none(), "only what changed");
+    assert_eq!(updated.query("updatePersonFields").as_deref(), Some("emailAddresses"));
     assert_eq!(s.server.count("POST", "/token"), 1, "one token for calendar and contacts");
 }
 
@@ -514,4 +520,78 @@ async fn nested_shared_mailboxes_use_their_accounts_sign_in() {
         matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token } if refresh_token.starts_with("refresh-") && refresh_token != "refresh-0")
     );
     assert!(s.secrets.get("t").is_err());
+}
+
+#[tokio::test]
+async fn a_shared_mailbox_graph_refuses_is_never_the_persons_own() {
+    let tokens = Arc::new(AtomicUsize::new(0));
+    let s = setup(AuthKind::Microsoft, OWN, move |request: &Request| match request.path() {
+        "/token" => token_reply(request, &tokens, None),
+        "/graph/me" => Reply::json(json!({ "mail": OWN, "userPrincipalName": OWN })),
+        _ => Reply::status(403, json!({ "error": { "code": "ErrorAccessDenied", "message": "Access is denied." } })),
+    })
+    .await;
+    let store = &s.engine.inner.store;
+    let mut team = store.account("m").unwrap();
+    team.id = "t".into();
+    team.email = SHARED.into();
+    team.username = SHARED.into();
+    store.insert_account(&team).unwrap();
+    store.set_account_parent("t", Some("m")).unwrap();
+
+    let error = s.engine.inner.graph_base(&team).await.unwrap_err();
+    assert_eq!(error.code, ErrorCode::NotSupported, "{error:?}");
+    // A mailbox of the person's own under an address Graph doesn't list is still theirs.
+    let mut alias = store.account("m").unwrap();
+    alias.email = "alex.alias@example.com".into();
+    assert_eq!(s.engine.inner.graph_base(&alias).await.unwrap(), "me");
+    assert!(!s.server.seen().iter().any(|r| r.path().starts_with("/graph/me/")), "nothing of the person's own");
+}
+
+#[tokio::test]
+async fn meetings_do_not_move_between_microsoft_calendars() {
+    let tokens = Arc::new(AtomicUsize::new(0));
+    let s = setup(AuthKind::Microsoft, OWN, move |request: &Request| match (request.method.as_str(), request.path()) {
+        (_, "/token") => token_reply(request, &tokens, None),
+        (_, "/graph/me") => Reply::json(json!({ "mail": OWN, "userPrincipalName": OWN })),
+        ("GET", "/graph/me/calendars") => Reply::json(json!({ "value": [
+            { "id": "CAL-1", "name": "Calendar", "isDefaultCalendar": true, "canEdit": true },
+            { "id": "CAL-2", "name": "Other", "canEdit": true, "isRemovable": true }
+        ] })),
+        ("GET", "/graph/me/calendars/CAL-1/events/MEET-1") => {
+            let mut meeting =
+                graph_event("MEET-1", "singleInstance", "2026-09-24T16:00:00", "2026-09-24T17:00:00", None);
+            meeting["attendees"] = json!([{ "emailAddress": { "address": "kim@example.com" }, "type": "required" }]);
+            Reply::json(meeting)
+        }
+        _ => Reply::empty(),
+    })
+    .await;
+    let error = s.engine.update_event("m:CAL-1/MEET-1", input("m:CAL-2", "Yoga"), None).await.unwrap_err();
+    assert_eq!(error.code, ErrorCode::NotSupported);
+    let seen = s.server.seen();
+    assert!(seen.iter().all(|r| r.method == "GET" || r.path() == "/token"), "nothing created or deleted");
+    let read = seen.iter().find(|r| r.path().ends_with("/events/MEET-1")).unwrap();
+    assert!(read.query("$select").unwrap().contains("attendees"));
+}
+
+#[tokio::test]
+async fn a_refresh_waiting_for_another_uses_the_newest_refresh_token() {
+    let tokens = Arc::new(AtomicUsize::new(0));
+    let s = setup(AuthKind::Microsoft, OWN, move |request: &Request| token_reply(request, &tokens, None)).await;
+    let record = s.engine.inner.store.account("m").unwrap();
+    // Another refresh holds the lock and rotates the refresh token meanwhile.
+    let busy = s.engine.inner.tokens.lock().await;
+    let secrets = s.secrets.clone();
+    let other = async move {
+        tokio::task::yield_now().await;
+        secrets.set("m", &Secret::OAuth { refresh_token: "refresh-rotated".into() }).unwrap();
+        drop(busy);
+    };
+    let (credential, ()) = tokio::join!(s.engine.inner.credential(&record), other);
+    assert!(matches!(credential.unwrap(), Credential::Token(_)));
+    let refreshes: Vec<Request> = s.server.seen().into_iter().filter(|r| r.path() == "/token").collect();
+    assert_eq!(refreshes.len(), 1);
+    assert_eq!(refreshes[0].form("refresh_token").as_deref(), Some("refresh-rotated"));
+    assert_eq!(refreshes[0].form("scope").as_deref(), Some(oauth::MICROSOFT_MAIL_SCOPES));
 }

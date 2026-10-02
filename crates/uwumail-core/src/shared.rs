@@ -94,8 +94,8 @@ pub fn parse_answer(body: &[u8]) -> Option<Vec<FoundMailbox>> {
             continue;
         }
         let Some(email) = text("SmtpAddress")
-            .filter(|a| is_address(a))
-            .or_else(|| text("OwnerSmtpAddress").filter(|a| is_address(a)))
+            .filter(|a| is_mailbox_address(a))
+            .or_else(|| text("OwnerSmtpAddress").filter(|a| is_mailbox_address(a)))
         else {
             continue;
         };
@@ -120,6 +120,14 @@ fn collect<'a>(element: &'a Element, into: &mut Vec<&'a Element>) {
 
 fn is_address(text: &str) -> bool {
     crate::autoconfig::split_email(text).is_ok()
+}
+
+/// An address a shared mailbox can have: a plain `local@domain`, nothing that could end a header
+/// or command line or quote its way into one (it becomes an IMAP user, a sender, a Graph path).
+pub fn is_mailbox_address(text: &str) -> bool {
+    is_address(text)
+        && text.len() <= 320
+        && !text.chars().any(|c| c.is_control() || c.is_whitespace() || "<>\"(),;:\\[]".contains(c))
 }
 
 fn local_part(email: &str) -> String {
@@ -357,6 +365,18 @@ mod tests {
 
         assert_eq!(token_owner("opaque-token"), TokenOwner::default());
         assert_eq!(token_owner("a.!!!.c"), TokenOwner::default());
+    }
+
+    #[test]
+    fn mailbox_addresses_are_plain() {
+        assert!(is_mailbox_address("team.vertrieb+x@contoso.example"));
+        for odd in ["a b@contoso.example", "a\r\nb@contoso.example", "\"a\"@contoso.example", "a<b>@contoso.example"] {
+            assert!(!is_mailbox_address(odd), "{odd:?}");
+        }
+        let odd = ANSWER.replace("vertrieb@contoso.example</SmtpAddress>", "vert rieb@contoso.example</SmtpAddress>");
+        let found = parse_answer(odd.as_bytes()).unwrap();
+        // The owner's address stands in where the mailbox's own isn't usable.
+        assert_eq!(found[0].email, "vertrieb@contoso.example");
     }
 
     #[test]

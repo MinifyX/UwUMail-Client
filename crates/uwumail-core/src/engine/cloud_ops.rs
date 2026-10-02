@@ -180,7 +180,7 @@ impl Inner {
         for _ in 0..2 {
             let token = self.cloud_token(account, call.api.token(), refused.as_deref()).await?;
             let endpoints = self.cloud.endpoints.lock().unwrap().clone();
-            match cloud::send(&self.http, &endpoints, &token.token, call).await? {
+            match cloud::send(&endpoints, &token.token, call).await? {
                 Answer::Done(value) => return Ok(value),
                 Answer::Unauthorized => refused = Some(token.token),
             }
@@ -250,6 +250,12 @@ impl Inner {
                 .filter_map(Value::as_str)
                 .map(|address| address.split_once(':').map_or(address, |(_, a)| a).to_lowercase()),
         );
+        // A mailbox opened with someone else's sign-in (nested under their account, or noted as
+        // theirs) is never `me`: that would show and change the person's own calendar under the
+        // shared mailbox's name.
+        let link = self.store.account_link(&account.id).unwrap_or_default();
+        let opened_by_other = self.cloud_holder(&account.id) != account.id
+            || link.signed_in_as().is_some_and(|person| !person.eq_ignore_ascii_case(&wanted));
         let base = if own.contains(&wanted) {
             "me".to_string()
         } else {
@@ -261,6 +267,11 @@ impl Inner {
                 Ok(_) => shared,
                 Err(error) if matches!(error.code, ErrorCode::ConnectionFailed | ErrorCode::SignInAgain) => {
                     return Err(error);
+                }
+                Err(_) if opened_by_other => {
+                    return Err(Error::not_supported(
+                        "Microsoft doesn't open this shared mailbox's calendar and contacts for you.",
+                    ));
                 }
                 // Another address of the person's own (an alias Graph doesn't list).
                 Err(_) => "me".to_string(),
@@ -711,14 +722,21 @@ impl Inner {
         match source {
             calendar::Source::Graph { base } => {
                 let path = format!("{base}/calendars/{}/events/{}", segment(&calendar_id), segment(&event_id));
+                let select =
+                    if moving { format!("{},attendees", graph_event_select()) } else { graph_event_select().into() };
                 let read = self
                     .cloud_call(
                         &account,
-                        &Call::get(Api::Graph, path.clone())
-                            .query("$select", graph_event_select())
-                            .prefer(graph_cal::PREFER),
+                        &Call::get(Api::Graph, path.clone()).query("$select", select).prefer(graph_cal::PREFER),
                     )
                     .await?;
+                // A move is a copy and a delete at Graph: for a meeting the delete would cancel it
+                // for everyone invited, and the copy would invite no one.
+                if moving && read.get("attendees").and_then(Value::as_array).is_some_and(|list| !list.is_empty()) {
+                    return Err(Error::not_supported(
+                        "Meetings with invited people can't move to another calendar at Microsoft. Move it in Outlook.",
+                    ));
+                }
                 let current =
                     graph_cal::event(&read).ok_or_else(|| Error::not_found("This event no longer exists."))?;
                 let patch = jscal::patch_for(&current.event, input, occurrence_start)?;
@@ -889,6 +907,16 @@ impl Inner {
         source: &contacts::Source,
         remote: &str,
     ) -> Result<(RemoteCard, Option<String>)> {
+        self.cloud_card_raw(account_id, source, remote).await.map(|(card, etag, _)| (card, etag))
+    }
+
+    /// [`Self::cloud_card`], and the contact as the provider sent it.
+    async fn cloud_card_raw(
+        &self,
+        account_id: &str,
+        source: &contacts::Source,
+        remote: &str,
+    ) -> Result<(RemoteCard, Option<String>, Value)> {
         let account = self.store.account(account_id)?;
         match source {
             contacts::Source::Graph { base } => {
@@ -902,7 +930,7 @@ impl Inner {
                 let book_remote = folder
                     .filter(|folder| books.iter().any(|book| book.remote == *folder))
                     .unwrap_or_else(|| DEFAULT_BOOK.to_string());
-                Ok((RemoteCard { remote: id, book_remote, card }, None))
+                Ok((RemoteCard { remote: id, book_remote, card }, None, read))
             }
             _ => {
                 let resource = cloud_cards::google_resource(remote)
@@ -915,7 +943,11 @@ impl Inner {
                     .await?;
                 let (resource, etag, card) = cloud_cards::google_card(&read)
                     .ok_or_else(|| Error::not_found("This contact no longer exists."))?;
-                Ok((RemoteCard { remote: resource, book_remote: DEFAULT_BOOK.to_string(), card }, etag))
+                // The path of the update is built from it: only a resource name of the shape asked for.
+                if cloud_cards::google_resource(&resource) != Some(resource.as_str()) {
+                    return Err(Error::connection("Google's answer isn't readable."));
+                }
+                Ok((RemoteCard { remote: resource, book_remote: DEFAULT_BOOK.to_string(), card }, etag, read))
             }
         }
     }
@@ -964,34 +996,48 @@ impl Inner {
         target: Option<&BookEntry>,
     ) -> Result<()> {
         let account = self.store.account(account_id)?;
-        let (current, etag) = self.cloud_card(account_id, source, remote).await?;
+        let (current, etag, raw) = self.cloud_card_raw(account_id, source, remote).await?;
         let mut card = Value::Object(current.card.clone());
         jscal::apply_patch(&mut card, patch)?;
         let Value::Object(card) = card else {
             return Err(Error::internal("The contact isn't an object any more."));
         };
+        // Only the fields that changed go back; the provider keeps everything else of the contact.
         match source {
             contacts::Source::Graph { base } => {
                 let path = format!("{base}/contacts/{}", segment(remote));
                 match target.filter(|target| target.remote != current.book_remote) {
                     Some(target) => {
-                        // Graph can't move contacts between folders: a copy there, then away here.
-                        self.cloud_create_card(account_id, source, target, &card).await?;
+                        // Graph can't move contacts between folders: a copy of all of it there,
+                        // then away here.
+                        let folder = if target.remote == DEFAULT_BOOK {
+                            format!("{base}/contacts")
+                        } else {
+                            format!("{base}/contactFolders/{}/contacts", segment(&target.remote))
+                        };
+                        let copy = cloud_cards::graph_copy(&raw, &current.card, &card);
+                        self.cloud_call(&account, &Call::new(Api::Graph, Method::POST, folder).body(copy)).await?;
                         self.cloud_call(&account, &Call::new(Api::Graph, Method::DELETE, path)).await?;
                     }
                     None => {
-                        let call = Call::new(Api::Graph, Method::PATCH, path).body(cloud_cards::card_to_graph(&card));
-                        self.cloud_call(&account, &call).await?;
+                        let changes = cloud_cards::graph_changes(&raw, &current.card, &card);
+                        if !changes.is_empty() {
+                            let call = Call::new(Api::Graph, Method::PATCH, path).body(Value::Object(changes));
+                            self.cloud_call(&account, &call).await?;
+                        }
                     }
                 }
             }
             _ => {
-                let mut body = cloud_cards::card_to_google(&card);
-                body["etag"] = json!(etag.unwrap_or_default());
+                let (mut body, fields) = cloud_cards::google_changes(&raw, &current.card, &card);
+                if fields.is_empty() {
+                    return Ok(());
+                }
+                body.insert("etag".into(), json!(etag.unwrap_or_default()));
                 let call = Call::new(Api::GooglePeople, Method::PATCH, format!("{}:updateContact", current.remote))
-                    .query("updatePersonFields", cloud_cards::GOOGLE_UPDATE_FIELDS)
+                    .query("updatePersonFields", fields.join(","))
                     .query("personFields", "metadata")
-                    .body(body);
+                    .body(Value::Object(body));
                 self.cloud_call(&account, &call).await?;
             }
         }

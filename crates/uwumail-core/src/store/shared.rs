@@ -65,10 +65,13 @@ pub fn shared_by_sign_in(accounts: &[(AccountRecord, AccountLink)]) -> Vec<(Stri
         if person.eq_ignore_ascii_case(&record.email) || has_children(&record.id) {
             continue;
         }
-        let parent = accounts
-            .iter()
-            .filter(microsoft_top)
-            .find(|(other, _)| other.id != record.id && other.email.eq_ignore_ascii_case(person));
+        // The account's own sign-in must be that person's too, where it is known: the shared
+        // mailbox loses its own copy of the sign-in and uses the account's from then on.
+        let parent = accounts.iter().filter(microsoft_top).find(|(other, other_link)| {
+            other.id != record.id
+                && other.email.eq_ignore_ascii_case(person)
+                && other_link.signed_in_as().is_none_or(|own| own.eq_ignore_ascii_case(person))
+        });
         if let Some((parent, _)) = parent {
             pairs.push((record.id.clone(), parent.id.clone()));
         }
@@ -260,6 +263,13 @@ mod tests {
         // A Google or password account never takes a shared mailbox.
         let google = (record("alex", "alex@contoso.example", AuthKind::Google), AccountLink::default());
         assert!(shared_by_sign_in(&[google, team.clone()]).is_empty());
+        // An account with that address whose own sign-in is someone else's (Kim opens Alex's
+        // mailbox) doesn't take it: its token isn't Alex's.
+        let kims = (
+            record("alex", "alex@contoso.example", AuthKind::Microsoft),
+            AccountLink { sign_in_as: Some("kim@contoso.example".into()), ..Default::default() },
+        );
+        assert!(shared_by_sign_in(&[kims, team.clone()]).is_empty());
         // A mailbox that already has shared ones under it stays where it is.
         let child = (
             record("c", "c@contoso.example", AuthKind::Microsoft),

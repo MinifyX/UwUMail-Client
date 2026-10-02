@@ -446,7 +446,7 @@ pub fn event(value: &Value) -> Option<GraphEvent> {
             }
             match own_zone {
                 Some(zone) => jscal::in_zone(time, zone).date(),
-                None if naive.hour() >= 12 => naive.date() + TimeDelta::days(1),
+                None if naive.hour() >= 12 => naive.date().succ_opt().unwrap_or(naive.date()),
                 None => naive.date(),
             }
         };

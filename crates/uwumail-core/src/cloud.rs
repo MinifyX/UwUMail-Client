@@ -182,9 +182,26 @@ pub enum Answer {
     Unauthorized,
 }
 
+/// The client for the APIs: no redirects, so the bearer token only ever goes to the address
+/// [`Call::url`] checked (a redirect would carry it on, or replay a change elsewhere).
+fn client() -> Result<reqwest::Client> {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client.clone());
+    }
+    let client = crate::tls::http_client()?
+        .user_agent(concat!("UwUMail/", env!("CARGO_PKG_VERSION")))
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| Error::internal(format!("HTTP client setup failed: {e}")))?;
+    Ok(CLIENT.get_or_init(|| client).clone())
+}
+
 /// Sends one call with a token.
-pub async fn send(http: &reqwest::Client, endpoints: &Endpoints, token: &str, call: &Call) -> Result<Answer> {
+pub async fn send(endpoints: &Endpoints, token: &str, call: &Call) -> Result<Answer> {
     let url = call.url(endpoints)?;
+    let http = client()?;
     let mut request = http.request(call.method.clone(), url).bearer_auth(token).header("Accept", "application/json");
     if let Some(prefer) = call.prefer {
         request = request.header("Prefer", prefer);

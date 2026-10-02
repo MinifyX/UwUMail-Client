@@ -26,9 +26,6 @@ struct ProviderConfig {
     client_secret: Option<&'static str>,
     authorize_url: &'static str,
     token_url: &'static str,
-    /// What the token for mail is asked with, when that isn't everything: Microsoft gives one
-    /// token per resource (Outlook for IMAP/SMTP, Graph for calendars and contacts).
-    mail_scopes: Option<&'static str>,
     redirect_host: &'static str,
     extra: &'static [(&'static str, &'static str)],
 }
@@ -105,7 +102,6 @@ fn config(provider: OAuthProvider) -> Result<ProviderConfig> {
             client_secret: None,
             authorize_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
             token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-            mail_scopes: Some(MICROSOFT_MAIL_SCOPES),
             redirect_host: "localhost",
             extra: &[("prompt", "select_account")],
         },
@@ -114,7 +110,6 @@ fn config(provider: OAuthProvider) -> Result<ProviderConfig> {
             client_secret: option_env!("UWUMAIL_GOOGLE_CLIENT_SECRET"),
             authorize_url: "https://accounts.google.com/o/oauth2/v2/auth",
             token_url: "https://oauth2.googleapis.com/token",
-            mail_scopes: None,
             redirect_host: "127.0.0.1",
             extra: &[("access_type", "offline"), ("prompt", "consent")],
         },
@@ -465,11 +460,19 @@ pub fn token_endpoint(provider: OAuthProvider) -> Result<TokenEndpoint> {
     })
 }
 
+/// What a refresh for mail (IMAP and SMTP) asks for, when that isn't everything: Microsoft gives one
+/// token per resource (Outlook for IMAP/SMTP, Graph for calendars and contacts), Google one for all.
+pub fn mail_scopes(provider: OAuthProvider) -> Option<&'static str> {
+    match provider {
+        OAuthProvider::Microsoft => Some(MICROSOFT_MAIL_SCOPES),
+        OAuthProvider::Google => None,
+    }
+}
+
 /// A fresh access token for mail (IMAP and SMTP).
 pub async fn refresh(_http: &reqwest::Client, provider: OAuthProvider, refresh_token: &str) -> Result<Tokens> {
-    let config = config(provider)?;
     let endpoint = token_endpoint(provider)?;
-    refresh_at(&endpoint, refresh_token, config.mail_scopes, false).await
+    refresh_at(&endpoint, refresh_token, mail_scopes(provider), false).await
 }
 
 /// A fresh access token for `scope` (all the sign-in allowed when `None`). With `api`, a refresh

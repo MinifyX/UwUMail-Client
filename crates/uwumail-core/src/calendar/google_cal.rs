@@ -45,7 +45,10 @@ pub fn calendar(value: &Value) -> Option<GoogleCalendar> {
 
 /// An `RRULE` line (without `RRULE:`) as a JSCalendar rule. Parts the app doesn't know stay in the
 /// rule under their own name, which makes it one the editor can't change.
-pub fn rule_from_rrule(line: &str) -> Option<Value> {
+///
+/// `zone` is the event's own zone: a JSCalendar `until` is a wall time there, while iCalendar's
+/// `UNTIL` of a timed event is in UTC. All-day rules end on a date.
+pub fn rule_from_rrule(line: &str, zone: Option<Tz>, all_day: bool) -> Option<Value> {
     let mut rule = Map::new();
     for part in line.split(';') {
         let (key, value) = part.split_once('=')?;
@@ -62,9 +65,13 @@ pub fn rule_from_rrule(line: &str) -> Option<Value> {
                 rule.insert("count".into(), json!(value.parse::<u64>().ok()?));
             }
             "UNTIL" => {
-                let until = NaiveDateTime::parse_from_str(value.trim_end_matches('Z'), "%Y%m%dT%H%M%S")
-                    .ok()
-                    .or_else(|| NaiveDate::parse_from_str(value, "%Y%m%d").ok()?.and_hms_opt(0, 0, 0))?;
+                let until = match NaiveDateTime::parse_from_str(value.trim_end_matches('Z'), "%Y%m%dT%H%M%S") {
+                    // A UTC instant: the same instant as a wall time in the event's zone.
+                    Ok(time) if value.ends_with('Z') => jscal::in_zone(time.and_utc(), zone.unwrap_or(Tz::UTC)),
+                    Ok(time) => time,
+                    Err(_) => NaiveDate::parse_from_str(value, "%Y%m%d").ok()?.and_hms_opt(0, 0, 0)?,
+                };
+                let until = if all_day { until.date().and_hms_opt(0, 0, 0).unwrap_or(until) } else { until };
                 rule.insert("until".into(), json!(format_local(until)));
             }
             "BYDAY" => {
@@ -72,8 +79,16 @@ pub fn rule_from_rrule(line: &str) -> Option<Value> {
                     .split(',')
                     .map(|day| {
                         let day = day.trim();
+                        // The day is the last two letters, "-1FR" or "MO"; anything else (also
+                        // letters outside ASCII, which byte offsets would cut apart) isn't one.
                         let split = day.len().checked_sub(2)?;
+                        if !day.is_char_boundary(split) {
+                            return None;
+                        }
                         let (nth, name) = day.split_at(split);
+                        if !name.bytes().all(|b| b.is_ascii_alphabetic()) {
+                            return None;
+                        }
                         let mut entry = json!({ "day": name.to_ascii_lowercase() });
                         if !nth.is_empty() {
                             entry["nthOfPeriod"] = json!(nth.parse::<i64>().ok()?);
@@ -198,7 +213,7 @@ pub fn event(value: &Value, calendar_zone: Option<Tz>) -> Option<GoogleEvent> {
         event.insert("locations".into(), json!({ "1": { "@type": "Location", "name": place } }));
     }
     let (start, utc) = if let Some(first) = date(value.get("start")) {
-        let last = date(value.get("end")).unwrap_or(first + TimeDelta::days(1));
+        let last = date(value.get("end")).or_else(|| first.checked_add_signed(TimeDelta::days(1))).unwrap_or(first);
         let days = (last - first).num_days().max(1);
         event.insert("showWithoutTime".into(), json!(true));
         event.insert("duration".into(), json!(jscal::format_duration(days * 86_400)));
@@ -217,6 +232,8 @@ pub fn event(value: &Value, calendar_zone: Option<Tz>) -> Option<GoogleEvent> {
         (jscal::in_zone(utc_start, zone), Some((utc_start, utc_end)))
     };
     event.insert("start".into(), json!(format_local(start)));
+    let all_day = utc.is_none();
+    let rule_zone = event.get("timeZone").and_then(Value::as_str).and_then(jscal::parse_zone).or(calendar_zone);
     let recurrence: Vec<String> = value
         .get("recurrence")
         .and_then(Value::as_array)
@@ -225,8 +242,11 @@ pub fn event(value: &Value, calendar_zone: Option<Tz>) -> Option<GoogleEvent> {
         .filter_map(Value::as_str)
         .map(String::from)
         .collect();
-    let rules: Vec<Value> =
-        recurrence.iter().filter_map(|line| line.strip_prefix("RRULE:")).filter_map(rule_from_rrule).collect();
+    let rules: Vec<Value> = recurrence
+        .iter()
+        .filter_map(|line| line.strip_prefix("RRULE:"))
+        .filter_map(|line| rule_from_rrule(line, rule_zone, all_day))
+        .collect();
     match rules.len() {
         0 => {}
         1 => {
@@ -252,7 +272,7 @@ fn times(event: &Value) -> (Value, Value) {
     let seconds = text(event, "duration").and_then(jscal::parse_duration).unwrap_or(0).max(0);
     if jscal::is_all_day(event) {
         let days = (seconds / 86_400).max(1);
-        let end = start.date() + TimeDelta::days(days);
+        let end = start.date().checked_add_signed(TimeDelta::days(days)).unwrap_or(start.date());
         let day =
             |d: NaiveDate| json!({ "date": d.format("%Y-%m-%d").to_string(), "dateTime": null, "timeZone": null });
         (day(start.date()), day(end))
@@ -346,24 +366,66 @@ mod tests {
 
     #[test]
     fn reads_and_writes_rules() {
-        let rule = rule_from_rrule("FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20261231T225959Z").unwrap();
+        let rule = rule_from_rrule("FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20261231T225959Z", None, false).unwrap();
         assert_eq!(
             rule,
             json!({ "frequency": "weekly", "byDay": [{ "day": "mo" }, { "day": "we" }], "until": "2026-12-31T22:59:59" })
         );
         assert!(jscal::recurrence_of(&json!({ "recurrenceRule": rule.clone() })).1);
-        let nth = rule_from_rrule("FREQ=MONTHLY;BYDAY=-1FR;INTERVAL=2").unwrap();
+        let nth = rule_from_rrule("FREQ=MONTHLY;BYDAY=-1FR;INTERVAL=2", None, false).unwrap();
         assert_eq!(nth["byDay"], json!([{ "day": "fr", "nthOfPeriod": -1 }]));
         assert_eq!(rule_to_rrule(&nth, false, None).unwrap(), "RRULE:FREQ=MONTHLY;INTERVAL=2;BYDAY=-1FR");
-        let odd = rule_from_rrule("FREQ=DAILY;BYHOUR=9").unwrap();
+        let odd = rule_from_rrule("FREQ=DAILY;BYHOUR=9", None, false).unwrap();
         assert!(!jscal::recurrence_of(&json!({ "recurrenceRule": odd })).1, "more than the editor knows");
-        assert!(rule_from_rrule("nonsense").is_none());
+        assert!(rule_from_rrule("nonsense", None, false).is_none());
+        // Day names outside ASCII are no days (and cut nothing apart).
+        for odd in ["FREQ=WEEKLY;BYDAY=\u{e9}A", "FREQ=WEEKLY;BYDAY=1\u{e9}", "FREQ=WEEKLY;BYDAY=\u{1F600}"] {
+            assert!(rule_from_rrule(odd, None, false).is_none(), "{odd}");
+        }
 
         let berlin = Some(chrono_tz::Europe::Berlin);
         let until = json!({ "frequency": "weekly", "until": "2026-12-31T23:59:59" });
         assert_eq!(rule_to_rrule(&until, false, berlin).unwrap(), "RRULE:FREQ=WEEKLY;UNTIL=20261231T225959Z");
         let days = json!({ "frequency": "yearly", "until": "2030-10-03T00:00:00" });
         assert_eq!(rule_to_rrule(&days, true, None).unwrap(), "RRULE:FREQ=YEARLY;UNTIL=20301003");
+    }
+
+    #[test]
+    fn utc_until_is_read_as_a_wall_time_of_the_events_zone() {
+        // The end of 30 September in New York is 04:00 UTC on 1 October; read as a wall time it
+        // would add a day to the series.
+        let ny = Some(chrono_tz::America::New_York);
+        let rule = rule_from_rrule("FREQ=DAILY;UNTIL=20261001T035959Z", ny, false).unwrap();
+        assert_eq!(rule["until"], "2026-09-30T23:59:59");
+        // And back to the same UNTIL, however often it is written.
+        assert_eq!(rule_to_rrule(&rule, false, ny).unwrap(), "RRULE:FREQ=DAILY;UNTIL=20261001T035959Z");
+        let berlin = Some(chrono_tz::Europe::Berlin);
+        let rule = rule_from_rrule("FREQ=WEEKLY;UNTIL=20261231T225959Z", berlin, false).unwrap();
+        assert_eq!(rule["until"], "2026-12-31T23:59:59");
+        // All-day series end on a date, also when UNTIL came as a UTC time.
+        let rule = rule_from_rrule("FREQ=YEARLY;UNTIL=20301002T220000Z", berlin, true).unwrap();
+        assert_eq!(rule["until"], "2030-10-03T00:00:00");
+        let rule = rule_from_rrule("FREQ=YEARLY;UNTIL=20301003", None, true).unwrap();
+        assert_eq!(rule["until"], "2030-10-03T00:00:00");
+
+        // Through a whole event: the series' own zone counts, not the calendar's.
+        let read = event(
+            &json!({ "id": "s", "summary": "Standup",
+                "start": { "dateTime": "2026-09-01T09:00:00-04:00", "timeZone": "America/New_York" },
+                "end": { "dateTime": "2026-09-01T09:15:00-04:00", "timeZone": "America/New_York" },
+                "recurrence": ["RRULE:FREQ=DAILY;UNTIL=20261001T035959Z"] }),
+            Some(chrono_tz::Europe::Berlin),
+        )
+        .unwrap();
+        assert_eq!(read.event["recurrenceRule"]["until"], "2026-09-30T23:59:59");
+    }
+
+    #[test]
+    fn extreme_dates_do_not_panic() {
+        let _ = event(&json!({ "id": "x", "start": { "date": "262142-12-31" } }), None);
+        let long = json!({ "@type": "Event", "start": "2026-10-03T00:00:00", "duration": "P99999999D",
+            "showWithoutTime": true });
+        let _ = new_body(&long);
     }
 
     #[test]

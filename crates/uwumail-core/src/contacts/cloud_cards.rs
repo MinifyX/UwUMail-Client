@@ -541,6 +541,185 @@ pub fn card_to_google(card: &Map<String, Value>) -> Value {
     })
 }
 
+// ------------------------------------------------------------------------------------------------
+// Changes: only what was changed goes back, and what the app doesn't map stays as it was.
+
+/// A provider's entry without what it adds by itself (`metadata`, formatted values).
+fn plain_entry(entry: &Value) -> Value {
+    let mut entry = entry.clone();
+    if let Some(map) = entry.as_object_mut() {
+        for key in ["metadata", "formattedType", "formattedValue", "displayNameLastFirst"] {
+            map.remove(key);
+        }
+    }
+    entry
+}
+
+fn list_of<'a>(raw: &'a Value, key: &str) -> Vec<&'a Value> {
+    raw.get(key).and_then(Value::as_array).map(|list| list.iter().collect()).unwrap_or_default()
+}
+
+fn same_text(a: Option<&str>, b: Option<&str>) -> bool {
+    a.map(str::trim).unwrap_or_default().eq_ignore_ascii_case(b.map(str::trim).unwrap_or_default())
+}
+
+/// The Graph fields of a contact that differ between `before` (as read) and `after`. Email
+/// addresses that stay keep the name Outlook shows for them.
+pub fn graph_changes(raw: &Value, before: &Map<String, Value>, after: &Map<String, Value>) -> Map<String, Value> {
+    let (Value::Object(old), Value::Object(new)) = (card_to_graph(before), card_to_graph(after)) else {
+        return Map::new();
+    };
+    let mut changes: Map<String, Value> = new.into_iter().filter(|(key, value)| old.get(key) != Some(value)).collect();
+    if let Some(Value::Array(emails)) = changes.get_mut("emailAddresses") {
+        let known = list_of(raw, "emailAddresses");
+        for email in emails.iter_mut() {
+            let address = text(email, "address");
+            if let Some(name) =
+                known.iter().find(|k| same_text(text(k, "address"), address)).and_then(|k| text(k, "name"))
+            {
+                email["name"] = json!(name);
+            }
+        }
+    }
+    changes
+}
+
+/// A Graph contact as it is created elsewhere (Graph can't move contacts between folders): every
+/// field it had, with the changes of `after` on top.
+pub fn graph_copy(raw: &Value, before: &Map<String, Value>, after: &Map<String, Value>) -> Value {
+    let mut copy = match raw {
+        Value::Object(map) => map.clone(),
+        _ => Map::new(),
+    };
+    copy.retain(|key, value| {
+        !key.starts_with('@')
+            && !matches!(
+                key.as_str(),
+                "id" | "changeKey" | "createdDateTime" | "lastModifiedDateTime" | "parentFolderId"
+            )
+            && !value.is_null()
+    });
+    copy.extend(graph_changes(raw, before, after));
+    Value::Object(copy)
+}
+
+/// The Google update of a person from `before` (as read) to `after`: the body, and the fields it
+/// replaces (`updatePersonFields`). Only fields that changed go; within them, what the app doesn't
+/// map stays: further organizations, other events, name prefixes and suffixes, custom labels.
+pub fn google_changes(
+    raw: &Value,
+    before: &Map<String, Value>,
+    after: &Map<String, Value>,
+) -> (Map<String, Value>, Vec<&'static str>) {
+    let (Value::Object(old), Value::Object(new)) = (card_to_google(before), card_to_google(after)) else {
+        return (Map::new(), Vec::new());
+    };
+    let mut body = Map::new();
+    let mut fields = Vec::new();
+    for field in GOOGLE_UPDATE_FIELDS.split(',') {
+        let wanted = new.get(field).cloned().unwrap_or(Value::Array(Vec::new()));
+        if old.get(field) == Some(&wanted) {
+            continue;
+        }
+        let wanted: Vec<Value> = wanted.as_array().cloned().unwrap_or_default();
+        let known = list_of(raw, field);
+        let merged: Vec<Value> = match field {
+            "names" => wanted
+                .into_iter()
+                .map(|name| {
+                    let mut kept = known.first().map(|k| plain_entry(k)).unwrap_or_else(|| json!({}));
+                    if let Some(map) = kept.as_object_mut() {
+                        for key in ["displayName", "unstructuredName", "givenName", "middleName", "familyName"] {
+                            map.remove(key);
+                        }
+                        map.extend(name.as_object().cloned().unwrap_or_default());
+                    }
+                    kept
+                })
+                .collect(),
+            "nicknames" | "biographies" => {
+                wanted.into_iter().chain(known.iter().skip(1).map(|k| plain_entry(k))).collect()
+            }
+            "organizations" => {
+                let mut first = known.first().map(|k| plain_entry(k)).unwrap_or_else(|| json!({}));
+                let given = wanted.first().cloned().unwrap_or_else(|| json!({}));
+                if let Some(map) = first.as_object_mut() {
+                    for key in ["name", "title"] {
+                        match given.get(key) {
+                            Some(value) => map.insert(key.into(), value.clone()),
+                            None => map.remove(key),
+                        };
+                    }
+                }
+                let empty = first.as_object().is_none_or(|map| map.keys().all(|key| key == "type"));
+                (!empty).then_some(first).into_iter().chain(known.iter().skip(1).map(|k| plain_entry(k))).collect()
+            }
+            "events" => known
+                .iter()
+                .filter(|e| !text(e, "type").is_some_and(|t| t.eq_ignore_ascii_case("anniversary")))
+                .map(|e| plain_entry(e))
+                .chain(wanted)
+                .collect(),
+            "emailAddresses" | "phoneNumbers" => wanted
+                .into_iter()
+                .map(|entry| {
+                    // The same value of the same kind keeps its own label (and display name).
+                    let same = known.iter().find(|k| {
+                        same_text(text(k, "value"), text(&entry, "value"))
+                            && google_type_of(k, field) == text(&entry, "type").unwrap_or("other")
+                    });
+                    match same {
+                        Some(k) => {
+                            let mut kept = plain_entry(k);
+                            kept["value"] = entry["value"].clone();
+                            kept
+                        }
+                        None => entry,
+                    }
+                })
+                .collect(),
+            "addresses" => wanted
+                .into_iter()
+                .map(|entry| {
+                    let parts = ["streetAddress", "city", "region", "postalCode", "country"];
+                    let same = known.iter().find(|k| {
+                        let street = text(k, "streetAddress").or_else(|| text(k, "formattedValue"));
+                        same_text(street, text(&entry, "streetAddress"))
+                            && parts[1..].iter().all(|part| same_text(text(k, part), text(&entry, part)))
+                            && google_type_of(k, field) == text(&entry, "type").unwrap_or("other")
+                    });
+                    // Unchanged: as it was, with its unstructured value, PO box, extended address.
+                    match same {
+                        Some(k) => {
+                            let mut kept = (*k).clone();
+                            if let Some(map) = kept.as_object_mut() {
+                                map.remove("metadata");
+                                map.remove("formattedType");
+                            }
+                            kept
+                        }
+                        None => entry,
+                    }
+                })
+                .collect(),
+            _ => wanted,
+        };
+        body.insert(field.to_string(), Value::Array(merged));
+        fields.push(field);
+    }
+    (body, fields)
+}
+
+/// The type an entry of a Google list is written back with by [`card_to_google`].
+fn google_type_of(entry: &Value, field: &str) -> &'static str {
+    match text(entry, "type").map(str::to_ascii_lowercase).as_deref() {
+        Some("home") => "home",
+        Some("work") => "work",
+        Some("mobile") if field == "phoneNumbers" => "mobile",
+        _ => "other",
+    }
+}
+
 /// A Google resource name as the app takes it: `people/` and letters, digits, `-` and `_` only.
 pub fn google_resource(remote: &str) -> Option<&str> {
     let id = remote.strip_prefix("people/")?;
@@ -615,6 +794,101 @@ mod tests {
         let only_company = card_to_google(&object(json!({ "organizations": { "o": { "name": "Nyu & Co" } } })));
         assert_eq!(only_company["names"], json!([]));
         assert_eq!(only_company["organizations"], json!([{ "name": "Nyu & Co" }]));
+    }
+
+    #[test]
+    fn google_changes_keep_what_the_app_does_not_map() {
+        let person = json!({
+            "resourceName": "people/c7", "etag": "e7",
+            "names": [{ "metadata": { "primary": true }, "honorificPrefix": "Dr.", "givenName": "Otto", "familyName": "Katz",
+                "displayName": "Dr. Otto Katz", "unstructuredName": "Dr. Otto Katz" }],
+            "phoneNumbers": [{ "value": "+43 1 2", "type": "school", "formattedType": "School" }],
+            "emailAddresses": [{ "value": "otto@example.net", "type": "work", "displayName": "Otto (work)" }],
+            "addresses": [{ "formattedValue": "Somewhere 1, Wien", "poBox": "12", "type": "home" }],
+            "organizations": [
+                { "name": "Nyu & Co", "title": "Cat herder", "department": "Paws" },
+                { "name": "Second job" }
+            ],
+            "events": [
+                { "type": "anniversary", "date": { "year": 2020, "month": 6, "day": 1 } },
+                { "type": "graduation", "date": { "year": 2010, "month": 7, "day": 2 } }
+            ]
+        });
+        let (_, _, before) = google_card(&person).unwrap();
+
+        // A new job title: only the organizations go, the department and the second job stay.
+        let mut after = before.clone();
+        after.insert("titles".into(), json!({ "t": { "@type": "Title", "name": "Head cat herder" } }));
+        let (body, fields) = google_changes(&person, &before, &after);
+        assert_eq!(fields, ["organizations"]);
+        assert_eq!(
+            body["organizations"],
+            json!([{ "name": "Nyu & Co", "title": "Head cat herder", "department": "Paws" }, { "name": "Second job" }])
+        );
+
+        // A second phone: the first keeps its own label; names, emails, addresses aren't sent.
+        let mut after = before.clone();
+        after["phones"]["p2"] = json!({ "@type": "Phone", "number": "+43 1 3", "features": { "mobile": true } });
+        let (body, fields) = google_changes(&person, &before, &after);
+        assert_eq!(fields, ["phoneNumbers"]);
+        assert_eq!(
+            body["phoneNumbers"],
+            json!([{ "value": "+43 1 2", "type": "school" }, { "value": "+43 1 3", "type": "mobile" }])
+        );
+
+        // Another wedding day: the graduation stays. A new surname keeps the title before the name.
+        let mut after = before.clone();
+        after["anniversaries"]["w1"]["date"]["day"] = json!(2);
+        after["name"]["components"][1]["value"] = json!("Kater");
+        let (body, fields) = google_changes(&person, &before, &after);
+        assert_eq!(fields, ["names", "events"]);
+        assert_eq!(
+            body["names"],
+            json!([{ "honorificPrefix": "Dr.", "givenName": "Otto", "middleName": "", "familyName": "Kater" }])
+        );
+        assert_eq!(
+            body["events"],
+            json!([
+                { "type": "graduation", "date": { "year": 2010, "month": 7, "day": 2 } },
+                { "type": "anniversary", "date": { "year": 2020, "month": 6, "day": 2 } }
+            ])
+        );
+        // Nothing changed: nothing goes.
+        assert!(google_changes(&person, &before, &before).1.is_empty());
+    }
+
+    #[test]
+    fn graph_changes_and_copies_keep_the_rest() {
+        let contact = json!({
+            "@odata.etag": "W/\"x\"", "id": "C1", "changeKey": "k", "parentFolderId": "F1",
+            "createdDateTime": "2026-01-01T00:00:00Z", "displayName": "Mina", "givenName": "Mina",
+            "emailAddresses": [{ "name": "Mina Sommer", "address": "mina@example.org" }],
+            "categories": ["Family"], "imAddresses": ["mina@im.example"], "spouseName": "Otto",
+            "birthday": "1990-05-01T11:59:00Z", "homePhones": []
+        });
+        let (_, _, before) = graph_card(&contact).unwrap();
+        let mut after = before.clone();
+        after.insert("titles".into(), json!({ "t": { "@type": "Title", "name": "Cat herder" } }));
+        after["emails"]["e2"] = json!({ "@type": "EmailAddress", "address": "mina@example.net" });
+        let changes = graph_changes(&contact, &before, &after);
+        let mut keys: Vec<&str> = changes.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["emailAddresses", "jobTitle"]);
+        assert_eq!(
+            changes["emailAddresses"],
+            json!([{ "address": "mina@example.org", "name": "Mina Sommer" }, { "address": "mina@example.net", "name": "mina@example.net" }]),
+            "a known address keeps its name"
+        );
+
+        let copy = graph_copy(&contact, &before, &after);
+        for gone in ["@odata.etag", "id", "changeKey", "parentFolderId", "createdDateTime"] {
+            assert!(copy.get(gone).is_none(), "{gone}");
+        }
+        assert_eq!(copy["categories"], json!(["Family"]));
+        assert_eq!(copy["imAddresses"], json!(["mina@im.example"]));
+        assert_eq!(copy["spouseName"], "Otto");
+        assert_eq!(copy["jobTitle"], "Cat herder");
+        assert_eq!(copy["birthday"], "1990-05-01T11:59:00Z");
     }
 
     #[test]

@@ -92,12 +92,16 @@ pub(super) fn start_shared_search(engine: Engine) {
 impl Inner {
     /// The account whose secret opens `account_id`: the account a shared mailbox is nested
     /// under, otherwise the account itself.
+    ///
+    /// Only a Microsoft mailbox opens with another Microsoft account's sign-in: whatever the row
+    /// says, a password or a Google sign-in never goes to another mailbox's servers.
     pub(super) fn secret_holder(&self, account_id: &str) -> String {
+        let microsoft = |id: &str| self.store.account(id).is_ok_and(|record| record.auth == AuthKind::Microsoft);
         self.store
             .account_link(account_id)
             .ok()
             .and_then(|link| link.parent_id)
-            .filter(|parent| parent != account_id && self.store.account(parent).is_ok())
+            .filter(|parent| parent != account_id && microsoft(parent) && microsoft(account_id))
             .unwrap_or_else(|| account_id.to_string())
     }
 
@@ -330,6 +334,9 @@ impl Engine {
         display_name: Option<&str>,
     ) -> Result<Account> {
         let email = email.trim();
+        if !shared::is_mailbox_address(email) {
+            return Err(Error::invalid("That doesn't look like an email address."));
+        }
         let (local, _) = autoconfig::split_email(email)?;
         let local = local.to_string();
         let (parent, _) = self.person_account(parent_id)?;
