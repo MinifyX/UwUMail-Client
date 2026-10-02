@@ -13,8 +13,13 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   sending, tested against Stalwart and UwUMail Server.
 - **Microsoft and Google sign in with their own page** (OAuth 2). Microsoft works
   for Outlook.com and Microsoft 365, company domains recognised through their
-  tenant, shared mailboxes included, with a plain explanation when a tenant
-  blocks IMAP or SMTP; on Android and iPhone the browser comes back to the app.
+  tenant, with a plain explanation when a tenant blocks IMAP or SMTP; on
+  Android and iPhone the browser comes back to the app.
+- **Shared mailboxes in Microsoft 365** show up on their own after signing in
+  (Exchange Autodiscover, for mailboxes granted with automapping) and nested
+  under the account whose sign-in opens them, with their own folders; others
+  are added by address. Counters, notifications, the unified inbox and sending
+  as the shared address work like in any mailbox.
   Google on the iPhone is best added with an app password. See
   [oauth.md](oauth.md).
 - **A unified inbox** across all mailboxes, and private and business mailboxes

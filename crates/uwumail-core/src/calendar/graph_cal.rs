@@ -2,8 +2,13 @@
 //!
 //! Events are read with `Prefer: outlook.timezone="UTC"`, so every time comes in UTC; the zone an
 //! event was made in (`originalStartTimeZone`, often a Windows name) gives its own wall time,
-//! which repeating events need to keep their hour across daylight saving. Events are written with
-//! IANA zone names, which Graph takes as they are.
+//! which repeating events need to keep their hour across daylight saving.
+//!
+//! Events are written with Windows zone names (`W. Europe Standard Time`), which Graph always takes;
+//! whether it takes IANA names everywhere isn't documented. An IANA zone gets the Windows zone it
+//! is (or one with the same offsets in winter and summer, so a series keeps its hour). A zone
+//! without one is written in UTC: a timed event at its exact instant, an all-day event at
+//! midnight UTC of its own date, so no day moves for anyone.
 
 use chrono::{Datelike, Duration as TimeDelta, NaiveDate, NaiveDateTime, Timelike, Utc};
 use chrono_tz::Tz;
@@ -161,6 +166,33 @@ const WINDOWS_ZONES: &[(&str, &str)] = &[
     ("UTC-02", "Etc/GMT+2"),
     ("UTC+12", "Etc/GMT-12"),
 ];
+
+/// The Windows name Graph is sent for `zone`, around `day`: the zone itself, else one with the same
+/// UTC offsets in January and July (the same daylight-saving shape). None for UTC and zones
+/// without one: those are written in UTC.
+pub fn windows_zone(zone: Tz, day: NaiveDate) -> Option<&'static str> {
+    if zone == Tz::UTC {
+        return None;
+    }
+    if let Some((windows, _)) = WINDOWS_ZONES.iter().find(|(_, iana)| *iana == zone.name()) {
+        return Some(windows);
+    }
+    use chrono::Offset as _;
+    use chrono::TimeZone as _;
+    let offsets = |zone: Tz| -> Option<(i32, i32)> {
+        let at = |month: u32| {
+            let noon = NaiveDate::from_ymd_opt(day.year(), month, 15)?.and_hms_opt(12, 0, 0)?;
+            Some(zone.offset_from_utc_datetime(&noon).fix().local_minus_utc())
+        };
+        Some((at(1)?, at(7)?))
+    };
+    let wanted = offsets(zone)?;
+    WINDOWS_ZONES
+        .iter()
+        .filter(|(windows, _)| !windows.starts_with("UTC"))
+        .find(|(_, iana)| iana.parse::<Tz>().ok().and_then(offsets) == Some(wanted))
+        .map(|(windows, _)| *windows)
+}
 
 /// A zone as Graph names it: an IANA name, a Windows name, or `tzone://Microsoft/Utc`.
 pub fn zone(name: &str) -> Option<Tz> {
@@ -445,41 +477,61 @@ pub fn event(value: &Value) -> Option<GraphEvent> {
     })
 }
 
-/// Start and end as Graph writes them, from a JSCalendar event.
-fn times(event: &Value) -> (Value, Value, bool) {
+/// How an event's times go to Graph: start, end, whether all-day, the zone name sent, and the day
+/// the series starts in that zone.
+struct Times {
+    start: Value,
+    end: Value,
+    all_day: bool,
+    zone: String,
+    begin: NaiveDate,
+}
+
+/// Start and end as Graph writes them, from a JSCalendar event (see the module's note on zones).
+fn times(event: &Value) -> Times {
     let all_day = jscal::is_all_day(event);
     let start = text(event, "start").and_then(parse_local).unwrap_or_default();
     let seconds = text(event, "duration").and_then(jscal::parse_duration).unwrap_or(0).max(0);
-    let zone = if all_day { "UTC".to_string() } else { text(event, "timeZone").unwrap_or("UTC").to_string() };
     let seconds = if all_day { (seconds / 86_400).max(1) * 86_400 } else { seconds };
     let end = start.checked_add_signed(TimeDelta::seconds(seconds)).unwrap_or(start);
-    (
-        json!({ "dateTime": format_local(start), "timeZone": zone }),
-        json!({ "dateTime": format_local(end), "timeZone": zone }),
+    // All-day events usually float; one with a zone keeps it.
+    let own = text(event, "timeZone").and_then(jscal::parse_zone);
+    let (start, end, zone) = match own.and_then(|zone| windows_zone(zone, start.date())) {
+        Some(windows) => (start, end, windows),
+        // Midnight UTC of the same date for all-day events; the same instant for the rest.
+        None if all_day => (start, end, "UTC"),
+        None => {
+            let zone = own.unwrap_or(Tz::UTC);
+            (jscal::to_utc(start, zone).naive_utc(), jscal::to_utc(end, zone).naive_utc(), "UTC")
+        }
+    };
+    Times {
+        start: json!({ "dateTime": format_local(start), "timeZone": zone }),
+        end: json!({ "dateTime": format_local(end), "timeZone": zone }),
         all_day,
-    )
+        zone: zone.to_string(),
+        begin: start.date(),
+    }
 }
 
 /// Everything of a JSCalendar event Graph keeps, for a new event.
 pub fn new_body(event: &Value) -> Value {
-    let (start, end, all_day) = times(event);
+    let times = times(event);
     let mut body = json!({
         "subject": text(event, "title").unwrap_or_default(),
         "body": { "contentType": "text", "content": text(event, "description").unwrap_or_default() },
-        "start": start,
-        "end": end,
-        "isAllDay": all_day,
+        "start": times.start,
+        "end": times.end,
+        "isAllDay": times.all_day,
     });
     let place = jscal::location_of(event);
     if !place.is_empty() {
         body["location"] = json!({ "displayName": place });
     }
-    if let Some(rule) = event.get("recurrenceRule").filter(|rule| rule.is_object()) {
-        let begin = text(event, "start").and_then(parse_local).unwrap_or_default().date();
-        let zone = if all_day { "UTC" } else { text(event, "timeZone").unwrap_or("UTC") };
-        if let Some(recurrence) = rule_to_graph(rule, begin, zone) {
-            body["recurrence"] = recurrence;
-        }
+    if let Some(rule) = event.get("recurrenceRule").filter(|rule| rule.is_object())
+        && let Some(recurrence) = rule_to_graph(rule, times.begin, &times.zone)
+    {
+        body["recurrence"] = recurrence;
     }
     body
 }
@@ -503,15 +555,14 @@ pub fn patch_body(current: &GraphEvent, changed: &Value, patch: &Map<String, Val
         body.insert("location".into(), json!({ "displayName": jscal::location_of(changed) }));
     }
     let retimed = ["start", "duration", "showWithoutTime", "timeZone"].iter().any(|key| touched(key));
+    let Times { start, end, all_day, zone, begin } = times(changed);
+    let zone = zone.as_str();
     if retimed {
-        let (start, end, all_day) = times(changed);
         body.insert("start".into(), start);
         body.insert("end".into(), end);
         body.insert("isAllDay".into(), json!(all_day));
     }
     let new_rule = touched("recurrenceRule") || touched("recurrenceRules");
-    let begin = text(changed, "start").and_then(parse_local).unwrap_or_default().date();
-    let zone = if jscal::is_all_day(changed) { "UTC" } else { text(changed, "timeZone").unwrap_or("UTC") };
     if new_rule {
         let rule = changed.get("recurrenceRule").filter(|rule| rule.is_object());
         body.insert("recurrence".into(), rule.and_then(|rule| rule_to_graph(rule, begin, zone)).unwrap_or(Value::Null));
@@ -585,7 +636,8 @@ mod tests {
 
         // Back to Graph: the same pattern, starting that day, in that zone.
         let back = new_body(&series.event);
-        assert_eq!(back["start"], json!({ "dateTime": "2026-09-03T18:00:00", "timeZone": "Europe/Berlin" }));
+        assert_eq!(back["start"], json!({ "dateTime": "2026-09-03T18:00:00", "timeZone": "W. Europe Standard Time" }));
+        assert_eq!(back["recurrence"]["range"]["recurrenceTimeZone"], "W. Europe Standard Time");
         assert_eq!(back["recurrence"]["pattern"]["daysOfWeek"], json!(["thursday"]));
         assert_eq!(back["recurrence"]["range"]["endDate"], "2026-12-31");
     }
@@ -659,8 +711,51 @@ mod tests {
         let mut moved = current.event.clone();
         jscal::apply_patch(&mut moved, &patch).unwrap();
         let body = patch_body(&current, &moved, &patch);
-        assert_eq!(body["start"], json!({ "dateTime": "2026-09-03T19:00:00", "timeZone": "Europe/Berlin" }));
+        assert_eq!(body["start"], json!({ "dateTime": "2026-09-03T19:00:00", "timeZone": "W. Europe Standard Time" }));
         assert_eq!(body["end"]["dateTime"], "2026-09-03T20:00:00");
         assert_eq!(body["recurrence"]["pattern"]["daysOfWeek"], json!(["thursday"]), "Graph's own rule goes back");
+    }
+
+    #[test]
+    fn writes_zones_graph_always_takes_and_keeps_all_day_dates() {
+        let day = NaiveDate::from_ymd_opt(2026, 10, 3).unwrap();
+        assert_eq!(windows_zone(chrono_tz::Europe::Berlin, day), Some("W. Europe Standard Time"));
+        // Not in the table: one with the same winter and summer offsets.
+        assert!(windows_zone(chrono_tz::Europe::Vienna, day).is_some());
+        assert_eq!(windows_zone(Tz::UTC, day), None);
+
+        // A timed event in a zone without a Windows name goes in UTC, at the same instant.
+        let timed = json!({ "@type": "Event", "title": "Call", "start": "2026-10-03T09:00:00", "duration": "PT30M",
+            "timeZone": "Pacific/Chatham" });
+        assert_eq!(windows_zone(chrono_tz::Pacific::Chatham, day), None);
+        let body = new_body(&timed);
+        assert_eq!(body["start"], json!({ "dateTime": "2026-10-02T19:15:00", "timeZone": "UTC" }), "+13:45");
+        assert_eq!(body["end"]["dateTime"], "2026-10-02T19:45:00");
+
+        // An all-day day stays that day, floating or in Berlin (UTC+2 in October).
+        for zone in [None, Some("Europe/Berlin")] {
+            let mut holiday = json!({ "@type": "Event", "title": "Holiday", "start": "2026-10-03T00:00:00",
+                "duration": "P1D", "showWithoutTime": true });
+            if let Some(zone) = zone {
+                holiday["timeZone"] = json!(zone);
+            }
+            let body = new_body(&holiday);
+            assert_eq!(body["isAllDay"], true);
+            assert_eq!(body["start"]["dateTime"], "2026-10-03T00:00:00", "{body}");
+            assert_eq!(body["end"]["dateTime"], "2026-10-04T00:00:00");
+            assert_eq!(body["start"]["timeZone"], body["end"]["timeZone"]);
+            // Graph answers in UTC: midnight in that zone, which is read back as the same day.
+            let utc = if zone.is_some() {
+                ("2026-10-02T22:00:00", "2026-10-03T22:00:00")
+            } else {
+                ("2026-10-03T00:00:00", "2026-10-04T00:00:00")
+            };
+            let read = event(&json!({ "id": "H", "isAllDay": true,
+                "start": { "dateTime": utc.0, "timeZone": "UTC" }, "end": { "dateTime": utc.1, "timeZone": "UTC" },
+                "originalStartTimeZone": body["start"]["timeZone"] }))
+            .unwrap();
+            assert_eq!(read.event["start"], "2026-10-03T00:00:00");
+            assert_eq!(read.event["duration"], "P1D");
+        }
     }
 }

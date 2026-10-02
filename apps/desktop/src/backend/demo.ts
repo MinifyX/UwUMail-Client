@@ -102,7 +102,7 @@ export class DemoBackend implements Backend {
   readonly kind = "demo";
 
   private accounts: Account[] = structuredClone(DEMO_ACCOUNTS);
-  private folders: Folder[] = DEMO_ACCOUNTS.flatMap((a) => buildFolders(a.id, lang()));
+  private folders: Folder[] = DEMO_ACCOUNTS.flatMap((a) => buildFolders(a.id, lang(), !a.parentId));
   // Newsletters and offers carry a List-Unsubscribe like the real ones.
   private messages: Message[] = buildMessages(lang()).map((message) =>
     /newsletter|aktion|offer|deal/i.test(message.subject)
@@ -412,11 +412,88 @@ export class DemoBackend implements Backend {
     return structuredClone(account);
   }
 
-  async removeAccount(accountId: string) {
-    this.accounts = this.accounts.filter((a) => a.id !== accountId);
-    this.folders = this.folders.filter((f) => f.accountId !== accountId);
-    this.messages = this.messages.filter((m) => m.accountId !== accountId);
+  async removeAccount(accountId: string, options?: { keepShared?: boolean }) {
+    const shared = this.accounts.filter((a) => a.parentId === accountId);
+    const removed = new Set([accountId]);
+    for (const account of shared) {
+      if (options?.keepShared) delete account.parentId;
+      else removed.add(account.id);
+    }
+    const parentId = this.accounts.find((a) => a.id === accountId)?.parentId;
+    const email = this.accounts.find((a) => a.id === accountId)?.email;
+    if (parentId && email) this.dismissedShared.add(`${parentId}:${email.toLowerCase()}`);
+    this.accounts = this.accounts.filter((a) => !removed.has(a.id));
+    this.folders = this.folders.filter((f) => !removed.has(f.accountId));
+    this.messages = this.messages.filter((m) => !removed.has(m.accountId));
     this.emit({ type: "mail:changed", accountId });
+    this.emit({ type: "accounts:changed" });
+  }
+
+  /** Found shared mailboxes the person removed: a search doesn't bring them back. */
+  private dismissedShared = new Set<string>();
+
+  private sharedParent(accountId: string) {
+    const account = this.accounts.find((a) => a.id === accountId);
+    if (!account) throw new BackendError("not_found", "This mailbox no longer exists.");
+    if (account.auth !== "microsoft" || account.parentId) {
+      throw new BackendError("not_supported", "Only Microsoft 365 work or school accounts have shared mailboxes.");
+    }
+    return account;
+  }
+
+  private addShared(parent: Account, email: string, displayName: string) {
+    const account: Account = {
+      id: `acc-${this.nextId++}`,
+      name: email.split("@")[1] ?? email,
+      email,
+      displayName,
+      color: parent.color,
+      auth: "microsoft",
+      status: { state: "idle" },
+      protocol: "imap",
+      protocols: ["imap"],
+      parentId: parent.id,
+    };
+    // Right after the account and its other shared mailboxes.
+    const last = this.accounts.reduce((at, a, i) => (a.id === parent.id || a.parentId === parent.id ? i : at), -1);
+    this.accounts.splice(last + 1, 0, account);
+    this.folders.push(...buildFolders(account.id, lang(), false));
+    return account;
+  }
+
+  async findSharedMailboxes(accountId: string) {
+    const parent = this.sharedParent(accountId);
+    await wait(900);
+    // The demo tenant shares one mailbox with Mini; it comes back unless it was removed by hand.
+    const team = DEMO_ACCOUNTS.find((a) => a.parentId === parent.id);
+    const added: Account[] = [];
+    if (
+      team &&
+      !this.accounts.some((a) => a.email === team.email) &&
+      !this.dismissedShared.has(`${parent.id}:${team.email}`)
+    ) {
+      added.push(this.addShared(parent, team.email, team.displayName));
+    }
+    parent.sharedSearch = "done";
+    this.emit({ type: "accounts:changed" });
+    return { state: "done" as const, added: structuredClone(added) };
+  }
+
+  async addSharedMailbox(accountId: string, email: string, displayName?: string) {
+    const parent = this.sharedParent(accountId);
+    await wait(900);
+    const address = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      throw new BackendError("invalid_input", "That isn't a mail address.");
+    }
+    if (this.accounts.some((a) => a.email.toLowerCase() === address.toLowerCase())) {
+      throw new BackendError("invalid_input", "This mailbox is already in UwUMail.");
+    }
+    this.dismissedShared.delete(`${parent.id}:${address.toLowerCase()}`);
+    const account = this.addShared(parent, address, displayName?.trim() || address.split("@")[0]!);
+    this.emit({ type: "mail:changed", accountId: account.id });
+    this.emit({ type: "accounts:changed" });
+    return structuredClone(account);
   }
 
   async signInAgain(_accountId: string): Promise<Account> {

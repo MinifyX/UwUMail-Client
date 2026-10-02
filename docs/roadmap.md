@@ -33,6 +33,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Contacts from mail history with autocomplete
 - [x] Sign in with Microsoft (OAuth 2) — needs a registered client id, see [oauth.md](oauth.md)
 - [x] Microsoft 365 and Exchange Online: company domains recognised through their Entra tenant, switch to Microsoft by hand, shared mailboxes, and a plain explanation when the tenant blocks IMAP or SMTP ([oauth.md](oauth.md#microsoft-365-and-exchange-online))
+- [x] Shared mailboxes (Microsoft 365) nested under their account: found through Autodiscover, added by address, older ones sorted in on their own (0.8, [oauth.md](oauth.md#shared-mailboxes))
 - [x] Sign in with Google (OAuth 2) — needs a registered client id, see [oauth.md](oauth.md)
 - [x] System notifications for new mail
 - [ ] Addon host: permissions dialog, sandbox frames, RPC bridge, install from file

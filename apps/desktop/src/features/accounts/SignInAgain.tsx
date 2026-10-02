@@ -3,14 +3,17 @@ import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import { backend, BackendError } from "@/backend/backend";
 import { Button } from "@/components/ui/Button";
-import { useT } from "@/i18n";
+import { translate, useT } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 
-/** Calendars and contacts look again once the new sign-in is stored. */
-function refreshCloud(client: QueryClient) {
+/** Mailboxes, calendars and contacts look again once the new sign-in is stored. */
+function refreshAfterSignIn(client: QueryClient) {
   return Promise.all(
     [
+      queryKeys.accounts,
+      queryKeys.folders,
+      queryKeys.identities,
       queryKeys.calendarAccounts,
       queryKeys.calendars,
       queryKeys.calendarEvents,
@@ -21,6 +24,29 @@ function refreshCloud(client: QueryClient) {
       ["contactsAvailable"],
     ].map((queryKey) => client.invalidateQueries({ queryKey })),
   );
+}
+
+/**
+ * Signs in again in the browser (for a shared mailbox: with its account), for a permission UwUMail
+ * asks for now: finding shared mailboxes, calendars, contacts. Says what came of it; mail keeps
+ * working whatever it was.
+ */
+export async function signInAgain(accountId: string, client: QueryClient) {
+  try {
+    const renewed = await backend().signInAgain(accountId);
+    toast(translate("shared.signedInAgain", { email: renewed.email }), "success");
+  } catch (error) {
+    if (error instanceof BackendError && error.code === "admin_consent_required") {
+      toast(translate("cloudSignIn.adminConsent"), "error");
+    } else {
+      toast(
+        translate("cloudSignIn.failed", { reason: error instanceof Error ? error.message : String(error) }),
+        "error",
+      );
+    }
+  } finally {
+    await refreshAfterSignIn(client);
+  }
 }
 
 /**
@@ -43,19 +69,8 @@ export function SignInAgainHint({
 
   const signIn = async () => {
     setBusy(true);
-    try {
-      await backend().signInAgain(accountId);
-      toast(t("cloudSignIn.done"), "success");
-    } catch (error) {
-      if (error instanceof BackendError && error.code === "admin_consent_required") {
-        toast(t("cloudSignIn.adminConsent"), "error");
-      } else {
-        toast(t("cloudSignIn.failed", { reason: error instanceof Error ? error.message : String(error) }), "error");
-      }
-    } finally {
-      setBusy(false);
-      await refreshCloud(client);
-    }
+    await signInAgain(accountId, client);
+    setBusy(false);
   };
 
   return (

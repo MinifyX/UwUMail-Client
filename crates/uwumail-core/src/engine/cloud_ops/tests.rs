@@ -212,7 +212,7 @@ async fn microsoft_calendars_through_graph() {
     let created = s.server.seen().into_iter().find(|r| r.method == "POST" && r.path().ends_with("/events")).unwrap();
     let body = created.json();
     assert_eq!(body["subject"], "Run");
-    assert_eq!(body["start"], json!({ "dateTime": "2026-09-24T18:00:00", "timeZone": "Europe/Berlin" }));
+    assert_eq!(body["start"], json!({ "dateTime": "2026-09-24T18:00:00", "timeZone": "W. Europe Standard Time" }));
     assert_eq!(body["location"]["displayName"], "Studio 3");
 
     let mut renamed = input("m:CAL-1", "Yin Yoga");
@@ -474,4 +474,44 @@ async fn google_calendars_and_contacts() {
     assert_eq!(updated.json()["names"], json!([{ "givenName": "Mina", "middleName": "", "familyName": "Sommer" }]));
     assert!(updated.query("updatePersonFields").unwrap().contains("emailAddresses"));
     assert_eq!(s.server.count("POST", "/token"), 1, "one token for calendar and contacts");
+}
+
+#[tokio::test]
+async fn personal_microsoft_accounts_ask_graph_for_their_own_calendars_only() {
+    let tokens = Arc::new(AtomicUsize::new(0));
+    let s = setup(AuthKind::Microsoft, OWN, graph_handler(tokens.clone(), "me")).await;
+    // The token said Microsoft's consumer tenant (a personal account under its own domain).
+    s.engine.inner.store.set_shared_search("m", super::super::shared_ops::PERSONAL, 0).unwrap();
+    assert_eq!(s.engine.calendars().await.unwrap().iter().filter(|c| !c.is_local).count(), 2);
+    let refreshes: Vec<Request> = s.server.seen().into_iter().filter(|r| r.path() == "/token").collect();
+    assert_eq!(refreshes.len(), 1, "no second try with other scopes");
+    assert_eq!(refreshes[0].form("scope").as_deref(), Some(oauth::MICROSOFT_GRAPH_OWN_SCOPES));
+}
+
+#[tokio::test]
+async fn nested_shared_mailboxes_use_their_accounts_sign_in() {
+    let tokens = Arc::new(AtomicUsize::new(0));
+    let s = setup(AuthKind::Microsoft, OWN, graph_handler(tokens.clone(), "users/team%40example.com")).await;
+    let store = &s.engine.inner.store;
+    let mut team = store.account("m").unwrap();
+    team.id = "t".into();
+    team.name = "Team".into();
+    team.email = SHARED.into();
+    team.username = SHARED.into();
+    store.insert_account(&team).unwrap();
+    store.set_account_parent("t", Some("m")).unwrap();
+    // The shared mailbox has no secret of its own.
+    assert!(s.secrets.get("t").is_err());
+
+    let books: Vec<_> = s.engine.address_books().await.unwrap().into_iter().filter(|b| b.account_id == "t").collect();
+    assert_eq!(books.len(), 2);
+    let seen = s.server.seen();
+    let refreshes: Vec<&Request> = seen.iter().filter(|r| r.path() == "/token").collect();
+    assert!(refreshes.iter().all(|r| r.form("refresh_token").as_deref() == Some("refresh-0")), "the account's token");
+    assert!(seen.iter().any(|r| r.path() == "/graph/users/team%40example.com/contactFolders"));
+    // The rotated refresh token went to the account, still none for the shared mailbox.
+    assert!(
+        matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token } if refresh_token.starts_with("refresh-") && refresh_token != "refresh-0")
+    );
+    assert!(s.secrets.get("t").is_err());
 }

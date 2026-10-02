@@ -49,7 +49,7 @@ Android, iOS and release workflows pass to the build. To register your own:
       **Office 365 Exchange Online** → **Delegated permissions** → open
       **EWS** → tick `EWS.AccessAsUser.All` → **Add permissions**.
 
-   The list should now show eleven delegated permissions: nine under
+   The list should now show nine delegated permissions: eight under
    Microsoft Graph, `EWS.AccessAsUser.All` under Office 365 Exchange Online.
    (Older guides pick IMAP and SMTP under "Office 365 Exchange Online"; the
    Graph entries are the same grants.) The app asks for the mail scopes as
@@ -59,6 +59,13 @@ Android, iOS and release workflows pass to the build. To register your own:
    `https://graph.microsoft.com/Calendars.ReadWrite` and so on; that is
    expected. "Grant admin consent for …" on this page only covers your own
    tenant; everyone else consents at sign-in (see below).
+
+   Personal Microsoft accounts (outlook.com, hotmail.*, live.*, msn.com) are
+   asked for less: mail, `offline_access`, `Calendars.ReadWrite`,
+   `Contacts.ReadWrite` and `User.Read`, without the two `.Shared`
+   permissions and without `EWS.AccessAsUser.All`, which they have no use for
+   (no shared mailboxes) and which could fail their sign-in. Company accounts
+   are asked for all nine.
 6. Copy the **Application (client) ID** into `UWUMAIL_MICROSOFT_CLIENT_ID`
    (repository secret for CI, environment variable for a local build).
 
@@ -95,9 +102,66 @@ for existing tenants at the end of December 2026, unavailable for tenants
 created after that, with a removal date to be announced in the second half of
 2027. OAuth is unaffected, and IMAP itself is not being retired.
 
-A shared mailbox has no sign-in of its own. Add it under its own address and
-give "Sign in as" the address that has access to it: the sign-in page then asks
-for that person, and their token opens the shared address over XOAUTH2.
+### Shared mailboxes
+
+A shared mailbox has no sign-in of its own. Whoever has **full access** to it
+signs in as themselves, and their token opens the shared address over XOAUTH2
+(the XOAUTH2 user is the shared address, the token is the person's). UwUMail
+shows shared mailboxes nested under the Microsoft 365 account whose sign-in
+opens them, with their own folders, counters, notifications and place in the
+unified inbox, exactly like any other mailbox. Mail sent from a shared mailbox
+goes out under its own address, which needs "Send As" for the person in
+Exchange. A shared mailbox keeps no secret of its own: it uses the sign-in of
+its account.
+
+**Found automatically.** After a Microsoft 365 sign-in, at every start (at most
+once a day) and on "Search again", UwUMail asks Exchange Autodiscover which
+shared mailboxes the person has: one `POST` to
+`https://outlook.office365.com/autodiscover/autodiscover.xml` with the request
+schema `http://schemas.microsoft.com/exchange/autodiscover/outlook/requestschema/2006`,
+the person's address, the response schema
+`.../outlook/responseschema/2006a` and the person's access token as `Bearer`.
+The answer lists them as `<AlternativeMailbox>` entries:
+
+- `Delegate` — shared mailboxes and other people's mailboxes the person has full
+  access to. These are added.
+- `Archive` — the person's own online archive. Left out: IMAP can't open it.
+- `TeamMailbox` — SharePoint site mailboxes, retired by Microsoft and not
+  reachable over IMAP. Left out.
+
+Autodiscover only lists mailboxes whose full-access grant kept **automapping**
+on, which is the default (`Add-MailboxPermission -Identity team@company.example
+-User alex@company.example -AccessRights FullAccess -AutoMapping $true`). Ones
+granted with `-AutoMapping $false` are invisible to every mail client and are
+added by address instead.
+
+The request needs the delegated permission **`EWS.AccessAsUser.All`** of
+**Office 365 Exchange Online** (step 5 of [Microsoft](#microsoft)); the app asks for it as
+`https://outlook.office.com/EWS.AccessAsUser.All`, on the same resource as IMAP,
+so the IMAP token carries it. Sign-ins from before UwUMail asked for it get
+`401`/`403`: nothing is found, mail keeps working, and the account settings say
+"Sign in again to find shared mailboxes automatically" with a button for it.
+Personal Microsoft accounts (outlook.com, hotmail, the consumer tenant) have no
+shared mailboxes and are never asked.
+
+Autodiscover POX belongs to EWS, which Microsoft is retiring in Exchange
+Online. Whatever it answers — an error, a redirect, nothing — counts as "nothing
+found"; adding by address keeps working.
+
+**Added by address.** "Add shared mailbox" (account settings, or the account's
+menu in the sidebar) takes the address, checks it with an IMAP login under the
+account's sign-in, and adds it under the account.
+
+**Removing.** A shared mailbox removed by hand is remembered and not brought
+back by the next search; adding it by address works any time. Removing the
+account asks whether its shared mailboxes go too (the default); kept ones stay
+as mailboxes of their own with a copy of the sign-in.
+
+**From before 0.8.** Shared mailboxes added as mailboxes of their own ("Sign in
+as" in the setup dialog, which still works) move under their person's account
+on their own, keeping their mail, folders and settings, once UwUMail knows whose
+sign-in opens them: the next token says so (the `upn` of Microsoft's access
+token), or the next search lists them.
 
 ### Calendars and contacts
 
@@ -105,9 +169,16 @@ Calendars and contacts of Microsoft sign-ins come from Microsoft Graph v1.0
 (`graph.microsoft.com`): the own calendars and the ones others shared, events
 over `calendarView` with recurring ones expanded, and contact folders with
 their contacts, all read and written. Shared mailboxes use
-`/users/<address>/…` with the token of the person who signs in for them; that
-needs `Calendars.ReadWrite.Shared` and `Contacts.ReadWrite.Shared` and the
-person's access to the mailbox in Exchange.
+`/users/<address>/…` with the Graph token of the account they are nested
+under; that needs `Calendars.ReadWrite.Shared` and `Contacts.ReadWrite.Shared`
+and the person's access to the mailbox in Exchange.
+
+Graph is sent event times with Windows zone names (`W. Europe Standard Time`),
+which it always takes; an IANA zone the table doesn't name gets the Windows
+zone with the same winter and summer offsets, so a series keeps its hour. A
+zone without any is written in UTC: a timed event at its exact instant, an
+all-day event at midnight UTC of its own date. All-day events always keep
+their date, also for people east or west of UTC.
 
 Microsoft hands out one access token per resource: the sign-in asks for
 everything at once (mail, EWS and Graph scopes), the code is redeemed for the

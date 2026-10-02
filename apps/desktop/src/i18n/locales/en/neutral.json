@@ -1229,8 +1229,7 @@
     "hint": "Sign in again to see calendar and contacts. Mail keeps working either way.",
     "hintFor": "Sign in to {{name}} again to see its calendar and contacts.",
     "button": "Sign in again",
-    "done": "Signed in again. Calendar and contacts are on their way.",
-    "adminConsent": "Your organisation lets apps read calendars and contacts only after an administrator agrees. Ask them to allow UwUMail; your mail keeps working in the meantime.",
+    "adminConsent": "Your organisation lets apps use these permissions only after an administrator agrees. Ask them to allow UwUMail again; your mail keeps working in the meantime.",
     "failed": "Signing in again didn't work: {{reason}}"
   },
   "assist": {
@@ -1785,5 +1784,35 @@
       "automatic": "Set automatically",
       "bySource": "Set automatically ({{source}})"
     }
+  },
+  "shared": {
+    "title": "Shared mailboxes",
+    "add": "Add shared mailbox",
+    "addTitle": "Add a shared mailbox",
+    "addIntro": "A shared mailbox opens with the sign-in of {{email}}. Enter its address; UwUMail checks that you have access.",
+    "address": "Address of the shared mailbox",
+    "addressPlaceholder": "team@company.example",
+    "displayName": "Name (optional)",
+    "displayNamePlaceholder": "e.g. Team Sales",
+    "addConfirm": "Add",
+    "added": "{{email}} was added.",
+    "noAccess": "{{account}} can't open {{email}}. Is it a shared mailbox you have full access to?",
+    "searchAgain": "Search again",
+    "found_one": "Found {{count}} new shared mailbox.",
+    "found_other": "Found {{count}} new shared mailboxes.",
+    "foundNone": "No new shared mailboxes found.",
+    "statePending": "UwUMail looks for your shared mailboxes shortly.",
+    "stateDone": "Shared mailboxes you have access to are added automatically.",
+    "stateNeedsSignIn": "Sign in again to find shared mailboxes automatically.",
+    "stateUnavailable": "Microsoft didn't say which shared mailboxes you have. You can still add them by address.",
+    "signInAgain": "Sign in again",
+    "signedInAgain": "Signed in again as {{email}}.",
+    "of": "Shared mailbox of {{email}}",
+    "remove": "Remove shared mailbox",
+    "removeConfirm": "Remove the shared mailbox {{email}}? It isn't added again automatically; you can add it by address any time. Mail on the server isn't touched.",
+    "removeWithShared_one": "Also remove its shared mailbox",
+    "removeWithShared_other": "Also remove its {{count}} shared mailboxes",
+    "toggle": "Show or hide the shared mailboxes of {{email}}",
+    "accountMenu": "More for {{email}}"
   }
 }

@@ -30,7 +30,6 @@ import { mobile, nativeAndroid, nativeIos, nativeMobile } from "@/backend/mobile
 import type { Account, Protocol } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
-import { ArmedButton } from "@/components/ui/ArmedButton";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -53,8 +52,10 @@ import {
   type SwipeAction,
 } from "@/state/settings";
 import { toast } from "@/state/toasts";
-import { startAccountSync, useAccountSync } from "@/state/accountSync";
 import { useMailRulesAccounts } from "../rules/useMailRules";
+import { nestAccounts, takesSharedMailboxes, useSharedMailboxes } from "@/state/sharedMailboxes";
+import { searchSharedMailboxes } from "../accounts/SharedMailboxDialogs";
+import { signInAgain } from "../accounts/SignInAgain";
 import { AccountCalendar } from "./AccountCalendar";
 import { AccountContacts } from "./AccountContacts";
 import { BlockedSenders } from "./BlockedSenders";
@@ -444,17 +445,7 @@ function Accounts() {
   const businessAccounts = useSettings((s) => s.businessAccounts);
   const setAccountWorkspace = useSettings((s) => s.setAccountWorkspace);
   const [switching, setSwitching] = useState<string | null>(null);
-  /** The account whose removal is being asked about. */
-  const [removing, setRemoving] = useState<Account | null>(null);
-
-  const remove = async (account: Account) => {
-    setRemoving(null);
-    await backend().removeAccount(account.id);
-    setAccountWorkspace(account.id, "private");
-    await client.invalidateQueries();
-    // Another account may carry the settings now.
-    if (useAccountSync.getState().accountId === account.id) void startAccountSync();
-  };
+  const openShared = useSharedMailboxes((s) => s.open);
 
   const switchProtocol = async (account: Account, protocol: Protocol) => {
     const name = PROTOCOL_NAMES[protocol];
@@ -476,7 +467,7 @@ function Accounts() {
       <SettingsSyncRow />
       <WorkspaceSettings />
       <ul className="flex flex-col gap-2">
-        {accounts.map((account) => {
+        {nestAccounts(accounts).map(({ account, shared }) => {
           const other = account.protocols.find((p) => p !== account.protocol);
           return (
             <li
@@ -501,7 +492,7 @@ function Accounts() {
                   {t("settings.protocolSwitchTo", { protocol: PROTOCOL_NAMES[other] })}
                 </Button>
               )}
-              <Button size="sm" variant="danger" onClick={() => setRemoving(account)}>
+              <Button size="sm" variant="danger" onClick={() => openShared({ kind: "remove", account })}>
                 {t("settings.removeAccount")}
               </Button>
               {workspaces && (
@@ -510,12 +501,18 @@ function Accounts() {
                   <WorkspacePicker
                     label={t("workspace.of", { email: account.email })}
                     value={workspaceOf(account.id, businessAccounts)}
-                    onChange={(workspace) => setAccountWorkspace(account.id, workspace)}
+                    onChange={(workspace) => {
+                      // Its shared mailboxes come along.
+                      for (const id of [account.id, ...shared.map((s) => s.id)]) setAccountWorkspace(id, workspace);
+                    }}
                   />
                 </div>
               )}
               <AccountCalendar account={account} />
               <AccountContacts account={account} />
+              {(takesSharedMailboxes(account) || shared.length > 0) && (
+                <SharedMailboxesOf account={account} shared={shared} />
+              )}
             </li>
           );
         })}
@@ -523,25 +520,77 @@ function Accounts() {
       <Button icon={Plus} onClick={() => setAddAccountOpen(true)} className="self-start">
         {t("nav.addAccount")}
       </Button>
-      {/* In the app, not the system's question: that one answers to the Enter that opened it, and
-          "Remove" only answers once the gesture that asked is over (security-audit C-10). */}
-      <Dialog open={removing !== null} onClose={() => setRemoving(null)} width="sm">
-        {removing && (
-          <div className="flex flex-col items-center gap-3 px-6 pt-6 pb-6 text-center">
-            <p className="text-[15px] font-semibold text-balance break-words">
-              {t("settings.removeAccountConfirm", { email: removing.email })}
-            </p>
-            <div className="flex flex-wrap justify-center gap-2 pt-1">
-              <Button variant="ghost" autoFocus onClick={() => setRemoving(null)}>
-                {t("common.cancel")}
+    </div>
+  );
+}
+
+/** A Microsoft 365 account's shared mailboxes: found ones, adding one by address, searching again. */
+function SharedMailboxesOf({ account, shared }: { account: Account; shared: Account[] }) {
+  const { t } = useT();
+  const client = useQueryClient();
+  const openShared = useSharedMailboxes((s) => s.open);
+  const [busy, setBusy] = useState<"search" | "signIn" | null>(null);
+  const state = account.sharedSearch;
+
+  const run = async (kind: "search" | "signIn") => {
+    setBusy(kind);
+    try {
+      await (kind === "search" ? searchSharedMailboxes(account, client) : signInAgain(account.id, client));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex basis-full flex-col gap-2 border-t border-hairline pt-2.5">
+      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-muted">
+        <Users className="size-3.5" aria-hidden />
+        {t("shared.title")}
+      </span>
+      {shared.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {shared.map((mailbox) => (
+            <li key={mailbox.id} className="flex items-center gap-3 rounded-xl bg-pink-tint/40 px-3 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13.5px] font-semibold">{mailbox.email}</span>
+                {mailbox.displayName && <span className="block text-[12.5px] text-muted">{mailbox.displayName}</span>}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => openShared({ kind: "remove", account: mailbox })}>
+                {t("shared.remove")}
               </Button>
-              <ArmedButton variant="danger" onClick={() => void remove(removing)}>
-                {t("settings.removeAccount")}
-              </ArmedButton>
-            </div>
-          </div>
-        )}
-      </Dialog>
+            </li>
+          ))}
+        </ul>
+      )}
+      {state && (
+        <p className={clsx("text-[12.5px]", state === "needsSignIn" ? "text-warning" : "text-muted")}>
+          {t(
+            state === "needsSignIn"
+              ? "shared.stateNeedsSignIn"
+              : state === "unavailable"
+                ? "shared.stateUnavailable"
+                : state === "pending"
+                  ? "shared.statePending"
+                  : "shared.stateDone",
+          )}
+        </p>
+      )}
+      {takesSharedMailboxes(account) && (
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" icon={Plus} onClick={() => openShared({ kind: "add", parent: account })}>
+            {t("shared.add")}
+          </Button>
+          {state === "needsSignIn" ? (
+            <Button size="sm" variant="primary" busy={busy === "signIn"} onClick={() => void run("signIn")}>
+              {t("shared.signInAgain")}
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" busy={busy === "search"} onClick={() => void run("search")}>
+              {t("shared.searchAgain")}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

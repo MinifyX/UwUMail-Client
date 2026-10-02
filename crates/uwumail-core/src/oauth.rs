@@ -26,8 +26,6 @@ struct ProviderConfig {
     client_secret: Option<&'static str>,
     authorize_url: &'static str,
     token_url: &'static str,
-    /// Everything the sign-in asks consent for.
-    scopes: &'static str,
     /// What the token for mail is asked with, when that isn't everything: Microsoft gives one
     /// token per resource (Outlook for IMAP/SMTP, Graph for calendars and contacts).
     mail_scopes: Option<&'static str>,
@@ -64,6 +62,32 @@ https://graph.microsoft.com/User.Read";
 /// The code is exchanged for the Outlook token, with Exchange Web Services in it.
 const MICROSOFT_EXCHANGE_SCOPES: &str = "offline_access https://outlook.office.com/IMAP.AccessAsUser.All \
 https://outlook.office.com/SMTP.Send https://outlook.office.com/EWS.AccessAsUser.All";
+/// Personal Microsoft accounts (outlook.com, hotmail.*, live.*, ...) have neither shared mailboxes
+/// nor Exchange Web Services for UwUMail: asking for those could fail the whole sign-in.
+const MICROSOFT_PERSONAL_SIGN_IN_SCOPES: &str = "offline_access https://outlook.office.com/IMAP.AccessAsUser.All \
+https://outlook.office.com/SMTP.Send https://graph.microsoft.com/Calendars.ReadWrite \
+https://graph.microsoft.com/Contacts.ReadWrite https://graph.microsoft.com/User.Read";
+
+/// What a sign-in as `login_hint` asks consent for, and what the code is then exchanged for (None:
+/// whatever the consent covered). Personal Microsoft accounts get the set without shared calendars,
+/// shared contacts and Exchange Web Services; company accounts everything.
+pub fn sign_in_scopes(provider: OAuthProvider, login_hint: &str) -> (&'static str, Option<&'static str>) {
+    match provider {
+        OAuthProvider::Microsoft if crate::shared::is_personal_address(login_hint) => {
+            (MICROSOFT_PERSONAL_SIGN_IN_SCOPES, Some(MICROSOFT_MAIL_SCOPES))
+        }
+        OAuthProvider::Microsoft => (MICROSOFT_SIGN_IN_SCOPES, Some(MICROSOFT_EXCHANGE_SCOPES)),
+        OAuthProvider::Google => (GOOGLE_SIGN_IN_SCOPES, None),
+    }
+}
+
+/// The Graph scopes a refresh asks for: personal accounts only their own calendars and contacts.
+pub fn graph_scopes(personal: bool) -> &'static str {
+    if personal { MICROSOFT_GRAPH_OWN_SCOPES } else { MICROSOFT_GRAPH_SCOPES }
+}
+
+const GOOGLE_SIGN_IN_SCOPES: &str =
+    "https://mail.google.com/ https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts";
 
 /// The app's own link that phones come back to after signing in. Registered with Microsoft next to
 /// `http://localhost` (docs/oauth.md), and with the system: Android's manifest, iOS' Info.plist.
@@ -81,7 +105,6 @@ fn config(provider: OAuthProvider) -> Result<ProviderConfig> {
             client_secret: None,
             authorize_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
             token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-            scopes: MICROSOFT_SIGN_IN_SCOPES,
             mail_scopes: Some(MICROSOFT_MAIL_SCOPES),
             redirect_host: "localhost",
             extra: &[("prompt", "select_account")],
@@ -91,7 +114,6 @@ fn config(provider: OAuthProvider) -> Result<ProviderConfig> {
             client_secret: option_env!("UWUMAIL_GOOGLE_CLIENT_SECRET"),
             authorize_url: "https://accounts.google.com/o/oauth2/v2/auth",
             token_url: "https://oauth2.googleapis.com/token",
-            scopes: "https://mail.google.com/ https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts",
             mail_scopes: None,
             redirect_host: "127.0.0.1",
             extra: &[("access_type", "offline"), ("prompt", "consent")],
@@ -273,6 +295,7 @@ pub async fn sign_in(
     };
     let verifier = random_token(48)?;
     let state = random_token(24)?;
+    let (scopes, exchange) = sign_in_scopes(provider, login_hint);
 
     let mut authorize = url::Url::parse(config.authorize_url).map_err(|e| Error::internal(e.to_string()))?;
     authorize
@@ -280,7 +303,7 @@ pub async fn sign_in(
         .append_pair("client_id", config.client_id)
         .append_pair("response_type", "code")
         .append_pair("redirect_uri", &redirect_uri)
-        .append_pair("scope", config.scopes)
+        .append_pair("scope", scopes)
         .append_pair("code_challenge", &pkce_challenge(&verifier))
         .append_pair("code_challenge_method", "S256")
         .append_pair("state", &state)
@@ -294,13 +317,13 @@ pub async fn sign_in(
             let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_app_link(&mut incoming, &state))
                 .await
                 .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
-            return exchange_code(http, &config, code, redirect_uri, verifier).await;
+            return exchange_code(http, &config, code, redirect_uri, verifier, exchange).await;
         }
     };
     let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_loopback(listeners, state))
         .await
         .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
-    exchange_code(http, &config, code, redirect_uri, verifier).await
+    exchange_code(http, &config, code, redirect_uri, verifier, exchange).await
 }
 
 /// Listeners on one port of both loopback addresses. Microsoft's redirect names `localhost`, which a
@@ -406,6 +429,7 @@ async fn exchange_code(
     code: String,
     redirect_uri: String,
     verifier: String,
+    exchange: Option<&str>,
 ) -> Result<Tokens> {
     let mut form = vec![
         ("client_id", config.client_id.to_string()),
@@ -417,9 +441,9 @@ async fn exchange_code(
     if let Some(secret) = config.client_secret {
         form.push(("client_secret", secret.to_string()));
     }
-    if config.mail_scopes.is_some() {
+    if let Some(scope) = exchange {
         // Consent covered several resources; the code becomes the Outlook token.
-        form.push(("scope", MICROSOFT_EXCHANGE_SCOPES.to_string()));
+        form.push(("scope", scope.to_string()));
     }
     request_tokens(config.token_url, &form, false).await
 }
@@ -568,6 +592,37 @@ mod tests {
         assert_eq!(code, "abc/123");
         assert_eq!(state, "xyz");
         assert!(parse_redirect("GET /?error=access_denied HTTP/1.1\r\n").is_err());
+    }
+
+    #[test]
+    fn personal_microsoft_accounts_ask_for_no_shared_or_ews_scopes() {
+        // Microsoft's own consumer domains (nothing is sent there).
+        for personal in ["mini@outlook.com", "mini@hotmail.de", "mini@live.com"] {
+            let (authorize, exchange) = sign_in_scopes(OAuthProvider::Microsoft, personal);
+            assert!(!authorize.contains(".Shared"), "{personal}");
+            assert!(!authorize.contains("EWS"), "{personal}");
+            for wanted in [
+                "IMAP.AccessAsUser.All",
+                "SMTP.Send",
+                "offline_access",
+                "Calendars.ReadWrite",
+                "Contacts.ReadWrite",
+                "User.Read",
+            ] {
+                assert!(authorize.contains(wanted), "{personal}: {wanted}");
+            }
+            assert_eq!(exchange, Some(MICROSOFT_MAIL_SCOPES));
+        }
+        let (authorize, exchange) = sign_in_scopes(OAuthProvider::Microsoft, "alex@contoso.example");
+        for wanted in
+            ["Calendars.ReadWrite.Shared", "Contacts.ReadWrite.Shared", "EWS.AccessAsUser.All", "IMAP.AccessAsUser.All"]
+        {
+            assert!(authorize.contains(wanted), "{wanted}");
+        }
+        assert!(exchange.unwrap().contains("EWS.AccessAsUser.All"));
+        assert_eq!(sign_in_scopes(OAuthProvider::Google, "mini@example.com").1, None);
+        assert!(!graph_scopes(true).contains(".Shared"));
+        assert!(graph_scopes(false).contains("Calendars.ReadWrite.Shared"));
     }
 
     #[test]

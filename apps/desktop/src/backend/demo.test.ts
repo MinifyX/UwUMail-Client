@@ -277,7 +277,7 @@ describe("DemoBackend assistant", () => {
     const scopes = await demo.assistScopes();
     expect(scopes.map((scope) => [scope.id, scope.accountIds])).toEqual([
       ["acc-private", ["acc-private"]],
-      ["device", ["acc-studio"]],
+      ["device", ["acc-studio", "acc-studio-team"]],
     ]);
     expect((await demo.assistProviders("acc-private"))[0]!.scope).toBe("server");
     expect((await demo.assistProviders("device"))[0]!.kind).toBe("ollama");
@@ -302,5 +302,40 @@ describe("DemoBackend assistant", () => {
     await demo.setKeywords([messages[0]!.id], { travel: true });
     const again = await demo.listThreads(inbox("acc-studio"));
     expect(again.threads.find((thread) => thread.id === threads[0]!.id)?.keywords).toContain("travel");
+  });
+});
+
+describe("DemoBackend shared mailboxes", () => {
+  it("nests the studio's shared mailbox and keeps a removed one away", async () => {
+    const demo = new DemoBackend();
+    const accounts = await demo.listAccounts();
+    expect(accounts.map((a) => [a.id, a.parentId ?? null])).toEqual([
+      ["acc-private", null],
+      ["acc-studio", null],
+      ["acc-studio-team", "acc-studio"],
+    ]);
+    const { threads } = await demo.listThreads(inbox("acc-studio-team"));
+    expect(threads.length).toBeGreaterThan(0);
+
+    await demo.removeAccount("acc-studio-team");
+    expect((await demo.findSharedMailboxes("acc-studio")).added).toEqual([]);
+    expect((await demo.listAccounts()).some((a) => a.parentId)).toBe(false);
+
+    const added = await demo.addSharedMailbox("acc-studio", "team@pixelstudio.example", "Team");
+    expect(added.parentId).toBe("acc-studio");
+    await expect(demo.addSharedMailbox("acc-studio", "team@pixelstudio.example")).rejects.toThrow(/already/);
+    await expect(demo.addSharedMailbox("acc-private", "x@pixelstudio.example")).rejects.toThrow();
+  });
+
+  it("takes shared mailboxes along with their account unless asked to keep them", async () => {
+    const demo = new DemoBackend();
+    await demo.removeAccount("acc-studio", { keepShared: true });
+    expect((await demo.listAccounts()).map((a) => [a.id, a.parentId ?? null])).toEqual([
+      ["acc-private", null],
+      ["acc-studio-team", null],
+    ]);
+    const again = new DemoBackend();
+    await again.removeAccount("acc-studio");
+    expect((await again.listAccounts()).map((a) => a.id)).toEqual(["acc-private"]);
   });
 });

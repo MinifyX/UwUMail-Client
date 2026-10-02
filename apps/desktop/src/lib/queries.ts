@@ -13,7 +13,7 @@ import type {
   ThreadSummary,
 } from "@/backend/types";
 import { translate, useT } from "@/i18n";
-import { inWorkspace } from "@/lib/workspaces";
+import { inWorkspace, sharedFollowAccounts } from "@/lib/workspaces";
 import { useAccountSync } from "@/state/accountSync";
 import { confirmDeleteForever } from "@/state/deleteForever";
 import { useSettings } from "@/state/settings";
@@ -336,6 +336,15 @@ export function useBackendEvents() {
   const { t } = useT();
   const runInBackground = useSettings((s) => s.runInBackground);
   const privacyProxy = useSettings((s) => s.privacyProxy);
+  const { data: accounts } = useAccounts();
+  const businessAccounts = useSettings((s) => s.businessAccounts);
+
+  // Shared mailboxes, found ones too, show in their account's workspace.
+  useEffect(() => {
+    if (!accounts) return;
+    const following = sharedFollowAccounts(accounts, businessAccounts);
+    if (following !== businessAccounts) useSettings.setState({ businessAccounts: [...following] });
+  }, [accounts, businessAccounts]);
 
   useEffect(() => {
     void backend().setRunInBackground(runInBackground);
@@ -403,6 +412,11 @@ export function useBackendEvents() {
           break;
         case "account:status":
           void client.invalidateQueries({ queryKey: queryKeys.accounts });
+          break;
+        case "accounts:changed":
+          void client.invalidateQueries({ queryKey: queryKeys.accounts });
+          void client.invalidateQueries({ queryKey: queryKeys.folders });
+          void client.invalidateQueries({ queryKey: queryKeys.identities });
           break;
         case "calendar:changed":
           void client.invalidateQueries({ queryKey: queryKeys.calendars });
