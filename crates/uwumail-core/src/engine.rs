@@ -145,6 +145,12 @@ struct Inner {
     image_texts: Mutex<crate::ocr::ResultCache>,
     /// The AI assistant's streams and auto-label queue.
     assist: assist_ops::AssistState,
+    /// One search for shared mailboxes at a time (see `shared_ops`).
+    shared_lock: AsyncMutex<()>,
+    /// Where shared mailboxes are asked for; a local fake in tests.
+    autodiscover_url: Mutex<String>,
+    /// Whether accounts sync in the background; tests that must not reach any server switch it off.
+    background_sync: std::sync::atomic::AtomicBool,
 }
 
 enum Credential {
@@ -185,6 +191,7 @@ mod folder_ops;
 mod ocr_ops;
 mod price_ops;
 mod push_ops;
+mod shared_ops;
 
 impl Engine {
     /// Must be called inside a Tokio runtime.
@@ -230,6 +237,9 @@ impl Engine {
                 ocr_permits: Arc::new(tokio::sync::Semaphore::new(crate::ocr::PARALLEL)),
                 image_texts: Mutex::new(crate::ocr::ResultCache::default()),
                 assist: assist_ops::AssistState::new(),
+                shared_lock: AsyncMutex::new(()),
+                autodiscover_url: Mutex::new(crate::shared::AUTODISCOVER_URL.to_string()),
+                background_sync: std::sync::atomic::AtomicBool::new(true),
             }),
         })
     }
@@ -263,6 +273,9 @@ impl Engine {
     /// still waiting in the outbox when UwUMail last stopped.
     pub fn start(&self) -> Result<()> {
         assist_ops::start_auto_labels(self.clone());
+        // Shared mailboxes added by hand before they could be nested go under their account.
+        self.nest_shared_mailboxes();
+        shared_ops::start_shared_search(self.clone());
         for account in self.inner.store.accounts()? {
             self.inner.spawn_sync(&account.id);
         }
@@ -272,14 +285,16 @@ impl Engine {
         Ok(())
     }
 
+    /// Every mailbox, each shared mailbox right after the account it is opened with.
     pub fn list_accounts(&self) -> Result<Vec<Account>> {
+        let links = self.inner.store.account_links()?;
+        let records = shared_ops::nested_order(self.inner.store.accounts()?, &links);
         let accounts = self.inner.accounts.lock().unwrap();
-        Ok(self
-            .inner
-            .store
-            .accounts()?
+        Ok(records
             .into_iter()
             .map(|record| {
+                let link = links.get(&record.id).cloned().unwrap_or_default();
+                let shared_search = shared_ops::shared_search_of(&record, &link);
                 let status = accounts.get(&record.id).map(|r| r.status.clone()).unwrap_or(AccountStatus::Idle);
                 let mut protocols = Vec::new();
                 if !record.imap.host.is_empty() && !record.smtp.host.is_empty() {
@@ -298,6 +313,8 @@ impl Engine {
                     status,
                     protocol: record.protocol,
                     protocols,
+                    parent_id: link.parent_id.filter(|parent| links.contains_key(parent)),
+                    shared_search,
                 }
             })
             .collect())
@@ -483,6 +500,8 @@ impl Engine {
             jmap_url: jmap_url.clone().filter(|_| new.auth == AuthKind::Password),
         };
 
+        // The Microsoft token of the sign-in, which tells whose it is.
+        let mut signed_in = None;
         let secret = match new.auth {
             AuthKind::Password => {
                 let password = new
@@ -524,33 +543,11 @@ impl Engine {
                     if new.auth == AuthKind::Microsoft { OAuthProvider::Microsoft } else { OAuthProvider::Google };
                 // Before the browser opens: the token must not be able to go anywhere else.
                 autoconfig::check_oauth_servers(provider, &[&record.imap, &record.smtp])?;
-                let mut waiting = None;
-                let app_link = self.inner.oauth_redirect.lock().unwrap().clone();
-                let redirect = match app_link.filter(|_| oauth::takes_app_link(provider)) {
-                    Some(uri) => {
-                        let (sender, incoming) = tokio::sync::mpsc::channel(SIGN_IN_LINK_QUEUE);
-                        // A newer sign-in replaces an abandoned one.
-                        waiting = Some(sender.clone());
-                        *self.inner.pending_sign_in.lock().unwrap() = Some(sender);
-                        oauth::Redirect::App { uri, incoming }
-                    }
-                    None => oauth::Redirect::Loopback,
-                };
                 // Whose sign-in page to show: the mailbox owner, or the person who has
                 // access to a shared mailbox.
                 let sign_in_as =
                     new.sign_in_as.as_deref().map(str::trim).filter(|a| !a.is_empty()).unwrap_or(&record.email);
-                let tokens =
-                    oauth::sign_in(&self.inner.http, provider, sign_in_as, self.inner.open_url.as_ref(), redirect)
-                        .await;
-                if let Some(ours) = waiting {
-                    let mut pending = self.inner.pending_sign_in.lock().unwrap();
-                    // Done either way; a sign-in started meanwhile keeps its slot.
-                    if pending.as_ref().is_some_and(|sender| sender.same_channel(&ours)) {
-                        *pending = None;
-                    }
-                }
-                let tokens = tokens?;
+                let tokens = self.browser_sign_in(provider, sign_in_as).await?;
                 let refresh_token = tokens
                     .refresh_token
                     .clone()
@@ -564,6 +561,9 @@ impl Engine {
                 )
                 .await?;
                 let _ = session.logout().await;
+                if provider == OAuthProvider::Microsoft {
+                    signed_in = Some(tokens.access_token.clone());
+                }
                 self.inner
                     .tokens
                     .lock()
@@ -578,6 +578,9 @@ impl Engine {
             let _ = self.inner.secrets.delete(&id);
             return Err(error);
         }
+        if let Some(token) = signed_in {
+            self.after_microsoft_sign_in(&record, &token);
+        }
         self.inner.spawn_sync(&id);
         self.inner.emit(EngineEvent::MailChanged { account_id: id.clone() });
         self.inner.emit(EngineEvent::PushChanged { reregister: record.protocol == Protocol::Jmap });
@@ -587,7 +590,13 @@ impl Engine {
             .ok_or_else(|| Error::internal("The new mailbox disappeared."))
     }
 
+    /// Removes a mailbox, and with it the shared mailboxes opened with its sign-in.
     pub async fn remove_account(&self, account_id: &str) -> Result<()> {
+        self.remove_account_with(account_id, false).await
+    }
+
+    /// Removes one mailbox and nothing else.
+    async fn remove_one_account(&self, account_id: &str) -> Result<()> {
         self.stop_push_briefly(account_id).await;
         let runtime = self.inner.accounts.lock().unwrap().remove(account_id);
         if let Some(runtime) = runtime {
@@ -609,6 +618,7 @@ impl Engine {
         self.inner.secrets.delete(account_id)?;
         self.inner.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
         self.inner.emit(EngineEvent::PushChanged { reregister: true });
+        self.inner.emit(EngineEvent::AccountsChanged {});
         Ok(())
     }
 
@@ -1710,6 +1720,9 @@ impl Inner {
     }
 
     fn spawn_sync(self: &Arc<Self>, account_id: &str) {
+        if !self.background_sync.load(Ordering::Relaxed) {
+            return;
+        }
         let mut accounts = self.accounts.lock().unwrap();
         let runtime = accounts.entry(account_id.to_string()).or_insert_with(Runtime::new);
         if runtime.task.is_some() {
@@ -1722,7 +1735,9 @@ impl Inner {
     }
 
     async fn credential(&self, account: &AccountRecord) -> Result<Credential> {
-        match self.secrets.get(&account.id)? {
+        // A shared mailbox opens with the sign-in of the account it is nested under.
+        let holder = self.secret_holder(&account.id);
+        match self.secrets.get(&holder)? {
             Secret::Password { password } => Ok(Credential::Password(password)),
             Secret::OAuth { refresh_token } => {
                 let provider =
@@ -1731,7 +1746,7 @@ impl Inner {
                 // keep sending them elsewhere.
                 autoconfig::check_oauth_servers(provider, &[&account.imap, &account.smtp])?;
                 let mut tokens = self.tokens.lock().await;
-                if let Some((token, expires)) = tokens.get(&account.id)
+                if let Some((token, expires)) = tokens.get(&holder)
                     && *expires > Instant::now() + Duration::from_secs(60)
                 {
                     return Ok(Credential::Token(token.clone()));
@@ -1740,9 +1755,14 @@ impl Inner {
                 if let Some(rotated) = &fresh.refresh_token
                     && *rotated != refresh_token
                 {
-                    self.secrets.set(&account.id, &Secret::OAuth { refresh_token: rotated.clone() })?;
+                    self.secrets.set(&holder, &Secret::OAuth { refresh_token: rotated.clone() })?;
                 }
-                tokens.insert(account.id.clone(), (fresh.access_token.clone(), Instant::now() + fresh.expires_in));
+                tokens.insert(holder.clone(), (fresh.access_token.clone(), Instant::now() + fresh.expires_in));
+                if provider == OAuthProvider::Microsoft && holder == account.id {
+                    for nested in self.note_sign_in(account, &fresh.access_token) {
+                        tokens.remove(&nested);
+                    }
+                }
                 Ok(Credential::Token(fresh.access_token))
             }
             Secret::ApiKey { .. } => Err(Error::auth("No saved password for this mailbox.")),

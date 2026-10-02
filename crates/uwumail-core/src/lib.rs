@@ -29,6 +29,7 @@ pub mod oauth;
 pub mod ocr;
 pub mod pictures;
 pub mod secrets;
+pub mod shared;
 pub mod smtp;
 pub mod store;
 pub mod tls;

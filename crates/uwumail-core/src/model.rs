@@ -113,6 +113,57 @@ pub struct Account {
     pub protocol: Protocol,
     /// Protocols this account can switch to.
     pub protocols: Vec<Protocol>,
+    /// For a shared mailbox: the Microsoft account whose sign-in opens it. It is listed right
+    /// after that account.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// For a Microsoft 365 work account: how the search for its shared mailboxes went.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shared_search: Option<SharedSearch>,
+}
+
+/// How the search for a Microsoft 365 account's shared mailboxes went (see `shared`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SharedSearch {
+    /// Not searched yet.
+    Pending,
+    /// Searched; whatever was found is listed under the account.
+    Done,
+    /// The sign-in is from before UwUMail asked for Exchange access: signing in again lets it search.
+    NeedsSignIn,
+    /// Microsoft didn't answer usefully; shared mailboxes can still be added by address.
+    Unavailable,
+}
+
+impl SharedSearch {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Done => "done",
+            Self::NeedsSignIn => "needsSignIn",
+            Self::Unavailable => "unavailable",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "pending" => Self::Pending,
+            "done" => Self::Done,
+            "needsSignIn" => Self::NeedsSignIn,
+            "unavailable" => Self::Unavailable,
+            _ => return None,
+        })
+    }
+}
+
+/// What a search for shared mailboxes found.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedSearchResult {
+    pub state: SharedSearch,
+    /// The mailboxes added by this search.
+    pub added: Vec<Account>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -909,6 +960,9 @@ pub enum EngineEvent {
     #[serde(rename = "push:changed")]
     PushChanged { reregister: bool },
     /// The AI assistant's providers, settings or labels changed, or it labelled new mail.
+    /// Mailboxes were added, removed or nested (shared mailboxes found or sorted under their account).
+    #[serde(rename = "accounts:changed")]
+    AccountsChanged {},
     #[serde(rename = "assist:changed", rename_all = "camelCase")]
     AssistChanged {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -928,6 +982,7 @@ impl EngineEvent {
             Self::CalendarChanged {} => "calendar:changed",
             Self::ContactsChanged {} => "contacts:changed",
             Self::PushChanged { .. } => "push:changed",
+            Self::AccountsChanged {} => "accounts:changed",
             Self::AssistChanged { .. } => "assist:changed",
         }
     }
