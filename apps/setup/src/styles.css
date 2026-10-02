@@ -31,11 +31,14 @@ body {
   background: linear-gradient(180deg, #fff3f8 0%, #ffd3e5 100%);
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.008em;
+  /* Blink drops contextual alternates (Nyu, the heart) as soon as letter-spacing isn't 0. */
+  font-feature-settings: "calt" 1;
 }
 
 input,
 textarea {
   font-variant-ligatures: no-contextual;
+  font-feature-settings: "calt" 0;
 }
 
 :focus-visible {
