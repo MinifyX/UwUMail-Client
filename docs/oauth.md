@@ -80,9 +80,68 @@ for existing tenants at the end of December 2026, unavailable for tenants
 created after that, with a removal date to be announced in the second half of
 2027. OAuth is unaffected, and IMAP itself is not being retired.
 
-A shared mailbox has no sign-in of its own. Add it under its own address and
-give "Sign in as" the address that has access to it: the sign-in page then asks
-for that person, and their token opens the shared address over XOAUTH2.
+### Shared mailboxes
+
+A shared mailbox has no sign-in of its own. Whoever has **full access** to it
+signs in as themselves, and their token opens the shared address over XOAUTH2
+(the XOAUTH2 user is the shared address, the token is the person's). UwUMail
+shows shared mailboxes nested under the Microsoft 365 account whose sign-in
+opens them, with their own folders, counters, notifications and place in the
+unified inbox, exactly like any other mailbox. Mail sent from a shared mailbox
+goes out under its own address, which needs "Send As" for the person in
+Exchange. A shared mailbox keeps no secret of its own: it uses the sign-in of
+its account.
+
+**Found automatically.** After a Microsoft 365 sign-in, at every start (at most
+once a day) and on "Search again", UwUMail asks Exchange Autodiscover which
+shared mailboxes the person has: one `POST` to
+`https://outlook.office365.com/autodiscover/autodiscover.xml` with the request
+schema `http://schemas.microsoft.com/exchange/autodiscover/outlook/requestschema/2006`,
+the person's address, the response schema
+`.../outlook/responseschema/2006a` and the person's access token as `Bearer`.
+The answer lists them as `<AlternativeMailbox>` entries:
+
+- `Delegate` — shared mailboxes and other people's mailboxes the person has full
+  access to. These are added.
+- `Archive` — the person's own online archive. Left out: IMAP can't open it.
+- `TeamMailbox` — SharePoint site mailboxes, retired by Microsoft and not
+  reachable over IMAP. Left out.
+
+Autodiscover only lists mailboxes whose full-access grant kept **automapping**
+on, which is the default (`Add-MailboxPermission -Identity team@company.example
+-User alex@company.example -AccessRights FullAccess -AutoMapping $true`). Ones
+granted with `-AutoMapping $false` are invisible to every mail client and are
+added by address instead.
+
+The request needs the delegated permission **`EWS.AccessAsUser.All`** of
+**Office 365 Exchange Online** on the Entra app (API permissions → Add a
+permission → APIs my organization uses → Office 365 Exchange Online → Delegated
+→ `EWS.AccessAsUser.All`); the app asks for it as
+`https://outlook.office.com/EWS.AccessAsUser.All`, on the same resource as IMAP,
+so the IMAP token carries it. Sign-ins from before UwUMail asked for it get
+`401`/`403`: nothing is found, mail keeps working, and the account settings say
+"Sign in again to find shared mailboxes automatically" with a button for it.
+Personal Microsoft accounts (outlook.com, hotmail, the consumer tenant) have no
+shared mailboxes and are never asked.
+
+Autodiscover POX belongs to EWS, which Microsoft is retiring in Exchange
+Online. Whatever it answers — an error, a redirect, nothing — counts as "nothing
+found"; adding by address keeps working.
+
+**Added by address.** "Add shared mailbox" (account settings, or the account's
+menu in the sidebar) takes the address, checks it with an IMAP login under the
+account's sign-in, and adds it under the account.
+
+**Removing.** A shared mailbox removed by hand is remembered and not brought
+back by the next search; adding it by address works any time. Removing the
+account asks whether its shared mailboxes go too (the default); kept ones stay
+as mailboxes of their own with a copy of the sign-in.
+
+**From before 0.8.** Shared mailboxes added as mailboxes of their own ("Sign in
+as" in the setup dialog, which still works) move under their person's account
+on their own, keeping their mail, folders and settings, once UwUMail knows whose
+sign-in opens them: the next token says so (the `upn` of Microsoft's access
+token), or the next search lists them.
 
 ### Who can sign in, and who needs their IT first
 
