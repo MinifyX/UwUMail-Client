@@ -22,6 +22,8 @@ on:
     secrets:
       UWUMAIL_MICROSOFT_CLIENT_ID:
         required: false
+      UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID:
+        required: false
       UWUMAIL_GOOGLE_CLIENT_ID:
         required: false
       UWUMAIL_GOOGLE_CLIENT_SECRET:
@@ -110,6 +112,7 @@ jobs:
           # Tauri's AppImage tools are AppImages themselves; they unpack instead of needing FUSE.
           APPIMAGE_EXTRACT_AND_RUN: 1
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
       - name: What was built
@@ -253,6 +256,7 @@ jobs:
         run: node scripts/build-setup.mjs --target aarch64-pc-windows-msvc
         env:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
 

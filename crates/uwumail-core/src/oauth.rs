@@ -3,15 +3,21 @@
 //! Authorization code flow with PKCE and a loopback redirect: the system
 //! browser shows the provider's page, and a one-shot HTTP listener on
 //! 127.0.0.1 receives the code. Client ids are compiled in from
-//! `UWUMAIL_MICROSOFT_CLIENT_ID`, `UWUMAIL_GOOGLE_CLIENT_ID` and
-//! `UWUMAIL_GOOGLE_CLIENT_SECRET` (Google's "secret" for desktop apps is not
-//! confidential). See docs/oauth.md.
+//! `UWUMAIL_MICROSOFT_CLIENT_ID`, `UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID`,
+//! `UWUMAIL_GOOGLE_CLIENT_ID` and `UWUMAIL_GOOGLE_CLIENT_SECRET` (Google's
+//! "secret" for desktop apps is not confidential). See docs/oauth.md.
+//!
+//! Microsoft has two app registrations: one open to personal and company accounts, which Entra
+//! only lets list mail permissions, and one for company accounts only ("Business"), which lists
+//! everything so that an administrator can allow it for the whole company in one go. Company
+//! addresses sign in with the business app when this build has its id; a refresh token is always
+//! redeemed with the app it was issued to ([`MicrosoftApp`], kept with the secret).
 
 use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -20,6 +26,62 @@ use crate::error::{Error, Result};
 use crate::model::OAuthProvider;
 
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+/// Which of UwUMail's two Microsoft app registrations a sign-in (and so its refresh token) belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MicrosoftApp {
+    /// "UwUMail-Client": personal and company accounts, only mail permissions listed. Every sign-in
+    /// from before the business app came along is one of these.
+    #[default]
+    Personal,
+    /// "UwUMail-Client Business": company accounts only, every permission listed.
+    Business,
+}
+
+/// The Microsoft client ids this build carries; an empty one counts as missing.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct MicrosoftIds<'a> {
+    pub personal: Option<&'a str>,
+    pub business: Option<&'a str>,
+}
+
+impl MicrosoftIds<'static> {
+    pub(crate) fn compiled() -> Self {
+        Self {
+            personal: option_env!("UWUMAIL_MICROSOFT_CLIENT_ID").filter(|id| !id.is_empty()),
+            business: option_env!("UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID").filter(|id| !id.is_empty()),
+        }
+    }
+}
+
+impl<'a> MicrosoftIds<'a> {
+    /// The app that really answers for `app`: without a business id, the personal app does
+    /// everything, as before there were two (local builds and forks).
+    pub(crate) fn effective(&self, app: MicrosoftApp) -> MicrosoftApp {
+        match (app, self.business) {
+            (MicrosoftApp::Business, Some(_)) => MicrosoftApp::Business,
+            _ => MicrosoftApp::Personal,
+        }
+    }
+
+    pub(crate) fn client_id(&self, app: MicrosoftApp) -> Option<&'a str> {
+        match self.effective(app) {
+            MicrosoftApp::Business => self.business,
+            MicrosoftApp::Personal => self.personal,
+        }
+    }
+
+    /// The app a sign-in as `login_hint` starts with: Microsoft's own consumer domains the personal
+    /// one, every other address the business one (when there is one).
+    pub(crate) fn for_address(&self, login_hint: &str) -> MicrosoftApp {
+        if crate::shared::is_personal_address(login_hint) {
+            MicrosoftApp::Personal
+        } else {
+            self.effective(MicrosoftApp::Business)
+        }
+    }
+}
 
 struct ProviderConfig {
     client_id: &'static str,
@@ -65,12 +127,12 @@ const MICROSOFT_PERSONAL_SIGN_IN_SCOPES: &str = "offline_access https://outlook.
 https://outlook.office.com/SMTP.Send https://graph.microsoft.com/Calendars.ReadWrite \
 https://graph.microsoft.com/Contacts.ReadWrite https://graph.microsoft.com/User.Read";
 
-/// What a sign-in as `login_hint` asks consent for, and what the code is then exchanged for (None:
-/// whatever the consent covered). Personal Microsoft accounts get the set without shared calendars,
-/// shared contacts and Exchange Web Services; company accounts everything.
-pub fn sign_in_scopes(provider: OAuthProvider, login_hint: &str) -> (&'static str, Option<&'static str>) {
+/// What a sign-in asks consent for, and what the code is then exchanged for (None: whatever the
+/// consent covered). Personal Microsoft accounts get the set without shared calendars, shared
+/// contacts and Exchange Web Services; company accounts everything.
+pub fn sign_in_scopes(provider: OAuthProvider, personal_account: bool) -> (&'static str, Option<&'static str>) {
     match provider {
-        OAuthProvider::Microsoft if crate::shared::is_personal_address(login_hint) => {
+        OAuthProvider::Microsoft if personal_account => {
             (MICROSOFT_PERSONAL_SIGN_IN_SCOPES, Some(MICROSOFT_MAIL_SCOPES))
         }
         OAuthProvider::Microsoft => (MICROSOFT_SIGN_IN_SCOPES, Some(MICROSOFT_EXCHANGE_SCOPES)),
@@ -90,21 +152,39 @@ const GOOGLE_SIGN_IN_SCOPES: &str =
 /// `http://localhost` (docs/oauth.md), and with the system: Android's manifest, iOS' Info.plist.
 pub const APP_LINK: &str = "app.uwumail://oauth";
 
-fn config(provider: OAuthProvider) -> Result<ProviderConfig> {
-    let missing = || {
-        Error::oauth_not_configured(
-            "This build of UwUMail has no OAuth client id for this provider. See docs/oauth.md to set one up.",
-        )
-    };
+fn not_configured() -> Error {
+    Error::oauth_not_configured(
+        "This build of UwUMail has no OAuth client id for this provider. See docs/oauth.md to set one up.",
+    )
+}
+
+/// The provider's settings; `app` picks the Microsoft app (ignored for Google).
+fn config(provider: OAuthProvider, app: MicrosoftApp) -> Result<ProviderConfig> {
+    let missing = not_configured;
     Ok(match provider {
-        OAuthProvider::Microsoft => ProviderConfig {
-            client_id: option_env!("UWUMAIL_MICROSOFT_CLIENT_ID").filter(|id| !id.is_empty()).ok_or_else(missing)?,
-            client_secret: None,
-            authorize_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-            token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-            redirect_host: "localhost",
-            extra: &[("prompt", "select_account")],
-        },
+        OAuthProvider::Microsoft => {
+            let ids = MicrosoftIds::compiled();
+            let client_id = ids.client_id(app).ok_or_else(missing)?;
+            match ids.effective(app) {
+                // Company accounts only: `organizations` skips the personal-account page.
+                MicrosoftApp::Business => ProviderConfig {
+                    client_id,
+                    client_secret: None,
+                    authorize_url: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize",
+                    token_url: "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
+                    redirect_host: "localhost",
+                    extra: &[("prompt", "select_account")],
+                },
+                MicrosoftApp::Personal => ProviderConfig {
+                    client_id,
+                    client_secret: None,
+                    authorize_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+                    token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+                    redirect_host: "localhost",
+                    extra: &[("prompt", "select_account")],
+                },
+            }
+        }
         OAuthProvider::Google => ProviderConfig {
             client_id: option_env!("UWUMAIL_GOOGLE_CLIENT_ID").filter(|id| !id.is_empty()).ok_or_else(missing)?,
             client_secret: option_env!("UWUMAIL_GOOGLE_CLIENT_SECRET"),
@@ -123,6 +203,8 @@ pub struct Tokens {
     pub expires_in: Duration,
     /// The scopes the access token carries, when the provider says (both do).
     pub scope: Option<String>,
+    /// The Microsoft app a browser sign-in went through: its refresh token only works with that one.
+    pub app: Option<MicrosoftApp>,
 }
 
 impl Tokens {
@@ -171,9 +253,23 @@ fn request_url(request: &str) -> Result<url::Url> {
     url::Url::parse(&format!("http://localhost{target}")).map_err(|_| Error::auth("Invalid redirect."))
 }
 
+/// A sign-in the provider (or the person) didn't finish.
+#[derive(Debug)]
+pub(crate) struct Refused {
+    pub error: Error,
+    /// Microsoft said the account is a personal one, which the business app doesn't take.
+    pub personal_account: bool,
+}
+
+impl From<Error> for Refused {
+    fn from(error: Error) -> Self {
+        Self { error, personal_account: false }
+    }
+}
+
 /// Pulls `code` and `state` out of `GET /?code=…&state=… HTTP/1.1`.
 #[cfg(test)]
-fn parse_redirect(request: &str) -> Result<(String, String)> {
+fn parse_redirect(request: &str) -> Result<(String, String), Refused> {
     redirect_parameters(&request_url(request)?)
 }
 
@@ -188,7 +284,7 @@ fn belongs_to(url: &url::Url, state: &str) -> bool {
 async fn wait_for_app_link(
     incoming: &mut tokio::sync::mpsc::Receiver<String>,
     state: &str,
-) -> Result<(String, String)> {
+) -> Result<(String, String), Refused> {
     loop {
         let url = incoming.recv().await.ok_or_else(|| Error::auth("The sign-in was cancelled."))?;
         if let Ok(url) = url::Url::parse(&url)
@@ -200,7 +296,7 @@ async fn wait_for_app_link(
 }
 
 /// `code` and `state` of a redirect URL, or the error the provider reported.
-pub(crate) fn redirect_parameters(url: &url::Url) -> Result<(String, String)> {
+pub(crate) fn redirect_parameters(url: &url::Url) -> Result<(String, String), Refused> {
     let mut code = None;
     let mut state = None;
     let mut error = None;
@@ -215,9 +311,33 @@ pub(crate) fn redirect_parameters(url: &url::Url) -> Result<(String, String)> {
         }
     }
     if let Some(error) = error {
-        return Err(explain_sign_in_error(&error, &description));
+        return Err(Refused {
+            error: explain_sign_in_error(&error, &description),
+            personal_account: personal_account_refused(&error, &description),
+        });
     }
     Ok((code.ok_or_else(|| Error::auth("No authorization code received."))?, state.unwrap_or_default()))
+}
+
+/// Whether Microsoft refused the sign-in because a personal Microsoft account came to the
+/// business app, which takes company accounts only:
+/// - AADSTS500200: "User account is a personal Microsoft account. Personal Microsoft accounts are
+///   not supported for this application unless explicitly invited to an organization."
+/// - AADSTS50020: "User account from identity provider 'live.com' does not exist in tenant ...".
+/// - AADSTS700016 / `unauthorized_client`: the app "was not found in the directory 'Microsoft
+///   Accounts'" or "is not enabled for consumers", i.e. the consumer side doesn't know the app.
+/// - AADSTS50034 / AADSTS90072: the address has no account in any company directory.
+///
+/// Most of these Microsoft shows on its own page instead of sending them back, which is why a
+/// sign-in first asks whether the domain is a company directory at all ([`tenant_exists`]).
+pub(crate) fn personal_account_refused(error: &str, description: &str) -> bool {
+    let description_lower = description.to_ascii_lowercase();
+    ["AADSTS500200", "AADSTS50020", "AADSTS700016", "AADSTS50034", "AADSTS90072"]
+        .iter()
+        .any(|code| description.contains(code))
+        || description_lower.contains("personal microsoft account")
+        || description_lower.contains("not enabled for consumers")
+        || (error == "unauthorized_client" && description_lower.contains("consumer"))
 }
 
 /// Turns a refused sign-in into something the person can act on.
@@ -239,13 +359,19 @@ pub(crate) fn explain_sign_in_error(error: &str, description: &str) -> Error {
 /// The page where an administrator allows UwUMail for their whole company.
 ///
 /// Naming the domain instead of `common` lands the admin in their own tenant. The v2 page names
-/// the scopes itself: an app registration open to personal accounts can't list the Graph and
-/// Exchange Web Services permissions (Entra refuses to save them), so the plain page would only
-/// cover mail. Afterwards the browser goes to `http://localhost`, which shows nothing; the consent
+/// the scopes itself: the business app lists them all anyway, but a build without one falls back to
+/// the personal app, which can't list the Graph and Exchange Web Services permissions (Entra
+/// refuses to save them there), so the plain page would only cover mail. Afterwards the browser goes to `http://localhost`, which shows nothing; the consent
 /// is done by then.
 pub fn admin_consent_url(domain: &str) -> Result<String> {
-    let config = config(OAuthProvider::Microsoft)?;
-    Ok(admin_consent_url_for(config.client_id, domain))
+    admin_consent_url_with(MicrosoftIds::compiled(), domain)
+}
+
+/// With the business app when there is one: that's the app company accounts sign in with now, and
+/// it lists every permission itself, so its consent covers calendars, contacts and shared mailboxes.
+fn admin_consent_url_with(ids: MicrosoftIds<'_>, domain: &str) -> Result<String> {
+    let client_id = ids.client_id(MicrosoftApp::Business).ok_or_else(not_configured)?;
+    Ok(admin_consent_url_for(client_id, domain))
 }
 
 fn admin_consent_url_for(client_id: &str, domain: &str) -> String {
@@ -283,6 +409,10 @@ pub enum Redirect {
 }
 
 /// Runs the whole browser sign-in. `open_url` must open the system browser.
+///
+/// Microsoft: a company address goes to the business app, unless its domain isn't a company
+/// directory at all (a personal Microsoft account with its own domain). Should the business app
+/// still be refused for a personal account, the sign-in starts over once with the personal app.
 pub async fn sign_in(
     http: &reqwest::Client,
     provider: OAuthProvider,
@@ -290,18 +420,85 @@ pub async fn sign_in(
     open_url: &(dyn Fn(&str) + Send + Sync),
     redirect: Redirect,
 ) -> Result<Tokens> {
-    let config = config(provider)?;
-    let (redirect_uri, receiver) = match redirect {
-        Redirect::Loopback => {
-            let listeners = loopback_listeners().await?;
-            let port = listeners[0].local_addr()?.port();
-            (format!("http://{}:{port}", config.redirect_host), Receiver::Loopback(listeners))
+    let mut receiver = match redirect {
+        Redirect::Loopback => Receiver::Loopback(None),
+        Redirect::App { uri, incoming } => Receiver::App(uri, incoming),
+    };
+    let mut personal = crate::shared::is_personal_address(login_hint);
+    let app = match provider {
+        OAuthProvider::Microsoft => {
+            let app = MicrosoftIds::compiled().for_address(login_hint);
+            if app == MicrosoftApp::Business && tenant_exists(login_hint).await == Some(false) {
+                // No company directory has this domain: a personal account with its own domain.
+                personal = true;
+                MicrosoftApp::Personal
+            } else {
+                app
+            }
         }
-        Redirect::App { uri, incoming } => (uri, Receiver::App(incoming)),
+        OAuthProvider::Google => MicrosoftApp::Personal,
+    };
+    let first = attempt(http, provider, app, personal, login_hint, open_url, &mut receiver).await;
+    match first {
+        Err(refused) if retry_with_personal_app(provider, app, &refused) => {
+            tracing::info!("The business app refused a personal Microsoft account; signing in with the personal app");
+            attempt(http, provider, MicrosoftApp::Personal, true, login_hint, open_url, &mut receiver)
+                .await
+                .map_err(|refused| refused.error)
+        }
+        other => other.map_err(|refused| refused.error),
+    }
+}
+
+/// Whether a refused sign-in starts over with the personal app: only once, only from the business app.
+pub(crate) fn retry_with_personal_app(provider: OAuthProvider, app: MicrosoftApp, refused: &Refused) -> bool {
+    provider == OAuthProvider::Microsoft && app == MicrosoftApp::Business && refused.personal_account
+}
+
+/// Whether the domain of `address` is a company directory with Microsoft (`None`: couldn't tell).
+/// Microsoft answers its OpenID configuration for every directory and every domain verified in
+/// one, and 400 `invalid_tenant` (AADSTS90002) for anything else.
+async fn tenant_exists(address: &str) -> Option<bool> {
+    let (_, domain) = crate::autoconfig::split_email(address).ok()?;
+    let tenant: String = url::form_urlencoded::byte_serialize(domain.as_bytes()).collect();
+    let url = format!("https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration");
+    let response = token_client().ok()?.get(url).timeout(Duration::from_secs(5)).send().await.ok()?;
+    tenant_answer(response.status().as_u16())
+}
+
+/// What the OpenID configuration's status says about a directory.
+pub(crate) fn tenant_answer(status: u16) -> Option<bool> {
+    match status {
+        200..=299 => Some(true),
+        400 | 404 => Some(false),
+        _ => None,
+    }
+}
+
+/// One sign-in through `app` in the browser.
+async fn attempt(
+    http: &reqwest::Client,
+    provider: OAuthProvider,
+    app: MicrosoftApp,
+    personal_account: bool,
+    login_hint: &str,
+    open_url: &(dyn Fn(&str) + Send + Sync),
+    receiver: &mut Receiver,
+) -> Result<Tokens, Refused> {
+    let config = config(provider, app)?;
+    let redirect_uri = match receiver {
+        Receiver::Loopback(listeners) => {
+            // New ones for every attempt: the last one's ended with it.
+            let fresh = loopback_listeners().await?;
+            let port = fresh[0].local_addr().map_err(Error::from)?.port();
+            *listeners = Some(fresh);
+            format!("http://{}:{port}", config.redirect_host)
+        }
+        Receiver::App(uri, _) => uri.clone(),
     };
     let verifier = random_token(48)?;
     let state = random_token(24)?;
-    let (scopes, exchange) = sign_in_scopes(provider, login_hint);
+    let (scopes, exchange) = sign_in_scopes(provider, personal_account);
 
     let mut authorize = url::Url::parse(config.authorize_url).map_err(|e| Error::internal(e.to_string()))?;
     authorize
@@ -317,19 +514,19 @@ pub async fn sign_in(
         .extend_pairs(config.extra.iter().copied());
     open_url(authorize.as_str());
 
-    let listeners = match receiver {
-        Receiver::Loopback(listeners) => listeners,
-        Receiver::App(mut incoming) => {
-            let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_app_link(&mut incoming, &state))
-                .await
-                .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
-            return exchange_code(http, &config, code, redirect_uri, verifier, exchange).await;
+    let waited = match receiver {
+        Receiver::Loopback(listeners) => {
+            let listeners = listeners.take().ok_or_else(|| Error::internal("The sign-in stopped listening."))?;
+            tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_loopback(listeners, state)).await
         }
+        Receiver::App(_, incoming) => tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_app_link(incoming, &state)).await,
     };
-    let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_loopback(listeners, state))
-        .await
-        .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
-    exchange_code(http, &config, code, redirect_uri, verifier, exchange).await
+    let (code, _state) = waited.map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
+    let mut tokens = exchange_code(http, &config, code, redirect_uri, verifier, exchange).await?;
+    if provider == OAuthProvider::Microsoft {
+        tokens.app = Some(MicrosoftIds::compiled().effective(app));
+    }
+    Ok(tokens)
 }
 
 /// Listeners on one port of both loopback addresses. Microsoft's redirect names `localhost`, which a
@@ -355,7 +552,7 @@ const REQUEST_WAIT: Duration = Duration::from_secs(10);
 /// Waits for the browser's redirect with this sign-in's `state`. Every connection is answered on
 /// its own, so one that says nothing, breaks off or sends something else neither holds up nor ends
 /// the sign-in: any program on the device can connect to the port.
-async fn wait_for_loopback(listeners: Vec<TcpListener>, state: String) -> Result<(String, String)> {
+async fn wait_for_loopback(listeners: Vec<TcpListener>, state: String) -> Result<(String, String), Refused> {
     let (found, mut answers) = tokio::sync::mpsc::channel(1);
     let (accepted_tx, mut accepted) = tokio::sync::mpsc::channel(16);
     // Dropped on return, which stops them.
@@ -383,7 +580,7 @@ async fn wait_for_loopback(listeners: Vec<TcpListener>, state: String) -> Result
             Some(result) = answers.recv() => return result,
             socket = accepted.recv() => {
                 let Some(socket) = socket else {
-                    return Err(Error::internal("The sign-in stopped listening."));
+                    return Err(Error::internal("The sign-in stopped listening.").into());
                 };
                 // Finished ones are let go of, so a flood of connections holds nothing.
                 while connections.try_join_next().is_some() {}
@@ -399,7 +596,7 @@ async fn wait_for_loopback(listeners: Vec<TcpListener>, state: String) -> Result
 }
 
 /// Answers one connection to the loopback listener: the redirect of this sign-in, or `None`.
-async fn answer(mut socket: tokio::net::TcpStream, state: &str) -> Option<Result<(String, String)>> {
+async fn answer(mut socket: tokio::net::TcpStream, state: &str) -> Option<Result<(String, String), Refused>> {
     let mut buffer = vec![0u8; 8192];
     let read = socket.read(&mut buffer).await.ok()?;
     let request = String::from_utf8_lossy(&buffer[..read]).to_string();
@@ -424,9 +621,11 @@ async fn answer(mut socket: tokio::net::TcpStream, state: &str) -> Option<Result
     Some(result)
 }
 
+/// Where an attempt's answer comes in: the loopback listeners of the current attempt, or the app
+/// link (its address and the links the platform hands over), which all attempts share.
 enum Receiver {
-    Loopback(Vec<TcpListener>),
-    App(tokio::sync::mpsc::Receiver<String>),
+    Loopback(Option<Vec<TcpListener>>),
+    App(String, tokio::sync::mpsc::Receiver<String>),
 }
 
 async fn exchange_code(
@@ -462,8 +661,9 @@ pub struct TokenEndpoint {
     pub client_secret: Option<String>,
 }
 
-pub fn token_endpoint(provider: OAuthProvider) -> Result<TokenEndpoint> {
-    let config = config(provider)?;
+/// Where a refresh token issued to `app` is redeemed (Google ignores `app`).
+pub fn token_endpoint(provider: OAuthProvider, app: MicrosoftApp) -> Result<TokenEndpoint> {
+    let config = config(provider, app)?;
     Ok(TokenEndpoint {
         url: config.token_url.to_string(),
         client_id: config.client_id.to_string(),
@@ -478,12 +678,6 @@ pub fn mail_scopes(provider: OAuthProvider) -> Option<&'static str> {
         OAuthProvider::Microsoft => Some(MICROSOFT_MAIL_SCOPES),
         OAuthProvider::Google => None,
     }
-}
-
-/// A fresh access token for mail (IMAP and SMTP).
-pub async fn refresh(_http: &reqwest::Client, provider: OAuthProvider, refresh_token: &str) -> Result<Tokens> {
-    let endpoint = token_endpoint(provider)?;
-    refresh_at(&endpoint, refresh_token, mail_scopes(provider), false).await
 }
 
 /// A fresh access token for `scope` (all the sign-in allowed when `None`). With `api`, a refresh
@@ -578,6 +772,7 @@ async fn request_tokens(url: &str, form: &[(&str, String)], api: bool) -> Result
         refresh_token: tokens.refresh_token,
         expires_in: Duration::from_secs(tokens.expires_in.unwrap_or(3600)),
         scope: tokens.scope,
+        app: None,
     })
 }
 
@@ -606,6 +801,94 @@ mod tests {
         }
     }
 
+    const BOTH: MicrosoftIds<'static> = MicrosoftIds { personal: Some("personal-app"), business: Some("business-app") };
+    const PERSONAL_ONLY: MicrosoftIds<'static> = MicrosoftIds { personal: Some("personal-app"), business: None };
+
+    #[test]
+    fn company_addresses_sign_in_with_the_business_app() {
+        assert_eq!(BOTH.for_address("alex@contoso.example"), MicrosoftApp::Business);
+        assert_eq!(BOTH.client_id(MicrosoftApp::Business), Some("business-app"));
+        for personal in ["mini@outlook.com", "mini@hotmail.de", "mini@live.com"] {
+            assert_eq!(BOTH.for_address(personal), MicrosoftApp::Personal, "{personal}");
+        }
+        assert_eq!(BOTH.client_id(MicrosoftApp::Personal), Some("personal-app"));
+    }
+
+    #[test]
+    fn without_a_business_app_the_personal_one_does_everything() {
+        // Local builds and forks: as before there were two apps.
+        assert_eq!(PERSONAL_ONLY.for_address("alex@contoso.example"), MicrosoftApp::Personal);
+        assert_eq!(PERSONAL_ONLY.effective(MicrosoftApp::Business), MicrosoftApp::Personal);
+        // A business sign-in saved by another build still gets an id instead of nothing.
+        assert_eq!(PERSONAL_ONLY.client_id(MicrosoftApp::Business), Some("personal-app"));
+        let none = MicrosoftIds { personal: None, business: None };
+        assert_eq!(none.client_id(MicrosoftApp::Personal), None);
+    }
+
+    #[test]
+    fn admin_consent_is_for_the_business_app_when_there_is_one() {
+        let url = admin_consent_url_with(BOTH, "contoso.example").unwrap();
+        let pairs: std::collections::HashMap<_, _> =
+            url::Url::parse(&url).unwrap().query_pairs().into_owned().collect();
+        assert_eq!(pairs["client_id"], "business-app");
+        let url = admin_consent_url_with(PERSONAL_ONLY, "contoso.example").unwrap();
+        let pairs: std::collections::HashMap<_, _> =
+            url::Url::parse(&url).unwrap().query_pairs().into_owned().collect();
+        assert_eq!(pairs["client_id"], "personal-app");
+        let none = MicrosoftIds { personal: None, business: None };
+        assert_eq!(
+            admin_consent_url_with(none, "contoso.example").unwrap_err().code,
+            crate::error::ErrorCode::OauthNotConfigured
+        );
+    }
+
+    #[test]
+    fn a_personal_account_refused_by_the_business_app_tries_the_personal_one() {
+        // What Microsoft sends back for a personal account on an app for company accounts only.
+        for description in [
+            "AADSTS500200: User account 'mini@own-domain.example' is a personal Microsoft account. Personal Microsoft accounts are not supported for this application unless explicitly invited to an organization.",
+            "AADSTS50020: User account 'mini@own-domain.example' from identity provider 'live.com' does not exist in tenant 'Contoso' and cannot access the application.",
+            "AADSTS700016: Application with identifier 'business-app' was not found in the directory 'Microsoft Accounts'.",
+            "AADSTS50034: The user account mini@own-domain.example does not exist in the organizations directory.",
+        ] {
+            let query = url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("error", "access_denied")
+                .append_pair("error_description", description)
+                .append_pair("state", "s")
+                .finish();
+            let url = url::Url::parse(&format!("http://localhost/?{query}")).unwrap();
+            let refused = redirect_parameters(&url).unwrap_err();
+            assert!(refused.personal_account, "{description}");
+            assert!(retry_with_personal_app(OAuthProvider::Microsoft, MicrosoftApp::Business, &refused));
+            // Once only, and never from the personal app or for Google.
+            assert!(!retry_with_personal_app(OAuthProvider::Microsoft, MicrosoftApp::Personal, &refused));
+            assert!(!retry_with_personal_app(OAuthProvider::Google, MicrosoftApp::Business, &refused));
+        }
+        assert!(personal_account_refused(
+            "unauthorized_client",
+            "The client does not exist or is not enabled for consumers."
+        ));
+        // A cancel, or a company that wants an admin, stays as it is.
+        let cancelled = url::Url::parse("http://localhost/?error=access_denied&state=s").unwrap();
+        assert!(!redirect_parameters(&cancelled).unwrap_err().personal_account);
+        let admin = url::Url::parse(
+            "http://localhost/?error=access_denied&error_description=AADSTS65001%3A+not+consented&state=s",
+        )
+        .unwrap();
+        let refused = redirect_parameters(&admin).unwrap_err();
+        assert!(!refused.personal_account);
+        assert!(!retry_with_personal_app(OAuthProvider::Microsoft, MicrosoftApp::Business, &refused));
+    }
+
+    #[test]
+    fn a_domain_without_a_company_directory_is_a_personal_account() {
+        assert_eq!(tenant_answer(200), Some(true));
+        // invalid_tenant (AADSTS90002).
+        assert_eq!(tenant_answer(400), Some(false));
+        // Microsoft having trouble isn't a no: the business app then.
+        assert_eq!(tenant_answer(503), None);
+    }
+
     #[test]
     fn pkce_challenge_matches_rfc7636_example() {
         assert_eq!(
@@ -627,7 +910,8 @@ mod tests {
     fn personal_microsoft_accounts_ask_for_no_shared_or_ews_scopes() {
         // Microsoft's own consumer domains (nothing is sent there).
         for personal in ["mini@outlook.com", "mini@hotmail.de", "mini@live.com"] {
-            let (authorize, exchange) = sign_in_scopes(OAuthProvider::Microsoft, personal);
+            let (authorize, exchange) = sign_in_scopes(OAuthProvider::Microsoft, true);
+            assert_eq!(BOTH.for_address(personal), MicrosoftApp::Personal, "{personal}");
             assert!(!authorize.contains(".Shared"), "{personal}");
             assert!(!authorize.contains("EWS"), "{personal}");
             for wanted in [
@@ -642,14 +926,14 @@ mod tests {
             }
             assert_eq!(exchange, Some(MICROSOFT_MAIL_SCOPES));
         }
-        let (authorize, exchange) = sign_in_scopes(OAuthProvider::Microsoft, "alex@contoso.example");
+        let (authorize, exchange) = sign_in_scopes(OAuthProvider::Microsoft, false);
         for wanted in
             ["Calendars.ReadWrite.Shared", "Contacts.ReadWrite.Shared", "EWS.AccessAsUser.All", "IMAP.AccessAsUser.All"]
         {
             assert!(authorize.contains(wanted), "{wanted}");
         }
         assert!(exchange.unwrap().contains("EWS.AccessAsUser.All"));
-        assert_eq!(sign_in_scopes(OAuthProvider::Google, "mini@example.com").1, None);
+        assert_eq!(sign_in_scopes(OAuthProvider::Google, false).1, None);
         assert!(!graph_scopes(true).contains(".Shared"));
         assert!(graph_scopes(false).contains("Calendars.ReadWrite.Shared"));
     }
@@ -742,18 +1026,21 @@ mod tests {
             "http://localhost/?error=access_denied&error_description=AADSTS65001%3A+The+user+or+administrator+has+not+consented&state=s",
         )
         .unwrap();
-        assert_eq!(redirect_parameters(&needs_admin).unwrap_err().code, crate::error::ErrorCode::AdminConsentRequired);
+        assert_eq!(
+            redirect_parameters(&needs_admin).unwrap_err().error.code,
+            crate::error::ErrorCode::AdminConsentRequired
+        );
         let grant_needs_admin = url::Url::parse(
             "http://localhost/?error=access_denied&error_description=AADSTS90094%3A+needs+permission+to+access+resources&state=s",
         )
         .unwrap();
         assert_eq!(
-            redirect_parameters(&grant_needs_admin).unwrap_err().code,
+            redirect_parameters(&grant_needs_admin).unwrap_err().error.code,
             crate::error::ErrorCode::AdminConsentRequired
         );
         // Someone who simply closed the page is not an admin problem.
         let cancelled = url::Url::parse("http://localhost/?error=access_denied&state=s").unwrap();
-        assert_eq!(redirect_parameters(&cancelled).unwrap_err().code, crate::error::ErrorCode::AuthFailed);
+        assert_eq!(redirect_parameters(&cancelled).unwrap_err().error.code, crate::error::ErrorCode::AuthFailed);
     }
 
     #[test]

@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::error::{Error, ErrorCode, Result};
 use crate::model::OAuthProvider;
-use crate::oauth::TokenEndpoint;
+use crate::oauth::{MicrosoftApp, TokenEndpoint};
 
 /// The biggest answer read; a calendar view or a page of contacts is far smaller.
 const MAX_ANSWER: usize = 32 * 1024 * 1024;
@@ -60,6 +60,8 @@ pub struct Endpoints {
     pub google_people: Url,
     /// Token endpoints instead of the providers' own (tests only).
     pub microsoft_token: Option<TokenEndpoint>,
+    /// The business app's (tests only); without one, business refresh tokens go to Microsoft.
+    pub microsoft_business_token: Option<TokenEndpoint>,
     pub google_token: Option<TokenEndpoint>,
 }
 
@@ -71,6 +73,7 @@ impl Default for Endpoints {
             google_calendar: fixed("https://www.googleapis.com/calendar/v3/"),
             google_people: fixed("https://people.googleapis.com/v1/"),
             microsoft_token: None,
+            microsoft_business_token: None,
             google_token: None,
         }
     }
@@ -85,14 +88,16 @@ impl Endpoints {
         }
     }
 
-    pub fn token_endpoint(&self, provider: OAuthProvider) -> Result<TokenEndpoint> {
-        let custom = match provider {
-            OAuthProvider::Microsoft => &self.microsoft_token,
-            OAuthProvider::Google => &self.google_token,
+    /// Where a refresh token issued to `app` (Microsoft) is redeemed.
+    pub fn token_endpoint(&self, provider: OAuthProvider, app: MicrosoftApp) -> Result<TokenEndpoint> {
+        let custom = match (provider, app) {
+            (OAuthProvider::Microsoft, MicrosoftApp::Personal) => &self.microsoft_token,
+            (OAuthProvider::Microsoft, MicrosoftApp::Business) => &self.microsoft_business_token,
+            (OAuthProvider::Google, _) => &self.google_token,
         };
         match custom {
             Some(endpoint) => Ok(endpoint.clone()),
-            None => crate::oauth::token_endpoint(provider),
+            None => crate::oauth::token_endpoint(provider, app),
         }
     }
 }

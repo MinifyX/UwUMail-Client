@@ -52,7 +52,7 @@ async fn setup(auth: AuthKind, email: &str, handler: impl Fn(&Request) -> Reply 
             jmap_url: None,
         })
         .unwrap();
-    secrets.set("m", &Secret::OAuth { refresh_token: "refresh-0".into() }).unwrap();
+    secrets.set("m", &Secret::oauth("refresh-0", None)).unwrap();
     let server = Server::start(handler).await;
     let token =
         TokenEndpoint { url: format!("{}/token", server.base), client_id: "test-app".into(), client_secret: None };
@@ -61,6 +61,7 @@ async fn setup(auth: AuthKind, email: &str, handler: impl Fn(&Request) -> Reply 
         google_calendar: server.url("/gcal/"),
         google_people: server.url("/people/"),
         microsoft_token: Some(token.clone()),
+        microsoft_business_token: None,
         google_token: Some(token),
     });
     Setup { engine, secrets, server, _dir: dir }
@@ -179,7 +180,7 @@ async fn microsoft_calendars_through_graph() {
     assert_eq!(refreshes[0].form("refresh_token").as_deref(), Some("refresh-0"));
     assert!(refreshes[0].form("scope").unwrap().contains("https://graph.microsoft.com/Calendars.ReadWrite"));
     assert!(!refreshes[0].form("scope").unwrap().contains("outlook.office.com"));
-    assert!(matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token } if refresh_token == "refresh-1"));
+    assert!(matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token, .. } if refresh_token == "refresh-1"));
 
     let calendars: Vec<CalendarInfo> =
         s.engine.calendars().await.unwrap().into_iter().filter(|c| !c.is_local).collect();
@@ -322,7 +323,7 @@ async fn sign_ins_without_consent_ask_to_sign_in_again() {
     s.engine.calendar_accounts(false).await.unwrap();
     assert_eq!(s.server.count("POST", "/token"), asked);
     // The mail's refresh token stays as it was.
-    assert!(matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token } if refresh_token == "refresh-0"));
+    assert!(matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token, .. } if refresh_token == "refresh-0"));
 
     // Google: the token works, but without the calendar and contacts the person didn't allow.
     let tokens = Arc::new(AtomicUsize::new(0));
@@ -359,7 +360,7 @@ async fn a_refused_token_is_renewed_once() {
     assert_eq!(tokens.load(Ordering::SeqCst), 2);
     let listing: Vec<Request> = s.server.seen().into_iter().filter(|r| r.path() == "/graph/me/calendars").collect();
     assert_eq!(listing[1].header("Authorization"), Some("Bearer access-2"));
-    assert!(matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token } if refresh_token == "refresh-2"));
+    assert!(matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token, .. } if refresh_token == "refresh-2"));
 }
 
 #[tokio::test]
@@ -517,7 +518,7 @@ async fn nested_shared_mailboxes_use_their_accounts_sign_in() {
     assert!(seen.iter().any(|r| r.path() == "/graph/users/team%40example.com/contactFolders"));
     // The rotated refresh token went to the account, still none for the shared mailbox.
     assert!(
-        matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token } if refresh_token.starts_with("refresh-") && refresh_token != "refresh-0")
+        matches!(s.secrets.get("m").unwrap(), Secret::OAuth { refresh_token, .. } if refresh_token.starts_with("refresh-") && refresh_token != "refresh-0")
     );
     assert!(s.secrets.get("t").is_err());
 }
@@ -585,7 +586,7 @@ async fn a_refresh_waiting_for_another_uses_the_newest_refresh_token() {
     let secrets = s.secrets.clone();
     let other = async move {
         tokio::task::yield_now().await;
-        secrets.set("m", &Secret::OAuth { refresh_token: "refresh-rotated".into() }).unwrap();
+        secrets.set("m", &Secret::oauth("refresh-rotated", None)).unwrap();
         drop(busy);
     };
     let (credential, ()) = tokio::join!(s.engine.inner.credential(&record), other);
@@ -594,4 +595,78 @@ async fn a_refresh_waiting_for_another_uses_the_newest_refresh_token() {
     assert_eq!(refreshes.len(), 1);
     assert_eq!(refreshes[0].form("refresh_token").as_deref(), Some("refresh-rotated"));
     assert_eq!(refreshes[0].form("scope").as_deref(), Some(oauth::MICROSOFT_MAIL_SCOPES));
+}
+
+/// The personal app's token endpoint stays `test-app`; the business app's is `business-app` on the
+/// same fake, which answers only the client id the refresh token was issued to.
+async fn with_business_app(s: &Setup) {
+    let personal =
+        TokenEndpoint { url: format!("{}/token", s.server.base), client_id: "test-app".into(), client_secret: None };
+    let business = TokenEndpoint { client_id: "business-app".into(), ..personal.clone() };
+    s.engine.set_cloud_endpoints(cloud::Endpoints {
+        graph: s.server.url("/graph/"),
+        google_calendar: s.server.url("/gcal/"),
+        google_people: s.server.url("/people/"),
+        microsoft_token: Some(personal.clone()),
+        microsoft_business_token: Some(business),
+        google_token: Some(personal),
+    });
+}
+
+fn issued_to(app: &'static str, tokens: Arc<AtomicUsize>) -> impl Fn(&Request) -> Reply + Send + Sync {
+    move |request: &Request| {
+        if request.path() == "/token" && request.form("client_id").as_deref() != Some(app) {
+            return Reply::status(
+                400,
+                json!({ "error": "invalid_grant", "error_description": "AADSTS700025: Client is public so neither 'client_assertion' nor 'client_secret' should be presented. AADSTS7000215: wrong client" }),
+            );
+        }
+        graph_handler(tokens.clone(), "me")(request)
+    }
+}
+
+#[tokio::test]
+async fn refreshes_go_to_the_app_the_refresh_token_was_issued_to() {
+    let tokens = Arc::new(AtomicUsize::new(0));
+    let s = setup(AuthKind::Microsoft, OWN, issued_to("business-app", tokens)).await;
+    with_business_app(&s).await;
+    s.secrets.set("m", &Secret::oauth("refresh-0", Some(oauth::MicrosoftApp::Business))).unwrap();
+
+    // Mail (IMAP/SMTP, and Exchange Web Services with it) and Graph both as the business app.
+    let record = s.engine.inner.store.account("m").unwrap();
+    assert!(matches!(s.engine.inner.credential(&record).await.unwrap(), Credential::Token(_)));
+    assert!(!s.engine.calendar_accounts(false).await.unwrap()[0].needs_sign_in);
+    let refreshes: Vec<Request> = s.server.seen().into_iter().filter(|r| r.path() == "/token").collect();
+    assert_eq!(refreshes.len(), 2);
+    assert!(refreshes.iter().all(|r| r.form("client_id").as_deref() == Some("business-app")));
+    // The rotated refresh token stays the business app's.
+    assert_eq!(s.secrets.get("m").unwrap().microsoft_app(), oauth::MicrosoftApp::Business);
+
+    // A shared mailbox nested under it opens with its account's sign-in, so with the business app.
+    let mut shared = record.clone();
+    shared.id = "team".into();
+    shared.email = SHARED.into();
+    shared.username = SHARED.into();
+    s.engine.inner.store.insert_account(&shared).unwrap();
+    s.engine.inner.store.set_account_parent("team", Some("m")).unwrap();
+    s.engine.inner.tokens.lock().await.clear();
+    assert!(matches!(s.engine.inner.credential(&shared).await.unwrap(), Credential::Token(_)));
+    let last = s.server.seen().into_iter().rfind(|r| r.path() == "/token").unwrap();
+    assert_eq!(last.form("client_id").as_deref(), Some("business-app"));
+    assert!(s.secrets.get("team").is_err(), "no secret of its own");
+}
+
+#[tokio::test]
+async fn sign_ins_saved_before_the_business_app_refresh_with_the_personal_one() {
+    let tokens = Arc::new(AtomicUsize::new(0));
+    let s = setup(AuthKind::Microsoft, OWN, issued_to("test-app", tokens)).await;
+    with_business_app(&s).await;
+    // A company account from 0.8.0-beta.1: no app in its secret.
+    let record = s.engine.inner.store.account("m").unwrap();
+    assert!(matches!(s.engine.inner.credential(&record).await.unwrap(), Credential::Token(_)));
+    assert!(!s.engine.calendar_accounts(false).await.unwrap()[0].needs_sign_in);
+    let refreshes: Vec<Request> = s.server.seen().into_iter().filter(|r| r.path() == "/token").collect();
+    assert_eq!(refreshes.len(), 2);
+    assert!(refreshes.iter().all(|r| r.form("client_id").as_deref() == Some("test-app")));
+    assert!(matches!(s.secrets.get("m").unwrap(), Secret::OAuth { microsoft_app: None, .. }));
 }

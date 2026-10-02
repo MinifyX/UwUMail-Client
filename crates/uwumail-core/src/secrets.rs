@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
+use crate::oauth::MicrosoftApp;
 
 const SERVICE: &str = "UwUMail";
 
@@ -18,12 +19,32 @@ pub enum Secret {
     },
     OAuth {
         refresh_token: String,
+        /// Microsoft: the app the refresh token was issued to, which is the only one that can
+        /// redeem it. Missing in secrets saved before there were two apps: those are all `Personal`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        microsoft_app: Option<MicrosoftApp>,
     },
     /// The key of an AI provider set up on this device (entry `assist-provider:<id>`).
     #[serde(rename = "apikey")]
     ApiKey {
         api_key: String,
     },
+}
+
+impl Secret {
+    /// An OAuth refresh token, with the Microsoft app it was issued to (`None` for Google).
+    pub fn oauth(refresh_token: impl Into<String>, microsoft_app: Option<MicrosoftApp>) -> Self {
+        Self::OAuth { refresh_token: refresh_token.into(), microsoft_app }
+    }
+
+    /// The Microsoft app an OAuth secret's refresh token belongs to; secrets from before there
+    /// were two apps belong to the personal one.
+    pub fn microsoft_app(&self) -> MicrosoftApp {
+        match self {
+            Self::OAuth { microsoft_app, .. } => microsoft_app.unwrap_or_default(),
+            _ => MicrosoftApp::Personal,
+        }
+    }
 }
 
 impl std::fmt::Debug for Secret {
@@ -201,6 +222,22 @@ mod tests {
         assert_eq!(serde_json::from_str::<Secret>(&stored).unwrap(), key);
     }
 
+    #[test]
+    fn oauth_secrets_from_before_two_microsoft_apps_belong_to_the_personal_one() {
+        // Exactly what 0.8.0-beta.1 and older wrote.
+        let legacy: Secret = serde_json::from_str("{\"kind\":\"oauth\",\"refresh_token\":\"r\"}").unwrap();
+        assert_eq!(legacy, Secret::oauth("r", None));
+        assert_eq!(legacy.microsoft_app(), MicrosoftApp::Personal);
+        // Written back unchanged, so an older version still reads it.
+        assert_eq!(serde_json::to_string(&legacy).unwrap(), "{\"kind\":\"oauth\",\"refresh_token\":\"r\"}");
+
+        let business = Secret::oauth("r", Some(MicrosoftApp::Business));
+        let stored = serde_json::to_string(&business).unwrap();
+        assert!(stored.contains("\"microsoft_app\":\"business\""), "{stored}");
+        let read: Secret = serde_json::from_str(&stored).unwrap();
+        assert_eq!(read.microsoft_app(), MicrosoftApp::Business);
+    }
+
     /// Like Windows: refuses entries longer than 2560 bytes of UTF-16.
     #[derive(Default)]
     struct SmallKeychain(Mutex<HashMap<String, String>>);
@@ -231,7 +268,7 @@ mod tests {
     #[test]
     fn a_long_microsoft_refresh_token_fits_in_small_keychain_entries() {
         let keychain = SmallKeychain::default();
-        let token = Secret::OAuth { refresh_token: "0.AXkA".repeat(700) };
+        let token = Secret::oauth("0.AXkA".repeat(700), Some(MicrosoftApp::Business));
         let json = serde_json::to_string(&token).unwrap();
         chunked::set(&keychain, "acc", &json).unwrap();
         assert_eq!(chunked::get(&keychain, "acc").unwrap(), json);

@@ -91,6 +91,7 @@ jobs:
       - run: pnpm build:setup
         env:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
       # The same install, start, update, refuse-older and uninstall as for the other systems.
@@ -125,6 +126,7 @@ jobs:
     uses: ./.github/workflows/desktop.yml
     secrets:
       UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+      UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
       UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
       UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
 

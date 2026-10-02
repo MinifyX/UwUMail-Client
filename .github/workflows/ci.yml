@@ -139,6 +139,7 @@ jobs:
         if: steps.changes.outputs.build == 'true' && runner.os == 'Windows'
         env:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

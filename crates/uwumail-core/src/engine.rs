@@ -573,7 +573,7 @@ impl Engine {
                     .lock()
                     .await
                     .insert(id.clone(), (tokens.access_token, Instant::now() + tokens.expires_in));
-                Secret::OAuth { refresh_token }
+                Secret::OAuth { refresh_token, microsoft_app: tokens.app }
             }
         };
 
@@ -1757,15 +1757,18 @@ impl Inner {
                 // Read under the lock: a refresh that finished while this waited (mail of a shared
                 // mailbox, a Graph token) may have replaced the refresh token, and Microsoft may
                 // refuse the old one.
-                let Secret::OAuth { refresh_token } = self.secrets.get(&holder)? else {
+                let Secret::OAuth { refresh_token, microsoft_app } = self.secrets.get(&holder)? else {
                     return Err(Error::auth("No saved sign-in for this mailbox."));
                 };
-                let endpoint = self.cloud.endpoints.lock().unwrap().token_endpoint(provider)?;
+                // Only the app the refresh token was issued to redeems it (the holder's for a
+                // shared mailbox); secrets from before there were two apps are the personal one's.
+                let endpoint =
+                    self.cloud.endpoints.lock().unwrap().token_endpoint(provider, microsoft_app.unwrap_or_default())?;
                 let fresh = oauth::refresh_at(&endpoint, &refresh_token, oauth::mail_scopes(provider), false).await?;
                 if let Some(rotated) = &fresh.refresh_token
                     && *rotated != refresh_token
                 {
-                    self.secrets.set(&holder, &Secret::OAuth { refresh_token: rotated.clone() })?;
+                    self.secrets.set(&holder, &Secret::OAuth { refresh_token: rotated.clone(), microsoft_app })?;
                 }
                 tokens.insert(holder.clone(), (fresh.access_token.clone(), Instant::now() + fresh.expires_in));
                 if provider == OAuthProvider::Microsoft && holder == account.id {
@@ -2491,7 +2494,7 @@ mod tests {
             jmap_url: None,
         };
         engine.inner.store.insert_account(&record).unwrap();
-        secrets.set("m", &Secret::OAuth { refresh_token: "r".into() }).unwrap();
+        secrets.set("m", &Secret::oauth("r", None)).unwrap();
         engine
             .inner
             .tokens
