@@ -23,6 +23,14 @@ function account(id: string, auth: Account["auth"], protocol: Account["protocol"
 
 let sources: CalendarAccount[] = [];
 const fake = {
+  signInAgain: vi.fn(async (accountId: string): Promise<Account> => {
+    sources = sources.map((entry) =>
+      entry.accountId === accountId
+        ? { ...entry, source: "microsoft" as const, problem: null, needsSignIn: false }
+        : entry,
+    );
+    return account(accountId, "microsoft", "imap");
+  }),
   calendarAccounts: vi.fn(async () => sources),
   setCalDavUrl: vi.fn(async (accountId: string, url: string | null) => {
     sources = sources.map((entry) =>
@@ -63,7 +71,11 @@ describe("a mailbox's calendar settings", () => {
         caldavUrl: null,
         problem: "No calendars for Microsoft sign-ins.",
         checked: true,
+        needsSignIn: true,
       },
+      { accountId: "outlook", source: "microsoft", caldavUrl: null, problem: null, checked: true },
+      { accountId: "gmail", source: "google", caldavUrl: null, problem: null, checked: true },
+
       { accountId: "dav", source: "caldav", caldavUrl: "https://dav.example.net/cal/", problem: null, checked: true },
     ];
   });
@@ -113,10 +125,25 @@ describe("a mailbox's calendar settings", () => {
     expect(screen.queryByLabelText("CalDAV address")).toBeNull();
     unmount();
 
+    renderBlock(account("outlook", "microsoft", "imap"));
+    expect(await screen.findByText("Microsoft 365 / Outlook.com")).toBeTruthy();
+    expect(screen.queryByLabelText("CalDAV address")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sign in again" })).toBeNull();
+    cleanup();
+
+    renderBlock(account("gmail", "google", "imap"));
+    expect(await screen.findByText("Google")).toBeTruthy();
+  });
+
+  it("asks a sign-in without the new permissions to sign in again, and looks again after it", async () => {
     renderBlock(account("work", "microsoft", "imap"));
     expect(
-      await screen.findByText("Calendars of mailboxes signed in with Microsoft or Google aren't supported yet."),
+      await screen.findByText("Sign in again to see calendar and contacts. Mail keeps working either way."),
     ).toBeTruthy();
-    expect(screen.queryByLabelText("CalDAV address")).toBeNull();
+    expect(screen.queryByText("No calendars for Microsoft sign-ins.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    await waitFor(() => expect(fake.signInAgain).toHaveBeenCalledWith("work"));
+    expect(await screen.findByText("Microsoft 365 / Outlook.com")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sign in again" })).toBeNull();
   });
 });

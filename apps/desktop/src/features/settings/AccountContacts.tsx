@@ -7,6 +7,7 @@ import { Field, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
 import { toast } from "@/state/toasts";
+import { SignInAgainHint } from "../accounts/SignInAgain";
 import { useContactsAccounts } from "../contacts/useContactsData";
 import { caldavUrlProblem } from "./AccountCalendar";
 
@@ -32,11 +33,12 @@ export function AccountContacts({ account }: { account: Account }) {
           )}
         </span>
       </div>
-      {source && source.source === null && (source.problem || account.auth !== "password") && (
-        <p className="text-[12.5px] break-words text-muted">
-          {/* Sign-ins get the known reason in the app's language; for the rest, what the discovery ran into. */}
-          {account.auth === "password" ? source.problem : t("accountContacts.signIn")}
-        </p>
+      {source?.needsSignIn ? (
+        <SignInAgainHint accountId={account.id} />
+      ) : (
+        source &&
+        source.source === null &&
+        source.problem && <p className="text-[12.5px] break-words text-muted">{source.problem}</p>
       )}
       {/* Microsoft and Google sign-ins can't log in to CardDAV; the UwUMail server has its own address books. */}
       {account.auth === "password" && source && source.source !== "jmap" && (
@@ -50,6 +52,9 @@ function SourceLabel({ source }: { source: ContactsAccount | undefined }) {
   const { t } = useT();
   if (source?.source === "jmap") return <span className="font-semibold">{t("accountContacts.source.jmap")}</span>;
   if (source?.source === "carddav") return <span className="font-semibold">{t("accountContacts.source.carddav")}</span>;
+  if (source?.source === "microsoft")
+    return <span className="font-semibold">{t("accountContacts.source.microsoft")}</span>;
+  if (source?.source === "google") return <span className="font-semibold">{t("accountContacts.source.google")}</span>;
   return <span className="text-muted">{t("accountContacts.unavailable")}</span>;
 }
 
