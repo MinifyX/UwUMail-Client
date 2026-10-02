@@ -7,6 +7,7 @@ import { Field, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
 import { toast } from "@/state/toasts";
+import { SignInAgainHint } from "../accounts/SignInAgain";
 import { useCalendarAccounts } from "../calendar/accounts";
 
 type UrlProblem = "https" | "invalid";
@@ -45,11 +46,12 @@ export function AccountCalendar({ account }: { account: Account }) {
           )}
         </span>
       </div>
-      {source && source.source === null && (source.problem || account.auth !== "password") && (
-        <p className="text-[12.5px] break-words text-muted">
-          {/* Sign-ins get the known reason in the app's language; for the rest, what the discovery ran into. */}
-          {account.auth === "password" ? source.problem : t("accountCalendar.signIn")}
-        </p>
+      {source?.needsSignIn ? (
+        <SignInAgainHint accountId={account.id} />
+      ) : (
+        source &&
+        source.source === null &&
+        source.problem && <p className="text-[12.5px] break-words text-muted">{source.problem}</p>
       )}
       {/* Microsoft and Google sign-ins can't log in to CalDAV; the UwUMail server has its own calendars. */}
       {account.auth === "password" && source && source.source !== "jmap" && (
@@ -63,6 +65,9 @@ function SourceLabel({ source }: { source: CalendarAccount | undefined }) {
   const { t } = useT();
   if (source?.source === "jmap") return <span className="font-semibold">{t("accountCalendar.source.jmap")}</span>;
   if (source?.source === "caldav") return <span className="font-semibold">{t("accountCalendar.source.caldav")}</span>;
+  if (source?.source === "microsoft")
+    return <span className="font-semibold">{t("accountCalendar.source.microsoft")}</span>;
+  if (source?.source === "google") return <span className="font-semibold">{t("accountCalendar.source.google")}</span>;
   return <span className="text-muted">{t("accountCalendar.unavailable")}</span>;
 }
 

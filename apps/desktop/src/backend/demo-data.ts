@@ -30,13 +30,15 @@ interface SampleMessage {
 }
 
 interface SampleThread {
-  account: "private" | "studio";
+  account: "private" | "studio" | "team";
   subject: Localized;
   messages: SampleMessage[];
 }
 
 export const ME_PRIVATE: Address = { name: "Mini", email: "mini@uwumail.example" };
 export const ME_STUDIO: Address = { name: "Mini", email: "mini@pixelstudio.example" };
+/** The studio's shared mailbox, opened with Mini's Microsoft sign-in. */
+export const ME_TEAM: Address = { name: "Pixel Studio Team", email: "team@pixelstudio.example" };
 
 const leni: Address = { name: "Leni Wanders", email: "leni@wanders.example" };
 const noah: Address = { name: "Noah Zockt", email: "noah@zockt.example" };
@@ -183,6 +185,20 @@ export const SAMPLE_THREADS: SampleThread[] = [
           "We're planning to play on Friday from 7pm. I'll bring snacks, you bring the controllers? Let me know if you're in!",
         ),
         attachments: [{ filename: "spieleabend-jingle.wav", mimeType: "audio/wav", size: 53_000, inline: false }],
+      },
+    ],
+  },
+  {
+    account: "team",
+    subject: p("Anfrage: Pixel-Workshop im November", "Enquiry: pixel workshop in November"),
+    messages: [
+      {
+        from: finn,
+        minutesAgo: 75,
+        body: p(
+          "Hallo liebes Pixel-Studio-Team,\n\nbietet ihr euren Pixel-Art-Workshop im November noch einmal an? Wir wären zu viert und könnten an einem Samstag.\n\nLiebe Grüße\nFinn",
+          "Hi dear Pixel Studio team,\n\nare you running your pixel art workshop again in November? We'd be four people and could make a Saturday.\n\nCheers\nFinn",
+        ),
       },
     ],
   },
@@ -431,6 +447,19 @@ export const DEMO_ACCOUNTS: Account[] = [
     status: { state: "idle" },
     protocol: "imap",
     protocols: ["imap"],
+    sharedSearch: "done",
+  },
+  {
+    id: "acc-studio-team",
+    name: "pixelstudio.example",
+    email: ME_TEAM.email,
+    displayName: ME_TEAM.name!,
+    color: "violet",
+    auth: "microsoft",
+    status: { state: "idle" },
+    protocol: "imap",
+    protocols: ["imap"],
+    parentId: "acc-studio",
   },
 ];
 
@@ -457,7 +486,8 @@ const CUSTOM_FOLDERS: [string, string | null, string, string][] = [
   ["projects-uwumail-ideas", "projects-uwumail", "Ideen", "Ideas"],
 ];
 
-export function buildFolders(accountId: string, lang: Lang): Folder[] {
+/** A mailbox's folders; `custom` adds the nested ones people make themselves. */
+export function buildFolders(accountId: string, lang: Lang, custom = true): Folder[] {
   const folders: Folder[] = ROLES.map((role) => ({
     id: `${accountId}:${role}`,
     accountId,
@@ -469,7 +499,7 @@ export function buildFolders(accountId: string, lang: Lang): Folder[] {
     unread: 0,
     total: 0,
   }));
-  for (const [key, parent, de, en] of CUSTOM_FOLDERS) {
+  for (const [key, parent, de, en] of custom ? CUSTOM_FOLDERS : []) {
     folders.push({
       id: `${accountId}:${key}`,
       accountId,
@@ -492,8 +522,8 @@ export function buildMessages(lang: Lang, now = Date.now()): Message[] {
   const messages: Message[] = [];
   let counter = 0;
   SAMPLE_THREADS.forEach((thread, threadIndex) => {
-    const accountId = thread.account === "private" ? "acc-private" : "acc-studio";
-    const me = thread.account === "private" ? ME_PRIVATE : ME_STUDIO;
+    const accountId = { private: "acc-private", studio: "acc-studio", team: "acc-studio-team" }[thread.account];
+    const me = { private: ME_PRIVATE, studio: ME_STUDIO, team: ME_TEAM }[thread.account];
     const threadId = `thr-${threadIndex + 1}`;
     for (const sample of thread.messages) {
       counter += 1;

@@ -10,9 +10,11 @@ import {
   PenLine,
   Plus,
   Settings,
+  Users,
   WifiOff,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type CSSProperties } from "react";
 import { backend } from "@/backend/backend";
 import type { Account, Folder, MailboxView } from "@/backend/types";
@@ -24,12 +26,14 @@ import { Badge } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
 import { useFolders, useMessageActions, useVisibleAccounts } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
+import { nestAccounts, takesSharedMailboxes, useSharedMailboxes } from "@/state/sharedMailboxes";
 import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { LabelNav } from "../labels/LabelNav";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { AppSwitch } from "../shell/AppSwitch";
+import { searchSharedMailboxes } from "../accounts/SharedMailboxDialogs";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
 import { useSelectionActions } from "./selection";
@@ -216,9 +220,44 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   );
 }
 
-function AccountSection({ account, folders }: { account: Account; folders: Folder[] }) {
+/** What can be done with a mailbox: new folder; for a Microsoft 365 account its shared mailboxes; removing a shared one. */
+function accountMenuItems(account: Account, t: (key: string) => string, client: QueryClient): MenuItem[] {
+  const shared = useSharedMailboxes.getState();
+  const items: MenuItem[] = [
+    {
+      label: t("folders.new"),
+      onSelect: () => useFolderEdit.getState().open({ kind: "create", accountId: account.id, parent: null }),
+    },
+  ];
+  if (takesSharedMailboxes(account)) {
+    items.push(
+      { label: t("shared.add"), onSelect: () => shared.open({ kind: "add", parent: account }) },
+      { label: t("shared.searchAgain"), onSelect: () => void searchSharedMailboxes(account, client) },
+    );
+  }
+  if (account.parentId) {
+    items.push({ label: t("shared.remove"), danger: true, onSelect: () => shared.open({ kind: "remove", account }) });
+  }
+  return items;
+}
+
+function AccountSection({
+  account,
+  shared = [],
+  folders,
+  nested = false,
+}: {
+  account: Account;
+  /** Its shared mailboxes, shown inside it. */
+  shared?: Account[];
+  folders: Folder[];
+  /** A shared mailbox inside its account. */
+  nested?: boolean;
+}) {
   const [open, setOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
   const { t } = useT();
+  const client = useQueryClient();
   const { status } = account;
   const statusLabel =
     status.state === "syncing"
@@ -228,25 +267,41 @@ function AccountSection({ account, folders }: { account: Account; folders: Folde
         : status.state === "error"
           ? `${t("status.error", { account: account.email })}: ${status.message}`
           : undefined;
-  const tree = buildFolderTree(folders);
+  const tree = buildFolderTree(folders.filter((f) => f.accountId === account.id));
+  // A folded mailbox still tells what's unread in its shared mailboxes' inboxes.
+  const sharedUnread = folders
+    .filter((f) => f.role === "inbox" && shared.some((s) => s.id === f.accountId))
+    .reduce((sum, f) => sum + f.unread, 0);
 
   return (
-    <section className="flex flex-col gap-0.5">
-      <div className="group flex items-center">
+    <section className={clsx("flex flex-col gap-0.5", nested && "ml-3 border-l border-hairline pl-1")}>
+      <div
+        className="group flex items-center"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenuOpen(true);
+        }}
+      >
         <button
           type="button"
           onClick={() => setOpen(!open)}
           aria-expanded={open}
-          title={statusLabel}
-          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-[12px] font-bold tracking-wide text-muted uppercase hover:text-ink"
+          title={nested ? t("shared.of", { email: account.email }) : statusLabel}
+          className={clsx(
+            "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-[12px] font-bold tracking-wide text-muted hover:text-ink",
+            !nested && "uppercase",
+          )}
         >
-          <AccountDot color={account.color} />
-          <span className="min-w-0 flex-1 truncate text-left tracking-normal normal-case">{account.email}</span>
+          {nested ? <Users className="size-3.5 shrink-0" aria-hidden /> : <AccountDot color={account.color} />}
+          <span className="min-w-0 flex-1 truncate text-left tracking-normal normal-case">
+            {nested ? account.displayName || account.email : account.email}
+          </span>
           {status.state === "syncing" && (
             <LoaderCircle className="size-3.5 animate-spin text-pink" aria-label={statusLabel} />
           )}
           {status.state === "offline" && <WifiOff className="size-3.5 text-warning" aria-label={statusLabel} />}
           {status.state === "error" && <CircleAlert className="size-3.5 text-danger" aria-label={statusLabel} />}
+          {!open && sharedUnread > 0 && <Badge count={sharedUnread} />}
           <ChevronDown className={clsx("size-3.5 transition-transform", !open && "-rotate-90")} aria-hidden />
         </button>
         <IconButton
@@ -254,15 +309,37 @@ function AccountSection({ account, folders }: { account: Account; folders: Folde
           size="sm"
           label={t("folders.new")}
           onClick={() => useFolderEdit.getState().open({ kind: "create", accountId: account.id, parent: null })}
-          className={clsx("mr-1 size-7!", HOVER_ONLY)}
+          className={clsx("size-7!", HOVER_ONLY)}
+        />
+        <Menu
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          align="end"
+          className="mr-1"
+          items={accountMenuItems(account, t, client)}
+          trigger={({ toggle, ...aria }) => (
+            <IconButton
+              icon={MoreHorizontal}
+              size="sm"
+              label={t("shared.accountMenu", { email: account.email })}
+              onClick={toggle}
+              className={clsx("mr-1 size-7!", HOVER_ONLY)}
+              {...aria}
+            />
+          )}
         />
       </div>
       {open && (
-        <ul role="tree" aria-label={account.email} className="flex flex-col gap-0.5">
-          {tree.map((node) => (
-            <FolderItem key={node.folder.id} node={node} account={account} />
+        <>
+          <ul role="tree" aria-label={account.email} className="flex flex-col gap-0.5">
+            {tree.map((node) => (
+              <FolderItem key={node.folder.id} node={node} account={account} />
+            ))}
+          </ul>
+          {shared.map((mailbox) => (
+            <AccountSection key={mailbox.id} account={mailbox} folders={folders} nested />
           ))}
-        </ul>
+        </>
       )}
     </section>
   );
@@ -350,11 +427,12 @@ export function MailboxNav({
 
         <LabelNav />
 
-        {accounts.map((account) => (
+        {nestAccounts(accounts).map(({ account, shared }) => (
           <AccountSection
             key={account.id}
             account={account}
-            folders={folders.filter((f) => f.accountId === account.id)}
+            shared={shared}
+            folders={folders.filter((f) => f.accountId === account.id || shared.some((s) => s.id === f.accountId))}
           />
         ))}
       </div>

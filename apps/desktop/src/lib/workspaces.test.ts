@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Folder, Identity } from "@/backend/types";
-import { activeFirst, inWorkspace, sendersByWorkspace, unreadInboxes, workspaceOf } from "./workspaces";
+import {
+  activeFirst,
+  inWorkspace,
+  sendersByWorkspace,
+  sharedFollowAccounts,
+  unreadInboxes,
+  workspaceOf,
+} from "./workspaces";
 
 const mailboxes = [{ id: "home" }, { id: "studio" }, { id: "club" }, { id: "shop" }];
 const business = ["studio", "shop"];
@@ -60,5 +67,17 @@ describe("workspaces", () => {
     expect(sendersByWorkspace(senders.slice(0, 1), "business", business).map((group) => group.workspace)).toEqual([
       "private",
     ]);
+  });
+
+  it("keeps shared mailboxes in their account's workspace", () => {
+    const accounts = [
+      { id: "studio" },
+      { id: "team", parentId: "studio" },
+      { id: "home" },
+      { id: "x", parentId: "home" },
+    ];
+    expect([...sharedFollowAccounts(accounts, ["studio", "x"])].sort()).toEqual(["studio", "team"]);
+    const settled = ["studio", "team"];
+    expect(sharedFollowAccounts(accounts, settled)).toBe(settled);
   });
 });

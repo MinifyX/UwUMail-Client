@@ -27,6 +27,22 @@ export interface Account {
   protocol: Protocol;
   /** Protocols this account can switch to. */
   protocols: Protocol[];
+  /** For a shared mailbox: the Microsoft account whose sign-in opens it. Listed right after it. */
+  parentId?: string;
+  /** For a Microsoft 365 work account: how the search for its shared mailboxes went. */
+  sharedSearch?: SharedSearch;
+}
+
+/**
+ * The search for a Microsoft 365 account's shared mailboxes: not yet, done, refused because the
+ * sign-in predates the Exchange permission (signing in again helps), or Microsoft didn't answer.
+ */
+export type SharedSearch = "pending" | "done" | "needsSignIn" | "unavailable";
+
+export interface SharedSearchResult {
+  state: SharedSearch;
+  /** The mailboxes this search added. */
+  added: Account[];
 }
 
 /** An address a mailbox can send from. */
@@ -469,14 +485,19 @@ export type EventDeleteScope = "occurrence" | "series";
 /** Where an account's calendars come from (client only). */
 export interface CalendarAccount {
   accountId: string;
-  /** JMAP calendars on a UwUMail server, CalDAV, or null when the account has no calendar here. */
-  source: "jmap" | "caldav" | null;
+  /**
+   * JMAP calendars on a UwUMail server, CalDAV, Microsoft Graph (`microsoft`), Google Calendar
+   * (`google`), or null when the account has no calendar here.
+   */
+  source: "jmap" | "caldav" | "microsoft" | "google" | null;
   /** The CalDAV address typed in by hand, if any. */
   caldavUrl: string | null;
-  /** Why there's no calendar, when there isn't (e.g. a Microsoft or Google sign-in). */
+  /** Why there's no calendar, when there isn't. */
   problem: string | null;
   /** False while only a search for a CalDAV server could tell; that waits until the calendar opens. */
   checked: boolean;
+  /** A Microsoft or Google sign-in from before calendars were asked for: signing in again fixes it. */
+  needsSignIn?: boolean;
 }
 
 /** An address book of one account (JMAP Contacts, or a CardDAV address book). */
@@ -568,20 +589,27 @@ export interface ContactInput {
 /** Where an account's address books come from (the app holds several mailboxes). */
 export interface ContactsAccount {
   accountId: string;
-  /** JMAP Contacts on a UwUMail server, CardDAV, or null when the account has no address books here. */
-  source: "jmap" | "carddav" | null;
+  /**
+   * JMAP Contacts on a UwUMail server, CardDAV, Microsoft Graph (`microsoft`), Google People
+   * (`google`), or null when the account has no address books here.
+   */
+  source: "jmap" | "carddav" | "microsoft" | "google" | null;
   /** The CardDAV address typed in by hand, if any. */
   carddavUrl: string | null;
   /** Why there are no address books, when there aren't. */
   problem: string | null;
   /** False while only a search for a CardDAV server could tell; that waits until the contacts open. */
   checked: boolean;
+  /** A Microsoft or Google sign-in from before contacts were asked for: signing in again fixes it. */
+  needsSignIn?: boolean;
 }
 
 export type BackendEvent =
   | { type: "mail:changed"; accountId: string }
   | { type: "mail:received"; accountId: string; messageIds: string[] }
   | { type: "account:status"; accountId: string; status: AccountStatus }
+  /** Mailboxes were added, removed or nested (shared mailboxes found or sorted under their account). */
+  | { type: "accounts:changed" }
   | { type: "send:done"; sendId: string; accountId: string }
   | { type: "send:failed"; sendId: string; accountId: string; reason: string; message: OutgoingMessage }
   | { type: "compose:mailto" }

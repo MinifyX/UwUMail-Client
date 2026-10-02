@@ -113,6 +113,57 @@ pub struct Account {
     pub protocol: Protocol,
     /// Protocols this account can switch to.
     pub protocols: Vec<Protocol>,
+    /// For a shared mailbox: the Microsoft account whose sign-in opens it. It is listed right
+    /// after that account.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// For a Microsoft 365 work account: how the search for its shared mailboxes went.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shared_search: Option<SharedSearch>,
+}
+
+/// How the search for a Microsoft 365 account's shared mailboxes went (see `shared`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SharedSearch {
+    /// Not searched yet.
+    Pending,
+    /// Searched; whatever was found is listed under the account.
+    Done,
+    /// The sign-in is from before UwUMail asked for Exchange access: signing in again lets it search.
+    NeedsSignIn,
+    /// Microsoft didn't answer usefully; shared mailboxes can still be added by address.
+    Unavailable,
+}
+
+impl SharedSearch {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Done => "done",
+            Self::NeedsSignIn => "needsSignIn",
+            Self::Unavailable => "unavailable",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "pending" => Self::Pending,
+            "done" => Self::Done,
+            "needsSignIn" => Self::NeedsSignIn,
+            "unavailable" => Self::Unavailable,
+            _ => return None,
+        })
+    }
+}
+
+/// What a search for shared mailboxes found.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedSearchResult {
+    pub state: SharedSearch,
+    /// The mailboxes added by this search.
+    pub added: Vec<Account>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -653,6 +704,10 @@ pub enum CalendarSource {
     /// JMAP Calendars on a UwUMail server.
     Jmap,
     Caldav,
+    /// Microsoft Graph (Microsoft 365 / Outlook.com sign-ins).
+    Microsoft,
+    /// Google Calendar (Google sign-ins).
+    Google,
 }
 
 /// Whether an account has calendars, and from where.
@@ -660,7 +715,7 @@ pub enum CalendarSource {
 #[serde(rename_all = "camelCase")]
 pub struct CalendarAccount {
     pub account_id: String,
-    /// None when the account has no calendar here (e.g. signed in with Microsoft or Google).
+    /// None when the account has no calendar here.
     pub source: Option<CalendarSource>,
     /// The CalDAV address typed in by hand, if any.
     pub caldav_url: Option<String>,
@@ -668,6 +723,9 @@ pub struct CalendarAccount {
     pub problem: Option<String>,
     /// False while only a search for a CalDAV server could tell, which waits until the calendar opens.
     pub checked: bool,
+    /// The sign-in doesn't cover calendars (yet): signing in again shows them.
+    #[serde(default)]
+    pub needs_sign_in: bool,
 }
 
 /// An address book of one account. Its id starts with the account id, so ids are unique across
@@ -700,6 +758,10 @@ pub enum ContactsSource {
     /// JMAP Contacts on a UwUMail server.
     Jmap,
     Carddav,
+    /// Microsoft Graph (Microsoft 365 / Outlook.com sign-ins).
+    Microsoft,
+    /// Google People (Google sign-ins).
+    Google,
 }
 
 /// Whether an account has address books, and from where.
@@ -707,7 +769,7 @@ pub enum ContactsSource {
 #[serde(rename_all = "camelCase")]
 pub struct ContactsAccount {
     pub account_id: String,
-    /// None when the account has no address books here (e.g. signed in with Microsoft or Google).
+    /// None when the account has no address books here.
     pub source: Option<ContactsSource>,
     /// The CardDAV address typed in by hand, if any.
     pub carddav_url: Option<String>,
@@ -715,6 +777,9 @@ pub struct ContactsAccount {
     pub problem: Option<String>,
     /// False while only a search for a CardDAV server could tell, which waits until the contacts open.
     pub checked: bool,
+    /// The sign-in doesn't cover contacts (yet): signing in again shows them.
+    #[serde(default)]
+    pub needs_sign_in: bool,
 }
 
 /// A blocked sender: on this device, or on the UwUMail server of one account.
@@ -909,6 +974,9 @@ pub enum EngineEvent {
     #[serde(rename = "push:changed")]
     PushChanged { reregister: bool },
     /// The AI assistant's providers, settings or labels changed, or it labelled new mail.
+    /// Mailboxes were added, removed or nested (shared mailboxes found or sorted under their account).
+    #[serde(rename = "accounts:changed")]
+    AccountsChanged {},
     #[serde(rename = "assist:changed", rename_all = "camelCase")]
     AssistChanged {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -928,6 +996,7 @@ impl EngineEvent {
             Self::CalendarChanged {} => "calendar:changed",
             Self::ContactsChanged {} => "contacts:changed",
             Self::PushChanged { .. } => "push:changed",
+            Self::AccountsChanged {} => "accounts:changed",
             Self::AssistChanged { .. } => "assist:changed",
         }
     }

@@ -16,6 +16,7 @@ import { useT } from "@/i18n";
 import { queryKeys, useAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
+import { SignInAgainHint } from "../accounts/SignInAgain";
 import { AppSwitch } from "../shell/AppSwitch";
 import { startNewContact, useContactsUi } from "./state";
 import { useAddressBooks, useContacts, useContactsAccounts } from "./useContactsData";
@@ -149,6 +150,19 @@ function AddressBookList({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <section className="flex flex-col gap-0.5" aria-labelledby="uwu-address-books">
+      {sources
+        .filter((source) => source.needsSignIn)
+        .map((source) => {
+          const account = accounts.find((candidate) => candidate.id === source.accountId);
+          return (
+            <SignInAgainHint
+              key={source.accountId}
+              accountId={source.accountId}
+              name={account ? account.name || account.email : source.accountId}
+              compact
+            />
+          );
+        })}
       <ul className="flex flex-col gap-0.5">
         <BookRow
           icon={UsersRound}

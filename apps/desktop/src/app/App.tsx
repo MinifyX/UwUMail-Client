@@ -6,6 +6,7 @@ import { MailShell } from "@/features/shell/MailShell";
 import { Onboarding } from "@/features/onboarding/Onboarding";
 import { DeleteForeverQuestion } from "@/features/mail/DeleteForeverQuestion";
 import { FolderDialogs } from "@/features/mail/FolderDialogs";
+import { SharedMailboxDialogs } from "@/features/accounts/SharedMailboxDialogs";
 import { LinkSheet, LinkStatus } from "@/features/mail/LinkPreview";
 import { LinkWarning } from "@/features/mail/LinkWarning";
 import { AppLock, BehindLock } from "@/features/mobile/AppLock";
@@ -40,6 +41,7 @@ export function App() {
         <LinkStatus />
         <DeleteForeverQuestion />
         <FolderDialogs />
+        <SharedMailboxDialogs />
         <NyuStage />
         <Toaster />
       </BehindLock>

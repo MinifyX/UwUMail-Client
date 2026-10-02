@@ -26,10 +26,65 @@ struct ProviderConfig {
     client_secret: Option<&'static str>,
     authorize_url: &'static str,
     token_url: &'static str,
-    scopes: &'static str,
     redirect_host: &'static str,
     extra: &'static [(&'static str, &'static str)],
 }
+
+/// Microsoft's mail token: IMAP and SMTP on outlook.office.com. Mailboxes signed in before
+/// calendars came along consented to exactly these, so refreshing with them always works.
+pub const MICROSOFT_MAIL_SCOPES: &str =
+    "offline_access https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send";
+/// Exchange Web Services (Autodiscover of shared mailboxes). Same resource as IMAP, so it lands in
+/// the mail token once consented.
+pub const MICROSOFT_EWS_SCOPE: &str = "https://outlook.office.com/EWS.AccessAsUser.All";
+/// Microsoft Graph for calendars and contacts, own and shared ones. A token of its own.
+pub const MICROSOFT_GRAPH_SCOPES: &str = "https://graph.microsoft.com/Calendars.ReadWrite \
+https://graph.microsoft.com/Calendars.ReadWrite.Shared https://graph.microsoft.com/Contacts.ReadWrite \
+https://graph.microsoft.com/Contacts.ReadWrite.Shared https://graph.microsoft.com/User.Read offline_access";
+/// Graph without the shared permissions, for a sign-in that wasn't given those (e.g. a personal
+/// account that doesn't offer them).
+pub const MICROSOFT_GRAPH_OWN_SCOPES: &str = "https://graph.microsoft.com/Calendars.ReadWrite \
+https://graph.microsoft.com/Contacts.ReadWrite https://graph.microsoft.com/User.Read offline_access";
+/// Google gives one token for everything the sign-in was allowed.
+pub const GOOGLE_CALENDAR_SCOPE: &str = "https://www.googleapis.com/auth/calendar";
+pub const GOOGLE_CONTACTS_SCOPE: &str = "https://www.googleapis.com/auth/contacts";
+
+/// What the sign-in page asks consent for: mail first (its token is the one the code is exchanged
+/// for), then Exchange Web Services and Graph.
+const MICROSOFT_SIGN_IN_SCOPES: &str = "offline_access https://outlook.office.com/IMAP.AccessAsUser.All \
+https://outlook.office.com/SMTP.Send https://outlook.office.com/EWS.AccessAsUser.All \
+https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/Calendars.ReadWrite.Shared \
+https://graph.microsoft.com/Contacts.ReadWrite https://graph.microsoft.com/Contacts.ReadWrite.Shared \
+https://graph.microsoft.com/User.Read";
+/// The code is exchanged for the Outlook token, with Exchange Web Services in it.
+const MICROSOFT_EXCHANGE_SCOPES: &str = "offline_access https://outlook.office.com/IMAP.AccessAsUser.All \
+https://outlook.office.com/SMTP.Send https://outlook.office.com/EWS.AccessAsUser.All";
+/// Personal Microsoft accounts (outlook.com, hotmail.*, live.*, ...) have neither shared mailboxes
+/// nor Exchange Web Services for UwUMail: asking for those could fail the whole sign-in.
+const MICROSOFT_PERSONAL_SIGN_IN_SCOPES: &str = "offline_access https://outlook.office.com/IMAP.AccessAsUser.All \
+https://outlook.office.com/SMTP.Send https://graph.microsoft.com/Calendars.ReadWrite \
+https://graph.microsoft.com/Contacts.ReadWrite https://graph.microsoft.com/User.Read";
+
+/// What a sign-in as `login_hint` asks consent for, and what the code is then exchanged for (None:
+/// whatever the consent covered). Personal Microsoft accounts get the set without shared calendars,
+/// shared contacts and Exchange Web Services; company accounts everything.
+pub fn sign_in_scopes(provider: OAuthProvider, login_hint: &str) -> (&'static str, Option<&'static str>) {
+    match provider {
+        OAuthProvider::Microsoft if crate::shared::is_personal_address(login_hint) => {
+            (MICROSOFT_PERSONAL_SIGN_IN_SCOPES, Some(MICROSOFT_MAIL_SCOPES))
+        }
+        OAuthProvider::Microsoft => (MICROSOFT_SIGN_IN_SCOPES, Some(MICROSOFT_EXCHANGE_SCOPES)),
+        OAuthProvider::Google => (GOOGLE_SIGN_IN_SCOPES, None),
+    }
+}
+
+/// The Graph scopes a refresh asks for: personal accounts only their own calendars and contacts.
+pub fn graph_scopes(personal: bool) -> &'static str {
+    if personal { MICROSOFT_GRAPH_OWN_SCOPES } else { MICROSOFT_GRAPH_SCOPES }
+}
+
+const GOOGLE_SIGN_IN_SCOPES: &str =
+    "https://mail.google.com/ https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts";
 
 /// The app's own link that phones come back to after signing in. Registered with Microsoft next to
 /// `http://localhost` (docs/oauth.md), and with the system: Android's manifest, iOS' Info.plist.
@@ -47,7 +102,6 @@ fn config(provider: OAuthProvider) -> Result<ProviderConfig> {
             client_secret: None,
             authorize_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
             token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-            scopes: "offline_access https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send",
             redirect_host: "localhost",
             extra: &[("prompt", "select_account")],
         },
@@ -56,7 +110,6 @@ fn config(provider: OAuthProvider) -> Result<ProviderConfig> {
             client_secret: option_env!("UWUMAIL_GOOGLE_CLIENT_SECRET"),
             authorize_url: "https://accounts.google.com/o/oauth2/v2/auth",
             token_url: "https://oauth2.googleapis.com/token",
-            scopes: "https://mail.google.com/",
             redirect_host: "127.0.0.1",
             extra: &[("access_type", "offline"), ("prompt", "consent")],
         },
@@ -68,6 +121,16 @@ pub struct Tokens {
     pub access_token: String,
     pub refresh_token: Option<String>,
     pub expires_in: Duration,
+    /// The scopes the access token carries, when the provider says (both do).
+    pub scope: Option<String>,
+}
+
+impl Tokens {
+    /// Whether the token was given `scope`. A provider that didn't say counts as yes; the API
+    /// answers for itself then.
+    pub fn has_scope(&self, scope: &str) -> bool {
+        self.scope.as_deref().is_none_or(|granted| granted.split_whitespace().any(|s| s.eq_ignore_ascii_case(scope)))
+    }
 }
 
 #[derive(Deserialize)]
@@ -77,6 +140,8 @@ struct TokenResponse {
     refresh_token: Option<String>,
     #[serde(default)]
     expires_in: Option<u64>,
+    #[serde(default)]
+    scope: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -225,6 +290,7 @@ pub async fn sign_in(
     };
     let verifier = random_token(48)?;
     let state = random_token(24)?;
+    let (scopes, exchange) = sign_in_scopes(provider, login_hint);
 
     let mut authorize = url::Url::parse(config.authorize_url).map_err(|e| Error::internal(e.to_string()))?;
     authorize
@@ -232,7 +298,7 @@ pub async fn sign_in(
         .append_pair("client_id", config.client_id)
         .append_pair("response_type", "code")
         .append_pair("redirect_uri", &redirect_uri)
-        .append_pair("scope", config.scopes)
+        .append_pair("scope", scopes)
         .append_pair("code_challenge", &pkce_challenge(&verifier))
         .append_pair("code_challenge_method", "S256")
         .append_pair("state", &state)
@@ -246,13 +312,13 @@ pub async fn sign_in(
             let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_app_link(&mut incoming, &state))
                 .await
                 .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
-            return exchange_code(http, &config, code, redirect_uri, verifier).await;
+            return exchange_code(http, &config, code, redirect_uri, verifier, exchange).await;
         }
     };
     let (code, _state) = tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_loopback(listeners, state))
         .await
         .map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
-    exchange_code(http, &config, code, redirect_uri, verifier).await
+    exchange_code(http, &config, code, redirect_uri, verifier, exchange).await
 }
 
 /// Listeners on one port of both loopback addresses. Microsoft's redirect names `localhost`, which a
@@ -353,11 +419,12 @@ enum Receiver {
 }
 
 async fn exchange_code(
-    http: &reqwest::Client,
+    _http: &reqwest::Client,
     config: &ProviderConfig,
     code: String,
     redirect_uri: String,
     verifier: String,
+    exchange: Option<&str>,
 ) -> Result<Tokens> {
     let mut form = vec![
         ("client_id", config.client_id.to_string()),
@@ -369,20 +436,81 @@ async fn exchange_code(
     if let Some(secret) = config.client_secret {
         form.push(("client_secret", secret.to_string()));
     }
-    request_tokens(http, config.token_url, &form).await
+    if let Some(scope) = exchange {
+        // Consent covered several resources; the code becomes the Outlook token.
+        form.push(("scope", scope.to_string()));
+    }
+    request_tokens(config.token_url, &form, false).await
 }
 
-pub async fn refresh(http: &reqwest::Client, provider: OAuthProvider, refresh_token: &str) -> Result<Tokens> {
+/// Where refresh tokens are redeemed, and as which app.
+#[derive(Debug, Clone)]
+pub struct TokenEndpoint {
+    pub url: String,
+    pub client_id: String,
+    pub client_secret: Option<String>,
+}
+
+pub fn token_endpoint(provider: OAuthProvider) -> Result<TokenEndpoint> {
     let config = config(provider)?;
+    Ok(TokenEndpoint {
+        url: config.token_url.to_string(),
+        client_id: config.client_id.to_string(),
+        client_secret: config.client_secret.map(String::from),
+    })
+}
+
+/// What a refresh for mail (IMAP and SMTP) asks for, when that isn't everything: Microsoft gives one
+/// token per resource (Outlook for IMAP/SMTP, Graph for calendars and contacts), Google one for all.
+pub fn mail_scopes(provider: OAuthProvider) -> Option<&'static str> {
+    match provider {
+        OAuthProvider::Microsoft => Some(MICROSOFT_MAIL_SCOPES),
+        OAuthProvider::Google => None,
+    }
+}
+
+/// A fresh access token for mail (IMAP and SMTP).
+pub async fn refresh(_http: &reqwest::Client, provider: OAuthProvider, refresh_token: &str) -> Result<Tokens> {
+    let endpoint = token_endpoint(provider)?;
+    refresh_at(&endpoint, refresh_token, mail_scopes(provider), false).await
+}
+
+/// A fresh access token for `scope` (all the sign-in allowed when `None`). With `api`, a refresh
+/// token that doesn't cover the scope, or no longer works, comes back as "sign in again" instead
+/// of a refused sign-in: it's about calendars and contacts then, and mail goes on.
+pub async fn refresh_at(
+    endpoint: &TokenEndpoint,
+    refresh_token: &str,
+    scope: Option<&str>,
+    api: bool,
+) -> Result<Tokens> {
     let mut form = vec![
-        ("client_id", config.client_id.to_string()),
+        ("client_id", endpoint.client_id.clone()),
         ("grant_type", "refresh_token".into()),
         ("refresh_token", refresh_token.to_string()),
     ];
-    if let Some(secret) = config.client_secret {
-        form.push(("client_secret", secret.to_string()));
+    if let Some(secret) = &endpoint.client_secret {
+        form.push(("client_secret", secret.clone()));
     }
-    request_tokens(http, config.token_url, &form).await
+    if let Some(scope) = scope {
+        form.push(("scope", scope.to_string()));
+    }
+    request_tokens(&endpoint.url, &form, api).await
+}
+
+/// Whether a refused refresh means the person has to sign in again: no consent for what was asked
+/// (Microsoft: AADSTS65001, `consent_required`, `interaction_required`, `invalid_scope`), or a
+/// refresh token that ran out or was revoked (`invalid_grant`).
+pub(crate) fn needs_new_sign_in(error: &str, description: &str) -> bool {
+    matches!(error, "invalid_grant" | "interaction_required" | "consent_required" | "invalid_scope")
+        || ["AADSTS65001", "AADSTS65004", "AADSTS70000", "AADSTS70011", "AADSTS50076", "AADSTS50079"]
+            .iter()
+            .any(|code| description.contains(code))
+}
+
+/// Whether only an administrator can allow what was asked for (AADSTS90094, or 65001 with an admin).
+pub(crate) fn needs_admin(description: &str) -> bool {
+    description.contains("AADSTS90094") || description.contains("AADSTS90008")
 }
 
 /// The client for the token endpoint: no redirects, so the code, its verifier and refresh tokens
@@ -404,7 +532,7 @@ fn token_client() -> Result<reqwest::Client> {
 /// Token answers are small; a bigger one isn't one.
 const MAX_TOKEN_ANSWER: usize = 256 * 1024;
 
-async fn request_tokens(_http: &reqwest::Client, url: &str, form: &[(&str, String)]) -> Result<Tokens> {
+async fn request_tokens(url: &str, form: &[(&str, String)], api: bool) -> Result<Tokens> {
     let mut response = token_client()?.post(url).form(form).send().await?;
     let status = response.status();
     let mut bytes = Vec::new();
@@ -416,9 +544,20 @@ async fn request_tokens(_http: &reqwest::Client, url: &str, form: &[(&str, Strin
     }
     let body = String::from_utf8_lossy(&bytes);
     if !status.is_success() {
-        let message = serde_json::from_str::<TokenError>(&body)
-            .map(|e| e.error_description.unwrap_or(e.error))
-            .unwrap_or_else(|_| format!("HTTP {status}"));
+        let parsed = serde_json::from_str::<TokenError>(&body).ok();
+        if api && let Some(parsed) = &parsed {
+            let description = parsed.error_description.as_deref().unwrap_or_default();
+            if needs_admin(description) {
+                return Err(Error::admin_consent_required(
+                    "This company allows calendars and contacts in apps only after an administrator agrees.",
+                ));
+            }
+            if needs_new_sign_in(&parsed.error, description) {
+                return Err(Error::sign_in_again("Sign in again to see calendar and contacts."));
+            }
+        }
+        let message =
+            parsed.map(|e| e.error_description.unwrap_or(e.error)).unwrap_or_else(|| format!("HTTP {status}"));
         return Err(Error::auth(format!("The provider refused the sign-in: {message}")));
     }
     let tokens: TokenResponse =
@@ -427,6 +566,7 @@ async fn request_tokens(_http: &reqwest::Client, url: &str, form: &[(&str, Strin
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_in: Duration::from_secs(tokens.expires_in.unwrap_or(3600)),
+        scope: tokens.scope,
     })
 }
 
@@ -455,6 +595,37 @@ mod tests {
         assert_eq!(code, "abc/123");
         assert_eq!(state, "xyz");
         assert!(parse_redirect("GET /?error=access_denied HTTP/1.1\r\n").is_err());
+    }
+
+    #[test]
+    fn personal_microsoft_accounts_ask_for_no_shared_or_ews_scopes() {
+        // Microsoft's own consumer domains (nothing is sent there).
+        for personal in ["mini@outlook.com", "mini@hotmail.de", "mini@live.com"] {
+            let (authorize, exchange) = sign_in_scopes(OAuthProvider::Microsoft, personal);
+            assert!(!authorize.contains(".Shared"), "{personal}");
+            assert!(!authorize.contains("EWS"), "{personal}");
+            for wanted in [
+                "IMAP.AccessAsUser.All",
+                "SMTP.Send",
+                "offline_access",
+                "Calendars.ReadWrite",
+                "Contacts.ReadWrite",
+                "User.Read",
+            ] {
+                assert!(authorize.contains(wanted), "{personal}: {wanted}");
+            }
+            assert_eq!(exchange, Some(MICROSOFT_MAIL_SCOPES));
+        }
+        let (authorize, exchange) = sign_in_scopes(OAuthProvider::Microsoft, "alex@contoso.example");
+        for wanted in
+            ["Calendars.ReadWrite.Shared", "Contacts.ReadWrite.Shared", "EWS.AccessAsUser.All", "IMAP.AccessAsUser.All"]
+        {
+            assert!(authorize.contains(wanted), "{wanted}");
+        }
+        assert!(exchange.unwrap().contains("EWS.AccessAsUser.All"));
+        assert_eq!(sign_in_scopes(OAuthProvider::Google, "mini@example.com").1, None);
+        assert!(!graph_scopes(true).contains(".Shared"));
+        assert!(graph_scopes(false).contains("Calendars.ReadWrite.Shared"));
     }
 
     #[test]

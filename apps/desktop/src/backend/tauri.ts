@@ -35,6 +35,7 @@ import type {
   LabelRef,
   BlockedSender,
   Account,
+  SharedSearchResult,
   AddressBookInfo,
   AssistComposeRequest,
   AssistComposeResult,
@@ -190,6 +191,7 @@ const EVENT_NAMES = [
   "mail:changed",
   "mail:received",
   "account:status",
+  "accounts:changed",
   "send:done",
   "send:failed",
   "compose:mailto",
@@ -298,8 +300,20 @@ export class TauriBackend implements Backend {
     return call<Account>("add_account", { account });
   }
 
-  removeAccount(accountId: string) {
-    return call<void>("remove_account", { accountId });
+  removeAccount(accountId: string, options?: { keepShared?: boolean }) {
+    return call<void>("remove_account", { accountId, keepShared: options?.keepShared ?? false });
+  }
+
+  findSharedMailboxes(accountId: string) {
+    return call<SharedSearchResult>("find_shared_mailboxes", { accountId });
+  }
+
+  addSharedMailbox(accountId: string, email: string, displayName?: string) {
+    return call<Account>("add_shared_mailbox", { accountId, email, displayName: displayName ?? null });
+  }
+
+  signInAgain(accountId: string) {
+    return call<Account>("sign_in_again", { accountId });
   }
 
   setAccountProtocol(accountId: string, protocol: Protocol) {
@@ -320,7 +334,7 @@ export class TauriBackend implements Backend {
    */
   async calendarsAvailable() {
     const accounts = await call<CalendarAccount[]>("calendar_accounts", { look: false });
-    return accounts.some((account) => account.source !== null || !account.checked);
+    return accounts.some((account) => account.source !== null || !account.checked || account.needsSignIn === true);
   }
 
   calendars() {
@@ -387,7 +401,7 @@ export class TauriBackend implements Backend {
    */
   async contactsAvailable() {
     const accounts = await call<ContactsAccount[]>("contacts_accounts", { look: false });
-    return accounts.some((account) => account.source !== null || !account.checked);
+    return accounts.some((account) => account.source !== null || !account.checked || account.needsSignIn === true);
   }
 
   contactsAccounts() {

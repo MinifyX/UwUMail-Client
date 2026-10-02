@@ -1,0 +1,6 @@
+# Pinned so the build is reproducible. Install into a venv, never globally.
+fonttools==4.60.1
+brotli==1.1.0
+uharfbuzz==0.51.1
+freetype-py==2.5.1
+pillow==12.3.0

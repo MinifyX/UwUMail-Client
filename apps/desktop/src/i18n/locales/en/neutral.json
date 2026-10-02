@@ -477,7 +477,13 @@
     "signatureLocalOnlyDesc": "This signature stays on this device: it’s too big to sync (256 KB at most) or has pictures that only work here.",
     "rules": "Rules",
     "assistant": "AI assistant",
-    "labels": "Labels"
+    "labels": "Labels",
+    "font": "Font",
+    "fontDesc": "For the whole app and for mails. Only on this device.",
+    "senderFonts": "Sender fonts",
+    "senderFontsDesc": "Many HTML mails are set in Times or another serif font. Mails without a font of their own always get yours.",
+    "senderFontsReplace": "Replace serif fonts with mine",
+    "senderFontsKeep": "As the sender set them"
   },
   "theme": {
     "system": "System",
@@ -1079,10 +1085,11 @@
     "checking": "Looking for calendars…",
     "source": {
       "jmap": "UwUMail server",
-      "caldav": "CalDAV"
+      "caldav": "CalDAV",
+      "microsoft": "Microsoft 365 / Outlook.com",
+      "google": "Google"
     },
     "unavailable": "Not available",
-    "signIn": "Calendars of mailboxes signed in with Microsoft or Google aren't supported yet.",
     "url": "CalDAV address",
     "urlHint": "Only needed when UwUMail doesn't find the calendars by itself.",
     "check": "Check again",
@@ -1210,10 +1217,11 @@
     "checking": "Looking for address books…",
     "source": {
       "jmap": "UwUMail server",
-      "carddav": "CardDAV"
+      "carddav": "CardDAV",
+      "microsoft": "Microsoft 365 / Outlook.com",
+      "google": "Google"
     },
     "unavailable": "Not available",
-    "signIn": "Address books of mailboxes signed in with Microsoft or Google aren't supported yet.",
     "url": "CardDAV address",
     "urlHint": "Only needed when UwUMail doesn't find the address books by itself.",
     "check": "Check again",
@@ -1222,6 +1230,13 @@
     "cleared": "Address removed. UwUMail looks for the address books by itself again.",
     "notFound": "No address books found: {{reason}}",
     "failed": "That didn't work: {{reason}}"
+  },
+  "cloudSignIn": {
+    "hint": "Sign in again to see calendar and contacts. Mail keeps working either way.",
+    "hintFor": "Sign in to {{name}} again to see its calendar and contacts.",
+    "button": "Sign in again",
+    "adminConsent": "Your organisation lets apps use these permissions only after an administrator agrees. Ask them to allow UwUMail again; your mail keeps working in the meantime.",
+    "failed": "Signing in again didn't work: {{reason}}"
   },
   "assist": {
     "thinking": "Thinking…",
@@ -1775,5 +1790,39 @@
       "automatic": "Set automatically",
       "bySource": "Set automatically ({{source}})"
     }
+  },
+  "shared": {
+    "title": "Shared mailboxes",
+    "add": "Add shared mailbox",
+    "addTitle": "Add a shared mailbox",
+    "addIntro": "A shared mailbox opens with the sign-in of {{email}}. Enter its address; UwUMail checks that you have access.",
+    "address": "Address of the shared mailbox",
+    "addressPlaceholder": "team@company.example",
+    "displayName": "Name (optional)",
+    "displayNamePlaceholder": "e.g. Team Sales",
+    "addConfirm": "Add",
+    "added": "{{email}} was added.",
+    "noAccess": "{{account}} can't open {{email}}. Is it a shared mailbox you have full access to?",
+    "searchAgain": "Search again",
+    "found_one": "Found {{count}} new shared mailbox.",
+    "found_other": "Found {{count}} new shared mailboxes.",
+    "foundNone": "No new shared mailboxes found.",
+    "statePending": "UwUMail looks for your shared mailboxes shortly.",
+    "stateDone": "Shared mailboxes you have access to are added automatically.",
+    "stateNeedsSignIn": "Sign in again to find shared mailboxes automatically.",
+    "stateUnavailable": "Microsoft didn't say which shared mailboxes you have. You can still add them by address.",
+    "signInAgain": "Sign in again",
+    "signedInAgain": "Signed in again as {{email}}.",
+    "of": "Shared mailbox of {{email}}",
+    "remove": "Remove shared mailbox",
+    "removeConfirm": "Remove the shared mailbox {{email}}? It isn't added again automatically; you can add it by address any time. Mail on the server isn't touched.",
+    "removeWithShared_one": "Also remove its shared mailbox",
+    "removeWithShared_other": "Also remove its {{count}} shared mailboxes",
+    "toggle": "Show or hide the shared mailboxes of {{email}}",
+    "accountMenu": "More for {{email}}"
+  },
+  "font": {
+    "system": "System font",
+    "sample": "Hi :3 – meeting at 10:30 <3"
   }
 }

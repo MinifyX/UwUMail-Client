@@ -13,8 +13,13 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   sending, tested against Stalwart and UwUMail Server.
 - **Microsoft and Google sign in with their own page** (OAuth 2). Microsoft works
   for Outlook.com and Microsoft 365, company domains recognised through their
-  tenant, shared mailboxes included, with a plain explanation when a tenant
-  blocks IMAP or SMTP; on Android and iPhone the browser comes back to the app.
+  tenant, with a plain explanation when a tenant blocks IMAP or SMTP; on
+  Android and iPhone the browser comes back to the app.
+- **Shared mailboxes in Microsoft 365** show up on their own after signing in
+  (Exchange Autodiscover, for mailboxes granted with automapping) and nested
+  under the account whose sign-in opens them, with their own folders; others
+  are added by address. Counters, notifications, the unified inbox and sending
+  as the shared address work like in any mailbox.
   Google on the iPhone is best added with an app password. See
   [oauth.md](oauth.md).
 - **A unified inbox** across all mailboxes, and private and business mailboxes
@@ -60,9 +65,14 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
 ## Calendar, contacts and birthdays
 
 - **Calendar and contacts** next to the mail: JMAP Calendars and Contacts on
-  UwUMail servers, CalDAV and CardDAV for other mailboxes with a password.
+  UwUMail servers, CalDAV and CardDAV for other mailboxes with a password, and
+  for Microsoft and Google sign-ins their own calendars and contacts (Microsoft
+  Graph: own and shared calendars, contact folders, shared mailboxes; Google
+  Calendar and People API), read and written. Mailboxes signed in before that
+  get a "Sign in again" button; mail keeps working without it. See
+  [oauth.md](oauth.md#calendars-and-contacts).
 - **Birthdays** with a cake and the age. Mailboxes on a UwUMail server show the
-  server's birthdays calendar, other mailboxes with CardDAV contacts get one of
+  server's birthdays calendar, other mailboxes with contacts get one of
   their own. Anniversaries, birthdays without a year, and birthday events from
   other calendars moved into the contacts; reminders per contact on UwUMail
   servers.

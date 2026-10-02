@@ -32,8 +32,8 @@ export function copyLink(check: LinkCheck, message: string) {
 }
 
 /**
- * Addresses are shown letter by letter: Manrope joins "--" into one dash, which would turn
- * "xn--" into "xn-" and hide exactly what the reader needs to see.
+ * Addresses are shown letter by letter: some fonts join "--" into one dash (turning "xn--" into
+ * "xn-"), and UwU Sans turns ":3" into Nyu. Either would hide exactly what the reader needs to see.
  */
 const EXACT = "[font-variant-ligatures:none] [font-feature-settings:'calt'_0,'liga'_0]";
 

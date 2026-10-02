@@ -23,6 +23,14 @@ function account(id: string, auth: Account["auth"], protocol: Account["protocol"
 
 let sources: ContactsAccount[] = [];
 const fake = {
+  signInAgain: vi.fn(async (accountId: string): Promise<Account> => {
+    sources = sources.map((entry) =>
+      entry.accountId === accountId
+        ? { ...entry, source: "microsoft" as const, problem: null, needsSignIn: false }
+        : entry,
+    );
+    return account(accountId, "microsoft", "imap");
+  }),
   contactsAccounts: vi.fn(async () => sources),
   setCardDavUrl: vi.fn(async (accountId: string, url: string | null) => {
     sources = sources.map((entry) =>
@@ -57,7 +65,16 @@ describe("a mailbox's contacts settings", () => {
     sources = [
       { accountId: "club", source: null, carddavUrl: null, problem: "No address book server found.", checked: true },
       { accountId: "uwu", source: "jmap", carddavUrl: null, problem: null, checked: true },
-      { accountId: "work", source: null, carddavUrl: null, problem: "None for Microsoft sign-ins.", checked: true },
+      {
+        accountId: "work",
+        source: null,
+        carddavUrl: null,
+        problem: "None for Microsoft sign-ins.",
+        checked: true,
+        needsSignIn: true,
+      },
+      { accountId: "outlook", source: "microsoft", carddavUrl: null, problem: null, checked: true },
+      { accountId: "gmail", source: "google", carddavUrl: null, problem: null, checked: true },
     ];
   });
   afterEach(cleanup);
@@ -85,10 +102,25 @@ describe("a mailbox's contacts settings", () => {
     expect(screen.queryByLabelText("CardDAV address")).toBeNull();
     unmount();
 
+    renderBlock(account("outlook", "microsoft", "imap"));
+    expect(await screen.findByText("Microsoft 365 / Outlook.com")).toBeTruthy();
+    expect(screen.queryByLabelText("CardDAV address")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sign in again" })).toBeNull();
+    cleanup();
+
+    renderBlock(account("gmail", "google", "imap"));
+    expect(await screen.findByText("Google")).toBeTruthy();
+  });
+
+  it("asks a sign-in without the new permissions to sign in again, and looks again after it", async () => {
     renderBlock(account("work", "microsoft", "imap"));
     expect(
-      await screen.findByText("Address books of mailboxes signed in with Microsoft or Google aren't supported yet."),
+      await screen.findByText("Sign in again to see calendar and contacts. Mail keeps working either way."),
     ).toBeTruthy();
-    expect(screen.queryByLabelText("CardDAV address")).toBeNull();
+    expect(screen.queryByText("None for Microsoft sign-ins.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    await waitFor(() => expect(fake.signInAgain).toHaveBeenCalledWith("work"));
+    expect(await screen.findByText("Microsoft 365 / Outlook.com")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sign in again" })).toBeNull();
   });
 });

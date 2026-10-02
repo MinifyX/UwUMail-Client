@@ -3,8 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSizeProbe, Message } from "@/backend/types";
 import { useT } from "@/i18n";
 import { markMail, type Mark } from "@/lib/dates";
+import type { FontChoice, SenderFonts } from "@/lib/fonts";
 import { escapeHtml, textToHtml } from "@/lib/format";
 import { replaceContentIds } from "@/lib/inlineImages";
+import { fontVariables, rewriteElementFonts } from "@/lib/mailFonts";
 import { proxyRemoteImages, type ImageProxy } from "@/lib/remoteImages";
 import { unwrappedText } from "@/lib/safeLinks";
 import type { MailAppearance } from "@/state/settings";
@@ -12,6 +14,7 @@ import { hideLinkStatus, watchLinks } from "./linkEvents";
 import { darkenImages, type RemoteImageLoader } from "./darkImages";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
 import { forwardFrameKeys } from "./readerKeys";
+import { useMailFonts } from "./useMailFonts";
 import { DATE_STYLE, watchDates, type DateReport } from "../dates/frameDates";
 import { deferRemotePictures, loadRemotePictures, PICTURE_STYLES, type PictureProgress } from "./remotePictures";
 
@@ -64,6 +67,8 @@ function sanitize(html: string) {
     unwrapLinkText(node);
     dropMathLinks(node);
     dropOwnMarkers(node);
+    // Same output whatever the font settings say; the frame decides (see lib/mailFonts).
+    rewriteElementFonts(node);
   });
   return purify.sanitize(html, {
     WHOLE_DOCUMENT: false,
@@ -127,6 +132,16 @@ export function fixViewportHeightUnits(html: string): string {
   });
 }
 
+/** The font the frame uses, and what becomes of the sender's fonts (see lib/mailFonts). */
+export interface MailFonts {
+  font: FontChoice;
+  senderFonts: SenderFonts;
+  /** The chosen font's `data:` @font-face rules; "" while it loads (the system font shows meanwhile). */
+  faces: string;
+}
+
+const SYSTEM_FONTS: MailFonts = { font: "system", senderFonts: "replace", faces: "" };
+
 /** Where the app hands out remote pictures (`uwuimg:`), on every platform's spelling of it. */
 const PROXIED_SOURCES = " uwuimg: http://uwuimg.localhost";
 
@@ -153,6 +168,7 @@ export function buildDocument(
   imageProxy?: ImageProxy | null,
   dateMarks: readonly Mark[] = [],
   deferPictures = false,
+  fonts: MailFonts = SYSTEM_FONTS,
 ) {
   const isHtml = message.bodyHtml !== null;
   const dark = variant === "dark";
@@ -178,15 +194,18 @@ export function buildDocument(
   // must not stretch to the frame height. Otherwise measuring and resizing
   // would feed each other. The color-scheme must match the frame element's,
   // or the engine paints an opaque white canvas behind dark content.
-  const frame = `:root{color-scheme:${dark ? "dark" : "light"}}
+  // A font that is still loading leaves --uwu-font on the system font rather than on nothing.
+  const variables = fontVariables(fonts.faces || fonts.font === "system" ? fonts.font : "system", fonts.senderFonts);
+  const frame = `${fonts.faces ? `${fonts.faces}\n` : ""}:root{color-scheme:${dark ? "dark" : "light"};${variables}}
 html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:hidden!important}
-#${ROOT_ID}{display:flow-root;overflow-x:auto}${dateMarks.length > 0 ? `\n${DATE_STYLE}` : ""}`;
-  // HTML mail brings its own design: keep the sender's typography and only
-  // give it paper and some breathing room.
-  const html = `body{background:${dark ? "#1c171f" : "#ffffff"};color:${dark ? "#f8f2f6" : "#1c1420"}}
+#${ROOT_ID}{display:flow-root;overflow-x:auto}
+pre,code,kbd,samp,tt{font-variant-ligatures:no-contextual}${dateMarks.length > 0 ? `\n${DATE_STYLE}` : ""}`;
+  // HTML mail brings its own design: keep the sender's sizes and weights and only give it paper,
+  // some breathing room and a font where it names none (the engine's default would be Times).
+  const html = `body{background:${dark ? "#1c171f" : "#ffffff"};color:${dark ? "#f8f2f6" : "#1c1420"};font-family:var(--uwu-font)}
 #${ROOT_ID}{padding:16px}
 a{color:${dark ? "#ff9dbf" : "#c8165f"}}`;
-  const text = `body{color:${dark ? "#f8f2f6" : "#1c1420"};background:${dark ? "transparent" : "#ffffff"};font:15px/1.6 "Manrope Variable",ui-sans-serif,system-ui,sans-serif}
+  const text = `body{color:${dark ? "#f8f2f6" : "#1c1420"};background:${dark ? "transparent" : "#ffffff"};font:15px/1.6 var(--uwu-font)}
 #${ROOT_ID}{overflow-wrap:break-word;${dark ? "" : "padding:16px"}}
 a{color:${dark ? "#ff9dbf" : "#c8165f"}}
 p{margin:0 0 12px}
@@ -331,14 +350,15 @@ export function MessageBody({
   const { t } = useT();
   const [height, setHeight] = useState(120);
   const variant = appearance.kind === "dark" ? "dark" : "light";
+  const fonts = useMailFonts();
   const html = useMemo(
-    () => buildDocument(message, allowRemote, variant, inlineImages, imageProxy, dateMarks, true),
-    [message, allowRemote, variant, inlineImages, imageProxy, dateMarks],
+    () => buildDocument(message, allowRemote, variant, inlineImages, imageProxy, dateMarks, true, fonts),
+    [message, allowRemote, variant, inlineImages, imageProxy, dateMarks, fonts],
   );
   // Remount the frame whenever the look changes: recoloring happens in the
   // loaded document, so an unchanged srcdoc alone wouldn't undo it. Embedded
   // images arriving count as a change too.
-  const signature = `${message.id}|${appearance.kind}|${allowRemote}|${inlineImages?.size ?? 0}|${darkImages}`;
+  const signature = `${message.id}|${appearance.kind}|${allowRemote}|${inlineImages?.size ?? 0}|${darkImages}|${fonts.font}|${fonts.senderFonts}|${fonts.faces.length}`;
   const needsPass = appearance.kind === "auto" || appearance.kind === "darken";
   const [finished, setFinished] = useState<{ signature: string; dark: boolean } | null>(null);
   const done = finished?.signature === signature ? finished : null;
