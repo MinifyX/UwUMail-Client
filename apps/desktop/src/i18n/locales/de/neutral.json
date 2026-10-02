@@ -1079,10 +1079,11 @@
     "checking": "Suche Kalender …",
     "source": {
       "jmap": "UwUMail-Server",
-      "caldav": "CalDAV"
+      "caldav": "CalDAV",
+      "microsoft": "Microsoft 365 / Outlook.com",
+      "google": "Google"
     },
     "unavailable": "Nicht verfügbar",
-    "signIn": "Kalender von Postfächern mit Microsoft- oder Google-Anmeldung gehen noch nicht.",
     "url": "CalDAV-Adresse",
     "urlHint": "Nur nötig, wenn UwUMail die Kalender nicht von selbst findet.",
     "check": "Erneut prüfen",
@@ -1210,10 +1211,11 @@
     "checking": "Suche Adressbücher …",
     "source": {
       "jmap": "UwUMail-Server",
-      "carddav": "CardDAV"
+      "carddav": "CardDAV",
+      "microsoft": "Microsoft 365 / Outlook.com",
+      "google": "Google"
     },
     "unavailable": "Nicht verfügbar",
-    "signIn": "Adressbücher von Postfächern mit Microsoft- oder Google-Anmeldung gehen noch nicht.",
     "url": "CardDAV-Adresse",
     "urlHint": "Nur nötig, wenn UwUMail die Adressbücher nicht von selbst findet.",
     "check": "Erneut prüfen",
@@ -1222,6 +1224,14 @@
     "cleared": "Adresse entfernt. UwUMail sucht die Adressbücher wieder von selbst.",
     "notFound": "Keine Adressbücher gefunden: {{reason}}",
     "failed": "Das hat nicht geklappt: {{reason}}"
+  },
+  "cloudSignIn": {
+    "hint": "Melde dich erneut an, um Kalender und Kontakte zu sehen. E-Mails funktionieren so oder so weiter.",
+    "hintFor": "Melde dich bei {{name}} erneut an, um Kalender und Kontakte zu sehen.",
+    "button": "Erneut anmelden",
+    "done": "Erneut angemeldet. Kalender und Kontakte sind unterwegs.",
+    "adminConsent": "Deine Organisation lässt Apps erst nach Zustimmung eines Administrators auf Kalender und Kontakte zugreifen. Bitte ihn, UwUMail zu erlauben; deine E-Mails funktionieren in der Zwischenzeit weiter.",
+    "failed": "Die erneute Anmeldung hat nicht geklappt: {{reason}}"
   },
   "assist": {
     "thinking": "Denkt nach …",

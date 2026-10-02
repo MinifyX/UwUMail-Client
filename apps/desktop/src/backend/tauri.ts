@@ -302,6 +302,10 @@ export class TauriBackend implements Backend {
     return call<void>("remove_account", { accountId });
   }
 
+  signInAgain(accountId: string) {
+    return call<Account>("sign_in_again", { accountId });
+  }
+
   setAccountProtocol(accountId: string, protocol: Protocol) {
     return call<Account>("set_account_protocol", { accountId, protocol });
   }
@@ -320,7 +324,7 @@ export class TauriBackend implements Backend {
    */
   async calendarsAvailable() {
     const accounts = await call<CalendarAccount[]>("calendar_accounts", { look: false });
-    return accounts.some((account) => account.source !== null || !account.checked);
+    return accounts.some((account) => account.source !== null || !account.checked || account.needsSignIn === true);
   }
 
   calendars() {
@@ -387,7 +391,7 @@ export class TauriBackend implements Backend {
    */
   async contactsAvailable() {
     const accounts = await call<ContactsAccount[]>("contacts_accounts", { look: false });
-    return accounts.some((account) => account.source !== null || !account.checked);
+    return accounts.some((account) => account.source !== null || !account.checked || account.needsSignIn === true);
   }
 
   contactsAccounts() {

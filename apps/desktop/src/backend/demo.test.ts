@@ -11,16 +11,24 @@ function day(days: number, time = "00:00:00") {
 }
 
 describe("DemoBackend calendar", () => {
-  it("has calendars for the UwUMail server account only", async () => {
+  it("has calendars for the UwUMail server account and the Microsoft sign-in", async () => {
     const demo = new DemoBackend();
     const calendars = await demo.calendars();
-    expect(calendars.map((c) => c.accountId)).toEqual(["acc-private", "acc-private", "acc-private", "acc-private"]);
-    expect(calendars.filter((c) => c.isDefault)).toHaveLength(1);
+    expect(calendars.map((c) => c.accountId)).toEqual([
+      "acc-private",
+      "acc-private",
+      "acc-private",
+      "acc-private",
+      "acc-studio",
+    ]);
+    expect(calendars.filter((c) => c.isDefault).map((c) => c.accountId)).toEqual(["acc-private", "acc-studio"]);
     expect(calendars.some((c) => !c.mayWrite)).toBe(true);
     const accounts = await demo.calendarAccounts();
     expect(accounts.find((a) => a.accountId === "acc-private")?.source).toBe("jmap");
-    expect(accounts.find((a) => a.accountId === "acc-studio")).toMatchObject({ source: null });
-    await expect(demo.createCalendar({ accountId: "acc-studio", name: "Nope", color: null })).rejects.toThrow();
+    expect(accounts.find((a) => a.accountId === "acc-studio")).toMatchObject({ source: "microsoft", problem: null });
+    const created = await demo.createCalendar({ accountId: "acc-studio", name: "Team", color: null });
+    expect(created.accountId).toBe("acc-studio");
+    await expect(demo.signInAgain("acc-studio")).rejects.toThrow();
   });
 
   it("has a birthdays calendar from the contacts, with the age, and takes birthday events over", async () => {
@@ -153,7 +161,7 @@ describe("DemoBackend calendar", () => {
       color: null,
       isDefault: true,
     });
-    expect(calendars.filter((c) => c.isDefault)).toHaveLength(1);
+    expect(calendars.filter((c) => c.isDefault && c.accountId === "acc-private")).toHaveLength(1);
     await demo.deleteCalendar(created.id);
     expect((await demo.calendars()).some((c) => c.id === created.id)).toBe(false);
     await expect(demo.deleteCalendar("acc-private:holidays")).rejects.toThrow();

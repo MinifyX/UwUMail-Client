@@ -308,6 +308,11 @@ async fn remove_account(engine: State<'_, Engine>, account_id: String) -> Comman
 }
 
 #[tauri::command]
+async fn sign_in_again(engine: State<'_, Engine>, account_id: String) -> CommandResult<Account> {
+    engine.sign_in_again(&account_id).await
+}
+
+#[tauri::command]
 async fn set_account_protocol(
     engine: State<'_, Engine>,
     account_id: String,
@@ -1121,6 +1126,7 @@ pub fn run() {
             microsoft_admin_consent_url,
             add_account,
             remove_account,
+            sign_in_again,
             set_account_protocol,
             sync_now,
             list_folders,

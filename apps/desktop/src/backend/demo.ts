@@ -419,6 +419,10 @@ export class DemoBackend implements Backend {
     this.emit({ type: "mail:changed", accountId });
   }
 
+  async signInAgain(_accountId: string): Promise<Account> {
+    throw new BackendError("not_supported", "Signing in with a provider needs the desktop app.");
+  }
+
   async syncNow(accountId?: string) {
     const targets = this.accounts.filter((a) => !accountId || a.id === accountId);
     for (const account of targets) {

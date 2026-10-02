@@ -1079,10 +1079,11 @@
     "checking": "Looking for calendars…",
     "source": {
       "jmap": "UwUMail server",
-      "caldav": "CalDAV"
+      "caldav": "CalDAV",
+      "microsoft": "Microsoft 365 / Outlook.com",
+      "google": "Google"
     },
     "unavailable": "Not available",
-    "signIn": "Calendars of mailboxes signed in with Microsoft or Google aren't supported yet.",
     "url": "CalDAV address",
     "urlHint": "Only needed when UwUMail doesn't find the calendars by itself.",
     "check": "Check again",
@@ -1210,10 +1211,11 @@
     "checking": "Looking for address books…",
     "source": {
       "jmap": "UwUMail server",
-      "carddav": "CardDAV"
+      "carddav": "CardDAV",
+      "microsoft": "Microsoft 365 / Outlook.com",
+      "google": "Google"
     },
     "unavailable": "Not available",
-    "signIn": "Address books of mailboxes signed in with Microsoft or Google aren't supported yet.",
     "url": "CardDAV address",
     "urlHint": "Only needed when UwUMail doesn't find the address books by itself.",
     "check": "Check again",
@@ -1222,6 +1224,14 @@
     "cleared": "Address removed. UwUMail looks for the address books by itself again.",
     "notFound": "No address books found: {{reason}}",
     "failed": "That didn't work: {{reason}}"
+  },
+  "cloudSignIn": {
+    "hint": "Sign in again to see calendar and contacts. Mail keeps working either way.",
+    "hintFor": "Sign in to {{name}} again to see its calendar and contacts.",
+    "button": "Sign in again",
+    "done": "Signed in again. Calendar and contacts are on their way.",
+    "adminConsent": "Your organisation lets apps read calendars and contacts only after an administrator agrees. Ask them to allow UwUMail; your mail keeps working in the meantime.",
+    "failed": "Signing in again didn't work: {{reason}}"
   },
   "assist": {
     "thinking": "Thinking…",

@@ -1,6 +1,6 @@
 //! Calendars across all accounts, behind one set of calls: JMAP Calendars where the UwUMail
-//! server has them, CalDAV for other password accounts, nothing for Microsoft and Google
-//! sign-ins (their calendars need other APIs).
+//! server has them, CalDAV for other password accounts, Microsoft Graph and Google Calendar for
+//! Microsoft and Google sign-ins (`cloud_ops`).
 
 use chrono::{Datelike, NaiveDateTime, Utc};
 use chrono_tz::Tz;
@@ -59,11 +59,16 @@ impl Inner {
             }
             Err(problem) => {
                 // Only a definite "none here" is remembered; a network hiccup is asked again next time.
-                if problem.code == ErrorCode::NotSupported {
+                if matches!(
+                    problem.code,
+                    ErrorCode::NotSupported | ErrorCode::SignInAgain | ErrorCode::AdminConsentRequired
+                ) {
                     self.calendar_sources.lock().await.insert(
                         account_id.to_string(),
                         SourceState::Unavailable { problem: problem.clone(), since: Instant::now() },
                     );
+                }
+                if problem.code == ErrorCode::NotSupported && account.auth == AuthKind::Password {
                     // Also past a restart, so the calendar isn't offered again at every start.
                     let _ = self.store.set_caldav_none_at(account_id, Some(now_millis() / 1000));
                 }
@@ -111,10 +116,11 @@ impl Inner {
                 return Ok(Source::Jmap);
             }
         }
+        if account.auth != AuthKind::Password {
+            return self.find_cloud_calendars(account).await;
+        }
         let Secret::Password { password } = self.secrets.get(&account.id)? else {
-            return Err(Error::not_supported(
-                "Calendars aren't available for mailboxes signed in with Microsoft or Google.",
-            ));
+            return Err(Error::auth("No saved password for this mailbox."));
         };
         let (_, domain) = autoconfig::split_email(&account.email)?;
         let manual = match self.store.caldav_url(&account.id)? {
@@ -142,6 +148,9 @@ impl Inner {
             return Ok(entries.clone());
         }
         let entries = match self.calendar_source(account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => {
+                self.cloud_calendar_entries(account_id, &source).await?
+            }
             Source::Jmap => {
                 let client = self.jmap_client(account_id).await?;
                 jmap_cal::calendars(&client)
@@ -236,6 +245,10 @@ impl Inner {
     ) -> Result<Vec<CalendarOccurrence>> {
         let entries = self.calendar_entries(account_id).await?;
         match self.calendar_source(account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => {
+                let range = cloud_ops::cloud_range(from, to, viewer);
+                self.cloud_occurrences(account_id, &source, &entries, range, viewer).await
+            }
             Source::Jmap => {
                 let client = self.jmap_client(account_id).await?;
                 let instances =
@@ -442,15 +455,19 @@ impl Engine {
             let (source, problem) = match &known {
                 Some(Ok(Source::Jmap)) => (Some(CalendarSource::Jmap), None),
                 Some(Ok(Source::Dav { .. })) => (Some(CalendarSource::Caldav), None),
+                Some(Ok(Source::Graph { .. })) => (Some(CalendarSource::Microsoft), None),
+                Some(Ok(Source::Google)) => (Some(CalendarSource::Google), None),
                 Some(Err(error)) => (None, Some(error.message.clone())),
                 None => (None, None),
             };
+            let needs_sign_in = matches!(&known, Some(Err(error)) if error.code == ErrorCode::SignInAgain);
             found.push(CalendarAccount {
                 account_id: account.id.clone(),
                 source,
                 caldav_url: self.inner.store.caldav_url(&account.id)?,
                 problem,
                 checked,
+                needs_sign_in,
             });
         }
         Ok(found)
@@ -499,6 +516,9 @@ impl Engine {
             }
         };
         let remote = match self.inner.calendar_source(&account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => {
+                self.inner.cloud_create_calendar(&account_id, &source, name, color.as_deref()).await?
+            }
             Source::Jmap => {
                 let client = self.inner.jmap_client(&account_id).await?;
                 jmap_cal::create_calendar(&client, name, color.as_deref()).await?
@@ -537,6 +557,13 @@ impl Engine {
             None => None,
         };
         match source {
+            Source::Graph { .. } | Source::Google => {
+                let color = color.as_ref().map(|color| color.as_deref());
+                self.inner.cloud_update_calendar(&entry, &source, name, color).await?;
+                if let Some(visible) = patch.is_visible {
+                    self.inner.store.set_calendar_hidden(&account_id, calendar_id, !visible)?;
+                }
+            }
             Source::Jmap => {
                 let mut changes = Map::new();
                 if let Some(name) = name {
@@ -600,6 +627,7 @@ impl Engine {
             return Err(Error::invalid("This calendar can't be deleted."));
         }
         match source {
+            Source::Graph { .. } | Source::Google => self.inner.cloud_delete_calendar(&entry, &source).await?,
             Source::Jmap => {
                 let client = self.inner.jmap_client(&entry.info.account_id).await?;
                 jmap_cal::delete_calendar(&client, &entry.remote).await?;
@@ -623,7 +651,9 @@ impl Engine {
                 let client = self.inner.jmap_client(&entry.info.account_id).await?;
                 jmap_cal::set_default(&client, &entry.remote).await?;
             }
-            Source::Dav { .. } => self.inner.store.set_default_calendar(&entry.info.account_id, calendar_id)?,
+            Source::Dav { .. } | Source::Graph { .. } | Source::Google => {
+                self.inner.store.set_default_calendar(&entry.info.account_id, calendar_id)?
+            }
         }
         self.inner.calendar_changed(Some(&entry.info.account_id));
         Ok(())
@@ -668,6 +698,9 @@ impl Engine {
         let account_id = entry.info.account_id.clone();
         let mut event = jscal::new_event(&input)?;
         let remote = match source {
+            Source::Graph { .. } | Source::Google => {
+                self.inner.cloud_create_event(&entry, &source, &Value::Object(event)).await?
+            }
             Source::Jmap => {
                 let client = self.inner.jmap_client(&account_id).await?;
                 jmap_cal::create_event(&client, &entry.remote, event).await?
@@ -708,6 +741,9 @@ impl Engine {
             return Err(Error::invalid("This calendar is read-only."));
         }
         match source {
+            Source::Graph { .. } | Source::Google => {
+                self.inner.cloud_update_event(account_id, &source, remote, &target, &input, occurrence_start).await?;
+            }
             Source::Jmap => {
                 let client = self.inner.jmap_client(account_id).await?;
                 let current = jmap_cal::event(&client, remote).await?;
@@ -760,6 +796,9 @@ impl Engine {
         }
         let (account_id, remote) = calendar::split_id(occurrence_id)?;
         match self.inner.calendar_source(account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => {
+                self.inner.cloud_delete_event(account_id, &source, remote, scope).await?;
+            }
             Source::Jmap => {
                 let client = self.inner.jmap_client(account_id).await?;
                 let target = match scope {
@@ -910,7 +949,7 @@ END:VCALENDAR
     }
 
     #[tokio::test]
-    async fn microsoft_and_google_mailboxes_have_no_calendar() {
+    async fn microsoft_sign_ins_without_consent_and_password_mailboxes_without_caldav() {
         let dir = tempfile::tempdir().unwrap();
         let secrets = Arc::new(crate::secrets::MemorySecrets::default());
         let engine = Engine::new(EngineOptions {
@@ -938,13 +977,13 @@ END:VCALENDAR
             })
             .unwrap();
         secrets.set("m", &Secret::OAuth { refresh_token: "r".into() }).unwrap();
+        let _refusing = engine.refuse_cloud_tokens().await;
 
-        // Known without asking anyone: a Microsoft sign-in has no calendar here.
+        // A Microsoft sign-in from before calendars came along: sign in again for them.
         let accounts = engine.calendar_accounts(false).await.unwrap();
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].source, None);
-        assert!(accounts[0].checked);
-        assert!(accounts[0].problem.as_deref().unwrap().contains("Microsoft"));
+        assert!(accounts[0].checked && accounts[0].needs_sign_in);
 
         // A password account could have one only a CalDAV search would find; that waits for the calendar.
         let mut imap = engine.inner.store.account("m").unwrap();
@@ -977,7 +1016,7 @@ END:VCALENDAR
         assert!(engine.calendar_events("2026-09-01T00:00:00", "2026-10-01T00:00:00", "UTC").await.unwrap().is_empty());
         let refused =
             engine.create_calendar(NewCalendar { account_id: Some("m".into()), name: "X".into(), color: None }).await;
-        assert_eq!(refused.unwrap_err().code, ErrorCode::NotSupported);
+        assert_eq!(refused.unwrap_err().code, ErrorCode::SignInAgain);
         // Only HTTPS addresses can be typed in.
         assert!(engine.set_caldav_url("m", Some("http://dav.example-company.de/")).await.is_err());
         assert!(engine.set_caldav_url("m", Some("https://dav.example-company.de/")).await.is_ok());

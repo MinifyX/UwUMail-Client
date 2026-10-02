@@ -83,7 +83,9 @@ export type BackendErrorCode =
   /** A company tenant lets only an administrator allow UwUMail. */
   | "admin_consent_required"
   /** This build carries no client id for the provider. */
-  | "oauth_not_configured";
+  | "oauth_not_configured"
+  /** The sign-in lacks a permission it needs now (calendars, contacts): signing in again asks for it. */
+  | "sign_in_again";
 
 export class BackendError extends Error {
   readonly code: BackendErrorCode;
@@ -181,6 +183,8 @@ export interface Backend {
   microsoftAdminConsentUrl(email: string): Promise<string>;
   addAccount(account: NewAccount): Promise<Account>;
   removeAccount(accountId: string): Promise<void>;
+  /** Signs in again in the browser (for a shared mailbox: its account), e.g. for a new permission. */
+  signInAgain(accountId: string): Promise<Account>;
   /** Switches between IMAP/SMTP and JMAP; the mailbox syncs again from scratch. */
   setAccountProtocol(accountId: string, protocol: Protocol): Promise<Account>;
   syncNow(accountId?: string): Promise<void>;

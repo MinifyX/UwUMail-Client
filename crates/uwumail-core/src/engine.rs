@@ -145,6 +145,8 @@ struct Inner {
     image_texts: Mutex<crate::ocr::ResultCache>,
     /// The AI assistant's streams and auto-label queue.
     assist: assist_ops::AssistState,
+    /// Graph and Google tokens and addresses for calendars and contacts of cloud sign-ins.
+    cloud: cloud_ops::CloudState,
 }
 
 enum Credential {
@@ -180,6 +182,7 @@ macro_rules! with_session {
 mod assist_ops;
 mod birthday_ops;
 mod calendar_ops;
+mod cloud_ops;
 mod contacts_ops;
 mod folder_ops;
 mod ocr_ops;
@@ -230,6 +233,7 @@ impl Engine {
                 ocr_permits: Arc::new(tokio::sync::Semaphore::new(crate::ocr::PARALLEL)),
                 image_texts: Mutex::new(crate::ocr::ResultCache::default()),
                 assist: assist_ops::AssistState::new(),
+                cloud: cloud_ops::CloudState::default(),
             }),
         })
     }
@@ -524,33 +528,11 @@ impl Engine {
                     if new.auth == AuthKind::Microsoft { OAuthProvider::Microsoft } else { OAuthProvider::Google };
                 // Before the browser opens: the token must not be able to go anywhere else.
                 autoconfig::check_oauth_servers(provider, &[&record.imap, &record.smtp])?;
-                let mut waiting = None;
-                let app_link = self.inner.oauth_redirect.lock().unwrap().clone();
-                let redirect = match app_link.filter(|_| oauth::takes_app_link(provider)) {
-                    Some(uri) => {
-                        let (sender, incoming) = tokio::sync::mpsc::channel(SIGN_IN_LINK_QUEUE);
-                        // A newer sign-in replaces an abandoned one.
-                        waiting = Some(sender.clone());
-                        *self.inner.pending_sign_in.lock().unwrap() = Some(sender);
-                        oauth::Redirect::App { uri, incoming }
-                    }
-                    None => oauth::Redirect::Loopback,
-                };
                 // Whose sign-in page to show: the mailbox owner, or the person who has
                 // access to a shared mailbox.
                 let sign_in_as =
                     new.sign_in_as.as_deref().map(str::trim).filter(|a| !a.is_empty()).unwrap_or(&record.email);
-                let tokens =
-                    oauth::sign_in(&self.inner.http, provider, sign_in_as, self.inner.open_url.as_ref(), redirect)
-                        .await;
-                if let Some(ours) = waiting {
-                    let mut pending = self.inner.pending_sign_in.lock().unwrap();
-                    // Done either way; a sign-in started meanwhile keeps its slot.
-                    if pending.as_ref().is_some_and(|sender| sender.same_channel(&ours)) {
-                        *pending = None;
-                    }
-                }
-                let tokens = tokens?;
+                let tokens = self.browser_sign_in(provider, sign_in_as).await?;
                 let refresh_token = tokens
                     .refresh_token
                     .clone()
@@ -602,8 +584,7 @@ impl Engine {
         self.inner.jmap.lock().await.remove(account_id);
         self.inner.calendar_sources.lock().await.remove(account_id);
         self.inner.calendar_lists.lock().unwrap().remove(account_id);
-        self.inner.contacts_sources.lock().await.remove(account_id);
-        self.inner.forget_contacts(account_id);
+        self.inner.forget_cloud(account_id).await;
         self.remove_cached_attachments(account_id)?;
         self.inner.store.delete_account(account_id)?;
         self.inner.secrets.delete(account_id)?;

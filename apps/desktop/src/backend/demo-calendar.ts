@@ -161,6 +161,18 @@ export class DemoCalendar {
         mayDelete: false,
         isBirthdays: true,
       }),
+      // The Studio mailbox signs in with Microsoft: its calendar comes over Microsoft Graph.
+      {
+        id: "acc-studio:calendar",
+        accountId: "acc-studio",
+        name: de ? "Kalender" : "Calendar",
+        color: "#8b5cf6",
+        isDefault: true,
+        isVisible: true,
+        sortOrder: 0,
+        mayWrite: true,
+        mayDelete: false,
+      },
     ];
     const day = today();
     const at = (days: number, hours = 0, minutes = 0) => format(day + days * DAY + (hours * 60 + minutes) * 60_000);
@@ -253,6 +265,16 @@ export class DemoCalendar {
         recurrence: null,
       }),
       event({
+        calendarId: "acc-studio:calendar",
+        title: de ? "Studio-Planung" : "Studio planning",
+        location: "Microsoft Teams",
+        allDay: false,
+        start: at(2, 9, 30),
+        end: at(2, 10, 15),
+        timeZone: zone,
+        recurrence: { frequency: "weekly", interval: 1, byDay: null, until: null, count: null },
+      }),
+      event({
         calendarId: "acc-private:holidays",
         title: de ? "Brückentag" : "Bridge day",
         allDay: true,
@@ -290,13 +312,9 @@ export class DemoCalendar {
     return accountIds.map((accountId) =>
       accountId === "acc-private"
         ? { accountId, source: "jmap", caldavUrl: null, problem: null, checked: true }
-        : {
-            accountId,
-            source: null,
-            caldavUrl: null,
-            problem: "Calendars aren't available for mailboxes signed in with Microsoft or Google.",
-            checked: true,
-          },
+        : accountId === "acc-studio"
+          ? { accountId, source: "microsoft", caldavUrl: null, problem: null, checked: true }
+          : { accountId, source: null, caldavUrl: null, problem: "The demo has no calendar here.", checked: true },
     );
   }
 
@@ -318,11 +336,8 @@ export class DemoCalendar {
 
   createCalendar(input: { accountId?: string; name: string; color: string | null }): CalendarInfo {
     const accountId = input.accountId ?? "acc-private";
-    if (accountId !== "acc-private") {
-      throw new BackendError(
-        "not_supported",
-        "Calendars aren't available for mailboxes signed in with Microsoft or Google.",
-      );
+    if (accountId !== "acc-private" && accountId !== "acc-studio") {
+      throw new BackendError("not_supported", "The demo has no calendar for this mailbox.");
     }
     const name = input.name.trim();
     if (!name || name.length > 200)

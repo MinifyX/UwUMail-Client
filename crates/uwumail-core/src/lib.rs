@@ -9,6 +9,7 @@ pub mod attachments;
 pub mod autoconfig;
 pub mod birthdays;
 pub mod calendar;
+pub mod cloud;
 pub mod contacts;
 pub mod engine;
 pub mod error;

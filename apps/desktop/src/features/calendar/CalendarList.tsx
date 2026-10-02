@@ -13,6 +13,7 @@ import { Menu, type MenuItem } from "@/components/ui/Menu";
 import { useT } from "@/i18n";
 import { queryKeys, useAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";
+import { SignInAgainHint } from "../accounts/SignInAgain";
 import { defaultCalendarAccount, groupByAccount, useCalendarAccounts } from "./accounts";
 import { BirthdayHint, BirthdayImportDialog, useBirthdayImportAccounts } from "./BirthdayImport";
 import { CALENDAR_COLORS, DEFAULT_COLOR } from "./format";
@@ -36,6 +37,11 @@ export function CalendarList() {
   const creatable = accounts
     .filter((account) => sources.some((source) => source.accountId === account.id && source.source !== null))
     .map((account) => ({ id: account.id, name: account.name || account.email }));
+
+  const nameOf = (accountId: string) => {
+    const account = accounts.find((candidate) => candidate.id === accountId);
+    return account ? account.name || account.email : accountId;
+  };
 
   const refresh = () =>
     Promise.all([
@@ -109,6 +115,16 @@ export function CalendarList() {
           <IconButton icon={Plus} size="sm" label={t("calendar.newCalendar")} onClick={() => setEditing("new")} />
         )}
       </div>
+      {sources
+        .filter((source) => source.needsSignIn)
+        .map((source) => (
+          <SignInAgainHint
+            key={source.accountId}
+            accountId={source.accountId}
+            name={nameOf(source.accountId)}
+            compact
+          />
+        ))}
       {importable.map((accountId) => (
         <BirthdayHint key={accountId} accountId={accountId} onOpen={() => setImporting(accountId)} />
       ))}

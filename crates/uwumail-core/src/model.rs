@@ -653,6 +653,10 @@ pub enum CalendarSource {
     /// JMAP Calendars on a UwUMail server.
     Jmap,
     Caldav,
+    /// Microsoft Graph (Microsoft 365 / Outlook.com sign-ins).
+    Microsoft,
+    /// Google Calendar (Google sign-ins).
+    Google,
 }
 
 /// Whether an account has calendars, and from where.
@@ -660,7 +664,7 @@ pub enum CalendarSource {
 #[serde(rename_all = "camelCase")]
 pub struct CalendarAccount {
     pub account_id: String,
-    /// None when the account has no calendar here (e.g. signed in with Microsoft or Google).
+    /// None when the account has no calendar here.
     pub source: Option<CalendarSource>,
     /// The CalDAV address typed in by hand, if any.
     pub caldav_url: Option<String>,
@@ -668,6 +672,9 @@ pub struct CalendarAccount {
     pub problem: Option<String>,
     /// False while only a search for a CalDAV server could tell, which waits until the calendar opens.
     pub checked: bool,
+    /// The sign-in doesn't cover calendars (yet): signing in again shows them.
+    #[serde(default)]
+    pub needs_sign_in: bool,
 }
 
 /// An address book of one account. Its id starts with the account id, so ids are unique across
@@ -700,6 +707,10 @@ pub enum ContactsSource {
     /// JMAP Contacts on a UwUMail server.
     Jmap,
     Carddav,
+    /// Microsoft Graph (Microsoft 365 / Outlook.com sign-ins).
+    Microsoft,
+    /// Google People (Google sign-ins).
+    Google,
 }
 
 /// Whether an account has address books, and from where.
@@ -707,7 +718,7 @@ pub enum ContactsSource {
 #[serde(rename_all = "camelCase")]
 pub struct ContactsAccount {
     pub account_id: String,
-    /// None when the account has no address books here (e.g. signed in with Microsoft or Google).
+    /// None when the account has no address books here.
     pub source: Option<ContactsSource>,
     /// The CardDAV address typed in by hand, if any.
     pub carddav_url: Option<String>,
@@ -715,6 +726,9 @@ pub struct ContactsAccount {
     pub problem: Option<String>,
     /// False while only a search for a CardDAV server could tell, which waits until the contacts open.
     pub checked: bool,
+    /// The sign-in doesn't cover contacts (yet): signing in again shows them.
+    #[serde(default)]
+    pub needs_sign_in: bool,
 }
 
 /// A blocked sender: on this device, or on the UwUMail server of one account.

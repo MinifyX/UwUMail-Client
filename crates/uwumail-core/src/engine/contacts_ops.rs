@@ -1,6 +1,6 @@
 //! Contacts across all accounts, behind one set of calls: JMAP Contacts where the UwUMail server
-//! has them, CardDAV for other password accounts, nothing for Microsoft and Google sign-ins
-//! (their contacts need other APIs).
+//! has them, CardDAV for other password accounts, Microsoft Graph and Google People for Microsoft
+//! and Google sign-ins (`cloud_ops`).
 
 use chrono::Utc;
 use serde_json::{Map, Value, json};
@@ -152,11 +152,16 @@ impl Inner {
             }
             Err(problem) => {
                 // Only a definite "none here" is remembered; a network hiccup is asked again next time.
-                if problem.code == ErrorCode::NotSupported {
+                if matches!(
+                    problem.code,
+                    ErrorCode::NotSupported | ErrorCode::SignInAgain | ErrorCode::AdminConsentRequired
+                ) {
                     self.contacts_sources.lock().await.insert(
                         account_id.to_string(),
                         SourceState::Unavailable { problem: problem.clone(), since: Instant::now() },
                     );
+                }
+                if problem.code == ErrorCode::NotSupported && account.auth == AuthKind::Password {
                     // Also past a restart, so the contacts aren't offered again at every start.
                     let _ = self.store.set_carddav_none_at(account_id, Some(now_millis() / 1000));
                 }
@@ -204,10 +209,11 @@ impl Inner {
                 return Ok(Source::Jmap);
             }
         }
+        if account.auth != AuthKind::Password {
+            return self.find_cloud_contacts(account).await;
+        }
         let Secret::Password { password } = self.secrets.get(&account.id)? else {
-            return Err(Error::not_supported(
-                "Address books aren't available for mailboxes signed in with Microsoft or Google.",
-            ));
+            return Err(Error::auth("No saved password for this mailbox."));
         };
         let (_, domain) = autoconfig::split_email(&account.email)?;
         let manual = match self.store.carddav_url(&account.id)? {
@@ -243,6 +249,7 @@ impl Inner {
             return Ok(entries.clone());
         }
         let entries = match self.contacts_source(account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => self.cloud_books(account_id, &source).await?,
             Source::Jmap => {
                 let client = self.jmap_client(account_id).await?;
                 jmap_contacts::books(&client)
@@ -320,6 +327,7 @@ impl Inner {
             return Ok(cards.clone());
         }
         let cards = match self.contacts_source(account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => self.cloud_cards(account_id, &source).await?,
             Source::Jmap => jmap_contacts::cards(&*self.jmap_client(account_id).await?).await?,
             Source::Dav { client, home } => {
                 let entries = self.address_book_entries(account_id).await?;
@@ -371,9 +379,12 @@ impl Engine {
         let mut found = Vec::new();
         for (account, known) in accounts.iter().zip(futures::future::join_all(sources).await) {
             let checked = known.is_some();
+            let needs_sign_in = matches!(&known, Some(Err(error)) if error.code == ErrorCode::SignInAgain);
             let (source, problem) = match known {
                 Some(Ok(Source::Jmap)) => (Some(ContactsSource::Jmap), None),
                 Some(Ok(Source::Dav { .. })) => (Some(ContactsSource::Carddav), None),
+                Some(Ok(Source::Graph { .. })) => (Some(ContactsSource::Microsoft), None),
+                Some(Ok(Source::Google)) => (Some(ContactsSource::Google), None),
                 Some(Err(error)) => (None, Some(error.message)),
                 None => (None, None),
             };
@@ -383,6 +394,7 @@ impl Engine {
                 carddav_url: self.inner.store.carddav_url(&account.id)?,
                 problem,
                 checked,
+                needs_sign_in,
             });
         }
         Ok(found)
@@ -441,6 +453,15 @@ impl Engine {
             }
         };
         let remote = match self.inner.contacts_source(&account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => {
+                let created =
+                    self.inner.cloud_book_call(&account_id, &source, reqwest::Method::POST, None, Some(name)).await?;
+                created
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .map(String::from)
+                    .ok_or_else(|| Error::internal("The new address book didn't show up."))?
+            }
             Source::Jmap => jmap_contacts::create_book(&*self.inner.jmap_client(&account_id).await?, name).await?,
             Source::Dav { client, home } => carddav::make_book(&client, &home, name).await?.path().to_string(),
         };
@@ -459,6 +480,12 @@ impl Engine {
         let name = check_name(name)?;
         let (source, entry) = self.inner.book_entry(book_id).await?;
         match source {
+            Source::Graph { .. } | Source::Google => {
+                let method = reqwest::Method::PATCH;
+                self.inner
+                    .cloud_book_call(&entry.info.account_id, &source, method, Some(&entry.remote), Some(name))
+                    .await?;
+            }
             Source::Jmap => {
                 let client = self.inner.jmap_client(&entry.info.account_id).await?;
                 jmap_contacts::rename_book(&client, &entry.remote, name).await?;
@@ -482,6 +509,11 @@ impl Engine {
             return Err(Error::invalid("The only address book of a mailbox stays."));
         }
         match source {
+            Source::Graph { .. } | Source::Google => {
+                let method = reqwest::Method::DELETE;
+                self.inner.cloud_book_call(&account_id, &source, method, Some(&entry.remote), None).await?;
+                self.inner.store.forget_address_book(book_id)?;
+            }
             Source::Jmap => {
                 jmap_contacts::delete_book(&*self.inner.jmap_client(&account_id).await?, &entry.remote).await?
             }
@@ -502,7 +534,9 @@ impl Engine {
                 let client = self.inner.jmap_client(&entry.info.account_id).await?;
                 jmap_contacts::set_default_book(&client, &entry.remote).await?;
             }
-            Source::Dav { .. } => self.inner.store.set_default_address_book(&entry.info.account_id, book_id)?,
+            Source::Dav { .. } | Source::Graph { .. } | Source::Google => {
+                self.inner.store.set_default_address_book(&entry.info.account_id, book_id)?
+            }
         }
         self.inner.contacts_changed(&entry.info.account_id);
         Ok(())
@@ -545,6 +579,9 @@ impl Engine {
     pub async fn contact_card(&self, card_id: &str) -> Result<Value> {
         let (account_id, remote) = contacts::split_id(card_id)?;
         let card = match self.inner.contacts_source(account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => {
+                self.inner.cloud_card(account_id, &source, remote).await?.0
+            }
             Source::Jmap => jmap_contacts::card(&*self.inner.jmap_client(account_id).await?, remote).await?,
             Source::Dav { client, home } => {
                 let read = read_dav_card(&client, &home, remote).await?;
@@ -569,6 +606,9 @@ impl Engine {
         let account_id = book.info.account_id.clone();
         let mut card = card_object(card)?;
         let remote = match source {
+            Source::Graph { .. } | Source::Google => {
+                self.inner.cloud_create_card(&account_id, &source, &book, &card).await?
+            }
             Source::Jmap => {
                 jmap_contacts::create_card(&*self.inner.jmap_client(&account_id).await?, &book.remote, card).await?
             }
@@ -628,6 +668,9 @@ impl Engine {
             return Err(Error::invalid("Move a contact by giving its new address book."));
         }
         match self.inner.contacts_source(account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => {
+                self.inner.cloud_update_card(account_id, &source, remote, &patch, target.as_ref()).await?;
+            }
             Source::Jmap => {
                 if let Some(target) = &target {
                     patch.insert("addressBookIds".into(), json!({ target.remote.clone(): true }));
@@ -671,6 +714,9 @@ impl Engine {
     pub async fn delete_contact_card(&self, card_id: &str) -> Result<()> {
         let (account_id, remote) = contacts::split_id(card_id)?;
         match self.inner.contacts_source(account_id).await? {
+            source @ (Source::Graph { .. } | Source::Google) => {
+                self.inner.cloud_delete_card(account_id, &source, remote).await?
+            }
             Source::Jmap => jmap_contacts::destroy_card(&*self.inner.jmap_client(account_id).await?, remote).await?,
             Source::Dav { client, home } => dav::delete(&client, &contacts::dav_url(&home, remote)?, None).await?,
         }
@@ -759,7 +805,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn microsoft_and_google_mailboxes_have_no_address_books() {
+    async fn microsoft_sign_ins_without_consent_and_password_mailboxes_without_carddav() {
         let dir = tempfile::tempdir().unwrap();
         let secrets = Arc::new(crate::secrets::MemorySecrets::default());
         let engine = Engine::new(EngineOptions {
@@ -787,13 +833,13 @@ mod tests {
             })
             .unwrap();
         secrets.set("m", &Secret::OAuth { refresh_token: "r".into() }).unwrap();
+        let _refusing = engine.refuse_cloud_tokens().await;
 
-        // Known without asking anyone: a Microsoft sign-in has no address books here.
+        // A Microsoft sign-in from before contacts came along: sign in again for them.
         let accounts = engine.contacts_accounts(false).await.unwrap();
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].source, None);
-        assert!(accounts[0].checked);
-        assert!(accounts[0].problem.as_deref().unwrap().contains("Microsoft"));
+        assert!(accounts[0].checked && accounts[0].needs_sign_in);
 
         // A password account could have address books only a CardDAV search would find; that waits
         // for the contacts, and typing a recipient doesn't start it.
@@ -822,7 +868,7 @@ mod tests {
         assert!(engine.address_books().await.unwrap().is_empty());
         assert!(engine.contact_cards().await.unwrap().is_empty());
         let refused = engine.create_address_book(Some("m".into()), "X").await;
-        assert_eq!(refused.unwrap_err().code, ErrorCode::NotSupported);
+        assert_eq!(refused.unwrap_err().code, ErrorCode::SignInAgain);
         // Suggestions still come from mail.
         assert!(engine.recipient_suggestions("alex").await.unwrap().is_empty());
         // Only HTTPS addresses can be typed in.
