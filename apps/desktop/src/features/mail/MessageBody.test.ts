@@ -89,8 +89,60 @@ describe("buildDocument", () => {
 
   it("does not force app typography onto HTML mail", () => {
     const doc = buildDocument(message({ bodyHtml: "<p>Hi</p>" }), false, "light");
-    expect(doc).not.toContain("Manrope");
     expect(doc).not.toContain("overflow-wrap:anywhere");
+    expect(doc).not.toContain("font:15px");
+  });
+
+  describe("fonts", () => {
+    const faces = '@font-face{font-family:"uwu-mail-font";src:url(data:font/woff2;base64,AAAA) format("woff2")}';
+    const fonts = { font: "uwu", senderFonts: "replace", faces } as const;
+    const build = (patch: Partial<Message>, chosen: Parameters<typeof buildDocument>[7] = fonts) =>
+      buildDocument(message(patch), false, "light", new Map(), null, [], false, chosen);
+
+    it("gives HTML mail without a font of its own ours instead of the engine's Times", () => {
+      const doc = build({ bodyHtml: "<p>Hi</p>" });
+      expect(doc).toContain(faces);
+      expect(doc).toMatch(/body\{[^}]*font-family:var\(--uwu-font\)/);
+      expect(doc).toContain('--uwu-font:"uwu-mail-font", system-ui');
+    });
+
+    it("replaces serif fonts, or keeps them when asked", () => {
+      const html = '<p style="font-family: Georgia, serif">Hi</p><p style="font-family: Arial, sans-serif">Ho</p>';
+      const replaced = build({ bodyHtml: html });
+      expect(replaced).toContain("font-family: var(--uwu-serif, Georgia), var(--uwu-serif, serif)");
+      expect(replaced).toContain("font-family: Arial, var(--uwu-sans, sans-serif)");
+      expect(replaced).toContain("--uwu-serif:var(--uwu-font)");
+      const kept = build({ bodyHtml: html }, { ...fonts, senderFonts: "keep" });
+      expect(kept).not.toContain("--uwu-serif:");
+      expect(kept).not.toContain("--uwu-sans:");
+      // ...but a mail without a font still doesn't end up in Times
+      expect(kept).toMatch(/body\{[^}]*font-family:var\(--uwu-font\)/);
+    });
+
+    it("rewrites style blocks, never monospace", () => {
+      const doc = build({
+        bodyHtml:
+          "<style>td{font-family:'Times New Roman'} pre{font-family:Consolas,monospace}</style><table><tr><td>x</td></tr></table>",
+      });
+      expect(doc).toContain("td{font-family:var(--uwu-serif, 'Times New Roman'), var(--uwu-font)}");
+      expect(doc).toContain("pre{font-family:Consolas,monospace}");
+      expect(doc).toContain("pre,code,kbd,samp,tt{font-variant-ligatures:no-contextual}");
+    });
+
+    it("sets plain text in the chosen font", () => {
+      expect(build({ bodyText: "Hi :3" })).toContain("font:15px/1.6 var(--uwu-font)");
+    });
+
+    it("shows the system font while the chosen one still loads", () => {
+      const doc = build({ bodyText: "Hi" }, { ...fonts, faces: "" });
+      expect(doc).not.toContain("@font-face");
+      expect(doc).toContain("--uwu-font:system-ui");
+    });
+
+    it("sanitizes the same way whatever the setting, so found dates keep their places", () => {
+      const mail = message({ bodyHtml: '<p style="font-family:Georgia">Termin am 3.10.</p>' });
+      expect(readableBody(mail)).toContain("var(--uwu-serif, Georgia)");
+    });
   });
 
   it("blocks remote images until allowed", () => {
@@ -108,7 +160,7 @@ describe("buildDocument", () => {
   // Regression: a frame whose document says "light" inside a dark app gets an
   // opaque white canvas, which made plain text unreadable in dark mode.
   it("gives dark plain text a matching color scheme", () => {
-    expect(buildDocument(message({ bodyText: "Hi" }), false, "dark")).toContain(":root{color-scheme:dark}");
+    expect(buildDocument(message({ bodyText: "Hi" }), false, "dark")).toContain(":root{color-scheme:dark;");
   });
 });
 

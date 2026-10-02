@@ -60,7 +60,7 @@ export function RecipientInput({ label, value, onChange, autoFocus }: RecipientI
   const open = focused && text.trim().length > 0 && suggestions.length > 0;
 
   return (
-    <div className="relative flex min-h-11 items-start gap-2 border-b border-hairline px-4 py-1.5">
+    <div className="relative flex min-h-11 items-start gap-2 border-b border-hairline px-4 py-1.5 [font-feature-settings:'calt'_0] [font-variant-ligatures:no-contextual]">
       <label htmlFor={id} className="w-12 shrink-0 pt-2 text-[13px] font-semibold text-muted">
         {label}
       </label>

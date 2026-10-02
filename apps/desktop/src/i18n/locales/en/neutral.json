@@ -477,7 +477,13 @@
     "signatureLocalOnlyDesc": "This signature stays on this device: it’s too big to sync (256 KB at most) or has pictures that only work here.",
     "rules": "Rules",
     "assistant": "AI assistant",
-    "labels": "Labels"
+    "labels": "Labels",
+    "font": "Font",
+    "fontDesc": "For the whole app and for mails. Only on this device.",
+    "senderFonts": "Sender fonts",
+    "senderFontsDesc": "Many HTML mails are set in Times or another serif font. Mails without a font of their own always get yours.",
+    "senderFontsReplace": "Replace serif fonts with mine",
+    "senderFontsKeep": "As the sender set them"
   },
   "theme": {
     "system": "System",
@@ -1814,5 +1820,9 @@
     "removeWithShared_other": "Also remove its {{count}} shared mailboxes",
     "toggle": "Show or hide the shared mailboxes of {{email}}",
     "accountMenu": "More for {{email}}"
+  },
+  "font": {
+    "system": "System font",
+    "sample": "Hi :3 – meeting at 10:30 <3"
   }
 }

@@ -65,6 +65,7 @@ import { Row } from "./Row";
 import { PUSH_STATUS_KEY, UnifiedPush } from "./UnifiedPush";
 import { Writing } from "./Writing";
 import { useUi, type SettingsSection } from "@/state/ui";
+import { FontPicker, SenderFontsSetting } from "./FontPicker";
 import { WorkspacePicker, WorkspaceSettings } from "../workspaces/WorkspaceSettings";
 
 const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
@@ -124,6 +125,7 @@ function Appearance() {
           ]}
         />
       </Row>
+      <FontPicker />
       <Row label={t("settings.motion")} description={t("settings.motionDesc")}>
         <Segmented
           label={t("settings.motion")}
@@ -322,6 +324,7 @@ function Reading() {
       <TrustedSenders />
       <BlockedSenders />
       <LinkSettings />
+      <SenderFontsSetting />
       <Row label={t("settings.mailAppearance")} description={t("settings.mailAppearanceDesc")}>
         <Segmented
           label={t("settings.mailAppearance")}

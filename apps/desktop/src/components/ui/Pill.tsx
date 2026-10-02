@@ -31,7 +31,7 @@ export function Badge({ count, className }: { count: number; className?: string 
   return (
     <span
       className={clsx(
-        "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-pink px-1.5 text-[11px] font-bold text-white",
+        "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-pink px-1.5 text-[11px] font-bold text-white tabular-nums",
         className,
       )}
     >

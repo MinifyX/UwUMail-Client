@@ -1,0 +1,45 @@
+FONTLOG for UwU Sans
+====================
+
+UwU Sans is the interface font of UwUMail. It is a Modified Version of
+Atkinson Hyperlegible Next (Braille Institute of America, designed by
+Applied Design Works and Letters from Sweden), licensed under the SIL Open
+Font License 1.1 (see OFL.txt). The upstream license names no Reserved Font
+Name; the family is renamed anyway so it can never be mistaken for the
+original.
+
+Upstream
+--------
+- Repository: https://github.com/googlefonts/atkinson-hyperlegible-next
+- Commit:     7925f50f649b3813257faf2f4c0b381011f434f1
+- File:       fonts/variable/AtkinsonHyperlegibleNext[wght].ttf (version 2.001)
+- SHA-256:    5a455d1cfa099b601ab70751bb9673e8fe1854dc4500c80e1a220d0d75e31745
+
+ChangeLog
+---------
+2026-10-02  Version 1.000 (MinifyX)
+- Renamed: family "UwU Sans", PostScript "UwUSans-Regular", variations
+  prefix "UwUSans", unique ID "1.000;MFX;UwUSans-Regular", vendor "MFX".
+  Copyright line for the modification added, upstream copyright kept.
+- Subset to Latin, Latin Extended, combining marks, general punctuation,
+  currency, letterlike symbols and the math signs upstream ships (upstream
+  has nothing outside these ranges, so no letters were lost). Hinting
+  instructions dropped (upstream variable font is unhinted in practice).
+- Italic not included; browsers slant the roman when needed.
+- New glyphs, drawn as code in build.py, with gvar deltas at wght 200 and
+  800 so their strokes follow the weight axis like the letters:
+  - nyu (U+E000, Private Use): Nyu, a cat face. Round head with two ears in
+    one stroke, oval eyes, a ":3" mouth. Sits on the baseline, ears reach
+    about cap height.
+  - heart (U+2665 BLACK HEART SUIT). U+2764 is left out on purpose so the
+    colour emoji keeps winning for ❤.
+  - arrowleft/up/right/down (U+2190-2193): upstream has no arrows, the
+    UwUMail interface uses them.
+- New `calt` lookup: ":3" becomes nyu, "<3" becomes heart, only when no
+  letter or digit stands directly before the ":"/"<" or directly after the
+  "3". Times (10:30), comparisons (x<3, 1<35) and words stay untouched.
+  Works with `tnum` active. Apps switch it off in inputs with
+  `font-variant-ligatures: no-contextual`.
+- Letters, digits, spacing and kerning are unchanged. Tabular figures come
+  from upstream's `tnum`. No tracking baked in; the app sets letter-spacing
+  in CSS.
