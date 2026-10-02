@@ -37,13 +37,28 @@ Android, iOS and release workflows pass to the build. To register your own:
    - `app.uwumail://oauth` — Android and iOS, where the browser comes back to
      the app through this link (see [Phones](#phones)).
 4. Authentication → Advanced settings → **Allow public client flows: Yes**.
-5. API permissions → Add a permission → **Microsoft Graph** → Delegated
-   permissions → `IMAP.AccessAsUser.All`, `SMTP.Send` and `offline_access`.
-   (Older guides pick the first two under "Office 365 Exchange Online"; the
-   Graph entries are the same grants.) The app still asks for the scopes as
+5. API permissions → the list already holds Microsoft Graph `User.Read`.
+   Add the rest in two rounds:
+   1. **Add a permission → Microsoft APIs → Microsoft Graph → Delegated
+      permissions**. Type each name into the search box and tick it:
+      `IMAP.AccessAsUser.All`, `SMTP.Send`, `offline_access`,
+      `Calendars.ReadWrite`, `Calendars.ReadWrite.Shared`, `Contacts.ReadWrite`,
+      `Contacts.ReadWrite.Shared` (and `User.Read`, if it isn't there yet).
+      Click **Add permissions**.
+   2. **Add a permission → APIs my organization uses** → search
+      **Office 365 Exchange Online** → **Delegated permissions** → open
+      **EWS** → tick `EWS.AccessAsUser.All` → **Add permissions**.
+
+   The list should now show eleven delegated permissions: nine under
+   Microsoft Graph, `EWS.AccessAsUser.All` under Office 365 Exchange Online.
+   (Older guides pick IMAP and SMTP under "Office 365 Exchange Online"; the
+   Graph entries are the same grants.) The app asks for the mail scopes as
    `https://outlook.office.com/IMAP.AccessAsUser.All` and
    `https://outlook.office.com/SMTP.Send`, which is how IMAP and SMTP want the
-   token; that is expected.
+   token, and for the calendar and contact scopes as
+   `https://graph.microsoft.com/Calendars.ReadWrite` and so on; that is
+   expected. "Grant admin consent for …" on this page only covers your own
+   tenant; everyone else consents at sign-in (see below).
 6. Copy the **Application (client) ID** into `UWUMAIL_MICROSOFT_CLIENT_ID`
    (repository secret for CI, environment variable for a local build).
 
@@ -83,6 +98,30 @@ created after that, with a removal date to be announced in the second half of
 A shared mailbox has no sign-in of its own. Add it under its own address and
 give "Sign in as" the address that has access to it: the sign-in page then asks
 for that person, and their token opens the shared address over XOAUTH2.
+
+### Calendars and contacts
+
+Calendars and contacts of Microsoft sign-ins come from Microsoft Graph v1.0
+(`graph.microsoft.com`): the own calendars and the ones others shared, events
+over `calendarView` with recurring ones expanded, and contact folders with
+their contacts, all read and written. Shared mailboxes use
+`/users/<address>/…` with the token of the person who signs in for them; that
+needs `Calendars.ReadWrite.Shared` and `Contacts.ReadWrite.Shared` and the
+person's access to the mailbox in Exchange.
+
+Microsoft hands out one access token per resource: the sign-in asks for
+everything at once (mail, EWS and Graph scopes), the code is redeemed for the
+mail token, and the stored refresh token buys a separate Graph token when the
+calendar or the contacts open. Microsoft may answer a refresh with a new
+refresh token; UwUMail always keeps the newest.
+
+Mailboxes added before UwUMail asked for calendars and contacts have a refresh
+token without them. Mail keeps working; the calendar, the contacts and the
+mailbox's settings say "Sign in again to see calendar and contacts", with a
+button that runs the sign-in once more. A company that allowed UwUMail for
+everyone by admin consent has to allow it once more for the new permissions
+(the same `adminconsent` page as below); until then UwUMail explains that an
+administrator has to agree, and mail still works.
 
 ### Who can sign in, and who needs their IT first
 
@@ -140,16 +179,42 @@ the app too soon, so Gmail on the iPhone is best added with an app password.
 
 ## Google
 
-1. [Google Cloud console](https://console.cloud.google.com) → create a
-   project → **APIs & Services → OAuth consent screen**: External, add the
-   scope `https://mail.google.com/`.
-2. **Credentials → Create credentials → OAuth client ID → Desktop app**.
-3. Copy client id and secret into `UWUMAIL_GOOGLE_CLIENT_ID` and
+1. [Google Cloud console](https://console.cloud.google.com) → project picker →
+   **New project** (or pick the existing one).
+2. **APIs & Services → Library**: search **Google Calendar API** → **Enable**.
+   Back to the Library, search **People API** → **Enable**. Without these two,
+   mail works but calendars and contacts answer "API not enabled", which
+   UwUMail shows as a hint to this page.
+3. **Google Auth Platform** (formerly *APIs & Services → OAuth consent
+   screen*) → **Get started**: app name, support email, audience
+   **External**, contact email, agree, **Create**.
+4. **Google Auth Platform → Data Access → Add or remove scopes**. Tick, or
+   paste under *Manually add scopes*:
+   - `https://mail.google.com/`
+   - `https://www.googleapis.com/auth/calendar`
+   - `https://www.googleapis.com/auth/contacts`
+
+   → **Update** → **Save**.
+5. **Google Auth Platform → Audience → Test users → Add users**: every Google
+   address that may sign in while the app is in *Testing*.
+6. **Google Auth Platform → Clients → Create client → Desktop app** → name it
+   → **Create**.
+7. Copy client id and secret into `UWUMAIL_GOOGLE_CLIENT_ID` and
    `UWUMAIL_GOOGLE_CLIENT_SECRET`.
 
-While the consent screen is in *Testing*, only up to 100 listed test users
-can sign in. `https://mail.google.com/` is a restricted scope: publishing the
-app for everyone requires Google's verification including a security
-assessment. Until then, Gmail users can add their mailbox with an
+While the app is in *Testing*, only up to 100 listed test users can sign in,
+and Google lets their refresh tokens expire after seven days, after which
+the mailbox has to be signed in again. `https://mail.google.com/` is a restricted
+scope: publishing the app for everyone requires Google's verification
+including a security assessment; the calendar and contacts scopes are
+"sensitive" and need the (lighter) verification as well. Until then, Gmail
+users can add their mailbox with an
 [app password](https://support.google.com/accounts/answer/185833) and the
 regular password flow.
+
+Google has one token for everything. Calendars come from Calendar API v3
+(recurring events expanded with `singleEvents=true`, the "Birthdays" calendar
+of the contacts left out, since UwUMail makes its own), contacts from the
+People API as one address book ("Contacts"; contact labels aren't separate
+address books). Gmail accounts added before calendars and contacts were asked
+for get the same "Sign in again" hint as Microsoft ones.

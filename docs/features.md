@@ -60,9 +60,14 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
 ## Calendar, contacts and birthdays
 
 - **Calendar and contacts** next to the mail: JMAP Calendars and Contacts on
-  UwUMail servers, CalDAV and CardDAV for other mailboxes with a password.
+  UwUMail servers, CalDAV and CardDAV for other mailboxes with a password, and
+  for Microsoft and Google sign-ins their own calendars and contacts (Microsoft
+  Graph: own and shared calendars, contact folders, shared mailboxes; Google
+  Calendar and People API), read and written. Mailboxes signed in before that
+  get a "Sign in again" button; mail keeps working without it. See
+  [oauth.md](oauth.md#calendars-and-contacts).
 - **Birthdays** with a cake and the age. Mailboxes on a UwUMail server show the
-  server's birthdays calendar, other mailboxes with CardDAV contacts get one of
+  server's birthdays calendar, other mailboxes with contacts get one of
   their own. Anniversaries, birthdays without a year, and birthday events from
   other calendars moved into the contacts; reminders per contact on UwUMail
   servers.

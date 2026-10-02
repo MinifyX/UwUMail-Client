@@ -90,6 +90,8 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 ## Later
 
 - [x] Contacts: JMAP Contacts on UwUMail servers, CardDAV for other mailboxes
+- [x] Calendars and contacts of Microsoft (Graph) and Google (Calendar, People API) sign-ins, read and write, shared mailboxes included; "Sign in again" for older sign-ins (0.8)
+- [ ] Microsoft/Google: reminders, wedding anniversaries (Graph has none), Google contact labels as address books, birthday-event import
 - [x] Birthdays: the server's birthdays calendar with ages, a local one from CardDAV cards, moving birthday events into contacts, anniversaries and reminders (reminders on UwUMail servers only)
 - [ ] Self-hostable sync server for settings, signatures and addons (AGPL-3.0)
 - [ ] Code signing for Windows and macOS
