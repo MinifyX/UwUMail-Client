@@ -87,20 +87,39 @@ const NUMBER_LABEL =
   /(?<![\p{L}])(bestell\p{L}*|auftrag\p{L}*|order|rechnungs?\p{L}*|invoice|kunden\p{L}*|customer|konto|account|iban|bic|artikel\p{L}*|sku|tracking|sendungs?\p{L}*|referenz|ref|ticket|nr|no|nummer|number|tel|telefon|phone|fon|fax|mobil|handy|version|v|release|build|kapitel|chapter|seite|page|abschnitt|section|plz|zip|id|§)\s{0,2}[.:#]{0,2}\s{0,3}$/iu;
 /** A document's own date is no appointment. */
 const DATE_LABEL =
-  /(?<![\p{L}])((?:rechnungs|bestell|beleg|buchungs|leistungs|ausstellungs|geburts|druck|erstellungs|versand|auftrags|kauf|zahlungseingangs)datum|invoice date|order date|purchase date|date of birth|birthday|geboren|born|issued(?: on)?|statement date|stand|as of|gesendet|sent|erstellt(?: am)?|created(?: on)?|updated(?: on)?|aktualisiert(?: am)?|zuletzt|last|gekauft(?: am)?|bestellt(?: am)?|bezahlt(?: am)?|paid(?: on)?|ordered(?: on)?|seit|since|gestern|yesterday|(?:bestellung|rechnung|auftrag|schreiben|brief|nachricht|e-mail|mail|lieferschein|vertrag|kündigung|order|invoice|letter) vom)\s{0,2}:?\s{0,3}$/iu;
+  /(?<![\p{L}])((?:rechnungs|bestell|beleg|buchungs|leistungs|ausstellungs|geburts|druck|erstellungs|versand|auftrags|kauf|zahlungseingangs)datum|invoice date|order date|purchase date|date of birth|birthday|geboren|born|issued(?: on)?|statement date|stand|as of|gesendet|sent|erstellt(?: am)?|created(?: on)?|updated(?: on)?|aktualisiert(?: am)?|zuletzt|last|gekauft(?: am)?|bestellt(?: am)?|bezahlt(?: am)?|paid(?: on)?|ordered(?: on)?|seit|since|gestern|yesterday|transaktionsdatum|zeitpunkt|eingegangen am|erhalten am|received on|(?:bestellung|rechnung|auftrag|schreiben|brief|nachricht|e-mail|mail|lieferschein|vertrag|kündigung|widerruf|widerrufs|datum|order|invoice|letter)(?:\s{1,2}(?:nr\.?|nummer|no\.?|#)?\s{0,2}[\p{L}\p{N}#/-]{3,24})? vom)\s{0,2}:?\s{0,3}$/iu;
 const CURRENCY_NEAR = /^\s{0,2}(€|eur|usd|\$|£|chf)|(€|\$|£)\s{0,2}$/iu;
+/** A group of digits right before: "0171 12.10.20" is a phone number, "Konto 1234 03.10.2026" an account. */
+const DIGITS_BEFORE = /\d{2,}[\s/-]{1,2}$/u;
+/**
+ * A period paid for, as receipts print it: "Sep 17 – Oct 17, 2026" next to "Paid", a month of a
+ * subscription. Not something to put in a calendar.
+ */
+const BILLING =
+  /(?<![\p{L}])(paid|bezahlt|receipt|quittung|beleg|rechnung|invoice|abo|abonnement|subscription|plan|zeitraum|period|laufzeit|billing|abrechnung|mitgliedschaft|membership|zahlungsbeleg)/iu;
 
 const STOP_EDGE = new Set(
   (
     "am um vom von bis ab zum zur den dem der die das des ist sind wird werden findet statt beginnt startet läuft endet gilt " +
     "jeweils ca circa bereits schon noch nur und oder on at from to until till the is are will be starts start begins " +
-    "runs ends takes place happens held a an this next kommenden nächsten diesen im in bei for of"
+    "runs ends takes place happens held a an this next kommenden nächsten diesen im in bei for of " +
+    "fällig zahlbar spätestens bitte please due by zwischen zw between ab gegen vor nach sollte soll muss wurde"
   ).split(/\s+/),
 );
 const LEADING_WORDS =
   /^(der|die|das|dem|den|des|ein|eine|einen|the|a|an|our|unser|unsere|unseren|unserem|your|dein|deine|ihr|ihre)\s+/iu;
 const NOT_A_TITLE =
-  /(?<![\p{L}])(ich|du|wir|ihr|uns|euch|mich|dich|mir|dir|i|you|we|us|me|they|them|he|she|er|es|man|lass|let's|lets|kannst|können|könnt|could|can|please|bitte|hast|habe|haben|have|has|hi|hallo|hey|liebe|lieber|dear|danke|thanks|thank)(?![\p{L}])/iu;
+  /(?<![\p{L}])(ich|du|wir|ihr|uns|euch|mich|dich|mir|dir|i|you|we|us|me|they|them|he|she|er|es|man|ihnen|sie|lass|let's|lets|kannst|können|könnt|could|can|please|bitte|hast|hat|habe|haben|have|has|hi|hallo|hey|liebe|lieber|dear|danke|thanks|thank)(?![\p{L}])/iu;
+/** Words that name a field, not an event: "Datum", "Betrag", "UTC". */
+const FIELD_WORDS =
+  /^(datum|date|zeit|time|uhrzeit|zeitpunkt|zeitraum|zeitfenster|termin|wann|when|utc|gmt|mez|mesz|cet|cest|betrag|summe|gesamt|gesamtbetrag|rechnungsbetrag|endbetrag|zahlbetrag|total|amount|preis|price|kosten|cost|fällig|due|zahlbar|status|info|hinweis|note|details?)$/iu;
+/** An amount of money anywhere in a candidate: "49,90 €", "EUR 12.50", "$5". */
+const MONEY = /(\d[\d.,]*\s?(€|eur|usd|chf|\$|£)(?!\p{L}))|((€|\$|£|eur|usd)\s?\d)/iu;
+/** Things a title never contains: a link, an address, a date of its own. */
+const NOT_IN_TITLE =
+  /(https?:\/\/|www\.|@\S+\.|\d{1,2}\.\s?\d{1,2}\.|(?<![\p{L}])(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?![\p{L}]))/iu;
+/** "Betrag: 49,90 €": a field and its value, not a heading. */
+const FIELD_LINE = /^[\p{L}\p{N} .&/-]{1,30}:\s*\S/u;
 const GREETING = /^(hallo|hi|hey|liebe|lieber|dear|moin|servus|guten|good|sehr geehrte)/iu;
 const TITLE_LABEL = /^\s*(was|what|titel|title|event|veranstaltung|anlass|thema|topic)\s*:\s*(.{2,120})$/iu;
 const PLACE_LABEL =
@@ -117,6 +136,9 @@ const PLACE_IN =
 /** "im Anhang", "in der Regel", "at the Moment" … look like places and aren't. */
 const NOT_A_PLACE =
   /^(anhang|anlage|voraus|vorfeld|rahmen|namen|auftrag|allgemeinen|übrigen|laufe|nachgang|moment|detail|details|einzelnen|grunde|sinne|prinzip|zuge|falle|regel|zwischenzeit|nähe|lage|zukunft|vergangenheit|woche|mail|e-mail|nachricht|betreff|kalender|shop|newsletter|kundenkonto|konto|browser|internet|app|team|jahr|monat|januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember|january|february|march|may|june|july|october|december|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|monday|tuesday|wednesday|thursday|friday|saturday|sunday|end|moment|latest|earliest|least|same|time|beginning|start)$/iu;
+/** Places too vague to name on their own: "im Dorf", "im Garten", "in Kraft". */
+const GENERIC_PLACE =
+  /^(dorf|stadt|garten|hof|haus|hause|büro|buero|office|wald|park|zentrum|center|centre|kraft|einsatz|gange|betrieb|anschluss|folgenden|homeoffice|urlaub|keller|flur|saal|raum|room|kalender|home|town|city|village|garden|house|hof|zimmer|kürze|kuerze|ordnung|sachen|bezug|form|ganzen|großen|wesentlichen|voraus|vorfeld)$/iu;
 const REPLY_PREFIX = /^\s*((re|aw|wg|fwd?|fw|antw|tr|sv|vs)\s*(\[\d+\])?\s*:\s*)+/iu;
 const MAX_TITLE = 80;
 
@@ -127,11 +149,24 @@ function lineBounds(text: string, from: number, to: number): [number, number] {
 }
 
 /** The sentence around a hit, inside its line. A dot after a digit belongs to a date, not the sentence. */
+/** "Dr.", "Str.", "z.B.": a dot that doesn't end the sentence. */
+const ABBREVIATION =
+  /(?<![\p{L}])(dr|prof|str|nr|st|hr|fr|frau|herr|ca|bzw|bspw|inkl|evtl|ggf|vgl|usw|mr|mrs|ms|jr|sr|no|z\.b|u\.a|\p{Lu})$/iu;
+
+function endsSentence(text: string, dot: number): boolean {
+  if (/\d/.test(text[dot - 1] ?? "")) return false;
+  return !ABBREVIATION.test(text.slice(Math.max(0, dot - 6), dot));
+}
+
 function sentenceBounds(text: string, from: number, to: number): [number, number] {
   const [lineStart, lineEnd] = lineBounds(text, from, to);
   let start = lineStart;
   for (let index = from - 1; index > lineStart; index--) {
-    if (/[.!?]/.test(text[index - 1]!) && /\s/.test(text[index]!) && !/\d/.test(text[index - 2] ?? "")) {
+    if (
+      /[.!?]/.test(text[index - 1]!) &&
+      /\s/.test(text[index]!) &&
+      (text[index - 1] !== "." || endsSentence(text, index - 1))
+    ) {
       start = index;
       break;
     }
@@ -142,7 +177,7 @@ function sentenceBounds(text: string, from: number, to: number): [number, number
     if (
       /[.!?]/.test(char) &&
       (index + 1 >= lineEnd || /\s/.test(text[index + 1]!)) &&
-      !/\d/.test(text[index - 1] ?? "")
+      (char !== "." || endsSentence(text, index))
     ) {
       end = index + 1;
       break;
@@ -173,6 +208,8 @@ function asTitle(candidate: string): string | null {
   const text = trimEdges(candidate);
   const count = words(text).length;
   if (count === 0 || count > 8 || text.length < 3 || !/\p{L}{2}/u.test(text) || NOT_A_TITLE.test(text)) return null;
+  if (MONEY.test(candidate) || NOT_IN_TITLE.test(text)) return null;
+  if (words(text).every((word) => FIELD_WORDS.test(word.replace(/[^\p{L}]/gu, "")))) return null;
   // A poster's "HERBSTFEST" reads as "Herbstfest" in a calendar.
   const shouting = text === text.toUpperCase() && /\p{Lu}{3}/u.test(text);
   const cased = shouting
@@ -226,14 +263,19 @@ function titleFor(text: string, hit: FoundDate, subject: string): string {
   const left = asTitle(text.slice(start, hit.from));
   if (left) return left;
   // What follows only names the thing when it starts like a name ("… Sommerfest im Park").
-  const rightText = text.slice(hit.to, end).replace(PLACE_AFTER, " ");
+  const rightText = text
+    .slice(hit.to, end)
+    .replace(PLACE_AFTER, " ")
+    // "… ist Flohmarkt im Hof": the name, without the verb in front or the place behind.
+    .replace(/^[\s,:–—-]*(?:(?:ist|sind|wird|findet|gibt es|gibt's|is|there is|we have|haben wir)\s+)+/iu, " ")
+    .replace(/\s(?:im|in der|in dem|in|at the|at|auf dem|auf der|bei|beim|statt)(?:\s.*)?$/su, "");
   const right = /^[\s,:–—-]*(\p{Lu}|\d)/u.test(rightText) ? asTitle(rightText) : null;
   if (right) return right;
   // A short line just above: the heading of the block the date stands in.
   for (const line of [...before].reverse().slice(0, 2)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    if (/[,:]$/.test(trimmed) || GREETING.test(trimmed)) break;
+    if (/[,:]$/.test(trimmed) || GREETING.test(trimmed) || FIELD_LINE.test(trimmed)) break;
     const heading = asTitle(trimmed);
     if (heading && trimmed.length <= 60) return heading;
     break;
@@ -250,14 +292,31 @@ function locationFor(text: string, hit: FoundDate): string | null {
   }
   const [sentenceStart, sentenceEnd] = sentenceBounds(text, hit.from, hit.to);
   const place = PLACE_AFTER.exec(text.slice(hit.to, sentenceEnd));
-  if (place) return place[1]!.trim().replace(/[.,;:]+$/, "");
+  if (place) {
+    const name = place[1]!
+      .trim()
+      .replace(/[,;:]+$/, "")
+      .replace(/(?<!\p{Lu}\p{Ll}?)\.$/u, "");
+    if (isPlace(name)) return name;
+  }
   // Elsewhere in the sentence, as long as it isn't one of the phrases that only look like a place.
   const sentence = `${text.slice(sentenceStart, hit.from)} ${text.slice(hit.to, sentenceEnd)}`;
   for (const match of sentence.matchAll(PLACE_IN)) {
-    const name = match[1]!.trim().replace(/[.,;:]+$/, "");
-    if (!NOT_A_PLACE.test(name.split(/\s+/)[0]!)) return name;
+    const name = match[1]!
+      .trim()
+      .replace(/[,;:]+$/, "")
+      .replace(/(?<!\p{Lu}\p{Ll}?)\.$/u, "");
+    if (isPlace(name)) return name;
   }
   return null;
+}
+
+/** A name worth putting in the place field: not a phrase like "im Anhang", nor a bare "im Dorf". */
+function isPlace(name: string): boolean {
+  const parts = name.split(/\s+/);
+  const first = parts[0]!.replace(/[.,;:]+$/, "");
+  if (NOT_A_PLACE.test(first)) return false;
+  return !(parts.length === 1 && GENERIC_PLACE.test(first));
 }
 
 function quoteFor(text: string, hit: FoundDate): string {
@@ -344,14 +403,22 @@ export function detectEvents(text: string, options: DetectOptions): DetectedEven
     const [lineStart, lineEnd] = lineBounds(text, hit.from, hit.to);
     const before = text.slice(Math.max(lineStart, hit.from - 40), hit.from);
     const after = text.slice(hit.to, Math.min(lineEnd, hit.to + 8));
-    if (isNumberKind(hit) && (NUMBER_LABEL.test(before) || CURRENCY_NEAR.test(after) || CURRENCY_NEAR.test(before)))
+    if (
+      isNumberKind(hit) &&
+      (NUMBER_LABEL.test(before) ||
+        CURRENCY_NEAR.test(after) ||
+        CURRENCY_NEAR.test(before) ||
+        DIGITS_BEFORE.test(before))
+    )
       continue;
     if (DATE_LABEL.test(before)) continue;
     // The mail's own date, as newsletters print it at the top.
     if (!hit.startTime && !hit.endDate && hit.startDate === referenceDay && hit.kind !== "relativeDay") continue;
     if (diffDays(referenceDay, hit.startDate) > 2 * 366) continue;
+    const line = text.slice(lineStart, lineEnd);
+    if (isBillingPeriod(hit, referenceDay, line, text)) continue;
     const times = wallTimes(hit);
-    const confidence = confidenceOf(hit, text.slice(lineStart, lineEnd));
+    const confidence = confidenceOf(hit, line);
     if (confidence < MIN_CONFIDENCE) continue;
     const key = `${times.start}|${times.end}`;
     const known = byKey.get(key);
@@ -367,7 +434,11 @@ export function detectEvents(text: string, options: DetectOptions): DetectedEven
       title: titleFor(text, hit, subject),
       location: locationFor(text, hit),
       quote: quoteFor(text, hit),
-      past: times.allDay ? dateOf(times.end) <= referenceDay : times.end <= options.reference,
+      // A time that already came when the mail arrived, with no end named, is the mail telling
+      // what happened ("abgeholt am … um 20:58", "login at 07:14 UTC"), not an appointment.
+      past: times.allDay
+        ? dateOf(times.end) <= referenceDay
+        : times.end <= options.reference || (!times.endKnown && times.start <= options.reference),
       ambiguous: hit.ambiguous,
       weekdayMismatch: hit.weekdayMismatch,
       source: options.source ?? "text",
@@ -379,6 +450,13 @@ export function detectEvents(text: string, options: DetectOptions): DetectedEven
   // Too many: the likeliest ones, still in text order.
   const keep = new Set([...events].sort((a, b) => b.confidence - a.confidence).slice(0, max));
   return events.filter((event) => keep.has(event));
+}
+
+function isBillingPeriod(hit: FoundDate, referenceDay: string, line: string, text: string): boolean {
+  if (!hit.endDate || hit.startTime || diffDays(hit.startDate, hit.endDate) < 27) return false;
+  const offset = diffDays(referenceDay, hit.startDate);
+  if (offset < -45 || offset > 3 || EVENT_CUES.test(line)) return false;
+  return BILLING.test(text.slice(Math.max(0, hit.from - 300), hit.to + 300));
 }
 
 function isNumberKind(hit: FoundDate): boolean {

@@ -35,6 +35,11 @@ describe("fromAssist", () => {
     });
   });
 
+  it("drops what isn't a time or ends before it starts", () => {
+    expect(fromAssist(assist({ start: "Freitag" }), REFERENCE)).toBeNull();
+    expect(fromAssist(assist({ end: "2026-10-16T18:00:00" }), REFERENCE)).toBeNull();
+  });
+
   it("keeps only https links and bounds what it says, by characters", () => {
     expect(fromAssist(assist({ url: "https://shop.example/tickets" }), REFERENCE)?.url).toBe(
       "https://shop.example/tickets",
@@ -46,11 +51,6 @@ describe("fromAssist", () => {
     expect(Array.from(long.title)).toHaveLength(500);
     expect(long.title.endsWith("🎉")).toBe(true);
     expect(Array.from(long.description!)).toHaveLength(2000);
-  });
-
-  it("drops what isn't a time or ends before it starts", () => {
-    expect(fromAssist(assist({ start: "Freitag" }), REFERENCE)).toBeNull();
-    expect(fromAssist(assist({ end: "2026-10-16T18:00:00" }), REFERENCE)).toBeNull();
   });
 
   it("knows an all-day event that ended before the mail", () => {
@@ -108,5 +108,62 @@ describe("mergeEvents", () => {
     const merged = mergeEvents(day, [], [fromAssist(assist({ title: "Sommerfest" }), REFERENCE)!]);
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({ allDay: false, start: "2026-10-16T19:30:00", refined: true });
+  });
+
+  describe("times beat a bare day, whichever side found them", () => {
+    const range = detectEvents("Flohmarkt am Samstag 03.10.26, zwischen 10:00 und 12:00 im Hof", context);
+
+    it("keeps the text's time range when the assistant only saw the day", () => {
+      const ai = fromAssist(
+        assist({ title: "Flohmarkt", start: "2026-10-03T00:00:00", end: "2026-10-04T00:00:00", allDay: true }),
+        REFERENCE,
+      )!;
+      const [event, ...rest] = mergeEvents(range, [], [ai]);
+      expect(rest).toHaveLength(0);
+      expect(event).toMatchObject({
+        start: "2026-10-03T10:00:00",
+        end: "2026-10-03T12:00:00",
+        allDay: false,
+        endKnown: true,
+        title: "Flohmarkt",
+        refined: true,
+      });
+    });
+
+    it("keeps an end the text read when the assistant only assumed an hour", () => {
+      const ai = fromAssist(assist({ start: "2026-10-03T10:00:00", end: "2026-10-03T11:00:00" }), REFERENCE)!;
+      expect(mergeEvents(range, [], [ai])[0]).toMatchObject({ end: "2026-10-03T12:00:00", allDay: false });
+    });
+
+    it("takes the assistant's own end when it read a different one", () => {
+      const ai = fromAssist(assist({ start: "2026-10-03T10:00:00", end: "2026-10-03T12:30:00" }), REFERENCE)!;
+      expect(mergeEvents(range, [], [ai])[0]).toMatchObject({ end: "2026-10-03T12:30:00" });
+    });
+
+    it("keeps several days the text read over the assistant's single one", () => {
+      const days = detectEvents("Messe vom 12. bis 15. Okt. 2026", context);
+      const ai = fromAssist(
+        assist({ title: "Messe", start: "2026-10-12T00:00:00", end: "2026-10-13T00:00:00", allDay: true }),
+        REFERENCE,
+      )!;
+      expect(mergeEvents(days, [], [ai])[0]).toMatchObject({
+        start: "2026-10-12T00:00:00",
+        end: "2026-10-16T00:00:00",
+        allDay: true,
+        title: "Messe",
+      });
+    });
+
+    it("lets a picture's time fill in a day-only text hit", () => {
+      const day = detectEvents("Herbstfest am 17.10.2026", context);
+      const [event, ...rest] = mergeEvents(day, image, []);
+      expect(rest).toHaveLength(0);
+      expect(event).toMatchObject({
+        start: "2026-10-17T14:00:00",
+        end: "2026-10-17T18:00:00",
+        allDay: false,
+        source: "text",
+      });
+    });
   });
 });

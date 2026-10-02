@@ -452,4 +452,28 @@ describe("into the calendar", () => {
       }),
     );
   });
+
+  it("fills in the end time of a range, not an all-day event", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <EventEditor />
+      </QueryClientProvider>,
+    );
+    const t = i18n.getFixedT("en", "neutral");
+    act(() =>
+      openInCalendar(
+        event("Flohmarkt: Samstag 03.10.26, zwischen 10:00 und 12:00"),
+        { subject: "Flohmarkt", from: { email: "mia@mood.example" }, accountId: "acc" },
+        t,
+      ),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(within(dialog).getByLabelText<HTMLSelectElement>("Calendar").value).toBe("home"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(fake.createEvent).toHaveBeenCalledOnce());
+    expect(fake.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ start: "2026-10-03T10:00:00", end: "2026-10-03T12:00:00", allDay: false }),
+    );
+  });
 });
