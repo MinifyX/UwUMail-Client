@@ -1775,5 +1775,35 @@
       "automatic": "Automatisch gesetzt",
       "bySource": "Automatisch gesetzt ({{source}})"
     }
+  },
+  "shared": {
+    "title": "Gemeinsame Postfächer",
+    "add": "Gemeinsames Postfach hinzufügen",
+    "addTitle": "Gemeinsames Postfach hinzufügen",
+    "addIntro": "Ein gemeinsames Postfach öffnet sich mit der Anmeldung von {{email}}. Gib seine Adresse ein; UwUMail prüft, ob du Zugriff hast.",
+    "address": "Adresse des gemeinsamen Postfachs",
+    "addressPlaceholder": "team@firma.example",
+    "displayName": "Name (optional)",
+    "displayNamePlaceholder": "z. B. Team Vertrieb",
+    "addConfirm": "Hinzufügen",
+    "added": "{{email}} wurde hinzugefügt.",
+    "noAccess": "{{account}} kann {{email}} nicht öffnen. Ist es ein gemeinsames Postfach, auf das du Vollzugriff hast?",
+    "searchAgain": "Erneut suchen",
+    "found_one": "{{count}} neues gemeinsames Postfach gefunden.",
+    "found_other": "{{count}} neue gemeinsame Postfächer gefunden.",
+    "foundNone": "Keine neuen gemeinsamen Postfächer gefunden.",
+    "statePending": "UwUMail sucht gleich nach deinen gemeinsamen Postfächern.",
+    "stateDone": "Gemeinsame Postfächer, auf die du Zugriff hast, kommen automatisch dazu.",
+    "stateNeedsSignIn": "Melde dich erneut an, damit gemeinsame Postfächer automatisch gefunden werden.",
+    "stateUnavailable": "Microsoft hat nicht verraten, welche gemeinsamen Postfächer du hast. Du kannst sie weiterhin per Adresse hinzufügen.",
+    "signInAgain": "Erneut anmelden",
+    "signedInAgain": "Erneut angemeldet als {{email}}.",
+    "of": "Gemeinsames Postfach von {{email}}",
+    "remove": "Gemeinsames Postfach entfernen",
+    "removeConfirm": "Das gemeinsame Postfach {{email}} entfernen? Es kommt nicht automatisch wieder dazu; du kannst es jederzeit per Adresse hinzufügen. Die Mails auf dem Server bleiben unberührt.",
+    "removeWithShared_one": "Auch sein gemeinsames Postfach entfernen",
+    "removeWithShared_other": "Auch seine {{count}} gemeinsamen Postfächer entfernen",
+    "toggle": "Gemeinsame Postfächer von {{email}} ein- oder ausblenden",
+    "accountMenu": "Mehr für {{email}}"
   }
 }

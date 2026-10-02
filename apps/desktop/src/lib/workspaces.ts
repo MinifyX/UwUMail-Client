@@ -11,6 +11,28 @@ export function workspaceOf(accountId: string, businessAccounts: readonly string
   return businessAccounts.includes(accountId) ? "business" : "private";
 }
 
+/**
+ * Shared mailboxes belong to their account's workspace. Returns the business list with each one
+ * following its account, or the same list when nothing changes.
+ */
+export function sharedFollowAccounts(
+  accounts: readonly { id: string; parentId?: string }[],
+  businessAccounts: readonly string[],
+): readonly string[] {
+  const business = new Set(businessAccounts);
+  let changed = false;
+  for (const account of accounts) {
+    if (!account.parentId) continue;
+    const wanted = business.has(account.parentId);
+    if (wanted !== business.has(account.id)) {
+      changed = true;
+      if (wanted) business.add(account.id);
+      else business.delete(account.id);
+    }
+  }
+  return changed ? [...business] : businessAccounts;
+}
+
 /** The mailboxes of one workspace, in their usual order. */
 export function inWorkspace<T extends { id: string }>(
   accounts: readonly T[],

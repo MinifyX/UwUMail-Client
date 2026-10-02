@@ -27,6 +27,22 @@ export interface Account {
   protocol: Protocol;
   /** Protocols this account can switch to. */
   protocols: Protocol[];
+  /** For a shared mailbox: the Microsoft account whose sign-in opens it. Listed right after it. */
+  parentId?: string;
+  /** For a Microsoft 365 work account: how the search for its shared mailboxes went. */
+  sharedSearch?: SharedSearch;
+}
+
+/**
+ * The search for a Microsoft 365 account's shared mailboxes: not yet, done, refused because the
+ * sign-in predates the Exchange permission (signing in again helps), or Microsoft didn't answer.
+ */
+export type SharedSearch = "pending" | "done" | "needsSignIn" | "unavailable";
+
+export interface SharedSearchResult {
+  state: SharedSearch;
+  /** The mailboxes this search added. */
+  added: Account[];
 }
 
 /** An address a mailbox can send from. */
@@ -582,6 +598,8 @@ export type BackendEvent =
   | { type: "mail:changed"; accountId: string }
   | { type: "mail:received"; accountId: string; messageIds: string[] }
   | { type: "account:status"; accountId: string; status: AccountStatus }
+  /** Mailboxes were added, removed or nested (shared mailboxes found or sorted under their account). */
+  | { type: "accounts:changed" }
   | { type: "send:done"; sendId: string; accountId: string }
   | { type: "send:failed"; sendId: string; accountId: string; reason: string; message: OutgoingMessage }
   | { type: "compose:mailto" }

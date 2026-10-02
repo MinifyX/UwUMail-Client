@@ -3,6 +3,7 @@ import type {
   LabelRef,
   BlockedSender,
   Account,
+  SharedSearchResult,
   AddressBookInfo,
   AssistComposeRequest,
   AssistComposeResult,
@@ -180,7 +181,14 @@ export interface Backend {
   /** The page an administrator opens to allow UwUMail for a whole company. */
   microsoftAdminConsentUrl(email: string): Promise<string>;
   addAccount(account: NewAccount): Promise<Account>;
-  removeAccount(accountId: string): Promise<void>;
+  /** Removes a mailbox; a Microsoft account's shared mailboxes go with it unless `keepShared`. */
+  removeAccount(accountId: string, options?: { keepShared?: boolean }): Promise<void>;
+  /** Searches a Microsoft 365 account for its shared mailboxes now and adds the new ones. */
+  findSharedMailboxes(accountId: string): Promise<SharedSearchResult>;
+  /** Adds a shared mailbox by address under a Microsoft 365 account, after checking its sign-in opens it. */
+  addSharedMailbox(accountId: string, email: string, displayName?: string): Promise<Account>;
+  /** Signs in again in the browser (for a shared mailbox: its account), e.g. for a new permission. */
+  signInAgain(accountId: string): Promise<Account>;
   /** Switches between IMAP/SMTP and JMAP; the mailbox syncs again from scratch. */
   setAccountProtocol(accountId: string, protocol: Protocol): Promise<Account>;
   syncNow(accountId?: string): Promise<void>;

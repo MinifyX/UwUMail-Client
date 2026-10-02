@@ -303,8 +303,28 @@ async fn add_account(engine: State<'_, Engine>, account: NewAccount) -> CommandR
 }
 
 #[tauri::command]
-async fn remove_account(engine: State<'_, Engine>, account_id: String) -> CommandResult<()> {
-    engine.remove_account(&account_id).await
+async fn remove_account(engine: State<'_, Engine>, account_id: String, keep_shared: Option<bool>) -> CommandResult<()> {
+    engine.remove_account_with(&account_id, keep_shared.unwrap_or(false)).await
+}
+
+#[tauri::command]
+async fn find_shared_mailboxes(engine: State<'_, Engine>, account_id: String) -> CommandResult<SharedSearchResult> {
+    engine.find_shared_mailboxes(&account_id).await
+}
+
+#[tauri::command]
+async fn add_shared_mailbox(
+    engine: State<'_, Engine>,
+    account_id: String,
+    email: String,
+    display_name: Option<String>,
+) -> CommandResult<Account> {
+    engine.add_shared_mailbox(&account_id, &email, display_name.as_deref()).await
+}
+
+#[tauri::command]
+async fn sign_in_again(engine: State<'_, Engine>, account_id: String) -> CommandResult<Account> {
+    engine.sign_in_again(&account_id).await
 }
 
 #[tauri::command]
@@ -1121,6 +1141,9 @@ pub fn run() {
             microsoft_admin_consent_url,
             add_account,
             remove_account,
+            find_shared_mailboxes,
+            add_shared_mailbox,
+            sign_in_again,
             set_account_protocol,
             sync_now,
             list_folders,
