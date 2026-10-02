@@ -37,35 +37,28 @@ Android, iOS and release workflows pass to the build. To register your own:
    - `app.uwumail://oauth` — Android and iOS, where the browser comes back to
      the app through this link (see [Phones](#phones)).
 4. Authentication → Advanced settings → **Allow public client flows: Yes**.
-5. API permissions → the list already holds Microsoft Graph `User.Read`.
-   Add the rest in two rounds:
-   1. **Add a permission → Microsoft APIs → Microsoft Graph → Delegated
-      permissions**. Type each name into the search box and tick it:
-      `IMAP.AccessAsUser.All`, `SMTP.Send`, `offline_access`,
-      `Calendars.ReadWrite`, `Calendars.ReadWrite.Shared`, `Contacts.ReadWrite`,
-      `Contacts.ReadWrite.Shared` (and `User.Read`, if it isn't there yet).
-      Click **Add permissions**.
-   2. **Add a permission → APIs my organization uses** → search
-      **Office 365 Exchange Online** → **Delegated permissions** → open
-      **EWS** → tick `EWS.AccessAsUser.All` → **Add permissions**.
+5. API permissions: leave the list as it is — Microsoft Graph `IMAP.AccessAsUser.All`,
+   `SMTP.Send`, `offline_access` (and `User.Read`, which a new registration starts with).
+   Calendars, contacts and Exchange Web Services are **not** added here: for a registration
+   that is open to personal Microsoft accounts, Entra refuses to save `Calendars.ReadWrite`,
+   `Calendars.ReadWrite.Shared`, `Contacts.ReadWrite`, `Contacts.ReadWrite.Shared`,
+   `User.Read` and `EWS.AccessAsUser.All` ("One or more of the following permission(s) are
+   currently not supported"). They don't need to be listed: UwUMail asks for them by name at
+   sign-in (dynamic consent), and the consent screen shows them there.
 
-   The list should now show nine delegated permissions: eight under
-   Microsoft Graph, `EWS.AccessAsUser.All` under Office 365 Exchange Online.
-   (Older guides pick IMAP and SMTP under "Office 365 Exchange Online"; the
-   Graph entries are the same grants.) The app asks for the mail scopes as
-   `https://outlook.office.com/IMAP.AccessAsUser.All` and
-   `https://outlook.office.com/SMTP.Send`, which is how IMAP and SMTP want the
-   token, and for the calendar and contact scopes as
-   `https://graph.microsoft.com/Calendars.ReadWrite` and so on; that is
-   expected. "Grant admin consent for …" on this page only covers your own
-   tenant; everyone else consents at sign-in (see below).
+   What the sign-in asks for:
+   - company accounts: `offline_access`, `https://outlook.office.com/IMAP.AccessAsUser.All`,
+     `.../SMTP.Send`, `.../EWS.AccessAsUser.All`, and
+     `https://graph.microsoft.com/Calendars.ReadWrite`, `Calendars.ReadWrite.Shared`,
+     `Contacts.ReadWrite`, `Contacts.ReadWrite.Shared`, `User.Read`;
+   - personal accounts (outlook.com, hotmail.*, live.*, msn.com): mail, `offline_access`,
+     `Calendars.ReadWrite`, `Contacts.ReadWrite` and `User.Read` — no `.Shared` and no EWS,
+     which they have no use for (no shared mailboxes) and which could fail their sign-in.
 
-   Personal Microsoft accounts (outlook.com, hotmail.*, live.*, msn.com) are
-   asked for less: mail, `offline_access`, `Calendars.ReadWrite`,
-   `Contacts.ReadWrite` and `User.Read`, without the two `.Shared`
-   permissions and without `EWS.AccessAsUser.All`, which they have no use for
-   (no shared mailboxes) and which could fail their sign-in. Company accounts
-   are asked for all nine.
+   "Grant admin consent for …" on the API permissions page therefore only covers the mail
+   permissions. To allow everything for a whole company, an administrator opens the v2 consent
+   page that UwUMail offers (see [below](#who-can-sign-in-and-who-needs-their-it-first)); it names
+   every scope itself.
 6. Copy the **Application (client) ID** into `UWUMAIL_MICROSOFT_CLIENT_ID`
    (repository secret for CI, environment variable for a local build).
 
@@ -214,8 +207,9 @@ these, and is not going to: it is a hobby project, not a company.
 
 So UwUMail does the next best thing. After a refused Microsoft sign-in it offers
 the page where an administrator allows the app for their whole company,
-`login.microsoftonline.com/<domain>/adminconsent?client_id=<id>`, ready to send to
-whoever runs the tenant. One click there and everyone in that company can sign
+`login.microsoftonline.com/<domain>/v2.0/adminconsent?client_id=<id>&scope=<all of the above>&redirect_uri=http://localhost`,
+ready to send to whoever runs the tenant. After "Accept" the browser lands on an empty
+`localhost` page; the consent is done by then. One click there and everyone in that company can sign
 in. Thunderbird asks its users to do the same thing, by hand, through a support
 article.
 

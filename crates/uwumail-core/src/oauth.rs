@@ -238,13 +238,24 @@ pub(crate) fn explain_sign_in_error(error: &str, description: &str) -> Error {
 
 /// The page where an administrator allows UwUMail for their whole company.
 ///
-/// Naming the domain instead of `common` lands the admin in their own tenant.
-/// The page lists exactly the permissions the app registration asks for.
+/// Naming the domain instead of `common` lands the admin in their own tenant. The v2 page names
+/// the scopes itself: an app registration open to personal accounts can't list the Graph and
+/// Exchange Web Services permissions (Entra refuses to save them), so the plain page would only
+/// cover mail. Afterwards the browser goes to `http://localhost`, which shows nothing; the consent
+/// is done by then.
 pub fn admin_consent_url(domain: &str) -> Result<String> {
     let config = config(OAuthProvider::Microsoft)?;
+    Ok(admin_consent_url_for(config.client_id, domain))
+}
+
+fn admin_consent_url_for(client_id: &str, domain: &str) -> String {
     let tenant: String = url::form_urlencoded::byte_serialize(domain.as_bytes()).collect();
-    let client_id: String = url::form_urlencoded::byte_serialize(config.client_id.as_bytes()).collect();
-    Ok(format!("https://login.microsoftonline.com/{tenant}/adminconsent?client_id={client_id}"))
+    let query = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("client_id", client_id)
+        .append_pair("scope", MICROSOFT_SIGN_IN_SCOPES)
+        .append_pair("redirect_uri", "http://localhost")
+        .finish();
+    format!("https://login.microsoftonline.com/{tenant}/v2.0/adminconsent?{query}")
 }
 
 const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8><title>UwUMail</title>\
@@ -579,6 +590,21 @@ pub fn xoauth2(user: &str, access_token: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn admin_consent_names_every_company_scope() {
+        let url = url::Url::parse(&admin_consent_url_for("abc", "company.example")).unwrap();
+        assert_eq!(url.path(), "/company.example/v2.0/adminconsent");
+        let pairs: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(pairs["client_id"], "abc");
+        assert_eq!(pairs["redirect_uri"], "http://localhost");
+        let scope = &pairs["scope"];
+        for wanted in
+            ["IMAP.AccessAsUser.All", "EWS.AccessAsUser.All", "Calendars.ReadWrite.Shared", "Contacts.ReadWrite"]
+        {
+            assert!(scope.contains(wanted), "{wanted} missing in {scope}");
+        }
+    }
 
     #[test]
     fn pkce_challenge_matches_rfc7636_example() {
