@@ -80,6 +80,13 @@ fn graph_event_select() -> &'static str {
 }
 
 impl Inner {
+    /// The account whose refresh token opens `account_id`'s calendars and contacts.
+    // With the shared-mailbox branch merged: `self.secret_holder(account_id)` (a shared mailbox
+    // nested under its account uses that account's sign-in).
+    pub(super) fn cloud_holder(&self, account_id: &str) -> String {
+        account_id.to_string()
+    }
+
     /// An access token for Graph or Google, from memory while it lasts. `refused` is a token the
     /// API just didn't take: that one isn't handed out again.
     async fn cloud_token(
@@ -88,7 +95,8 @@ impl Inner {
         kind: TokenKind,
         refused: Option<&str>,
     ) -> Result<CachedToken> {
-        let key = (account.id.clone(), kind);
+        let holder = self.cloud_holder(&account.id);
+        let key = (holder.clone(), kind);
         let cached = async || {
             self.cloud
                 .tokens
@@ -109,7 +117,7 @@ impl Inner {
         if let Some(token) = cached().await {
             return Ok(token);
         }
-        let Secret::OAuth { refresh_token } = self.secrets.get(&account.id)? else {
+        let Secret::OAuth { refresh_token } = self.secrets.get(&holder)? else {
             return Err(Error::sign_in_again("Sign in again to see calendar and contacts."));
         };
         let endpoint = self.cloud.endpoints.lock().unwrap().token_endpoint(provider)?;
@@ -131,7 +139,7 @@ impl Inner {
         if let Some(rotated) = &tokens.refresh_token
             && *rotated != refresh_token
         {
-            self.secrets.set(&account.id, &Secret::OAuth { refresh_token: rotated.clone() })?;
+            self.secrets.set(&holder, &Secret::OAuth { refresh_token: rotated.clone() })?;
         }
         let cached =
             CachedToken { token: tokens.access_token, until: Instant::now() + tokens.expires_in, scope: tokens.scope };
@@ -1025,24 +1033,54 @@ impl Inner {
 }
 
 impl Engine {
-    /// Signs a Microsoft or Google mailbox in again, in the browser: for a sign-in from before
-    /// calendars and contacts came along, or one that ran out. The new sign-in has to open the same
-    /// mailbox; until it's done, the old one stays.
-    pub async fn sign_in_again(&self, account_id: &str) -> Result<()> {
-        let account = self.inner.store.account(account_id)?;
-        let provider = provider_of(&account)?;
-        autoconfig::check_oauth_servers(provider, &[&account.imap, &account.smtp])?;
-        let hint = if account.username.contains('@') { account.username.clone() } else { account.email.clone() };
-        let tokens = self.oauth_sign_in(provider, &hint).await?;
+    /// The browser sign-in, through the app link where there is one.
+    // The same as the shared-mailbox branch's (engine/shared_ops.rs); one of the two goes at merge.
+    pub(super) async fn browser_sign_in(&self, provider: OAuthProvider, login_hint: &str) -> Result<oauth::Tokens> {
+        let mut waiting = None;
+        let app_link = self.inner.oauth_redirect.lock().unwrap().clone();
+        let redirect = match app_link.filter(|_| oauth::takes_app_link(provider)) {
+            Some(uri) => {
+                let (sender, incoming) = tokio::sync::mpsc::channel(SIGN_IN_LINK_QUEUE);
+                // A newer sign-in replaces an abandoned one.
+                waiting = Some(sender.clone());
+                *self.inner.pending_sign_in.lock().unwrap() = Some(sender);
+                oauth::Redirect::App { uri, incoming }
+            }
+            None => oauth::Redirect::Loopback,
+        };
+        let tokens =
+            oauth::sign_in(&self.inner.http, provider, login_hint, self.inner.open_url.as_ref(), redirect).await;
+        if let Some(ours) = waiting {
+            let mut pending = self.inner.pending_sign_in.lock().unwrap();
+            // Done either way; a sign-in started meanwhile keeps its slot.
+            if pending.as_ref().is_some_and(|sender| sender.same_channel(&ours)) {
+                *pending = None;
+            }
+        }
+        tokens
+    }
+
+    /// Signs a Microsoft or Google mailbox in again in the browser: for a sign-in from before
+    /// calendars and contacts came along, or one that ran out. The new sign-in has to open the
+    /// same mailbox; until it's done, the old one stays.
+    // The shared-mailbox branch has the same call (engine/shared_ops.rs); at merge, that one stays
+    // and calls `forget_cloud` for the account and its shared mailboxes, as here.
+    pub async fn sign_in_again(&self, account_id: &str) -> Result<Account> {
+        let holder_id = self.inner.cloud_holder(account_id);
+        let holder = self.inner.store.account(&holder_id)?;
+        let provider = provider_of(&holder)?;
+        autoconfig::check_oauth_servers(provider, &[&holder.imap, &holder.smtp])?;
+        let hint = if holder.username.contains('@') { holder.username.clone() } else { holder.email.clone() };
+        let tokens = self.browser_sign_in(provider, &hint).await?;
         let refresh_token = tokens
             .refresh_token
             .clone()
             .ok_or_else(|| Error::auth("The provider didn't allow offline access. Please try again."))?;
         // Signed in as someone who can't open this mailbox: nothing changes.
         let mut session = imap::login(
-            &account.imap,
+            &holder.imap,
             Login::OAuth {
-                username: oauth_mailbox(&account.username, &account.email),
+                username: oauth_mailbox(&holder.username, &holder.email),
                 access_token: &tokens.access_token,
             },
         )
@@ -1056,15 +1094,21 @@ impl Engine {
         let _ = session.logout().await;
         {
             let mut mail_tokens = self.inner.tokens.lock().await;
-            self.inner.secrets.set(account_id, &Secret::OAuth { refresh_token })?;
-            mail_tokens.insert(account_id.to_string(), (tokens.access_token, Instant::now() + tokens.expires_in));
+            self.inner.secrets.set(&holder_id, &Secret::OAuth { refresh_token })?;
+            mail_tokens.insert(holder_id.clone(), (tokens.access_token, Instant::now() + tokens.expires_in));
         }
-        self.inner.forget_cloud(account_id).await;
-        self.inner.wake(account_id);
+        self.inner.forget_cloud(&holder_id).await;
+        if holder_id != account_id {
+            self.inner.forget_cloud(account_id).await;
+        }
+        self.inner.wake(&holder_id);
         self.inner.calendar_changed(Some(account_id));
         self.inner.emit(EngineEvent::ContactsChanged {});
-        self.inner.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
-        Ok(())
+        self.inner.emit(EngineEvent::MailChanged { account_id: holder_id.clone() });
+        self.list_accounts()?
+            .into_iter()
+            .find(|a| a.id == account_id)
+            .ok_or_else(|| Error::not_found("This mailbox no longer exists."))
     }
 
     /// Where Graph, Google and the token endpoints are (tests only).

@@ -532,7 +532,7 @@ impl Engine {
                 // access to a shared mailbox.
                 let sign_in_as =
                     new.sign_in_as.as_deref().map(str::trim).filter(|a| !a.is_empty()).unwrap_or(&record.email);
-                let tokens = self.oauth_sign_in(provider, sign_in_as).await?;
+                let tokens = self.browser_sign_in(provider, sign_in_as).await?;
                 let refresh_token = tokens
                     .refresh_token
                     .clone()
@@ -567,32 +567,6 @@ impl Engine {
             .into_iter()
             .find(|a| a.id == id)
             .ok_or_else(|| Error::internal("The new mailbox disappeared."))
-    }
-
-    /// The browser sign-in with a provider, through the app link where the platform has one.
-    async fn oauth_sign_in(&self, provider: OAuthProvider, login_hint: &str) -> Result<oauth::Tokens> {
-        let mut waiting = None;
-        let app_link = self.inner.oauth_redirect.lock().unwrap().clone();
-        let redirect = match app_link.filter(|_| oauth::takes_app_link(provider)) {
-            Some(uri) => {
-                let (sender, incoming) = tokio::sync::mpsc::channel(SIGN_IN_LINK_QUEUE);
-                // A newer sign-in replaces an abandoned one.
-                waiting = Some(sender.clone());
-                *self.inner.pending_sign_in.lock().unwrap() = Some(sender);
-                oauth::Redirect::App { uri, incoming }
-            }
-            None => oauth::Redirect::Loopback,
-        };
-        let tokens =
-            oauth::sign_in(&self.inner.http, provider, login_hint, self.inner.open_url.as_ref(), redirect).await;
-        if let Some(ours) = waiting {
-            let mut pending = self.inner.pending_sign_in.lock().unwrap();
-            // Done either way; a sign-in started meanwhile keeps its slot.
-            if pending.as_ref().is_some_and(|sender| sender.same_channel(&ours)) {
-                *pending = None;
-            }
-        }
-        tokens
     }
 
     pub async fn remove_account(&self, account_id: &str) -> Result<()> {
