@@ -145,7 +145,8 @@
     "syncFailed": "Syncing with {{email}} didn’t work (╥﹏╥) {{detail}}",
     "syncRefused": "The server doesn’t take {{count}} settings. They stay on this device.",
     "signatureLocalOnly": "Only here",
-    "signatureLocalOnlyDesc": "This one stays with me on this device: too big to travel (256 KB at most) or with pictures that only work here."
+    "signatureLocalOnlyDesc": "This one stays with me on this device: too big to travel (256 KB at most) or with pictures that only work here.",
+    "fontDesc": "Nyu likes UwU Sans best, but it's your call. For the whole app and for mails, only on this device."
   },
   "attachment": {
     "loading": "Unpacking the attachment…",

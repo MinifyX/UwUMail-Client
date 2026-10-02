@@ -145,7 +145,8 @@
     "syncFailed": "Mit {{email}} hat das Synchronisieren nicht geklappt (╥﹏╥) {{detail}}",
     "syncRefused": "{{count}} Einstellungen nimmt der Server nicht an. Sie bleiben auf diesem Gerät.",
     "signatureLocalOnly": "Nur hier",
-    "signatureLocalOnlyDesc": "Die hier bleibt bei mir auf diesem Gerät: zu groß zum Mitreisen (höchstens 256 KB) oder mit Bildern, die nur hier gehen."
+    "signatureLocalOnlyDesc": "Die hier bleibt bei mir auf diesem Gerät: zu groß zum Mitreisen (höchstens 256 KB) oder mit Bildern, die nur hier gehen.",
+    "fontDesc": "Nyu mag UwU Sans am liebsten, aber du entscheidest. Gilt für die ganze App und für Mails, nur auf diesem Gerät."
   },
   "attachment": {
     "loading": "Ich pack den Anhang aus…",

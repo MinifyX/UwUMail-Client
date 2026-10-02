@@ -477,7 +477,13 @@
     "signatureLocalOnlyDesc": "Diese Signatur bleibt auf diesem Gerät: Sie ist zu groß zum Synchronisieren (höchstens 256 KB) oder hat Bilder, die nur hier gehen.",
     "rules": "Regeln",
     "assistant": "KI-Assistent",
-    "labels": "Labels"
+    "labels": "Labels",
+    "font": "Schrift",
+    "fontDesc": "Für die ganze App und für Mails. Gilt nur auf diesem Gerät.",
+    "senderFonts": "Schrift der Absender",
+    "senderFontsDesc": "Viele HTML-Mails sind in Times oder einer anderen Serifenschrift gesetzt. Mails ohne eigene Schrift bekommen immer deine.",
+    "senderFontsReplace": "Serifenschriften durch meine ersetzen",
+    "senderFontsKeep": "Wie vom Absender"
   },
   "theme": {
     "system": "System",
@@ -1775,5 +1781,9 @@
       "automatic": "Automatisch gesetzt",
       "bySource": "Automatisch gesetzt ({{source}})"
     }
+  },
+  "font": {
+    "system": "Systemschrift",
+    "sample": "Hallo :3 – Termin um 10:30 <3"
   }
 }

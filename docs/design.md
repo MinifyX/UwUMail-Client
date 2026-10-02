@@ -33,7 +33,21 @@ pink, violet, sky, mint, amber, coral.
 
 ## Type
 
-- **Manrope** (variable, bundled, no network) for everything.
+- **UwU Sans** (variable, bundled, no network) for everything: Atkinson
+  Hyperlegible Next with Nyu (U+E000), a heart and arrows added, see
+  `brand/fonts/uwu-sans`. `:3` becomes Nyu and `<3` a heart, never next to a
+  letter or digit (times like 10:30 stay). Inputs, the composer, code and
+  address fields switch that off (`font-variant-ligatures: no-contextual`).
+- Settings → Appearance → Font: UwU Sans (default), Rubik, DM Sans or the
+  system font, on this device only. It applies through `--font-ui` and to
+  mails (as a `data:` font inside the mail frame, see `lib/fonts.ts`).
+- Interface tracking is set in CSS (`--tracking-ui`, -0.008em for UwU Sans),
+  never baked into the font. Counts, dates and times in lists use tabular
+  figures (`tabular-nums`).
+- HTML mails: a mail without a font gets ours, never the engine's Times. By
+  default serif fonts are replaced with ours (Settings → Reading → Sender
+  fonts); fonts that may be missing (Calibri, Aptos) fall back to ours.
+  Monospace is never touched (`lib/mailFonts.ts`).
 - Sizes: 12 caption · 13 meta · 14 body/list · 16 reader body · 18 section ·
   22 title. Weights 400, 500, 600 (titles and sender names), 700 only for the
   wordmark.

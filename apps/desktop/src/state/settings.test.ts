@@ -30,3 +30,30 @@ describe("Nyu animations setting", () => {
     expect(useSettings.getState().nyuAnimations).toBe("on");
   });
 });
+
+describe("font settings", () => {
+  afterEach(() => {
+    useSettings.setState({ font: DEFAULT_SETTINGS.font, senderFonts: DEFAULT_SETTINGS.senderFonts });
+  });
+
+  it("start with UwU Sans and serif fonts replaced", () => {
+    expect(DEFAULT_SETTINGS.font).toBe("uwu");
+    expect(DEFAULT_SETTINGS.senderFonts).toBe("replace");
+  });
+
+  it("are kept on this device and come back", async () => {
+    useSettings.getState().update({ font: "rubik", senderFonts: "keep" });
+    const saved = localStorage.getItem(KEY)!;
+    expect(JSON.parse(saved).state).toMatchObject({ font: "rubik", senderFonts: "keep" });
+    useSettings.setState({ font: "uwu", senderFonts: "replace" });
+    localStorage.setItem(KEY, saved);
+    await useSettings.persist.rehydrate();
+    expect(useSettings.getState()).toMatchObject({ font: "rubik", senderFonts: "keep" });
+  });
+
+  it("fall back to the defaults for values this version doesn't know", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ state: { font: "comic", senderFonts: 3 }, version: 1 }));
+    await useSettings.persist.rehydrate();
+    expect(useSettings.getState()).toMatchObject({ font: "uwu", senderFonts: "replace" });
+  });
+});

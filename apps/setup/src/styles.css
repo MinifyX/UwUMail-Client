@@ -1,11 +1,12 @@
 @import "tailwindcss";
 @import "../../desktop/src/components/nyu/nyu.css";
+@import "../../desktop/src/styles/fonts.css";
 
 /* Tailwind classes used inside the shared Nyu components. */
 @source "../../desktop/src/components/nyu";
 
 @theme inline {
-  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "UwU Sans", ui-sans-serif, system-ui, sans-serif;
   --color-plum: #4b1d3f;
   --color-plum-soft: #7a5670;
   --color-pink: #ff4d8d;
@@ -29,6 +30,12 @@ body {
   color: var(--color-plum);
   background: linear-gradient(180deg, #fff3f8 0%, #ffd3e5 100%);
   -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.008em;
+}
+
+input,
+textarea {
+  font-variant-ligatures: no-contextual;
 }
 
 :focus-visible {

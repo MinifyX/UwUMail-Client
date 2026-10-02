@@ -162,7 +162,7 @@ export function ThreadRow({
             )}
             {names}
             {thread.messageCount > 1 && (
-              <span className="ml-1.5 text-[12px] font-semibold text-muted">{thread.messageCount}</span>
+              <span className="ml-1.5 text-[12px] font-semibold text-muted tabular-nums">{thread.messageCount}</span>
             )}
           </span>
           <span className="flex shrink-0 items-center gap-1.5 self-center transition-opacity group-hover:opacity-0">

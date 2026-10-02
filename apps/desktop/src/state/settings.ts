@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pkg from "../../package.json";
+import { isFontChoice, isSenderFonts, type FontChoice, type SenderFonts } from "@/lib/fonts";
 
 export type LayoutMode = "simple" | "pro";
 /** Mail list rows: roomy cards with three lines, or two lines with a small picture. */
@@ -108,6 +109,10 @@ export interface Settings {
   groupByLabel: boolean;
   /** The sidebar's labels are folded away. */
   labelsCollapsed: boolean;
+  /** The font of the interface and of mails, see lib/fonts. This device only. */
+  font: FontChoice;
+  /** Serif fonts in HTML mails become `font`, or stay as the sender wrote them. This device only. */
+  senderFonts: SenderFonts;
 }
 
 interface SettingsActions {
@@ -164,6 +169,8 @@ export const DEFAULT_SETTINGS: Settings = {
   assistCurrency: "EUR",
   groupByLabel: false,
   labelsCollapsed: false,
+  font: "uwu",
+  senderFonts: "replace",
 };
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -205,6 +212,8 @@ export const useSettings = create<Settings & SettingsActions>()(
         if (!(NYU_ANIMATIONS as readonly unknown[]).includes(state.nyuAnimations)) {
           state.nyuAnimations = DEFAULT_SETTINGS.nyuAnimations;
         }
+        if (!isFontChoice(state.font)) state.font = DEFAULT_SETTINGS.font;
+        if (!isSenderFonts(state.senderFonts)) state.senderFonts = DEFAULT_SETTINGS.senderFonts;
         return state;
       },
     },
