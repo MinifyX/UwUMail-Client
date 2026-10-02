@@ -976,7 +976,7 @@ END:VCALENDAR
                 jmap_url: None,
             })
             .unwrap();
-        secrets.set("m", &Secret::OAuth { refresh_token: "r".into() }).unwrap();
+        secrets.set("m", &Secret::oauth("r", None)).unwrap();
         let _refusing = engine.refuse_cloud_tokens().await;
 
         // A Microsoft sign-in from before calendars came along: sign in again for them.

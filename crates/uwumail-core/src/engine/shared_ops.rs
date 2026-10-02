@@ -442,7 +442,9 @@ impl Engine {
         {
             // Under the mail tokens' lock: a refresh running meanwhile could replace the refresh token.
             let mut mail_tokens = self.inner.tokens.lock().await;
-            self.inner.secrets.set(&holder_id, &Secret::OAuth { refresh_token })?;
+            // The new sign-in's app from now on: a company account moves to the business app here.
+            // Only now, after it worked: a refused or cancelled sign-in leaves the old one as it was.
+            self.inner.secrets.set(&holder_id, &Secret::OAuth { refresh_token, microsoft_app: tokens.app })?;
             mail_tokens.insert(holder_id.clone(), (tokens.access_token.clone(), Instant::now() + tokens.expires_in));
         }
         if provider == OAuthProvider::Microsoft {
@@ -511,7 +513,7 @@ mod tests {
     /// A Microsoft account with a token that stays valid for the test, so nothing goes to Microsoft.
     async fn signed_in(engine: &Engine, secrets: &crate::secrets::MemorySecrets, id: &str, email: &str) {
         engine.inner.store.insert_account(&microsoft(id, email)).unwrap();
-        secrets.set(id, &Secret::OAuth { refresh_token: format!("refresh-{id}") }).unwrap();
+        secrets.set(id, &Secret::oauth(format!("refresh-{id}"), None)).unwrap();
         engine
             .inner
             .tokens
@@ -690,7 +692,7 @@ mod tests {
         signed_in(&engine, &secrets, "alex", "alex@contoso.example").await;
         // Added by hand as a mailbox of its own, with the sign-in of Alex.
         engine.inner.store.insert_account(&microsoft("team", "team@contoso.example")).unwrap();
-        secrets.set("team", &Secret::OAuth { refresh_token: "refresh-team".into() }).unwrap();
+        secrets.set("team", &Secret::oauth("refresh-team", None)).unwrap();
         assert_eq!(engine.list_accounts().unwrap()[1].parent_id, None);
 
         let claims = r#"{"upn":"alex@contoso.example","tid":"t"}"#;
@@ -720,7 +722,7 @@ mod tests {
         assert_eq!(accounts.len(), 2);
         assert!(accounts.iter().all(|a| a.parent_id.is_none()));
         assert!(
-            matches!(secrets.get(&team).unwrap(), Secret::OAuth { refresh_token } if refresh_token == "refresh-alex")
+            matches!(secrets.get(&team).unwrap(), Secret::OAuth { refresh_token, .. } if refresh_token == "refresh-alex")
         );
         assert!(secrets.get(&info).is_ok());
 

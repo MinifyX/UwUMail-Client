@@ -128,10 +128,12 @@ impl Inner {
         if let Some(token) = cached().await {
             return Ok(token);
         }
-        let Secret::OAuth { refresh_token } = self.secrets.get(&holder)? else {
+        let Secret::OAuth { refresh_token, microsoft_app } = self.secrets.get(&holder)? else {
             return Err(Error::sign_in_again("Sign in again to see calendar and contacts."));
         };
-        let endpoint = self.cloud.endpoints.lock().unwrap().token_endpoint(provider)?;
+        // Redeemed only by the app it was issued to; a shared mailbox's is its account's.
+        let app = microsoft_app.unwrap_or_default();
+        let endpoint = self.cloud.endpoints.lock().unwrap().token_endpoint(provider, app)?;
         let tokens = match kind {
             TokenKind::Graph => {
                 let personal = self.microsoft_personal(&holder);
@@ -151,7 +153,7 @@ impl Inner {
         if let Some(rotated) = &tokens.refresh_token
             && *rotated != refresh_token
         {
-            self.secrets.set(&holder, &Secret::OAuth { refresh_token: rotated.clone() })?;
+            self.secrets.set(&holder, &Secret::OAuth { refresh_token: rotated.clone(), microsoft_app })?;
         }
         let cached =
             CachedToken { token: tokens.access_token, until: Instant::now() + tokens.expires_in, scope: tokens.scope };
@@ -1115,6 +1117,7 @@ impl Engine {
             google_calendar: server.url("/gcal/"),
             google_people: server.url("/people/"),
             microsoft_token: Some(token.clone()),
+            microsoft_business_token: Some(token.clone()),
             google_token: Some(token),
         });
         server

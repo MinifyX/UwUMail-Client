@@ -11,7 +11,8 @@ in from environment variables:
 
 | Variable | Provider |
 | --- | --- |
-| `UWUMAIL_MICROSOFT_CLIENT_ID` | Microsoft (Outlook.com, Hotmail, Microsoft 365) |
+| `UWUMAIL_MICROSOFT_CLIENT_ID` | Microsoft, app "UwUMail-Client": personal accounts (Outlook.com, Hotmail, Live), and everything when the business id is missing |
+| `UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID` | Microsoft, app "UwUMail-Client Business": Microsoft 365 company accounts (optional) |
 | `UWUMAIL_GOOGLE_CLIENT_ID` | Google |
 | `UWUMAIL_GOOGLE_CLIENT_SECRET` | Google (not confidential for desktop apps) |
 
@@ -21,15 +22,29 @@ repository secrets with the same names.
 
 ## Microsoft
 
-The official builds use their own Entra app, **UwUMail-Client**; its client id
-is the repository secret `UWUMAIL_MICROSOFT_CLIENT_ID`, which the desktop,
-Android, iOS and release workflows pass to the build. To register your own:
+The official builds use **two** Entra app registrations, because Entra won't let
+one registration do both jobs: an app open to personal Microsoft accounts can't
+list the Graph and Exchange Web Services permissions (Entra refuses to save
+`Calendars.ReadWrite`, `Calendars.ReadWrite.Shared`, `Contacts.ReadWrite`,
+`Contacts.ReadWrite.Shared`, `User.Read` and `EWS.AccessAsUser.All` there: "One or
+more of the following permission(s) are currently not supported"). Without them
+listed, "Grant admin consent" only covers mail, and a company can't allow
+calendars, contacts and shared mailboxes for everyone in one go.
+
+| App | Client id (repository secret) | Who signs in with it |
+| --- | --- | --- |
+| **UwUMail-Client** | `UWUMAIL_MICROSOFT_CLIENT_ID` | personal accounts: outlook.com, hotmail.\*, live.\*, msn.com, and personal Microsoft accounts with their own domain |
+| **UwUMail-Client Business** | `UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID` | Microsoft 365 company accounts (every other address) |
+
+The desktop, Android, iOS, CI and release workflows pass both to the build.
+
+### (a) UwUMail-Client (personal and company accounts)
 
 1. [Microsoft Entra admin center](https://entra.microsoft.com) → App
    registrations → New registration.
-2. Name it (the official one is `UwUMail-Client`), supported account types
-   **"Accounts in any organizational directory and personal Microsoft
-   accounts"**, so Outlook.com and Hotmail work next to Microsoft 365.
+2. Name it `UwUMail-Client`, supported account types **"Accounts in any
+   organizational directory and personal Microsoft accounts"**
+   (`AzureADandPersonalMicrosoftAccount`).
 3. Authentication → Add a platform → **"Mobile and desktop applications"**,
    redirect URIs:
    - `http://localhost` — desktop. Any port on localhost is allowed for this
@@ -37,40 +52,85 @@ Android, iOS and release workflows pass to the build. To register your own:
    - `app.uwumail://oauth` — Android and iOS, where the browser comes back to
      the app through this link (see [Phones](#phones)).
 4. Authentication → Advanced settings → **Allow public client flows: Yes**.
-5. API permissions → the list already holds Microsoft Graph `User.Read`.
-   Add the rest in two rounds:
-   1. **Add a permission → Microsoft APIs → Microsoft Graph → Delegated
-      permissions**. Type each name into the search box and tick it:
-      `IMAP.AccessAsUser.All`, `SMTP.Send`, `offline_access`,
-      `Calendars.ReadWrite`, `Calendars.ReadWrite.Shared`, `Contacts.ReadWrite`,
-      `Contacts.ReadWrite.Shared` (and `User.Read`, if it isn't there yet).
-      Click **Add permissions**.
-   2. **Add a permission → APIs my organization uses** → search
-      **Office 365 Exchange Online** → **Delegated permissions** → open
-      **EWS** → tick `EWS.AccessAsUser.All` → **Add permissions**.
-
-   The list should now show nine delegated permissions: eight under
-   Microsoft Graph, `EWS.AccessAsUser.All` under Office 365 Exchange Online.
-   (Older guides pick IMAP and SMTP under "Office 365 Exchange Online"; the
-   Graph entries are the same grants.) The app asks for the mail scopes as
-   `https://outlook.office.com/IMAP.AccessAsUser.All` and
-   `https://outlook.office.com/SMTP.Send`, which is how IMAP and SMTP want the
-   token, and for the calendar and contact scopes as
-   `https://graph.microsoft.com/Calendars.ReadWrite` and so on; that is
-   expected. "Grant admin consent for …" on this page only covers your own
-   tenant; everyone else consents at sign-in (see below).
-
-   Personal Microsoft accounts (outlook.com, hotmail.*, live.*, msn.com) are
-   asked for less: mail, `offline_access`, `Calendars.ReadWrite`,
-   `Contacts.ReadWrite` and `User.Read`, without the two `.Shared`
-   permissions and without `EWS.AccessAsUser.All`, which they have no use for
-   (no shared mailboxes) and which could fail their sign-in. Company accounts
-   are asked for all nine.
+5. API permissions: only Microsoft Graph `IMAP.AccessAsUser.All`, `SMTP.Send`
+   and `offline_access` (a new registration may start with `User.Read`; keep or
+   remove it). Calendars, contacts and EWS are **not** added — Entra won't save
+   them here. UwUMail asks for them by name at sign-in (dynamic consent) and the
+   consent screen shows them there: personal accounts get mail, `offline_access`,
+   `Calendars.ReadWrite`, `Contacts.ReadWrite` and `User.Read` — no `.Shared` and
+   no EWS, which they have no use for (no shared mailboxes) and which could fail
+   their sign-in.
 6. Copy the **Application (client) ID** into `UWUMAIL_MICROSOFT_CLIENT_ID`
    (repository secret for CI, environment variable for a local build).
 
-No client secret is needed; the app is a public client. The client id isn't
-secret either, it ends up in every build.
+### (b) UwUMail-Client Business (company accounts only)
+
+1. App registrations → New registration, name `UwUMail-Client Business`,
+   supported account types **"Accounts in any organizational directory (Any
+   Microsoft Entra ID tenant - Multitenant)"** (`AzureADMultipleOrgs`).
+2. Authentication → "Mobile and desktop applications", the same redirect URIs:
+   `http://localhost` and `app.uwumail://oauth`.
+3. Authentication → Advanced settings → **Allow public client flows: Yes**.
+4. API permissions → Add a permission, all **delegated**:
+   - **Microsoft Graph**: `IMAP.AccessAsUser.All`, `SMTP.Send`, `offline_access`,
+     `User.Read`, `Calendars.ReadWrite`, `Calendars.ReadWrite.Shared`,
+     `Contacts.ReadWrite`, `Contacts.ReadWrite.Shared`.
+   - **Office 365 Exchange Online** (APIs my organization uses → "Office 365
+     Exchange Online"): `EWS.AccessAsUser.All`.
+
+   Here Entra saves them all, so an administrator's consent (the API
+   permissions page in their own tenant, or the page UwUMail offers, see
+   [below](#who-can-sign-in-and-who-needs-their-it-first)) covers mail,
+   calendars, contacts and shared mailboxes for the whole company at once.
+5. Copy the **Application (client) ID** into
+   `UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID`.
+
+What a company sign-in asks for: `offline_access`,
+`https://outlook.office.com/IMAP.AccessAsUser.All`, `.../SMTP.Send`,
+`.../EWS.AccessAsUser.All`, and `https://graph.microsoft.com/Calendars.ReadWrite`,
+`Calendars.ReadWrite.Shared`, `Contacts.ReadWrite`, `Contacts.ReadWrite.Shared`,
+`User.Read`. It goes to the `organizations` endpoint
+(`login.microsoftonline.com/organizations/oauth2/v2.0/...`).
+
+No client secret is needed for either; both are public clients. The client ids
+aren't secret either, they end up in every build.
+
+### Which account uses which app
+
+- **Microsoft's own consumer domains** (outlook.com, hotmail.\*, live.\*, msn.com …)
+  always sign in with UwUMail-Client.
+- **Every other address** signs in with UwUMail-Client Business. Before the
+  browser opens, UwUMail asks Entra whether the domain is a company directory at
+  all (`login.microsoftonline.com/<domain>/v2.0/.well-known/openid-configuration`,
+  `400 invalid_tenant` when not). A domain that isn't one is a personal
+  Microsoft account with its own domain, which the business app would refuse:
+  that goes to UwUMail-Client straight away. If the lookup can't be made, the
+  business app is tried.
+- **Fallback**: if Microsoft still sends the business sign-in back refused for
+  a personal account — `AADSTS500200` ("is a personal Microsoft account …"),
+  `AADSTS50020` ("from identity provider 'live.com' does not exist in tenant"),
+  `AADSTS700016` (app "not found in the directory 'Microsoft Accounts'"),
+  `AADSTS50034`/`AADSTS90072` (no such user in the directory), or
+  `unauthorized_client` "not enabled for consumers" — UwUMail starts the sign-in
+  over once with UwUMail-Client and the personal scopes. Microsoft shows most of
+  these on its own error page instead of sending them back, which is why the
+  directory lookup comes first.
+- **Builds without `UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID`** (local builds,
+  forks) use UwUMail-Client for everything, company accounts included, exactly as
+  before there were two apps.
+
+A refresh token only works with the app it was issued to. UwUMail therefore
+keeps, next to each refresh token in the keychain, which app it belongs to
+(`"microsoft_app": "business"`; secrets without the field are UwUMail-Client's),
+and every refresh — the mail token for IMAP, SMTP and Autodiscover, and the Graph
+token — goes to that app. Shared mailboxes use the sign-in of the account they
+are nested under, and with it that account's app.
+
+**Company accounts added before 0.8.0-beta.2** stay on UwUMail-Client, and their
+mail keeps working. Their calendars and contacts may say "Sign in again to see
+calendar and contacts"; the "Sign in again" button signs in with UwUMail-Client
+Business and switches the account over. The old sign-in is only replaced once the
+new one worked: a cancelled or refused one leaves it as it was.
 
 ### Microsoft 365 and Exchange Online
 
@@ -136,7 +196,7 @@ granted with `-AutoMapping $false` are invisible to every mail client and are
 added by address instead.
 
 The request needs the delegated permission **`EWS.AccessAsUser.All`** of
-**Office 365 Exchange Online** (step 5 of [Microsoft](#microsoft)); the app asks for it as
+**Office 365 Exchange Online** (step 4 of [UwUMail-Client Business](#b-uwumail-client-business-company-accounts-only)); the app asks for it as
 `https://outlook.office.com/EWS.AccessAsUser.All`, on the same resource as IMAP,
 so the IMAP token carries it. Sign-ins from before UwUMail asked for it get
 `401`/`403`: nothing is found, mail keeps working, and the account settings say
@@ -214,8 +274,12 @@ these, and is not going to: it is a hobby project, not a company.
 
 So UwUMail does the next best thing. After a refused Microsoft sign-in it offers
 the page where an administrator allows the app for their whole company,
-`login.microsoftonline.com/<domain>/adminconsent?client_id=<id>`, ready to send to
-whoever runs the tenant. One click there and everyone in that company can sign
+`login.microsoftonline.com/<domain>/v2.0/adminconsent?client_id=<id>&scope=<all of the above>&redirect_uri=http://localhost`,
+with the client id of UwUMail-Client Business (of UwUMail-Client in a build without
+it). The business app lists every permission itself, so the plain admin consent
+page would do as well; the v2 page with the scopes named works for both apps.
+ready to send to whoever runs the tenant. After "Accept" the browser lands on an empty
+`localhost` page; the consent is done by then. One click there and everyone in that company can sign
 in. Thunderbird asks its users to do the same thing, by hand, through a support
 article.
 
