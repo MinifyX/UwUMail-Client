@@ -1,11 +1,15 @@
 //! Calendars: JMAP Calendars on UwUMail servers, CalDAV for other mailboxes that sign in with a
-//! password. Online only: events are read from the server for the range on screen; only each
-//! account's list of calendars is kept in memory for a few minutes.
+//! password, Microsoft Graph and Google Calendar for mailboxes signed in there. Online only:
+//! events are read from the server for the range on screen; only each account's list of
+//! calendars is kept in memory for a few minutes.
 //!
 //! Both paths meet in the JSCalendar shape (`jscal`): a UwUMail server sends it over JMAP, and
-//! CalDAV's iCalendar is converted into it with `calcard` (`ical`).
+//! CalDAV's iCalendar is converted into it with `calcard` (`ical`), Graph's and Google's events by
+//! `graph_cal` and `google_cal`.
 
 pub mod dav;
+pub mod google_cal;
+pub mod graph_cal;
 pub mod ical;
 pub mod jmap_cal;
 pub mod jscal;
@@ -28,6 +32,12 @@ pub enum Source {
         client: Arc<dav::DavClient>,
         home: Url,
     },
+    /// Microsoft Graph; `base` is `me` or `users/<mailbox>` (a shared mailbox), escaped.
+    Graph {
+        base: String,
+    },
+    /// Google Calendar of the signed-in person.
+    Google,
 }
 
 /// What's known about an account's calendars.

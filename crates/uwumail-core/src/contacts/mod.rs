@@ -1,5 +1,6 @@
 //! Contacts: JMAP Contacts (RFC 9610) on UwUMail servers, CardDAV (RFC 6352) for other
-//! mailboxes that sign in with a password. Online only: each account's address books and cards
+//! mailboxes that sign in with a password, Microsoft Graph and Google People for mailboxes signed
+//! in there. Online only: each account's address books and cards
 //! are kept in memory for a few minutes and read from the server again after that.
 //!
 //! Both paths meet in the JSContact shape (RFC 9553): a UwUMail server sends it over JMAP, and
@@ -7,6 +8,7 @@
 //! JSContact with ids of its own, the same shape the webmail reads.
 
 pub mod carddav;
+pub mod cloud_cards;
 pub mod jmap_contacts;
 pub mod vcard;
 
@@ -31,6 +33,12 @@ pub enum Source {
         client: Arc<DavClient>,
         home: Url,
     },
+    /// Microsoft Graph; `base` is `me` or `users/<mailbox>` (a shared mailbox), escaped.
+    Graph {
+        base: String,
+    },
+    /// Google People of the signed-in person.
+    Google,
 }
 
 /// What's known about an account's contacts.

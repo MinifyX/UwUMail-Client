@@ -20,6 +20,10 @@ pub enum ErrorCode {
     /// This build carries no client id for the provider, so signing in with it
     /// cannot start. A packaging matter, not something a user can fix.
     OauthNotConfigured,
+    /// The mailbox's sign-in doesn't cover this (e.g. calendars and contacts of a Microsoft or
+    /// Google mailbox signed in before UwUMail asked for them), or it ran out. Signing in again
+    /// fixes it; mail keeps working meanwhile.
+    SignInAgain,
 }
 
 /// Error type crossing the boundary to the UI. The message is shown to users,
@@ -130,6 +134,10 @@ impl Error {
 
     pub fn oauth_not_configured(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::OauthNotConfigured, message)
+    }
+
+    pub fn sign_in_again(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::SignInAgain, message)
     }
 
     pub fn internal(message: impl Into<String>) -> Self {
