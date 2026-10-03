@@ -312,6 +312,62 @@ const SHOT_SUBJECT_CHARS: usize = 120;
 const SHOT_SNIPPET_CHARS: usize = 200;
 
 /// One space between words, at most `max` characters (with "…" when cut).
+/// A text for a correction example with what could be a code, a number of an account or a link
+/// taken out: runs of four digits or more (spaces and hyphens inside a run count with it) become
+/// `#`, words mixing letters and digits keep only their shape, and web addresses become `[link]`.
+/// The same as UwUMail Server's `masked` (LABELS22-L3, R2 I-3; C3-6 here).
+fn masked(text: &str) -> String {
+    let words: Vec<String> = text
+        .split_whitespace()
+        .map(|word| {
+            let lower = word.to_lowercase();
+            if lower.contains("://") || lower.starts_with("www.") {
+                "[link]".to_owned()
+            } else if mixed_code(word) {
+                word.chars().map(|c| if c.is_alphanumeric() { '#' } else { c }).collect()
+            } else {
+                word.to_owned()
+            }
+        })
+        .collect();
+    let text = words.join(" ");
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    while at < chars.len() {
+        if !chars[at].is_ascii_digit() {
+            out.push(chars[at]);
+            at += 1;
+            continue;
+        }
+        // A run: digits, with single spaces or hyphens between them.
+        let mut end = at;
+        let mut digits = 0;
+        while end < chars.len() {
+            if chars[end].is_ascii_digit() {
+                digits += 1;
+                end += 1;
+            } else if matches!(chars[end], ' ' | '-') && chars.get(end + 1).is_some_and(char::is_ascii_digit) {
+                end += 1;
+            } else {
+                break;
+            }
+        }
+        for c in &chars[at..end] {
+            out.push(if digits >= 4 && c.is_ascii_digit() { '#' } else { *c });
+        }
+        at = end;
+    }
+    out
+}
+
+/// A word of four letters and digits or more that has both, like a code (`AB7-K2X`, `X9F2Q`),
+/// not a short name like `MP3` or `A4`.
+fn mixed_code(word: &str) -> bool {
+    let alphanumeric = word.chars().filter(|c| c.is_alphanumeric()).count();
+    alphanumeric >= 4 && word.chars().any(|c| c.is_ascii_digit()) && word.chars().any(char::is_alphabetic)
+}
+
 fn shot_cut(text: &str, max: usize) -> String {
     let text: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
     match text.char_indices().nth(max) {
@@ -707,8 +763,9 @@ impl Store {
     }
 
     /// Keeps a hand-labeling as a correction for the model: the sender's domain (never the
-    /// address), the subject and the start of the text, cut short. The newest
-    /// [`MAX_SHOTS_POSITIVE`] put on and [`MAX_SHOTS_NEGATIVE`] taken off stay per label.
+    /// address), the subject and the start of the text, codes and links masked ([`masked`]), cut
+    /// short; a mail with a one-time code keeps none. The newest [`MAX_SHOTS_POSITIVE`] put on and
+    /// [`MAX_SHOTS_NEGATIVE`] taken off stay per label.
     #[allow(clippy::too_many_arguments)]
     pub fn keep_label_shot(
         &self,
@@ -720,6 +777,9 @@ impl Store {
         snippet: &str,
         now: i64,
     ) -> Result<()> {
+        if uwumail_labels::has_one_time_code(&format!("{subject}\n{snippet}")) {
+            return Ok(());
+        }
         let conn = self.conn();
         conn.execute(
             "INSERT INTO label_shots (label_id, message_id, positive, sender_domain, subject, snippet, created_at)
@@ -730,8 +790,8 @@ impl Store {
                 message_id,
                 positive,
                 shot_cut(sender_domain, 100),
-                shot_cut(subject, SHOT_SUBJECT_CHARS),
-                shot_cut(snippet, SHOT_SNIPPET_CHARS),
+                shot_cut(&masked(subject), SHOT_SUBJECT_CHARS),
+                shot_cut(&masked(snippet), SHOT_SNIPPET_CHARS),
                 now
             ],
         )?;
@@ -742,6 +802,12 @@ impl Store {
                  ORDER BY created_at DESC, rowid DESC LIMIT ?3)",
             params![label_id, positive, keep],
         )?;
+        Ok(())
+    }
+
+    /// Forgets every correction: AI labels were switched off (C3-6).
+    pub fn forget_label_shots(&self) -> Result<()> {
+        self.conn().execute("DELETE FROM label_shots", [])?;
         Ok(())
     }
 
@@ -1323,6 +1389,31 @@ mod tests {
         assert_eq!(count("leni@example.com"), Some(1), "put on by hand again, it counts from one");
         store.delete_assist_label("g1").unwrap();
         assert!(store.label_shots().unwrap().iter().all(|s| s.label_id != "g1"));
+    }
+
+    /// C3-6: codes, account numbers and links never go into a correction; a mail with a one-time
+    /// code keeps none at all.
+    #[test]
+    fn corrections_mask_codes_and_links() {
+        let (store, _) = store();
+        store
+            .keep_label_shot(
+                "g1",
+                "m1",
+                true,
+                "bank.example",
+                "Konto 1234 5678 9012, Gutschein AB7-K2X",
+                "Zurücksetzen: https://bank.example/reset?t=abc oder www.bank.example, Bestellung 42",
+                1,
+            )
+            .unwrap();
+        let shot = &store.label_shots().unwrap()[0];
+        assert_eq!(shot.subject, "Konto #### #### ####, Gutschein ###-###");
+        assert_eq!(shot.snippet, "Zurücksetzen: [link] oder [link] Bestellung 42");
+        store.keep_label_shot("g1", "m2", true, "bank.example", "Dein Code", "Dein Code: 482913", 2).unwrap();
+        assert_eq!(store.label_shots().unwrap().len(), 1, "a one-time code mail keeps no example");
+        store.forget_label_shots().unwrap();
+        assert!(store.label_shots().unwrap().is_empty());
     }
 
     #[test]

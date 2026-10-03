@@ -11,6 +11,13 @@ pub struct AuthenticationSignals {
     pub dkim: Option<String>,
     pub dmarc: Option<String>,
     pub from_domain: Option<String>,
+    /// The domains whose DKIM signatures passed (`header.d`, or the domain of `header.i`), to tell
+    /// whether a pass belongs to the From domain (R2-M1 of the server, C3-1 here).
+    #[serde(skip)]
+    pub dkim_pass_domains: Vec<String>,
+    /// The envelope sender's domain SPF passed for (`smtp.mailfrom`).
+    #[serde(skip)]
+    pub spf_pass_domain: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -38,7 +45,11 @@ pub struct SpamSignals {
 }
 
 /// SPF, DKIM and DMARC from the receiving server's `Authentication-Results` (see
-/// [`receiving_results`] for which one counts). The headers are only as trustworthy as that server.
+/// [`receiving_results`] for which one counts), read the way RFC 8601 reads it
+/// ([`auth_results_parts`]), with the domains DKIM and SPF passed for, so that
+/// [`super::spam::authentic`] can tell whether a pass belongs to the From domain (C3-1, C3-2; the
+/// server's R2-M1). A DMARC result the server names for another From domain is left out. The
+/// headers are only as trustworthy as that server.
 pub fn authentication(headers: &[(String, String)], from_email: &str) -> AuthenticationSignals {
     let from_domain = from_email
         .rsplit_once('@')
@@ -46,24 +57,123 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
         .filter(|domain| !domain.is_empty());
     let mut signals = AuthenticationSignals { from_domain, ..AuthenticationSignals::default() };
     let Some(value) = receiving_results(headers) else { return signals };
+    let parts = auth_results_parts(value);
     let mut dkim: Vec<String> = Vec::new();
-    for part in value.split(';').skip(1) {
-        let Some(first) = part.split_whitespace().next() else { continue };
-        let Some((method, result)) = first.split_once('=') else { continue };
+    for part in parts.iter().skip(1) {
+        let Some((method, result)) = part.first().and_then(|first| first.split_once('=')) else { continue };
         let result: String =
             result.chars().filter(|c| c.is_ascii_alphanumeric()).take(20).collect::<String>().to_ascii_lowercase();
         if result.is_empty() {
             continue;
         }
+        let property = |key: &str| {
+            part.iter().skip(1).find_map(|token| {
+                let (name, value) = token.split_once('=')?;
+                name.eq_ignore_ascii_case(key).then_some(value)
+            })
+        };
         match method.to_ascii_lowercase().as_str() {
-            "spf" if signals.spf.is_none() => signals.spf = Some(result),
-            "dmarc" if signals.dmarc.is_none() => signals.dmarc = Some(result),
-            "dkim" => dkim.push(result),
+            "spf" if signals.spf.is_none() => {
+                if result == "pass" {
+                    signals.spf_pass_domain = property("smtp.mailfrom").and_then(domain_part);
+                }
+                signals.spf = Some(result);
+            }
+            "dmarc" if signals.dmarc.is_none() => {
+                let other_from = property("header.from")
+                    .and_then(domain_part)
+                    .is_some_and(|named| signals.from_domain.as_deref().is_some_and(|from| from != named));
+                if !other_from {
+                    signals.dmarc = Some(result);
+                }
+            }
+            "dkim" => {
+                if result == "pass"
+                    && let Some(domain) = property("header.d").or_else(|| property("header.i")).and_then(domain_part)
+                {
+                    signals.dkim_pass_domains.push(domain);
+                }
+                dkim.push(result);
+            }
             _ => {}
         }
     }
     signals.dkim = if dkim.iter().any(|r| r == "pass") { Some("pass".into()) } else { dkim.into_iter().next() };
     signals
+}
+
+/// The domain of an `Authentication-Results` value: `header.d=signer.example`, the part after the
+/// last `@` of `smtp.mailfrom=user@envelope.example` or `header.i=@signer.example`.
+fn domain_part(value: &str) -> Option<String> {
+    let domain = value.rsplit('@').next().unwrap_or(value).trim().trim_end_matches('.').to_ascii_lowercase();
+    (!domain.is_empty() && domain.len() <= 253 && domain.contains('.')).then_some(domain)
+}
+
+/// An `Authentication-Results` value split into its `;` parts, each into its words, the way
+/// RFC 8601 reads it: comments in parentheses are left out, and a quoted string is one word
+/// without its quotes. A quoted envelope sender (`"a;dmarc=pass"@attacker.example`) can neither
+/// end a part nor start a result of its own (the server's R2-M1, C3-2 here).
+pub(crate) fn auth_results_parts(value: &str) -> Vec<Vec<String>> {
+    let mut parts: Vec<Vec<String>> = vec![Vec::new()];
+    let mut word = String::new();
+    let mut quoted = false;
+    let mut depth = 0usize;
+    let mut chars = value.chars();
+    let end_word = |parts: &mut Vec<Vec<String>>, word: &mut String| {
+        if !word.is_empty()
+            && let Some(part) = parts.last_mut()
+        {
+            part.push(std::mem::take(word));
+        }
+    };
+    while let Some(c) = chars.next() {
+        if quoted {
+            match c {
+                '\\' => word.extend(chars.next()),
+                '"' => quoted = false,
+                c => word.push(c),
+            }
+        } else if depth > 0 {
+            match c {
+                '\\' => {
+                    chars.next();
+                }
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
+        } else {
+            match c {
+                '"' => quoted = true,
+                '(' => {
+                    end_word(&mut parts, &mut word);
+                    depth = 1;
+                }
+                ';' => {
+                    end_word(&mut parts, &mut word);
+                    parts.push(Vec::new());
+                }
+                c if c.is_whitespace() => end_word(&mut parts, &mut word),
+                c => word.push(c),
+            }
+        }
+        if parts.len() > 64 || word.len() > 1024 {
+            break;
+        }
+    }
+    end_word(&mut parts, &mut word);
+    parts
+}
+
+/// Whether `domain` (a DKIM signer, an SPF-checked envelope domain) is the From domain, a parent of
+/// it or below it: what makes a pass vouch for the From when no DMARC policy judges it. The same as
+/// UwUMail Server's `uwumail_smtp::related_domains` (R2-M1).
+pub fn related_domains(from_domain: &str, domain: &str) -> bool {
+    let from = from_domain.trim().trim_end_matches('.').to_ascii_lowercase();
+    let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+    !from.is_empty()
+        && domain.contains('.')
+        && (from == domain || from.ends_with(&format!(".{domain}")) || domain.ends_with(&format!(".{from}")))
 }
 
 /// Where the receiving server's own header fields end: the first `Received:` (top first) that
@@ -87,25 +197,51 @@ fn intake(headers: &[(String, String)]) -> Option<(usize, Option<String>)> {
 }
 
 /// A `Received:` of a hop inside the receiving server, judged only by what that server writes
-/// itself: the IP addresses in brackets of the `from` part, which must all be loopback, private or
-/// link-local; or no `from` part at all (Gmail's internal `by …` hops). The name after `from` is
-/// the HELO the connecting side chose, so "from localhost" proves nothing (C2-1).
+/// itself: the IP addresses of the `from` part, which must all be loopback, private or link-local;
+/// or no `from` part at all (Gmail's internal `by …` hops).
+///
+/// What the connecting side chose proves nothing (C2-1, C3-3): the HELO name right after `from`
+/// (Postfix, sendmail, Gmail: `from <helo> (<rdns> [<ip>])`) unless that is itself the bracketed
+/// address Exim writes there (`from [<ip>] (helo=<helo>)`), and every `helo=`/`ident=` value or
+/// word after `HELO` (Exim, qmail). Addresses count in brackets, or alone in parentheses as
+/// Microsoft and qmail write them (`(192.0.2.7)`, C3-7).
 fn local_hop(value: &str) -> bool {
     let lower = value.trim_start().to_ascii_lowercase();
     let Some(rest) = lower.strip_prefix("from") else { return true };
-    // The from part without the HELO itself (it may be an address literal the sender chose), up to
-    // where the receiving server names itself.
-    let clause = rest.split_whitespace().skip(1).take_while(|token| *token != "by").collect::<Vec<_>>().join(" ");
-    let mut literals = clause
-        .split('[')
-        .skip(1)
-        .filter_map(|part| part.split(']').next())
-        .map(|literal| literal.trim().trim_start_matches("ipv6:"))
-        .peekable();
-    if literals.peek().is_none() {
-        return false;
+    // The from part, up to where the receiving server names itself.
+    let tokens: Vec<&str> = rest.split_whitespace().take_while(|token| *token != "by").collect();
+    let mut literals: Vec<&str> = Vec::new();
+    let mut skip_next = false;
+    for (index, token) in tokens.iter().enumerate() {
+        if std::mem::take(&mut skip_next) {
+            continue;
+        }
+        let bare = token.trim_start_matches('(');
+        if index == 0 && !bare.starts_with('[') {
+            continue;
+        }
+        if bare.starts_with("helo=") || bare.starts_with("ident=") {
+            continue;
+        }
+        if bare.trim_end_matches(')') == "helo" {
+            skip_next = true;
+            continue;
+        }
+        if let Some((_, inside)) = token.split_once('[') {
+            literals.push(inside.split(']').next().unwrap_or_default());
+        } else if token.starts_with('(') && token.ends_with(')') {
+            let inside = token.trim_matches(|c| c == '(' || c == ')');
+            if inside.parse::<std::net::IpAddr>().is_ok() {
+                literals.push(inside);
+            }
+        }
     }
-    literals.all(|literal| match literal.parse::<std::net::IpAddr>() {
+    !literals.is_empty() && literals.iter().all(|literal| internal_address(literal))
+}
+
+/// A loopback, private or link-local address (`IPv6:` prefix allowed).
+fn internal_address(literal: &str) -> bool {
+    match literal.trim().trim_start_matches("ipv6:").parse::<std::net::IpAddr>() {
         Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
         Ok(std::net::IpAddr::V6(ip)) => {
             ip.is_loopback()
@@ -114,7 +250,7 @@ fn local_hop(value: &str) -> bool {
                 || ip.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback() || v4.is_private())
         }
         Err(_) => false,
-    })
+    }
 }
 
 /// The host a `Received:` names after `by`.
@@ -151,7 +287,8 @@ fn receiving_results(headers: &[(String, String)]) -> Option<&str> {
             return None;
         }
         if is_results(name) {
-            let authserv_id = value.split(';').next().and_then(|id| id.split_whitespace().next()).unwrap_or_default();
+            let parts = auth_results_parts(value);
+            let authserv_id = parts.first().and_then(|id| id.first()).map_or("", String::as_str);
             return aligned(authserv_id, &host).then_some(value.as_str());
         }
     }
@@ -159,39 +296,14 @@ fn receiving_results(headers: &[(String, String)]) -> Option<&str> {
 }
 
 /// Whether the receiving server's `Authentication-Results` vouch for the domain of the From
-/// address: DMARC passed for it, or DKIM or SPF passed for a domain aligned with it (the same
-/// domain or one within the same registrable domain). Labels without a model only give learned
+/// address, as [`super::spam::authentic`] decides it, like UwUMail Server's labels (C3-5): DMARC
+/// passed, or without a DMARC policy a DKIM or SPF (`smtp.mailfrom`) pass for the From domain, a
+/// parent or a subdomain of it; a DMARC failure never. Labels without a model only give learned
 /// senders' labels to such mail (`from_trusted` in docs/labels.md of UwUMail Server), since anyone
 /// can write a known address into `From`. No results, or none that vouch: `false`.
 pub fn from_vouched(headers: &[(String, String)], from_email: &str) -> bool {
-    let Some(from_domain) = from_email.rsplit_once('@').and_then(|(_, domain)| domain_of(domain)) else {
-        return false;
-    };
-    let Some(value) = receiving_results(headers) else { return false };
-    for part in value.split(';').skip(1) {
-        let mut tokens = part.split_whitespace().filter(|token| !token.starts_with('('));
-        let Some((method, result)) = tokens.next().and_then(|first| first.split_once('=')) else { continue };
-        if !result.eq_ignore_ascii_case("pass") {
-            continue;
-        }
-        let property = |names: &[&str]| {
-            part.split_whitespace().find_map(|token| {
-                let (name, value) = token.split_once('=')?;
-                names.iter().any(|n| n.eq_ignore_ascii_case(name)).then(|| value.trim_matches(|c| c == '"' || c == ';'))
-            })
-        };
-        let vouched = match method.to_ascii_lowercase().as_str() {
-            // DMARC is about the From domain itself; when the server names it, it must be this one.
-            "dmarc" => property(&["header.from"]).is_none_or(|domain| aligned(domain, &from_domain)),
-            "dkim" => property(&["header.d", "header.i"]).is_some_and(|domain| aligned(domain, &from_domain)),
-            "spf" => property(&["smtp.mailfrom", "smtp.helo"]).is_some_and(|domain| aligned(domain, &from_domain)),
-            _ => false,
-        };
-        if vouched {
-            return true;
-        }
-    }
-    false
+    let auth = authentication(headers, from_email);
+    auth.from_domain.is_some() && super::spam::authentic(&auth)
 }
 
 /// The lower-case domain of an address, or the name itself when it has no `@`.
@@ -425,12 +537,105 @@ mod tests {
         assert!(local_hop("by 2002:a05:6000:1::1 with SMTP id y"));
         assert!(!local_hop("from localhost (unknown [192.0.2.7]) by mx.example.org"));
         assert!(!local_hop("from localhost by mx.example.org"));
-        assert!(!local_hop("from [127.0.0.1] by mx.example.org"));
+        // Exim writes the connecting address first, and leaves the HELO out when it is the same.
+        assert!(local_hop("from [127.0.0.1] by mx.example.org"));
         assert!(local_hop("from localhost\r\n\t(localhost [127.0.0.1])\r\n\tby mail.example.org"));
         assert!(!local_hop("from x ([127.0.0.1] [203.0.113.9]) by y"));
         assert!(!local_hop("from [127.0.0.1] (unknown [2001:db8::7]) by y"));
         // A bracket in the server's own part after "by" doesn't count for the from part.
         assert!(!local_hop("from evil.example (evil.example [192.0.2.7]) by mx [127.0.0.1]"));
+    }
+
+    /// C3-3: Exim writes the address itself and the HELO as `helo=`; only the address counts.
+    #[test]
+    fn an_exim_helo_does_not_make_a_hop_internal() {
+        let headers = [
+            header("Received", "from [192.0.2.7] (helo=[127.0.0.1])\r\n\tby mx.example.org with esmtp (Exim 4.97)"),
+            header("X-Spam-Status", "No, score=-50.0 required=5.0 tests=BAYES_HAM"),
+            header("Authentication-Results", "mx.example.org; spf=pass smtp.mailfrom=bank.example; dmarc=pass"),
+            header("Received", "from mail.bank.example (mail.bank.example [198.51.100.1]) by relay.bank.example"),
+        ];
+        assert_eq!(spam_status(&headers), (None, None, vec![]));
+        assert_eq!(authentication(&headers, "service@bank.example").dmarc, None);
+        assert!(!from_vouched(&headers, "service@bank.example"));
+        assert!(receiving_headers(&headers).is_empty());
+
+        assert!(!local_hop("from [192.0.2.7] (helo=[127.0.0.1]) by mx.example.org"));
+        assert!(!local_hop("from [192.0.2.7] (helo=localhost) by mx.example.org"));
+        assert!(!local_hop("from evil.example ([192.0.2.7] helo=[10.0.0.1]) by mx.example.org"));
+        assert!(!local_hop("from evil.example ([192.0.2.7]:4711 helo=[10.0.0.1] ident=[127.0.0.1]) by mx"));
+        assert!(!local_hop("from unknown (HELO [127.0.0.1]) (192.0.2.7) by mx.example.org"));
+        // Exim's and qmail's own internal hops.
+        assert!(local_hop("from localhost ([127.0.0.1] helo=mail.example.org) by mail.example.org"));
+        assert!(local_hop("from [127.0.0.1] (helo=localhost) by mail.example.org with esmtp"));
+        assert!(local_hop("from unknown (HELO mail.example.org) (127.0.0.1) by mail.example.org"));
+    }
+
+    /// C3-7: Microsoft and qmail write the address alone in parentheses.
+    #[test]
+    fn addresses_in_parentheses_count() {
+        assert!(local_hop(
+            "from AM0PR01MB1234.eurprd01.prod.outlook.com (10.167.16.153) by AM0PR01CA0001.outlook.office365.com (2603:10a6:208::14) with Microsoft SMTP Server"
+        ));
+        assert!(!local_hop("from mail.sender.example (198.51.100.1) by AM0PR01CA0001.outlook.office365.com"));
+        // Only a whole token is an address: a name or a mixed pair is not.
+        assert!(!local_hop("from x (10.0.0.1 is me) by y"));
+        assert!(!local_hop("from x (10.0.0.1) (192.0.2.7) by y"));
+    }
+
+    /// C3-1/C3-2 (the server's R2-M1): a From counts as authenticated only when a pass belongs to
+    /// its domain, never against a DMARC failure, and the results are read as RFC 8601 reads them.
+    #[test]
+    fn authentication_needs_a_pass_aligned_with_the_from_domain() {
+        let auth_for = |from: &str, results: &str| {
+            let headers = vec![
+                header("Authentication-Results", &format!("mx.example.org;\r\n\t{results}")),
+                header("Received", "from a.example (a.example [192.0.2.1]) by mx.example.org"),
+            ];
+            authentication(&headers, from)
+        };
+        let authentic = |from: &str, results: &str| crate::assist::spam::authentic(&auth_for(from, results));
+        // The attacker's own domain signs and passes SPF; the From domain publishes no DMARC policy.
+        let unaligned = "dkim=pass header.d=attacker.example header.s=s1 header.b=abc; \
+             spf=pass (mx.example.org: domain of x@attacker.example designates 192.0.2.1 as permitted sender) \
+             smtp.mailfrom=x@attacker.example; dmarc=none header.from=smallbank.example";
+        assert!(!authentic("service@smallbank.example", unaligned));
+        let parsed = auth_for("service@smallbank.example", unaligned);
+        assert_eq!(parsed.dkim_pass_domains, ["attacker.example"]);
+        assert_eq!(parsed.spf_pass_domain.as_deref(), Some("attacker.example"));
+        // The same passes for the From domain, a parent or a subdomain of it, do vouch.
+        assert!(authentic("service@smallbank.example", "dkim=pass header.d=smallbank.example; dmarc=none"));
+        assert!(authentic("service@mail.smallbank.example", "dkim=pass header.i=@smallbank.example; dmarc=none"));
+        assert!(authentic(
+            "service@smallbank.example",
+            "spf=pass smtp.mailfrom=bounce@news.smallbank.example; dkim=none; dmarc=none"
+        ));
+        // HELO checks vouch for nothing.
+        assert!(!authentic("service@smallbank.example", "spf=pass smtp.helo=smallbank.example"));
+        // DMARC failing (a spoofed address at a p=none domain) is never outweighed.
+        assert!(!authentic(
+            "friend@contact.example",
+            "dkim=pass header.d=contact.example; spf=pass smtp.mailfrom=x@contact.example; dmarc=fail"
+        ));
+        assert!(authentic("service@bank.example", "dmarc=pass header.from=bank.example"));
+        // A quoted envelope sender can neither end a part nor start a result of its own.
+        let injected =
+            r#"spf=pass smtp.mailfrom="a;dmarc=pass header.d=smallbank.example"@attacker.example; dmarc=none"#;
+        let parsed = auth_for("service@smallbank.example", injected);
+        assert_eq!(parsed.dmarc.as_deref(), Some("none"));
+        assert_eq!(parsed.spf_pass_domain.as_deref(), Some("attacker.example"));
+        assert!(!authentic("service@smallbank.example", injected));
+        assert!(!from_vouched(
+            &[
+                header("Authentication-Results", &format!("mx.example.org; {injected}")),
+                header("Received", "from a.example (a.example [192.0.2.1]) by mx.example.org"),
+            ],
+            "service@smallbank.example"
+        ));
+        // Nor can a comment.
+        let commented = "spf=pass (dmarc=pass; smtp.mailfrom=x@smallbank.example) smtp.mailfrom=x@attacker.example";
+        let parsed = auth_for("service@smallbank.example", commented);
+        assert_eq!((parsed.dmarc, parsed.spf_pass_domain.as_deref()), (None, Some("attacker.example")));
     }
 
     /// C2-2: right below the intake line only the hosts known to put theirs there count.
@@ -486,6 +691,7 @@ mod tests {
                 dkim: Some("pass".into()),
                 dmarc: Some("pass".into()),
                 from_domain: Some("billing.example".into()),
+                ..AuthenticationSignals::default()
             },
             spam_score: Some(-5.5),
             spam_threshold: Some(5.0),

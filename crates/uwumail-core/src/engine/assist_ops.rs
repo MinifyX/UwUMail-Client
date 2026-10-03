@@ -1593,7 +1593,9 @@ impl Engine {
             .take(uwumail_labels::MAX_RECIPIENTS)
             .map(|email| email.chars().take(uwumail_labels::MAX_FIELD_CHARS).collect::<String>().to_lowercase())
             .collect();
-        if !mail.from.is_empty() {
+        // Known only when authentication backs the From address, as on UwUMail Server (C3-5):
+        // anyone can write a contact's address into From.
+        if mail.from_trusted && !mail.from.is_empty() {
             let (_, _, written_to, _) = self.inner.store.sender_history(&mail.from, i64::MAX)?;
             mail.known_sender = written_to > 0;
         }
@@ -1619,7 +1621,7 @@ impl Engine {
             return Ok(Vec::new());
         }
         let mut mail = self.label_mail(message)?;
-        if ai.is_some() && !mail.from.is_empty() && !mail.known_sender {
+        if ai.is_some() && mail.from_trusted && !mail.from.is_empty() && !mail.known_sender {
             let people = run.people(self).await;
             mail.known_sender = people.iter().any(|(_, email)| *email == mail.from);
         }

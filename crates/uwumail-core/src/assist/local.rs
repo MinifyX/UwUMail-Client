@@ -526,6 +526,10 @@ impl Device<'_> {
             }
         }
         for (key, value) in changes {
+            // Corrections only serve AI labels: switched off, they go (C3-6).
+            if key == "autoLabels" && value.as_deref() == Some("false") {
+                self.store.forget_label_shots()?;
+            }
             self.store.set_assist_setting(&key, value.as_deref())?;
         }
         Ok(())
@@ -1026,6 +1030,13 @@ mod tests {
         assert!(device.update_settings(&json!({ "default": { "providerId": "nope" } })).is_err());
         device.update_settings(&json!({ "autoLabels": true })).unwrap();
         assert!(device.auto_labels_on().unwrap());
+        // Switched off, AI labels take the person's corrections along (C3-6).
+        device.store.keep_label_shot("g1", "m1", true, "shop.example", "Angebot", "Rabatt", 1).unwrap();
+        device.update_settings(&json!({ "autoLabels": true })).unwrap();
+        assert_eq!(device.store.label_shots().unwrap().len(), 1);
+        device.update_settings(&json!({ "autoLabels": false })).unwrap();
+        assert!(device.store.label_shots().unwrap().is_empty());
+        device.update_settings(&json!({ "autoLabels": true })).unwrap();
 
         // Deleting a provider drops the choices that name it.
         device.delete_provider(local_id).unwrap();
