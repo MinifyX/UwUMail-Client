@@ -58,8 +58,15 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   any device.
 - **Undo send** for 0–30 seconds (10 by default): the mail waits in a local
   outbox and goes out even after UwUMail was closed.
-- **Signatures** per sender address, formatted and with pictures, several per
-  address, with defaults for new mail and replies.
+- **Signatures** per domain: pick a domain, write one signature for all your
+  addresses there (or for all domains), with `{name}`, `{adresse}` and
+  `{domain}` filled in per address. On a UwUMail server (0.22 and later) it
+  lives on the server, shared with the webmail and the portal, single
+  addresses can differ, and the composer says when the server adds your
+  organisation's mandatory footer. For other mailboxes the domain signature
+  stays on the device. Signatures of single addresses work as before:
+  formatted, with pictures, several per address, with defaults for new mail
+  and replies, and they go first on this device.
 - **Addresses** suggested from the address books and the mail history.
 
 ## Calendar, contacts and birthdays
@@ -83,7 +90,8 @@ Dates in a mail's text are underlined, a bar above the mail lists what it
 found, and *Add to calendar* opens the event already filled in. Text on
 pictures such as posters counts too: mailboxes on a UwUMail server have the
 server read it, other mailboxes the system's text recognition on Mac, iPhone,
-Windows and Android (not on Linux). This is done by rules on the device; the AI
+Windows and Android (not on Linux). Time ranges such as "Samstag 03.10.26,
+zwischen 10:00 und 12:00" keep their start and end. This is done by rules on the device; the AI
 assistant only reads a mail for dates when you click *Find appointment* or
 *Check with AI*, or when you switched that on for every mail.
 

@@ -1,6 +1,8 @@
 // Shapes shared by the UI and the mail engine. The Rust side serializes the
 // same structures with serde (camelCase), see crates/uwumail-core/src/model.rs.
 
+import type { DomainSignatureOverview } from "@/lib/domainSignatures";
+
 export type AccountColor = "pink" | "violet" | "sky" | "mint" | "amber" | "coral";
 
 export const ACCOUNT_COLORS: readonly AccountColor[] = ["pink", "violet", "sky", "mint", "amber", "coral"];
@@ -67,6 +69,12 @@ export interface Signature {
   html: string;
   forNew: boolean;
   forReplies: boolean;
+}
+
+/** One account's signatures per domain on its UwUMail server (lib/domainSignatures). */
+export interface AccountDomainSignatures {
+  accountId: string;
+  overview: DomainSignatureOverview;
 }
 
 export type FolderRole = "inbox" | "sent" | "drafts" | "archive" | "trash" | "junk";

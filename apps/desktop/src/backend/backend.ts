@@ -1,4 +1,5 @@
 import type {
+  AccountDomainSignatures,
   LabelCount,
   LabelRef,
   BlockedSender,
@@ -67,6 +68,7 @@ import type {
   UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
+import type { DomainSignatureChange } from "@/lib/domainSignatures";
 import type { ImageProxy } from "@/lib/remoteImages";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 
@@ -163,6 +165,13 @@ export interface Backend {
   deleteSignature(signatureId: string): Promise<void>;
   /** Stores a signature from the settings sync as it came, whether or not its address is set up here. */
   putSyncedSignature(signature: Signature): Promise<Signature>;
+  /**
+   * Signatures per domain of every account whose UwUMail server has them
+   * (`urn:uwumail:jmap:signatures`, lib/domainSignatures); unreachable ones are left out.
+   */
+  domainSignatures(): Promise<AccountDomainSignatures[]>;
+  /** Sets or removes an account's signatures on its server, all or none; returns them after the change. */
+  saveDomainSignatures(accountId: string, change: DomainSignatureChange): Promise<AccountDomainSignatures>;
   /** Accounts whose UwUMail server keeps settings for its apps; unreachable ones are left out. */
   settingsSyncAccounts(): Promise<string[]>;
   /** The settings an account's server keeps for all devices, see lib/settingsSync. */

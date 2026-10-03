@@ -7,6 +7,8 @@ import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
 import { DemoContacts } from "./demo-contacts";
+import { DemoSignatures } from "./demo-signatures";
+import type { DomainSignatureChange } from "@/lib/domainSignatures";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMessage } from "./demo-data";
 import { DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
@@ -123,19 +125,18 @@ export class DemoBackend implements Backend {
   /** Draft key → the demo message that holds the draft, and what the composer sent. */
   private drafts = new Map<string, { messageId: string; draft: OutgoingMessage }>();
   private blocked: BlockedSender[] = [];
-  private signatures: Signature[] = [
+  /** Signatures kept on this device; the JMAP mailbox's live on its "server" (serverSignatures). */
+  private signatures: Signature[] = [];
+  private serverSignatures = new DemoSignatures([
     {
-      id: "sig-demo",
-      email: DEMO_ACCOUNTS[0]!.email,
-      name: lang() === "de" ? "Lang" : "Long",
+      // Like the server's identity signatures: the address's own one, under the address's id.
+      id: DEMO_ACCOUNTS[0]!.id,
       html:
         lang() === "de"
           ? "<p>Liebe Grüße<br><b>Mini</b> · UwUMail-Team</p>"
           : "<p>Kind regards<br><b>Mini</b> · UwUMail team</p>",
-      forNew: true,
-      forReplies: true,
     },
-  ];
+  ]);
   private identities: Identity[] = [
     {
       id: "id-studio",
@@ -242,6 +243,29 @@ export class DemoBackend implements Backend {
     if (index >= 0) this.signatures[index] = structuredClone(signature);
     else this.signatures.push(structuredClone(signature));
     return structuredClone(signature);
+  }
+
+  /** The JMAP demo mailbox plays a UwUMail server with signatures per domain. */
+  private async serverIdentities(): Promise<Identity[]> {
+    const jmap = new Set(this.accounts.filter((a) => a.protocol === "jmap").map((a) => a.id));
+    return (await this.listIdentities()).filter((identity) => jmap.has(identity.accountId));
+  }
+
+  async domainSignatures() {
+    await wait(60);
+    const identities = await this.serverIdentities();
+    const accounts = [...new Set(identities.map((identity) => identity.accountId))];
+    return accounts.map((accountId) => ({
+      accountId,
+      overview: this.serverSignatures.overview(identities.filter((identity) => identity.accountId === accountId)),
+    }));
+  }
+
+  async saveDomainSignatures(accountId: string, change: DomainSignatureChange) {
+    await wait(100);
+    const identities = (await this.serverIdentities()).filter((identity) => identity.accountId === accountId);
+    if (identities.length === 0) throw new BackendError("not_supported", "This mailbox has no signatures per domain.");
+    return { accountId, overview: this.serverSignatures.change(identities, change) };
   }
 
   /** The JMAP demo mailbox plays a UwUMail server with the settings extension, in memory. */

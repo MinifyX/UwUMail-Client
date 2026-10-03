@@ -49,6 +49,21 @@ fn put_synced_signature(engine: State<'_, Engine>, signature: Signature) -> Comm
     engine.put_synced_signature(signature)
 }
 
+/// Signatures per domain of the accounts whose UwUMail server has them; unreachable ones are left out.
+#[tauri::command]
+async fn domain_signatures(engine: State<'_, Engine>) -> CommandResult<Vec<AccountSignatures>> {
+    engine.domain_signatures().await
+}
+
+#[tauri::command]
+async fn save_domain_signatures(
+    engine: State<'_, Engine>,
+    account_id: String,
+    change: serde_json::Value,
+) -> CommandResult<AccountSignatures> {
+    engine.save_domain_signatures(&account_id, &change).await
+}
+
 #[tauri::command]
 async fn settings_sync_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<String>> {
     engine.settings_sync_accounts().await
@@ -1101,6 +1116,8 @@ pub fn run() {
             save_signature,
             delete_signature,
             put_synced_signature,
+            domain_signatures,
+            save_domain_signatures,
             settings_sync_accounts,
             load_user_settings,
             save_user_settings,

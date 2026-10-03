@@ -32,7 +32,8 @@ import { useT } from "@/i18n";
 import { formatSize } from "@/lib/format";
 import { modKey } from "@/lib/platform";
 import { foreignHtml, htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
-import { useAccounts, useIdentities, useMessageActions, useSignatures } from "@/lib/queries";
+import { useAccounts, useDomainSignatures, useIdentities, useMessageActions, useSenderSignatures } from "@/lib/queries";
+import { companyFooterForSender } from "@/lib/localSignatures";
 import { activeFirst, sendersByWorkspace } from "@/lib/workspaces";
 import { toast } from "@/state/toasts";
 import { useSettings } from "@/state/settings";
@@ -98,7 +99,8 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const draggingInside = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   // Signatures: the address's default goes in when the draft starts, or once they've loaded.
-  const { data: signatures } = useSignatures();
+  // Own device signatures, else the server's or the domain's (lib/localSignatures).
+  const signatures = useSenderSignatures();
   const signatureKind = request.mode === "new" ? "new" : "reply";
   const placement = request.mode === "new" ? "end" : "beforeQuote";
   const emailOf = (account: string, from: string) => from || accounts.find((a) => a.id === account)?.email || "";
@@ -146,6 +148,9 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   // Until someone picks a sender, a reply comes from the address it was sent to (also once the addresses load).
   const fromEmail = draft.fromEmail ?? (request.source ? replyFrom(request.source, identities ?? []) : "");
   const senderEmail = emailOf(accountId, fromEmail);
+  // The server appends the domain's mandatory company footer on sending; the composer only says so.
+  const { data: domainSignatures } = useDomainSignatures();
+  const companyFooter = companyFooterForSender(domainSignatures, accountId, senderEmail);
   useEffect(() => {
     if (signatureAdded.current || request.restore || !signatures || !identities || dirty.current) return;
     signatureAdded.current = true;
@@ -556,6 +561,12 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
               : senders.map(senderOption)}
           </select>
         </div>
+      )}
+
+      {companyFooter && (
+        <p className="border-b border-hairline px-4 py-1.5 text-[12px] text-muted" data-testid="company-footer-note">
+          {t("compose.companyFooter")}
+        </p>
       )}
 
       <div className="relative">

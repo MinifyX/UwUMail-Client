@@ -9,7 +9,7 @@ import { useT } from "@/i18n";
 import { isAndroid, PRO_QUERY, useIsPhone, useMediaQuery } from "@/lib/device";
 import { useHotkeys, type HotkeyMap } from "@/lib/hotkeys";
 import { fitPanes, usePaneWidths } from "@/lib/paneWidths";
-import { useAccounts, useBackendEvents, useIdentities, useSignatures } from "@/lib/queries";
+import { useAccounts, useBackendEvents, useDomainSignatures, useIdentities, useSignatures } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
@@ -119,6 +119,7 @@ export function MailShell() {
   // Loaded early, so a reply opens with the right sender address and signature.
   useIdentities();
   useSignatures();
+  useDomainSignatures();
   useBackendEvents();
   useWorkspaceGuard();
 

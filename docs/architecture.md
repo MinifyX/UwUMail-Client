@@ -435,7 +435,17 @@ mailboxes bring theirs from the server (`Identity/get`, checked every ten
 minutes), and aliases can be added by hand. The engine refuses a From address
 that isn't set up for that mailbox. Signatures are kept on this device per
 sender address (`signatures` table); one can be the default for new mail and
-one for replies. The composer marks the inserted block with
+one for replies. A row whose address is `@domain` is the device's signature for
+all addresses of that domain, `*` the one for every domain; these never travel
+with the settings sync (the server only takes signatures of one address).
+Mailboxes on a UwUMail server with `urn:uwumail:jmap:signatures` keep
+signatures per domain on the server instead (`SignatureSettings/get`/`set`,
+`jmap_signatures.rs`); the page checks the answer field by field
+(`backend/jmap/domainSignatures.ts`) and uses the webmail's rules
+(`lib/domainSignatures.ts`, byte-identical). What an address sends with, first
+match wins (`lib/localSignatures.ts`): its own device signatures, the server's
+effective signature for addresses the server knows, the device's domain
+signature, the device's one for every domain. The composer marks the inserted block with
 `data-uwu-signature`, so switching the sender or picking another signature
 replaces it; the marker is removed before sending.
 

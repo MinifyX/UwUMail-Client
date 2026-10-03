@@ -31,6 +31,7 @@ import {
   toLocalModelServers,
 } from "./assistConvert";
 import type {
+  AccountDomainSignatures,
   LabelCount,
   LabelRef,
   BlockedSender,
@@ -89,6 +90,9 @@ import type {
 import type { ImageProxy } from "@/lib/remoteImages";
 import { cardFromInput, patchFromInput, toContactRecord, type JmapCard } from "./contacts";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
+import type { DomainSignatureChange, SignatureText } from "@/lib/domainSignatures";
+import { foreignHtml } from "@/lib/safeHtml";
+import { overviewFrom } from "./jmap/domainSignatures";
 
 /** Where the app hands out a mail's remote pictures (`uwuimg:` in Rust), spelled for this platform. */
 let picturesBase: string | null = null;
@@ -126,6 +130,14 @@ export function engineError(error: unknown): BackendError {
   return new BackendError(error.code, error.message);
 }
 
+/** An account's signatures per domain as the engine hands them on, checked field by field. */
+function accountSignaturesFrom(raw: { accountId: string; overview: unknown }): AccountDomainSignatures {
+  const overview =
+    raw.overview && typeof raw.overview === "object" && !Array.isArray(raw.overview)
+      ? (raw.overview as Record<string, unknown>)
+      : {};
+  return { accountId: String(raw.accountId), overview: overviewFrom(overview) };
+}
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(command, args);
@@ -241,6 +253,23 @@ export class TauriBackend implements Backend {
 
   putSyncedSignature(signature: Signature) {
     return call<Signature>("put_synced_signature", { signature });
+  }
+
+  async domainSignatures() {
+    const found = await call<{ accountId: string; overview: unknown }[]>("domain_signatures");
+    return found.map(accountSignaturesFrom);
+  }
+
+  async saveDomainSignatures(accountId: string, change: DomainSignatureChange) {
+    const clean = (signature: SignatureText | null) =>
+      signature && { text: signature.text, html: signature.html.trim() ? foreignHtml(signature.html) : "" };
+    const mapped = (entries: Record<string, SignatureText | null> | undefined) =>
+      Object.fromEntries(Object.entries(entries ?? {}).map(([key, signature]) => [key, clean(signature)]));
+    const saved = await call<{ accountId: string; overview: unknown }>("save_domain_signatures", {
+      accountId,
+      change: { domains: mapped(change.domains), identities: mapped(change.identities) },
+    });
+    return accountSignaturesFrom(saved);
   }
 
   settingsSyncAccounts() {
