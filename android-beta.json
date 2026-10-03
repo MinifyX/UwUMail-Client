@@ -1,9 +1,9 @@
 {
-  "version": "0.9.0-beta.1",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.1/UwUMail-android.apk",
-  "sha256": "0d1e9fac921198598e3cffe77f4271d0ea1ea9270b9d3e04a9976ecf31a1f248",
+  "version": "0.9.0-beta.2",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-android.apk",
+  "sha256": "ba1764cadc6ab94370da41688f9468f01a97e89a482dfa11ec38159a6d871252",
   "notes": {
-    "de": "- Neu: Basis-Labels wie Rechnungen, Newsletter oder Termine, die ohne KI zuverlässig erkannt werden. Die KI wird nur noch gefragt, wenn die Regeln unsicher sind, und eine Warnung zeigt, wenn sich zwei Labels überschneiden\n- Neu: Der Spamcheck zeigt die Fakten hinter seinem Urteil und prüft auf Phishing, zum Beispiel gefälschte Absender, die um Gutscheine oder eilige Überweisungen bitten\n- Neu: Signaturen pro Domain oder für alle Domains, mit Platzhaltern wie Name und Adresse, auf dem Server oder nur auf diesem Gerät. Eine Firmensignatur des Servers wird angezeigt\n- Besser: Termine wie „Samstag 03.10.26, zwischen 10:00 und 12:00“ werden mit Uhrzeit erkannt statt als ganztägig, auch beim Prüfen mit KI\n- Sicherheit: viele Verbesserungen aus einer gründlichen Sicherheitsprüfung",
-    "en": "- New: base labels such as invoices, newsletters or appointments, recognised reliably without AI. The AI is only asked when the rules are unsure, and a warning shows when two labels overlap\n- New: the spam check shows the facts behind its verdict and checks for phishing, for example forged senders asking for gift cards or urgent transfers\n- New: signatures per domain or for all domains, with placeholders such as name and address, on the server or only on this device. A company signature set by the server is shown\n- Better: appointments like \"Samstag 03.10.26, zwischen 10:00 und 12:00\" are found with their time instead of as all-day events, also when checking with AI\n- Security: many improvements from a thorough security review"
+    "de": "- Behoben: Auf macOS öffneten sich die Einstellungen und alle Bearbeitungsfenster nicht, es war nur eine dünne Linie zu sehen",
+    "en": "- Fixed: on macOS the settings and every edit window didn't open, only a thin line showed"
   }
 }
