@@ -2363,8 +2363,13 @@ fn read_for_spam_check(
     let parsed = parse_capped(raw);
     let mail = MailText::from_parsed(message, parsed.as_ref(), mail::MAX_MAIL_CHARS);
     let Some(parsed) = parsed else { return (mail, Vec::new(), 0) };
+    // Tracked links of a newsletter only pass as such when the receiving server vouches for its
+    // From domain (SPAM-3), read with this device's rule for whose headers count (signals.rs).
+    let from = message.from.email.trim().to_lowercase();
+    let from_authenticated = spam::authentic(&signals::authentication(&mail.headers, &from));
     let read = crate::phishing::read_message(&parsed);
-    let findings = crate::phishing::check(&crate::phishing::Input { contact_domains, ..read.input() });
+    let findings =
+        crate::phishing::check(&crate::phishing::Input { contact_domains, from_authenticated, ..read.input() });
     (mail, findings, parsed.attachments().count())
 }
 
