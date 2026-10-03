@@ -956,19 +956,19 @@ impl Engine {
 
     /// A mail read from its raw form, with all its headers: for the spam check.
     async fn raw_mail(&self, message: &Message) -> Result<MailText> {
-        Ok(self.raw_mail_and_bytes(message).await?.0)
+        let raw = self.raw_bytes(message).await?;
+        Ok(MailText::from_parsed(message, parse_capped(&raw).as_ref(), mail::MAX_MAIL_CHARS))
     }
 
-    /// The mail read from its raw form, and the raw form itself (for the phishing checks).
-    async fn raw_mail_and_bytes(&self, message: &Message) -> Result<(MailText, Vec<u8>)> {
+    /// The raw form of a mail.
+    async fn raw_bytes(&self, message: &Message) -> Result<Vec<u8>> {
         let location = self
             .inner
             .store
             .locations(std::slice::from_ref(&message.id))?
             .pop()
             .ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
-        let raw = self.inner.raw_message(&location).await?;
-        Ok((MailText::from_raw(message, &raw, mail::MAX_MAIL_CHARS), raw))
+        self.inner.raw_message(&location).await
     }
 
     /// Whether a mail is in its mailbox's junk folder.
@@ -985,13 +985,21 @@ impl Engine {
     /// the mail and the phishing checks weigh into a band of allowed verdicts, the model chooses
     /// within it, and reasons that cite nothing real are dropped.
     async fn spam_check_on_device(&self, message: &Message, language: Option<&str>) -> Result<Value> {
-        let (mail, raw) = self.raw_mail_and_bytes(message).await?;
+        let raw = self.raw_bytes(message).await?;
         let people = self.address_book().await;
-        let signals = self.spam_signals(message, &mail, &people)?;
         let domains = contact_domains(&people);
-        let phishing = crate::phishing::check_message(&raw, &domains);
-        let shape = spam::MailShape { has_links: !mail.links.is_empty(), attachments: Some(attachment_count(&raw)) };
-        let assessment = spam::assess(&signals, &phishing, &format!("{}\n{}", mail.subject, mail.text));
+        // One parse, capped, off the async workers: the text, the phishing checks and the count of
+        // attachments all read it (C-5).
+        let (mail, phishing, attachments) = {
+            let message = message.clone();
+            tokio::task::spawn_blocking(move || read_for_spam_check(&message, &raw, &domains))
+                .await
+                .map_err(|_| Error::assist("providerFailed", "The mail couldn't be read."))?
+        };
+        let signals = self.spam_signals(message, &mail, &people)?;
+        let shape = spam::MailShape { has_links: !mail.links.is_empty(), attachments: Some(attachments) };
+        let mut assessment = spam::assess(&signals, &phishing, &format!("{}\n{}", mail.subject, mail.text));
+        allow_concern(&mut assessment);
         let facts = spam::facts(&signals, &assessment, signals::rule_meaning);
         let prompt = prompts::spam_check(&mail, &facts, &assessment.allowed, language);
         let typical = estimate::output_tokens(estimate::Answer::SpamCheck, &prompt);
@@ -2342,9 +2350,37 @@ fn contact_domains(people: &[(String, String)]) -> Vec<String> {
     domains
 }
 
-/// How many attachments a raw message has.
-fn attachment_count(raw: &[u8]) -> usize {
-    mail_parser::MessageParser::default().parse(raw).map_or(0, |message| message.attachments().count())
+/// How much of a raw message is parsed for the assistant at most (the phishing checks' own cap).
+const MAX_PARSED_RAW: usize = 25 * 1024 * 1024;
+
+/// The mail's text, the phishing checks' findings and the number of attachments, from one parse
+/// of at most [`MAX_PARSED_RAW`] bytes.
+fn read_for_spam_check(
+    message: &Message,
+    raw: &[u8],
+    contact_domains: &[String],
+) -> (MailText, Vec<crate::phishing::Finding>, usize) {
+    let parsed = parse_capped(raw);
+    let mail = MailText::from_parsed(message, parsed.as_ref(), mail::MAX_MAIL_CHARS);
+    let Some(parsed) = parsed else { return (mail, Vec::new(), 0) };
+    let read = crate::phishing::read_message(&parsed);
+    let findings = crate::phishing::check(&crate::phishing::Input { contact_domains, ..read.input() });
+    (mail, findings, parsed.attachments().count())
+}
+
+/// On this device "suspicious" always stays possible: the facts here rest partly on headers of
+/// another provider, so the model may always raise a concern, even against clean-looking facts or
+/// facts that say spam (C-1).
+fn allow_concern(assessment: &mut spam::Assessment) {
+    if !assessment.allowed.contains(&"suspicious") {
+        assessment.allowed.push("suspicious");
+        assessment.allowed.sort_by_key(|verdict| spam::VERDICTS.iter().position(|known| known == verdict));
+    }
+}
+
+/// A raw message parsed, at most its first [`MAX_PARSED_RAW`] bytes.
+fn parse_capped(raw: &[u8]) -> Option<mail_parser::Message<'_>> {
+    mail_parser::MessageParser::default().parse(&raw[..raw.len().min(MAX_PARSED_RAW)])
 }
 
 #[cfg(test)]
@@ -2362,11 +2398,53 @@ mod tests {
         assert_eq!(contact_domains(&people), ["a.example", "b.example"]);
     }
 
+    /// C-1: a Gmail-shaped scam whose sender wrote a filter score of -50 and a passed DMARC for
+    /// itself is not "clean" on this device, and "suspicious" stays possible whatever the facts.
+    #[test]
+    fn forged_headers_cannot_make_a_mail_clean() {
+        let header = |name: &str, value: &str| (name.to_owned(), value.to_owned());
+        let headers = vec![
+            header("Received", "by 2002:a05:6000:1::1 with SMTP id y"),
+            header("Received", "from mail.scam.example (mail.scam.example. [192.0.2.7]) by mx.google.com with ESMTPS"),
+            header("X-Spam-Status", "No, score=-50.0 required=5.0 tests=BAYES_HAM"),
+            header("Authentication-Results", "mx.google.com.evil.example; dmarc=pass; spf=pass; dkim=pass"),
+        ];
+        let (spam_score, spam_threshold, tests) = signals::spam_status(&headers);
+        let signals = signals::SpamSignals {
+            authentication: signals::authentication(&headers, "service@bank.example"),
+            spam_score,
+            spam_threshold,
+            tests,
+            in_junk: false,
+            sender: Some(signals::SenderSignals::default()),
+        };
+        let mut assessment = spam::assess(&signals, &[], "Ihr Konto wird gesperrt");
+        assert!(!assessment.evidence.iter().any(|e| e.tone == spam::Tone::Good), "{assessment:?}");
+        assert_ne!(assessment.band, spam::Band::Clean);
+        allow_concern(&mut assessment);
+        assert!(assessment.allowed.contains(&"suspicious"));
+
+        // Even facts that clearly speak for a mail leave the concern open, in verdict order.
+        let clean = signals::SpamSignals {
+            authentication: signals::AuthenticationSignals { dmarc: Some("pass".into()), ..Default::default() },
+            spam_score: Some(-5.0),
+            spam_threshold: Some(5.0),
+            sender: Some(signals::SenderSignals { written_to: 3, in_contacts: true, ..Default::default() }),
+            ..Default::default()
+        };
+        let mut assessment = spam::assess(&clean, &[], "");
+        assert_eq!(assessment.allowed, ["legitimate"]);
+        allow_concern(&mut assessment);
+        assert_eq!(assessment.allowed, ["legitimate", "suspicious"]);
+        assert_eq!(spam::settle(&assessment, "spam", 0.9).0, "suspicious");
+    }
+
     #[test]
     fn attachments_are_counted_and_garbage_has_none() {
         let raw = b"From: a@example.com\r\nSubject: x\r\nMIME-Version: 1.0\r\n\
             Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n\
             --b\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=a.pdf\r\n\r\nJVBE\r\n--b--\r\n";
+        let attachment_count = |raw: &[u8]| parse_capped(raw).map_or(0, |message| message.attachments().count());
         assert_eq!(attachment_count(raw), 1);
         assert_eq!(attachment_count(b""), 0);
     }
@@ -2849,7 +2927,10 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         let label = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Leni" }), None).await.unwrap();
         let label_id = label["id"].as_str().unwrap().to_string();
         let from = "Leni <leni@example.com>";
-        let vouched = ["Authentication-Results: mx.example.org; dkim=pass header.d=example.com"];
+        let vouched = [
+            "Authentication-Results: mx.example.org; dkim=pass header.d=example.com",
+            "Received: from mail.example.com by mx.example.org",
+        ];
         let mails: Vec<String> =
             (10..14).map(|uid| add_mail(&engine, uid, from, "Hallo", "Wie geht's?", &vouched, None)).collect();
         let other = add_mail(&engine, 20, "Tom <tom@example.com>", "Hi", "Na?", &vouched, None);

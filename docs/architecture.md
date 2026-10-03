@@ -497,9 +497,13 @@ Nothing is ever sent by the assistant.
 
 **Spam check.** Facts first, as on UwUMail Server 0.22 (`assist/spam.rs` is a
 copy of its `uwumail-assist` module). The facts are local signals: the
-`Authentication-Results` added by the own server (SPF, DKIM, DMARC; only the
-one above the second `Received`), `X-Spam-Status`, how often the sender wrote
-before and ended in junk, whether they are in the contacts, plus the
+`Authentication-Results` and `X-Spam-Status` the receiving server wrote: only
+headers above its intake line (the first `Received` from another host; local
+hops such as amavis or Gmail's internal ones don't count), or an
+`Authentication-Results` right below it whose authserv-id belongs to the host
+of that line. Anything lower may be the sender's and counts for nothing, also
+in what goes to a UwUMail server for a mail of another account. Then how often
+the sender wrote before and ended in junk, whether they are in the contacts, plus the
 deterministic phishing checks of `phishing/` (a copy of UwUMail Server's:
 lookalike, homoglyph and punycode domains against a brand list and the domains
 of the contacts on this device, a display name that shows another address or
@@ -507,7 +511,8 @@ domain, link text that names another site than its link, credential requests).
 `spam::assess` weighs them into a score and a band (clean to spam) that allows
 only some verdicts; the schema's verdict enum holds just those. The model
 answers with reasons `{text, evidence}`, `settle` moves a verdict outside the
-band to the band's default (`modelVerdict` keeps the model's), and `verify`
+band to the band's default (`modelVerdict` keeps the model's; on the device
+"suspicious" always stays allowed), fact lines are tag-escaped like the mail, and `verify`
 drops reasons whose quote isn't in the mail, that cite no listed fact, or claim
 links or attachments the mail lacks (`reasonDetails`, `droppedReasons`). The
 answer carries the assessment as `facts`. With a UwUMail account the server

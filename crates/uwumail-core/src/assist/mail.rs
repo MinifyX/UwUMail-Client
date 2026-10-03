@@ -41,8 +41,13 @@ pub struct MailText {
 impl MailText {
     /// Reads a message from its raw form, with what the store knows about it.
     pub fn from_raw(message: &Message, raw: &[u8], max_chars: usize) -> Self {
-        let parsed = MessageParser::default().parse(raw);
-        let (text, links, headers) = match &parsed {
+        Self::from_parsed(message, MessageParser::default().parse(raw).as_ref(), max_chars)
+    }
+
+    /// The same from a message already parsed, so a caller that needs the parse for more reads
+    /// it only once.
+    pub fn from_parsed(message: &Message, parsed: Option<&mail_parser::Message<'_>>, max_chars: usize) -> Self {
+        let (text, links, headers) = match parsed {
             Some(parsed) => {
                 let mut text = parsed.body_text(0).map(|text| text.into_owned()).unwrap_or_default();
                 let mut links = Vec::new();

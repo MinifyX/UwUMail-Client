@@ -41,6 +41,8 @@ const SEARCH_FOLDERS: usize = 25;
 const MAX_SEND_DELAY: u64 = 60;
 /// JMAP identities are asked for at most this often per account.
 const IDENTITIES_EVERY: Duration = Duration::from_secs(10 * 60);
+/// How long the composer's signatures wait for one UwUMail server's signatures per domain.
+const DOMAIN_SIGNATURES_WAIT: Duration = Duration::from_secs(4);
 /// Sign-in links waiting to be looked at; more at once only comes from someone flooding the link.
 const SIGN_IN_LINK_QUEUE: usize = 8;
 /// How long a search that found no CalDAV or CardDAV server keeps the calendar or the contacts from
@@ -1140,27 +1142,34 @@ impl Engine {
     }
 
     /// Signatures per domain of every account whose UwUMail server has them. Accounts that can't
-    /// be reached right now are left out; their addresses keep what the composer knows.
+    /// be reached right now, or don't answer within [`DOMAIN_SIGNATURES_WAIT`], are left out; their
+    /// addresses keep what the composer knows. All are asked at once, so one slow server can't hold
+    /// up the signature of every new mail (C-4).
     pub async fn domain_signatures(&self) -> Result<Vec<AccountSignatures>> {
-        let mut found = Vec::new();
-        for account in self.inner.store.accounts()? {
-            if account.protocol != Protocol::Jmap {
-                continue;
-            }
-            let client = match self.inner.jmap_client(&account.id).await {
-                Ok(client) if client.session.signatures_account_id.is_some() => client,
-                Ok(_) => continue,
-                Err(error) => {
-                    tracing::debug!("Couldn't ask {} about its signatures: {error}", account.id);
-                    continue;
+        let accounts: Vec<_> =
+            self.inner.store.accounts()?.into_iter().filter(|account| account.protocol == Protocol::Jmap).collect();
+        let asks = accounts.into_iter().map(|account| async move {
+            let ask = async {
+                let client = self.inner.jmap_client(&account.id).await?;
+                if client.session.signatures_account_id.is_none() {
+                    return Ok(None);
                 }
+                jmap_signatures::load(&client).await.map(Some)
             };
-            match jmap_signatures::load(&client).await {
-                Ok(overview) => found.push(AccountSignatures { account_id: account.id, overview }),
-                Err(error) => tracing::debug!("Couldn't load the signatures of {}: {error}", account.id),
+            match tokio::time::timeout(DOMAIN_SIGNATURES_WAIT, ask).await {
+                Ok(Ok(Some(overview))) => Some(AccountSignatures { account_id: account.id, overview }),
+                Ok(Ok(None)) => None,
+                Ok(Err(error)) => {
+                    tracing::debug!("Couldn't load the signatures of {}: {error}", account.id);
+                    None
+                }
+                Err(_) => {
+                    tracing::debug!("{} took too long to tell its signatures", account.id);
+                    None
+                }
             }
-        }
-        Ok(found)
+        });
+        Ok(futures::future::join_all(asks).await.into_iter().flatten().collect())
     }
 
     /// Changes an account's signatures per domain on its server, all or nothing; returns the

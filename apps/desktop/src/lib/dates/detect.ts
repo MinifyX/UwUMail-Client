@@ -142,10 +142,22 @@ const GENERIC_PLACE =
 const REPLY_PREFIX = /^\s*((re|aw|wg|fwd?|fw|antw|tr|sv|vs)\s*(\[\d+\])?\s*:\s*)+/iu;
 const MAX_TITLE = 80;
 
+/**
+ * How far around a hit its "line" reaches at most. Inline HTML without block elements reads as one
+ * line; looking at all of it for every hit made a crafted mail cost hits × length (SPAM-7).
+ */
+const LINE_WINDOW = 1000;
+/** At most this many hits are looked at closer, in text order. */
+const MAX_HITS = 400;
+
 function lineBounds(text: string, from: number, to: number): [number, number] {
-  const start = text.lastIndexOf("\n", from - 1) + 1;
-  const newline = text.indexOf("\n", to);
-  return [start, newline < 0 ? text.length : newline];
+  const floor = Math.max(0, from - LINE_WINDOW);
+  let start = from;
+  while (start > floor && text.charCodeAt(start - 1) !== 10) start--;
+  const ceiling = Math.min(text.length, to + LINE_WINDOW);
+  let end = to;
+  while (end < ceiling && text.charCodeAt(end) !== 10) end++;
+  return [start, end];
 }
 
 /** The sentence around a hit, inside its line. A dot after a digit belongs to a date, not the sentence. */
@@ -385,8 +397,16 @@ function confidenceOf(hit: FoundDate, line: string): number {
   return Math.round(Math.min(1, Math.max(0, score)) * 100) / 100;
 }
 
-function overlaps(from: number, to: number, ranges: readonly (readonly [number, number])[]) {
-  return ranges.some(([start, end]) => from < end && to > start);
+/** The ranges sorted and joined, so hits in text order can walk them once. */
+function joined(ranges: readonly (readonly [number, number])[]): [number, number][] {
+  const sorted = ranges.filter(([start, end]) => end > start).sort((a, b) => a[0] - b[0]);
+  const out: [number, number][] = [];
+  for (const [start, end] of sorted) {
+    const last = out[out.length - 1];
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else out.push([start, end]);
+  }
+  return out;
 }
 
 const NUMBER_KINDS = new Set<FoundDate["kind"]>(["numeric", "numericWeak", "slash", "slashWeak", "iso"]);
@@ -398,8 +418,14 @@ export function detectEvents(text: string, options: DetectOptions): DetectedEven
   const referenceDay = dateOf(options.reference);
   const subject = subjectTitle(options.subject, options.reference, options.locale);
   const byKey = new Map<string, DetectedEvent>();
+  const excluded = joined(options.excluded ?? []);
+  let next = 0;
+  let looked = 0;
   for (const hit of found) {
-    if (options.excluded && overlaps(hit.from, hit.to, options.excluded)) continue;
+    // Hits come in text order (by start); a range ending before this one's start is done with.
+    while (next < excluded.length && excluded[next]![1] <= hit.from) next++;
+    if (next < excluded.length && hit.to > excluded[next]![0]) continue;
+    if (++looked > MAX_HITS) break;
     const [lineStart, lineEnd] = lineBounds(text, hit.from, hit.to);
     const before = text.slice(Math.max(lineStart, hit.from - 40), hit.from);
     const after = text.slice(hit.to, Math.min(lineEnd, hit.to + 8));

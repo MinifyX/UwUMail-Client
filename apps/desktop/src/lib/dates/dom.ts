@@ -151,7 +151,8 @@ export function collectText(root: Element, forward = false): CollectedText {
   let text = "";
   const pieces: TextPiece[] = [];
   const excluded: Range[] = [];
-  const endsInSpace = () => text.length === 0 || /\s$/.test(text);
+  // The last character only: a regex with `$` would walk the whole text each time.
+  const endsInSpace = () => text.length === 0 || /\s/.test(text[text.length - 1]!);
   const breakLine = () => {
     if (text.length > 0 && !text.endsWith("\n")) text += "\n";
   };
@@ -159,7 +160,8 @@ export function collectText(root: Element, forward = false): CollectedText {
   const visit = (node: Node, depth: number, linked: boolean, pre: boolean) => {
     if (text.length > MAX_TEXT || depth > MAX_DEPTH) return;
     if (node.nodeType === Node.TEXT_NODE) {
-      const data = (node as Text).data;
+      // Past the cap nothing is read anyway; a huge text node shouldn't be walked to its end.
+      const data = (node as Text).data.slice(0, MAX_TEXT + 1 - text.length);
       if (pre) {
         pieces.push({ node: node as Text, from: text.length, to: text.length + data.length, offsets: null, linked });
         text += data;

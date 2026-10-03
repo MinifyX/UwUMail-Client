@@ -37,10 +37,8 @@ pub struct SpamSignals {
     pub sender: Option<SenderSignals>,
 }
 
-/// SPF, DKIM and DMARC from the receiving server's `Authentication-Results`. Header fields are
-/// read top first; only one above the second `Received:` counts (the receiving server writes its
-/// own there), so a sender can't vouch for itself with one lower down. The headers are only as
-/// trustworthy as that server.
+/// SPF, DKIM and DMARC from the receiving server's `Authentication-Results` (see
+/// [`receiving_results`] for which one counts). The headers are only as trustworthy as that server.
 pub fn authentication(headers: &[(String, String)], from_email: &str) -> AuthenticationSignals {
     let from_domain = from_email
         .rsplit_once('@')
@@ -68,18 +66,63 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
     signals
 }
 
-/// The receiving server's own `Authentication-Results`: read top first, only one above the second
-/// `Received:` counts, so a sender can't vouch for itself with one lower down.
+/// Where the receiving server's own header fields end: the first `Received:` (top first) that
+/// records the mail coming in from another host, and the host that wrote it (its `by` part).
+/// Everything above that line the receiving server wrote; everything below it came with the mail,
+/// so the sender may have written it. Hops inside the server (from localhost, or without a `from`
+/// part, like Gmail's internal ones above its intake line) don't end it. With only such hops, the
+/// first `Received:` ends it and no host is named. No `Received:` at all: nothing is the server's.
+fn intake(headers: &[(String, String)]) -> Option<(usize, Option<String>)> {
+    let mut first = None;
+    for (index, (name, value)) in headers.iter().enumerate() {
+        if !name.eq_ignore_ascii_case("Received") {
+            continue;
+        }
+        first.get_or_insert(index);
+        if !local_hop(value) {
+            return Some((index, by_host(value)));
+        }
+    }
+    first.map(|index| (index, None))
+}
+
+/// A `Received:` of a hop inside the receiving server.
+fn local_hop(value: &str) -> bool {
+    let lower = value.trim_start().to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("from") else { return true };
+    let host = rest.split_whitespace().next().unwrap_or_default().trim_matches(|c| c == '[' || c == ']');
+    matches!(host, "localhost" | "localhost.localdomain" | "127.0.0.1" | "::1" | "ipv6:::1")
+}
+
+/// The host a `Received:` names after `by`.
+fn by_host(value: &str) -> Option<String> {
+    let mut tokens = value.split_whitespace();
+    while let Some(token) = tokens.next() {
+        if token.eq_ignore_ascii_case("by") {
+            return tokens.next().and_then(|host| domain_of(host.trim_end_matches(';')));
+        }
+    }
+    None
+}
+
+/// The receiving server's own `Authentication-Results`, read top first: one above its intake line
+/// (see [`intake`]), or one right below it (before the next `Received:`) whose authserv-id belongs
+/// to the host that wrote the intake line, as Gmail and many servers place theirs. One the sender
+/// wrote counts for nothing, so a sender can't vouch for itself on a server that adds none.
 fn receiving_results(headers: &[(String, String)]) -> Option<&str> {
-    let mut received = 0;
-    for (name, value) in headers {
+    let (boundary, host) = intake(headers)?;
+    let is_results = |name: &str| name.eq_ignore_ascii_case("Authentication-Results");
+    if let Some((_, value)) = headers[..boundary].iter().find(|(name, _)| is_results(name)) {
+        return Some(value);
+    }
+    let host = host?;
+    for (name, value) in &headers[boundary + 1..] {
         if name.eq_ignore_ascii_case("Received") {
-            received += 1;
-            if received >= 2 {
-                return None;
-            }
-        } else if name.eq_ignore_ascii_case("Authentication-Results") {
-            return Some(value);
+            return None;
+        }
+        if is_results(name) {
+            let authserv_id = value.split(';').next().and_then(|id| id.split_whitespace().next()).unwrap_or_default();
+            return aligned(authserv_id, &host).then_some(value.as_str());
         }
     }
     None
@@ -140,9 +183,29 @@ fn aligned(vouched: &str, from_domain: &str) -> bool {
     }
 }
 
+/// The header fields of the spam check the receiving server wrote, top first: its
+/// `Authentication-Results` (see [`receiving_results`]) and its `X-Spam-Status` (see
+/// [`spam_status`]). What goes to a UwUMail server checking a mail of another account.
+pub fn receiving_headers(headers: &[(String, String)]) -> Vec<(String, String)> {
+    let results = receiving_results(headers);
+    let ours = intake(headers).map_or(0, |(boundary, _)| boundary);
+    headers
+        .iter()
+        .enumerate()
+        .filter(|(index, (name, value))| {
+            (name.eq_ignore_ascii_case("X-Spam-Status") && *index < ours)
+                || results.is_some_and(|wanted| std::ptr::eq(wanted, value.as_str()))
+        })
+        .map(|(_, header)| header.clone())
+        .collect()
+}
+
 /// The receiving server's spam filter: `X-Spam-Status: Yes, score=6.0 required=5.0 tests=A,B`.
+/// Only one above the server's intake line counts (see [`intake`]): Gmail, Outlook and many other
+/// hosts write none of their own, and the one a sender writes would vouch for its own mail.
 pub fn spam_status(headers: &[(String, String)]) -> (Option<f64>, Option<f64>, Vec<String>) {
-    let Some((_, value)) = headers.iter().find(|(name, _)| name.eq_ignore_ascii_case("X-Spam-Status")) else {
+    let ours = intake(headers).map_or(&headers[..0], |(boundary, _)| &headers[..boundary]);
+    let Some((_, value)) = ours.iter().find(|(name, _)| name.eq_ignore_ascii_case("X-Spam-Status")) else {
         return (None, None, Vec::new());
     };
     let (mut score, mut required, mut tests) = (None, None, Vec::new());
@@ -242,6 +305,7 @@ mod tests {
     #[test]
     fn only_the_receiving_servers_results_count() {
         let headers = vec![
+            header("X-Spam-Status", "Yes, score=6.0 required=5.0 tests=SPF_FAIL,SPAMHAUS_ZEN"),
             header("Received", "from mx.example.net by imap.example.org"),
             header(
                 "Authentication-Results",
@@ -249,7 +313,7 @@ mod tests {
             ),
             header("Received", "from evil.example by mx.example.net"),
             header("Authentication-Results", "evil.example; spf=pass; dmarc=pass"),
-            header("X-Spam-Status", "Yes, score=6.0 required=5.0 tests=SPF_FAIL,SPAMHAUS_ZEN"),
+            header("X-Spam-Status", "No, score=-50.0 required=5.0 tests=BAYES_HAM"),
         ];
         let auth = authentication(&headers, "service@Bank.example");
         assert_eq!(auth.spf.as_deref(), Some("fail"));
@@ -257,18 +321,63 @@ mod tests {
         assert_eq!(auth.dmarc.as_deref(), Some("fail"));
         assert_eq!(auth.from_domain.as_deref(), Some("bank.example"));
         // The sender's own claim below the second Received line counts for nothing.
-        let forged = [headers[0].clone(), headers[2].clone(), headers[3].clone()];
+        let forged = [headers[1].clone(), headers[3].clone(), headers[4].clone()];
         assert_eq!(authentication(&forged, "x@bank.example").spf, None);
         assert_eq!(spam_status(&headers), (Some(6.0), Some(5.0), vec!["SPF_FAIL".into(), "SPAMHAUS_ZEN".into()]));
-        let none = [header("X-Spam-Status", "No, score=0.0 required=5.0 tests=none")];
+        let received = header("Received", "from mx.example.net by imap.example.org");
+        let none = [header("X-Spam-Status", "No, score=0.0 required=5.0 tests=none"), received.clone()];
         assert_eq!(spam_status(&none), (Some(0.0), Some(5.0), vec![]));
-        assert_eq!(spam_status(&[header("X-Spam-Status", "Yes, tests=<script>")]), (None, None, vec![]));
+        let script = [header("X-Spam-Status", "Yes, tests=<script>"), received];
+        assert_eq!(spam_status(&script), (None, None, vec![]));
+        // With no Received line at all, nothing is the receiving server's.
+        assert_eq!(spam_status(&[header("X-Spam-Status", "Yes, score=6.0")]), (None, None, vec![]));
+    }
+
+    /// A Gmail-shaped mail (Gmail writes no X-Spam-Status) whose sender wrote its own good-looking
+    /// headers: they count for nothing, and Gmail's own results, right below its intake line, do.
+    #[test]
+    fn a_senders_own_headers_cannot_vouch_for_its_mail() {
+        let gmail_intake = header(
+            "Received",
+            "from mail.scam.example (mail.scam.example. [192.0.2.7]) by mx.google.com with ESMTPS id x; Fri, 2 Oct 2026",
+        );
+        let forged = [
+            header("Received", "by 2002:a05:6000:1::1 with SMTP id y; Fri, 2 Oct 2026"),
+            gmail_intake.clone(),
+            header("X-Spam-Status", "No, score=-50.0 required=5.0 tests=BAYES_HAM,KNOWN_GOOD_SENDER"),
+            header("Authentication-Results", "mx.example.org; spf=pass; dkim=pass header.d=bank.example; dmarc=pass"),
+            header("From", "Bank <service@bank.example>"),
+        ];
+        assert_eq!(spam_status(&forged), (None, None, vec![]));
+        assert_eq!(authentication(&forged, "service@bank.example").dmarc, None);
+        assert!(!from_vouched(&forged, "service@bank.example"));
+        // The same trick on a server that adds nothing of its own, with only its intake line.
+        assert_eq!(authentication(&forged[1..], "service@bank.example").dmarc, None);
+
+        // Gmail's own results right below its intake line count.
+        let real = [
+            header("Received", "by 2002:a05:6000:1::1 with SMTP id y; Fri, 2 Oct 2026"),
+            gmail_intake,
+            header("Authentication-Results", "mx.google.com; spf=fail smtp.mailfrom=scam.example; dmarc=fail"),
+            header("Authentication-Results", "mx.google.com; dmarc=pass"),
+        ];
+        assert_eq!(authentication(&real, "service@bank.example").dmarc.as_deref(), Some("fail"));
+
+        // A spam filter stamping through a local hop (amavis) is the server's.
+        let amavis = [
+            header("Received", "from localhost (localhost [127.0.0.1]) by mail.example.org"),
+            header("X-Spam-Status", "Yes, score=7.1 required=5.0 tests=BAYES_SPAM"),
+            header("Received", "from mail.scam.example by mail.example.org"),
+            header("X-Spam-Status", "No, score=-50.0 required=5.0"),
+        ];
+        assert_eq!(spam_status(&amavis).0, Some(7.1));
     }
 
     #[test]
     fn only_aligned_passes_of_the_receiving_server_vouch_for_the_from_address() {
-        let results =
-            |value: &str| vec![header("Received", "from mx.example.net"), header("Authentication-Results", value)];
+        let results = |value: &str| {
+            vec![header("Received", "from mx.example.net by mx.example.org"), header("Authentication-Results", value)]
+        };
         let vouched = |value: &str, from: &str| from_vouched(&results(value), from);
         assert!(vouched("mx.example.org; dmarc=pass header.from=bank.example", "a@bank.example"));
         assert!(vouched("mx.example.org; dmarc=pass", "a@bank.example"));
@@ -285,8 +394,8 @@ mod tests {
         assert!(!vouched("mx.example.org; dmarc=pass", ""));
         // A sender's own results below the second Received line count for nothing.
         let forged = [
-            header("Received", "from mx.example.net"),
-            header("Received", "from evil.example"),
+            header("Received", "from mx.example.net by mx.example.org"),
+            header("Received", "from evil.example by mx.example.net"),
             header("Authentication-Results", "evil.example; dmarc=pass header.from=bank.example"),
         ];
         assert!(!from_vouched(&forged, "a@bank.example"));

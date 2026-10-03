@@ -697,6 +697,15 @@ impl Store {
         // of its server for the AI of the other mailboxes.
         conn.execute("DELETE FROM assist_label_log WHERE account_id = ?1", [id])?;
         conn.execute("DELETE FROM label_examples WHERE message_id NOT IN (SELECT id FROM messages)", [])?;
+        // Its hand corrections (subject and start of the text, sent to the model as examples) and
+        // the senders learned or taken off from its mail, unless mail of theirs is left elsewhere.
+        conn.execute("DELETE FROM label_shots WHERE message_id NOT IN (SELECT id FROM messages)", [])?;
+        conn.execute(
+            "DELETE FROM label_senders WHERE lower(address) NOT IN (
+                SELECT lower(json_extract(from_json, '$.email')) FROM messages
+                WHERE json_extract(from_json, '$.email') IS NOT NULL)",
+            [],
+        )?;
         conn.execute("DELETE FROM assist_settings WHERE key = 'serverAssist' AND value = ?1", [id])?;
         Ok(())
     }
@@ -2245,10 +2254,36 @@ mod tests {
             })
             .unwrap();
         store.set_assist_setting("serverAssist", Some("acc")).unwrap();
+        store.keep_label_shot("g1", &id, true, "x.example", "Hi", "Hallo Mini", 1).unwrap();
+        store.count_label_sender("g1", "leni@x.example").unwrap();
+        store.block_label_sender("g1", "tom@x.example").unwrap();
+        // A sender who also wrote to another mailbox stays learned there.
+        let other =
+            AccountRecord { id: "other".into(), email: "mini@other.example".into(), ..store.account("acc").unwrap() };
+        store.insert_account(&other).unwrap();
+        let info = FolderInfo {
+            path: "INBOX",
+            name: "INBOX",
+            role: Some(FolderRole::Inbox),
+            delimiter: Some("."),
+            selectable: true,
+            parent_ref: None,
+        };
+        let other_inbox = store.upsert_folder("other", &info).unwrap();
+        let bytes = raw("b@x", "Hi", "Ana <Ana@x.example>", None, "", date);
+        store
+            .insert_message("other", &other_inbox, 1, MessageFlags::default(), bytes.len() as u64, None, &parse(&bytes))
+            .unwrap();
+        store.count_label_sender("g1", "ana@x.example").unwrap();
+
         store.delete_account("acc").unwrap();
         assert!(store.label_log(None, 10).unwrap().is_empty());
         assert!(store.label_examples().unwrap().is_empty());
         assert_eq!(store.assist_setting("serverAssist").unwrap(), None);
+        assert!(store.label_shots().unwrap().is_empty(), "its corrections go to no model any more");
+        assert!(store.label_senders("leni@x.example").unwrap().is_empty());
+        assert!(store.label_senders("tom@x.example").unwrap().is_empty());
+        assert_eq!(store.label_senders("ana@x.example").unwrap().get("g1"), Some(&1));
     }
 
     #[test]
