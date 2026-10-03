@@ -106,16 +106,21 @@ describe("the demo's assistant", () => {
     const check = await checking;
     expect(check.verdict).toBe("phishing");
     expect(check.signals.authentication.dmarc).toBe("fail");
+    expect(check.facts).toMatchObject({ band: "leaningSpam" });
+    expect(check.facts!.allowed).toContain("phishing");
+    expect(check.reasonDetails.some((reason) => reason.quote !== null)).toBe(true);
+    expect(check.droppedReasons).toBe(1);
     expect(check.signals.sender).toMatchObject({ earlierMessages: 0, inContacts: false, firstSeen: null });
   });
 
-  it("lowers the model's spam to suspicious for a sale mail from a known shop", async () => {
+  it("keeps the model's spam out for a sale mail from a known shop the facts vouch for", async () => {
     const { assist, messages } = setup();
     const mail = messages.find((message) => message.subject.startsWith("Pixel Days"))!;
     const checking = assist.spamCheck(mail.id);
     await vi.runAllTimersAsync();
     const check = await checking;
-    expect(check).toMatchObject({ verdict: "suspicious", modelVerdict: "spam" });
+    expect(check).toMatchObject({ verdict: "legitimate", modelVerdict: "spam" });
+    expect(check.facts).toMatchObject({ band: "clean", allowed: ["legitimate"] });
     expect(check.signals.sender.earlierMessages).toBeGreaterThan(0);
   });
 

@@ -290,7 +290,7 @@
         "fairly": "pretty sure (・ω・)",
         "sure": "totally sure ✿"
       },
-      "modelVerdict": "The model thought “{{verdict}}”, but the server disagrees: sender verified, spam filter calm, you two go way back (｀・ω・´)"
+      "modelVerdict": "The model thought “{{verdict}}”, but the facts say otherwise, so it stays within what they allow (｀・ω・´)"
     }
   },
   "dates": {

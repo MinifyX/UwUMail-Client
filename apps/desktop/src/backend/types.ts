@@ -1042,12 +1042,55 @@ export interface AssistSpamCheck extends AssistAnswer {
   /** 0 to 1. */
   confidence: number;
   /**
-   * What the model said when the server or the device lowered it ("spam" or "phishing" to
-   * "suspicious") because the own checks were clearly good; absent when the verdict is the model's own.
+   * What the model said when the server or the device moved it back into the range the facts allow
+   * (see `facts.allowed`); absent when the verdict is the model's own.
    */
   modelVerdict?: AssistVerdict;
   reasons: string[];
+  /**
+   * The same reasons with what each rests on: a quote from the mail or one of the facts. Reasons
+   * the mail does not back are not in here (only counted in `droppedReasons`).
+   */
+  reasonDetails: AssistSpamReason[];
+  /** How many reasons of the model were left out because nothing in the mail backs them. */
+  droppedReasons: number;
+  /** What the server or the device weighed before the model said anything; null from older servers. */
+  facts: AssistSpamFacts | null;
   signals: AssistSpamSignals;
+}
+
+/** A reason of the spam check and the evidence it cites. */
+export interface AssistSpamReason {
+  text: string;
+  /** Words from the mail the reason rests on, as they stand there. */
+  quote: string | null;
+  /** The fact it rests on (`F3`), when it cites one. */
+  fact: string | null;
+}
+
+/** How far the facts point towards spam, from "clean" to "spam". */
+export type AssistSpamBand = "clean" | "leaningClean" | "unclear" | "leaningSpam" | "spam";
+
+/** One fact that was weighed, by a stable code (`DMARC_PASS`, `LOOKALIKE_BRAND_FROM`, …). */
+export interface AssistSpamEvidence {
+  code: string;
+  tone: "good" | "bad";
+  /** How much it moved the score; positive is towards spam. */
+  weight: number;
+  /** What exactly was seen (a domain, a count); technical, not translated. */
+  detail: string | null;
+  /** Part of the phishing checks. */
+  phishing: boolean;
+}
+
+/** The weighing of the facts: they decide the range, the model only explains within it. */
+export interface AssistSpamFacts {
+  score: number;
+  band: AssistSpamBand;
+  evidence: AssistSpamEvidence[];
+  /** The verdicts the model could choose from. */
+  allowed: AssistVerdict[];
+  defaultVerdict: AssistVerdict;
 }
 
 /** Somebody an event names, with an address from the address book or the mail's headers. */

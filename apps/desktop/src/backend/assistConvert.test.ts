@@ -158,6 +158,65 @@ describe("the assistant's answers from the engine", () => {
     for (const modelVerdict of [null, undefined, "scam"]) {
       expect(toSpamCheck({ verdict: "suspicious", modelVerdict }, "e1")).not.toHaveProperty("modelVerdict");
     }
+    // An older server sends neither facts nor details.
+    expect(toSpamCheck({ verdict: "spam" }, "e1")).toMatchObject({ facts: null, reasonDetails: [], droppedReasons: 0 });
+  });
+
+  it("reads the facts and the evidence of the reasons, and drops what is malformed", () => {
+    const check = toSpamCheck(
+      {
+        verdict: "phishing",
+        reasons: ["Die Adresse ahmt PayPal nach."],
+        reasonDetails: [
+          { text: "Die Adresse ahmt PayPal nach.", quote: null, fact: "F2" },
+          { text: "Droht mit Sperrung.", quote: "wird gesperrt", fact: "<script>" },
+          { quote: "ohne Text" },
+          "kaputt",
+        ],
+        droppedReasons: 2,
+        facts: {
+          score: 7.5,
+          band: "spam",
+          evidence: [
+            {
+              code: "LOOKALIKE_BRAND_FROM",
+              tone: "bad",
+              weight: 4,
+              detail: "paypa1.example looks like PayPal",
+              phishing: true,
+            },
+            { code: "lower case", tone: "bad", weight: 1 },
+            { code: "DMARC_PASS", tone: "good" },
+            { code: "FIRST_MAIL", tone: "weird", weight: 0.5 },
+          ],
+          allowed: ["spam", "phishing", "scam"],
+          defaultVerdict: "nonsense",
+        },
+      },
+      "e1",
+    );
+    expect(check.reasonDetails).toEqual([
+      { text: "Die Adresse ahmt PayPal nach.", quote: null, fact: "F2" },
+      { text: "Droht mit Sperrung.", quote: "wird gesperrt", fact: null },
+    ]);
+    expect(check.droppedReasons).toBe(2);
+    expect(check.facts).toEqual({
+      score: 7.5,
+      band: "spam",
+      evidence: [
+        {
+          code: "LOOKALIKE_BRAND_FROM",
+          tone: "bad",
+          weight: 4,
+          detail: "paypa1.example looks like PayPal",
+          phishing: true,
+        },
+        { code: "FIRST_MAIL", tone: "bad", weight: 0.5, detail: null, phishing: false },
+      ],
+      allowed: ["spam", "phishing"],
+      defaultVerdict: "suspicious",
+    });
+    expect(toSpamCheck({ facts: { score: 1, band: "maybe" } }, "e1").facts).toBeNull();
   });
 
   it("drops events without a start, links that aren't https and more than the limit", () => {

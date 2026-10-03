@@ -290,7 +290,7 @@
         "fairly": "ziemlich sicher (・ω・)",
         "sure": "ganz sicher ✿"
       },
-      "modelVerdict": "Das Modell fand’s „{{verdict}}“, aber der Server sieht das anders: Absender bestätigt, Spamfilter ganz ruhig, ihr schreibt euch schon länger (｀・ω・´)"
+      "modelVerdict": "Das Modell dachte „{{verdict}}“, aber die Fakten sehen das anders, also bleibt es bei dem, was sie hergeben (｀・ω・´)"
     }
   },
   "dates": {

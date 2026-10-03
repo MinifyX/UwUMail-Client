@@ -96,6 +96,25 @@ const fake = {
     verdict: "phishing",
     confidence: 0.9,
     reasons: ["Asks to confirm a password through a link"],
+    reasonDetails: [{ text: "Asks to confirm a password through a link", quote: "confirm your password", fact: null }],
+    droppedReasons: 1,
+    facts: {
+      score: 6.5,
+      band: "leaningSpam",
+      evidence: [
+        { code: "DMARC_FAIL", tone: "bad", weight: 2, detail: "bank.example", phishing: false },
+        {
+          code: "LOOKALIKE_BRAND_LINK",
+          tone: "bad",
+          weight: 3,
+          detail: "paypa1.example looks like PayPal",
+          phishing: true,
+        },
+        { code: "SOMETHING_NEW", tone: "good", weight: -0.5, detail: null, phishing: false },
+      ],
+      allowed: ["suspicious", "spam", "phishing"],
+      defaultVerdict: "suspicious",
+    },
     signals: {
       authentication: { spf: "fail", dkim: null, dmarc: "fail", fromDomain: "bank.example" },
       spamScore: 4.2,
@@ -405,6 +424,16 @@ describe("the assistant's UI", () => {
     expect(screen.queryByText(/%/)).toBeNull();
     expect(screen.queryByText(/The model said/)).toBeNull();
     expect(screen.getByText("Asks to confirm a password through a link")).toBeTruthy();
+    expect(screen.getByText("In the mail: “confirm your password”")).toBeTruthy();
+    expect(screen.getByText(/1 reason of the model was left out/)).toBeTruthy();
+    // The facts, strongest first, with codes the app does not know yet shown as they are.
+    expect(screen.getByText(/rather spam/)).toBeTruthy();
+    const facts = within(screen.getByRole("list", { name: "What the facts say" })).getAllByRole("listitem");
+    expect(facts.map((item) => item.textContent)).toEqual([
+      "Link imitates a known brandpaypa1.example looks like PayPal+3.0",
+      "DMARC failed: the sender may be forged" + "bank.example" + "+2.0",
+      "SOMETHING_NEW-0.5",
+    ]);
     expect(screen.getByText("4.2 of 5.0 points")).toBeTruthy();
     expect(screen.getByText("First mail from this address")).toBeTruthy();
     expect(screen.getByText("Not in your address book")).toBeTruthy();
@@ -413,7 +442,7 @@ describe("the assistant's UI", () => {
     expect(useAssistReader.getState().spamChecks.e1).toBeUndefined();
   });
 
-  it("says how sure the model is in words and when the server lowered its verdict", async () => {
+  it("says how sure the model is in words and when the facts moved its verdict", async () => {
     const result = await fake.assistSpamCheck("e1");
     fake.assistSpamCheck.mockResolvedValueOnce({
       ...result,
@@ -428,6 +457,6 @@ describe("the assistant's UI", () => {
     expect(screen.getByRole("meter", { name: "How sure the model is" }).getAttribute("aria-valuetext")).toBe(
       "fairly sure",
     );
-    expect(screen.getByText(/The model said “Spam”, but that contradicts the server’s checks/)).toBeTruthy();
+    expect(screen.getByText(/The model said “Spam”, but the facts don’t allow that/)).toBeTruthy();
   });
 });

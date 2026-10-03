@@ -28,7 +28,9 @@ import {
   type AssistProviderInput,
   type AssistSettings,
   type AssistSettingsPatch,
+  type AssistSpamBand,
   type AssistSpamCheck,
+  type AssistSpamEvidence,
   type AssistStreamHandlers,
   type AssistSummarizeRequest,
   type AssistSummary,
@@ -819,7 +821,7 @@ export class DemoAssist {
     const newsletter = (message.keywords ?? []).some((keyword) => keyword.startsWith("newsletter"));
     // A sale mail from a shop that wrote before: the model's "spam" the server lowers.
     const advert = !risky && !pushy && earlier.length > 0 && /\d\s?%/.test(message.subject);
-    const verdict: AssistVerdict = risky ? "phishing" : pushy || advert ? "suspicious" : "legitimate";
+    const said: AssistVerdict = risky ? "phishing" : advert ? "spam" : pushy ? "suspicious" : "legitimate";
     const reasons = risky
       ? de
         ? [
@@ -851,17 +853,72 @@ export class DemoAssist {
                 earlier.length > 0 ? "The sender has written before." : "The content fits the sender.",
                 newsletter ? "An ordinary newsletter with an unsubscribe link." : "No request for payments or logins.",
               ];
+    // What the server weighed first, like `facts` of the real one: the band the verdict must stay in.
+    const evidence: AssistSpamEvidence[] = risky
+      ? [
+          { code: "DMARC_FAIL", tone: "bad", weight: 2, detail: domain, phishing: false },
+          { code: "FIRST_MAIL", tone: "bad", weight: 0.5, detail: null, phishing: false },
+          { code: "HTML_ATTACHMENT", tone: "bad", weight: 1, detail: null, phishing: true },
+          { code: "URGENCY", tone: "bad", weight: 0.5, detail: "24", phishing: false },
+          { code: "FILTER_SOME_POINTS", tone: "bad", weight: 1.8, detail: "4.6/5.0", phishing: false },
+        ]
+      : [
+          { code: "DMARC_PASS", tone: "good", weight: -1.5, detail: domain, phishing: false },
+          ...(earlier.length > 0
+            ? [
+                {
+                  code: "KNOWN_SENDER",
+                  tone: "good" as const,
+                  weight: -1.5,
+                  detail: String(earlier.length),
+                  phishing: false,
+                },
+              ]
+            : [{ code: "FIRST_MAIL", tone: "bad" as const, weight: 0.5, detail: null, phishing: false }]),
+          ...(pushy ? [{ code: "URGENCY", tone: "bad" as const, weight: 0.5, detail: null, phishing: false }] : []),
+          { code: "FILTER_WANTED", tone: "good", weight: -0.5, detail: "0.3/5.0", phishing: false },
+        ];
+    const score = Math.round(evidence.reduce((sum, item) => sum + item.weight, 0) * 10) / 10;
+    const band: AssistSpamBand =
+      score <= -2 ? "clean" : score < 1.5 ? "leaningClean" : score < 4 ? "unclear" : score < 7 ? "leaningSpam" : "spam";
+    // The ranks the band allows, as the server has them; phishing only with a phishing finding.
+    const [low, high] = { clean: [0, 0], leaningClean: [0, 1], unclear: [0, 2], leaningSpam: [1, 2], spam: [2, 2] }[
+      band
+    ];
+    const rank = (verdict: AssistVerdict) => ({ legitimate: 0, suspicious: 1, spam: 2, phishing: 2 })[verdict];
+    const phishingPossible = evidence.some((item) => item.phishing);
+    const allowed = (["legitimate", "suspicious", "spam", "phishing"] as const).filter(
+      (verdict) => rank(verdict) >= low! && rank(verdict) <= high! && (verdict !== "phishing" || phishingPossible),
+    );
+    const defaultVerdict: AssistVerdict =
+      high === 0 || band === "leaningClean"
+        ? "legitimate"
+        : band === "unclear"
+          ? "suspicious"
+          : phishingPossible
+            ? "phishing"
+            : "spam";
+    // Like the server: what the model says stays only when the facts allow it.
+    const verdict = allowed.includes(said) ? said : defaultVerdict;
+    const reasonDetails = reasons.map((text, index) => ({
+      text,
+      quote: risky && index === 1 ? (de ? "24 Stunden" : "24 hours") : null,
+      fact: risky && index === 1 ? null : `F${index + 1}`,
+    }));
     await thinking(900);
     const answer = this.answer("spamCheck", this.text(message), reasons.join(" "));
     return {
       ...answer,
       emailId,
       verdict,
-      confidence: risky ? 0.93 : pushy ? 0.64 : advert ? 0.78 : 0.86,
-      // Like the server: the model calls the advert spam, but a known sender whose mail passed
-      // every check is only "suspicious".
-      ...(advert ? { modelVerdict: "spam" as const } : {}),
+      confidence: risky ? 0.93 : verdict !== said ? 0.55 : pushy ? 0.64 : 0.86,
+      // The model calls the advert spam, but a known sender whose mail passed every check is not.
+      ...(verdict !== said ? { modelVerdict: said } : {}),
       reasons,
+      reasonDetails,
+      // The model also claimed a link the mail does not have; the server left that out.
+      droppedReasons: risky ? 1 : 0,
+      facts: { score, band, evidence, allowed, defaultVerdict },
       signals: {
         authentication: risky
           ? { spf: "softfail", dkim: "none", dmarc: "fail", fromDomain: domain }

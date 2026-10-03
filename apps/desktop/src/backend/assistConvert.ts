@@ -34,7 +34,11 @@ import {
   type AssistScope,
   type AssistSettings,
   type AssistSettingsPatch,
+  type AssistSpamBand,
   type AssistSpamCheck,
+  type AssistSpamEvidence,
+  type AssistSpamFacts,
+  type AssistSpamReason,
   type AssistCost,
   type AssistPrice,
   type AssistUsage,
@@ -538,6 +542,11 @@ export function toSpamCheck(value: unknown, emailId: string): AssistSpamCheck {
     confidence: Math.min(1, Math.max(0, confidence)),
     ...(modelVerdict ? { modelVerdict } : {}),
     reasons: asStrings(raw.reasons).slice(0, 6),
+    reasonDetails: (Array.isArray(raw.reasonDetails) ? raw.reasonDetails.slice(0, 6) : [])
+      .map(toSpamReason)
+      .filter((reason): reason is AssistSpamReason => reason !== null),
+    droppedReasons: asCount(raw.droppedReasons),
+    facts: toSpamFacts(raw.facts),
     signals: {
       authentication: {
         spf: asString(auth.spf),
@@ -559,6 +568,50 @@ export function toSpamCheck(value: unknown, emailId: string): AssistSpamCheck {
       },
     },
   };
+}
+
+const BANDS: readonly AssistSpamBand[] = ["clean", "leaningClean", "unclear", "leaningSpam", "spam"];
+/** The most facts shown; the server sends a few dozen at most. */
+const MAX_SPAM_EVIDENCE = 40;
+
+function toSpamReason(value: unknown): AssistSpamReason | null {
+  const raw = asObject(value);
+  const text = raw ? asString(raw.text) : null;
+  if (!raw || !text) return null;
+  const fact = asString(raw.fact);
+  return {
+    text: clip(text, 500) ?? "",
+    quote: clip(asString(raw.quote), 300),
+    fact: fact !== null && /^F\d{1,3}$/.test(fact) ? fact : null,
+  };
+}
+
+function toSpamFacts(value: unknown): AssistSpamFacts | null {
+  const raw = asObject(value);
+  if (!raw) return null;
+  const band = BANDS.find((band) => band === raw.band);
+  const score = asNumber(raw.score);
+  if (!band || score === null) return null;
+  const evidence = (Array.isArray(raw.evidence) ? raw.evidence.slice(0, MAX_SPAM_EVIDENCE) : []).flatMap(
+    (entry): AssistSpamEvidence[] => {
+      const item = asObject(entry);
+      const code = item ? asString(item.code) : null;
+      const weight = item ? asNumber(item.weight) : null;
+      if (!item || !code || !/^[A-Z0-9_]{1,64}$/.test(code) || weight === null) return [];
+      return [
+        {
+          code,
+          tone: item.tone === "good" ? "good" : "bad",
+          weight,
+          detail: clip(asString(item.detail), 200),
+          phishing: item.phishing === true,
+        },
+      ];
+    },
+  );
+  const allowed = VERDICTS.filter((verdict) => asStrings(raw.allowed).includes(verdict));
+  const defaultVerdict = VERDICTS.find((verdict) => verdict === raw.defaultVerdict) ?? "suspicious";
+  return { score, band, evidence, allowed, defaultVerdict };
 }
 
 const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
