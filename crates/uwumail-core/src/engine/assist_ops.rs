@@ -16,7 +16,7 @@ use crate::assist::prices::PriceTable;
 use crate::assist::prompts::{self, ComposeRequest, Prompt, SUBJECT_MARK};
 use crate::assist::provider::{self, ProviderKind};
 use crate::assist::validate::{self, EventContext};
-use crate::assist::{Feature, Label, StreamEvent, StreamSink, discover, foreign, server, signals};
+use crate::assist::{Feature, Label, StreamEvent, StreamSink, discover, foreign, server, signals, spam};
 use crate::store::{LabelExample, LabelHeaders, LabelLogRecord};
 
 /// At most this much picture text goes along when the assistant reads a mail's appointments.
@@ -876,6 +876,11 @@ impl Engine {
 
     /// A mail read from its raw form, with all its headers: for the spam check.
     async fn raw_mail(&self, message: &Message) -> Result<MailText> {
+        Ok(self.raw_mail_and_bytes(message).await?.0)
+    }
+
+    /// The mail read from its raw form, and the raw form itself (for the phishing checks).
+    async fn raw_mail_and_bytes(&self, message: &Message) -> Result<(MailText, Vec<u8>)> {
         let location = self
             .inner
             .store
@@ -883,7 +888,7 @@ impl Engine {
             .pop()
             .ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
         let raw = self.inner.raw_message(&location).await?;
-        Ok(MailText::from_raw(message, &raw, mail::MAX_MAIL_CHARS))
+        Ok((MailText::from_raw(message, &raw, mail::MAX_MAIL_CHARS), raw))
     }
 
     /// Whether a mail is in its mailbox's junk folder.
@@ -896,47 +901,66 @@ impl Engine {
             .is_some_and(|(_, _, role)| role.as_deref() == Some("junk")))
     }
 
+    /// The facts-first check of UwUMail Server (assist/spam.rs) on this device: what is known about
+    /// the mail and the phishing checks weigh into a band of allowed verdicts, the model chooses
+    /// within it, and reasons that cite nothing real are dropped.
     async fn spam_check_on_device(&self, message: &Message, language: Option<&str>) -> Result<Value> {
-        let mail = self.raw_mail(message).await?;
-        let signals = self.spam_signals(message, &mail, true).await?;
-        let prompt = prompts::spam_check(&mail, &signals::findings(&signals), language);
+        let (mail, raw) = self.raw_mail_and_bytes(message).await?;
+        let people = self.address_book().await;
+        let signals = self.spam_signals(message, &mail, &people)?;
+        let domains = contact_domains(&people);
+        let phishing = crate::phishing::check_message(&raw, &domains);
+        let shape = spam::MailShape { has_links: !mail.links.is_empty(), attachments: Some(attachment_count(&raw)) };
+        let assessment = spam::assess(&signals, &phishing, &format!("{}\n{}", mail.subject, mail.text));
+        let facts = spam::facts(&signals, &assessment, signals::rule_meaning);
+        let prompt = prompts::spam_check(&mail, &facts, &assessment.allowed, language);
         let typical = estimate::output_tokens(estimate::Answer::SpamCheck, &prompt);
         let (answer, effective) =
             self.device().ask(self.assist_http()?, Feature::SpamCheck, &prompt, typical, None).await?;
         let (verdict, confidence, reasons) = validate::parse_spam(&answer.text)
             .ok_or_else(|| Error::assist("providerFailed", "The model's answer wasn't a verdict."))?;
-        let (verdict, confidence, model_verdict) = signals::held_to_facts(verdict, confidence, &signals);
+        let (verdict, confidence, model_verdict) = spam::settle(&assessment, &verdict, confidence);
+        let (reason_details, dropped_reasons) =
+            spam::verify(reasons, &mail, &shape, &facts, &signals, validate::MAX_REASONS);
         let mut out = local::answer_json(&effective, &answer);
         out.insert("verdict".into(), json!(verdict));
         out.insert("confidence".into(), json!(confidence));
-        out.insert("reasons".into(), json!(reasons));
+        out.insert("reasons".into(), json!(reason_details.iter().map(|reason| &reason.text).collect::<Vec<_>>()));
+        out.insert("reasonDetails".into(), json!(reason_details));
+        out.insert("droppedReasons".into(), json!(dropped_reasons));
         out.insert("modelVerdict".into(), json!(model_verdict));
+        out.insert("facts".into(), serde_json::to_value(&assessment)?);
         out.insert("signals".into(), serde_json::to_value(&signals)?);
         Ok(Value::Object(out))
     }
 
-    /// What is known about a mail and its sender. Without `contacts`, the address books aren't
-    /// asked (an estimate must not wait for servers).
-    async fn spam_signals(&self, message: &Message, mail: &MailText, contacts: bool) -> Result<signals::SpamSignals> {
+    /// What is known about a mail and its sender; `people` are the address books' entries (none for
+    /// an estimate, which must not wait for servers).
+    fn spam_signals(
+        &self,
+        message: &Message,
+        mail: &MailText,
+        people: &[(String, String)],
+    ) -> Result<signals::SpamSignals> {
         let from = message.from.email.trim().to_lowercase();
         let (spam_score, spam_threshold, tests) = signals::spam_status(&mail.headers);
         let in_junk = self.in_junk(&message.id)?;
         let (earlier, earlier_in_junk, written_to, first) = self.inner.store.sender_history(&from, mail.date)?;
-        let in_contacts = contacts && self.address_book().await.iter().any(|(_, email)| *email == from);
+        let in_contacts = people.iter().any(|(_, email)| *email == from);
         Ok(signals::SpamSignals {
             authentication: signals::authentication(&mail.headers, &from),
             spam_score,
             spam_threshold,
             tests,
             in_junk,
-            sender: signals::SenderSignals {
-                address: from,
+            sender: Some(signals::SenderSignals {
+                address: Some(from).filter(|address| !address.is_empty()),
                 earlier_messages: earlier,
                 earlier_in_junk,
                 written_to,
                 in_contacts,
                 first_seen: first.filter(|_| earlier > 0).map(crate::mime::iso8601),
-            },
+            }),
         })
     }
 
@@ -1189,8 +1213,10 @@ impl Engine {
                 let message =
                     messages.last().ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
                 let mail = MailText::from_stored(message, mail::MAX_MAIL_CHARS);
-                let signals = self.spam_signals(message, &mail, false).await?;
-                let prompt = prompts::spam_check(&mail, &signals::findings(&signals), language);
+                let signals = self.spam_signals(message, &mail, &[])?;
+                let assessment = spam::assess(&signals, &[], &format!("{}\n{}", mail.subject, mail.text));
+                let facts = spam::facts(&signals, &assessment, signals::rule_meaning);
+                let prompt = prompts::spam_check(&mail, &facts, &assessment.allowed, language);
                 let output = estimate::output_tokens(estimate::Answer::SpamCheck, &prompt);
                 (prompt, output)
             }
@@ -1982,9 +2008,46 @@ pub(super) fn start_auto_labels(engine: Engine) {
     });
 }
 
+/// How many domains of the address books the phishing checks compare a sender with.
+const MAX_CONTACT_DOMAINS: usize = 2000;
+
+/// The domains of the people in the address books, for lookalikes of a partner's domain.
+fn contact_domains(people: &[(String, String)]) -> Vec<String> {
+    let mut domains: Vec<String> = people.iter().filter_map(|(_, email)| crate::phishing::domain_of(email)).collect();
+    domains.sort();
+    domains.dedup();
+    domains.truncate(MAX_CONTACT_DOMAINS);
+    domains
+}
+
+/// How many attachments a raw message has.
+fn attachment_count(raw: &[u8]) -> usize {
+    mail_parser::MessageParser::default().parse(raw).map_or(0, |message| message.attachments().count())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contact_domains_are_unique_and_sorted() {
+        let people = vec![
+            ("Ana".to_owned(), "ana@b.example".to_owned()),
+            ("Bo".to_owned(), "bo@a.example".to_owned()),
+            ("Cy".to_owned(), "cy@b.example".to_owned()),
+            ("Nobody".to_owned(), "not an address".to_owned()),
+        ];
+        assert_eq!(contact_domains(&people), ["a.example", "b.example"]);
+    }
+
+    #[test]
+    fn attachments_are_counted_and_garbage_has_none() {
+        let raw = b"From: a@example.com\r\nSubject: x\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n\
+            --b\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=a.pdf\r\n\r\nJVBE\r\n--b--\r\n";
+        assert_eq!(attachment_count(raw), 1);
+        assert_eq!(attachment_count(b""), 0);
+    }
 
     #[test]
     fn the_subject_comes_first_while_streaming() {

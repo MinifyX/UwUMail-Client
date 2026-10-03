@@ -495,14 +495,24 @@ checked against their schema, a label can only be one of the person's own, and
 written text is only a preview until the person clicks Insert or Replace.
 Nothing is ever sent by the assistant.
 
-**Spam check.** The model's verdict comes with local signals: the
+**Spam check.** Facts first, as on UwUMail Server 0.22 (`assist/spam.rs` is a
+copy of its `uwumail-assist` module). The facts are local signals: the
 `Authentication-Results` added by the own server (SPF, DKIM, DMARC; only the
 one above the second `Received`), `X-Spam-Status`, how often the sender wrote
-before and ended in junk, whether they are in the contacts. The model gives
-its reasons before the verdict. When these facts clearly speak for the mail
-(known sender, DMARC passed, 0 points or less, not in junk), "spam" or
-"phishing" becomes "suspicious", at most half sure, and `modelVerdict` keeps
-what the model said (`null` otherwise; the same rule as UwUMail Server's).
+before and ended in junk, whether they are in the contacts, plus the
+deterministic phishing checks of `phishing/` (a copy of UwUMail Server's:
+lookalike, homoglyph and punycode domains against a brand list and the domains
+of the contacts on this device, a display name that shows another address or
+domain, link text that names another site than its link, credential requests).
+`spam::assess` weighs them into a score and a band (clean to spam) that allows
+only some verdicts; the schema's verdict enum holds just those. The model
+answers with reasons `{text, evidence}`, `settle` moves a verdict outside the
+band to the band's default (`modelVerdict` keeps the model's), and `verify`
+drops reasons whose quote isn't in the mail, that cite no listed fact, or claim
+links or attachments the mail lacks (`reasonDetails`, `droppedReasons`). The
+answer carries the assessment as `facts`. With a UwUMail account the server
+does all of this; older servers answer without `facts` and the card shows the
+old display.
 Schemas go out with their properties in the order of `required`, since
 providers make the model write them in that order.
 

@@ -18,6 +18,7 @@ pub mod prompts;
 pub mod provider;
 pub mod server;
 pub mod signals;
+pub mod spam;
 pub mod sse;
 pub mod validate;
 

@@ -100,8 +100,10 @@ assistant only reads a mail for dates when you click *Find appointment* or
 Writing and rewriting, summaries, a second opinion on spam, appointments and
 labels, with the server's assistant for UwUMail mailboxes and your own
 providers (a local Ollama or LM Studio in one click) for all others. Every AI
-button tells on hover what it will take in tokens and money. See
-[ai-assistant.md](ai-assistant.md).
+button tells on hover what it will take in tokens and money. The spam check
+weighs the facts and phishing checks (lookalike domains, spoofed display names,
+misleading links) first and shows them with their weights; the model only
+chooses among the verdicts they allow. See [ai-assistant.md](ai-assistant.md).
 
 ## Phones
 

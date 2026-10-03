@@ -29,6 +29,7 @@ pub mod mime;
 pub mod model;
 pub mod oauth;
 pub mod ocr;
+pub mod phishing;
 pub mod pictures;
 pub mod secrets;
 pub mod shared;

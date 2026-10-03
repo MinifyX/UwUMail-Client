@@ -16,7 +16,7 @@ pub struct AuthenticationSignals {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SenderSignals {
-    pub address: String,
+    pub address: Option<String>,
     pub earlier_messages: u64,
     pub earlier_in_junk: u64,
     pub written_to: u64,
@@ -33,7 +33,8 @@ pub struct SpamSignals {
     pub spam_threshold: Option<f64>,
     pub tests: Vec<String>,
     pub in_junk: bool,
-    pub sender: SenderSignals,
+    /// `None` for a mail whose history nobody knows (the shape is the server's); always set here.
+    pub sender: Option<SenderSignals>,
 }
 
 /// SPF, DKIM and DMARC from the receiving server's `Authentication-Results`. Header fields are
@@ -193,6 +194,15 @@ const RULE_MEANINGS: &[(&str, &str)] = &[
     ("LINK_TO_IP", "a link leads to a bare IP address"),
     ("LOOKALIKE_LINK", "a link leads to a domain that imitates a known one"),
     ("FROM_NAME_SPOOFS_ADDRESS", "the sender's name shows an address other than the real one"),
+    ("LOOKALIKE_BRAND_FROM", "the sender's domain is spelled to look like a known brand's"),
+    ("BRAND_IN_FROM_DOMAIN", "the sender's domain carries a known brand's name but is not the brand's"),
+    ("LOOKALIKE_CONTACT_FROM", "the sender's domain looks like the domain of one of the reader's contacts"),
+    ("BRAND_IN_FROM_NAME", "the sender's name claims a known brand, the address is not the brand's"),
+    ("REPLY_TO_OTHER_SITE", "answers go to another domain than the sender's"),
+    ("LOOKALIKE_BRAND_LINK", "a link leads to a domain spelled to look like a known brand's"),
+    ("BRAND_LINK_TEXT", "a link shows a known brand's or contact's address and leads somewhere else"),
+    ("BRAND_IN_SUBJECT", "the subject names a known brand and asks to log in or confirm data, from another domain"),
+    ("CREDENTIAL_REQUEST", "the mail asks to log in or confirm data, with links to another domain than the sender's"),
     ("HIDDEN_TEXT", "the mail hides text from the reader"),
     ("HTML_ONLY", "the mail has no plain text part"),
     ("BASE64_TEXT", "the text is encoded in an unusual way"),
@@ -216,81 +226,9 @@ const RULE_MEANINGS: &[(&str, &str)] = &[
     ("FETCHED_NO_AUTH", "nothing vouches for the sender of this fetched mail"),
 ];
 
-/// The signals as facts for the prompt.
-pub fn findings(signals: &SpamSignals) -> String {
-    let auth = &signals.authentication;
-    let or_none = |value: &Option<String>| value.clone().unwrap_or_else(|| "not checked".into());
-    let mut out = format!(
-        "- SPF: {}\n- DKIM: {}\n- DMARC: {}\n- Domain of the From address: {}\n",
-        or_none(&auth.spf),
-        or_none(&auth.dkim),
-        or_none(&auth.dmarc),
-        auth.from_domain.clone().unwrap_or_else(|| "none".into())
-    );
-    if auth.dmarc.as_deref() == Some("pass") {
-        let domain = auth.from_domain.as_deref().unwrap_or("the From address");
-        out.push_str(&format!(
-            "- DMARC passed for {domain}: the mail really comes from the domain in its From address.\n"
-        ));
-    }
-    let meaning = "fewer points mean more likely wanted mail; 0 or less means the filter rates it as wanted mail";
-    match (signals.spam_score, signals.spam_threshold) {
-        (Some(score), Some(threshold)) => out.push_str(&format!(
-            "- Spam filter: {score:.1} points, Junk from {threshold:.1} ({meaning}); {}\n",
-            if score >= threshold { "this mail is over the limit" } else { "this mail is under the limit" }
-        )),
-        (Some(score), None) => out.push_str(&format!("- Spam filter: {score:.1} points ({meaning})\n")),
-        _ => out.push_str("- Spam filter: did not look at this mail\n"),
-    }
-    if !signals.tests.is_empty() {
-        out.push_str("- Spam filter rules that counted:\n");
-        for test in &signals.tests {
-            match RULE_MEANINGS.iter().find(|(rule, _)| rule == test) {
-                Some((_, meaning)) => out.push_str(&format!("  - {test}: {meaning}\n")),
-                None => out.push_str(&format!("  - {test}\n")),
-            }
-        }
-    }
-    out.push_str(&format!("- In the Junk folder now: {}\n", if signals.in_junk { "yes" } else { "no" }));
-    let sender = &signals.sender;
-    out.push_str(&format!(
-        "- Earlier mails from this address: {} ({} of them in Junk); mails the reader sent to it: {}; in the reader's \
-address book: {}",
-        sender.earlier_messages,
-        sender.earlier_in_junk,
-        sender.written_to,
-        if sender.in_contacts { "yes" } else { "no" }
-    ));
-    out
-}
-
-/// Whether the facts clearly speak for a mail: the reader knows the sender (earlier mail of it on
-/// this device, none in Junk; or in the address book; or written to), the From domain is authentic
-/// (DMARC passed, or without a DMARC result both DKIM and SPF passed), the receiving server's spam
-/// filter rates it as wanted (0 points or less) and it is not in Junk. The same rule as in UwUMail
-/// Server.
-pub fn clearly_good(signals: &SpamSignals) -> bool {
-    let (auth, sender) = (&signals.authentication, &signals.sender);
-    let passed = |result: &Option<String>| result.as_deref() == Some("pass");
-    let authentic = match auth.dmarc.as_deref() {
-        Some("pass") => true,
-        None | Some("none") => passed(&auth.dkim) && passed(&auth.spf),
-        Some(_) => false,
-    };
-    let known =
-        (sender.earlier_messages >= 1 && sender.earlier_in_junk == 0) || sender.in_contacts || sender.written_to >= 1;
-    authentic && known && !signals.in_junk && signals.spam_score.is_some_and(|score| score <= 0.0)
-}
-
-/// The model's verdict, held to the facts: "spam" or "phishing" for a mail they clearly speak for
-/// becomes "suspicious", at most half sure, since small models sometimes see a scam in an ordinary
-/// invoice. The third value is the model's own verdict when it was lowered.
-pub fn held_to_facts(verdict: String, confidence: f64, signals: &SpamSignals) -> (String, f64, Option<String>) {
-    if matches!(verdict.as_str(), "spam" | "phishing") && clearly_good(signals) {
-        ("suspicious".into(), confidence.min(0.5), Some(verdict))
-    } else {
-        (verdict, confidence, None)
-    }
+/// What a rule of the receiving server's spam filter or of the phishing checks means, for the model.
+pub fn rule_meaning(rule: &str) -> Option<&'static str> {
+    RULE_MEANINGS.iter().find(|(known, _)| *known == rule).map(|(_, meaning)| *meaning)
 }
 
 #[cfg(test)]
@@ -354,17 +292,6 @@ mod tests {
         assert!(!from_vouched(&forged, "a@bank.example"));
     }
 
-    #[test]
-    fn findings_are_plain_facts() {
-        let signals = SpamSignals {
-            sender: SenderSignals { address: "a@example.com".into(), earlier_messages: 3, ..Default::default() },
-            ..Default::default()
-        };
-        let text = findings(&signals);
-        assert!(text.contains("- SPF: not checked"));
-        assert!(text.contains("Earlier mails from this address: 3 (0 of them in Junk)"));
-    }
-
     /// The invoice of a user report: authentic, wanted by the filter, from a sender who wrote before.
     fn invoice_signals() -> SpamSignals {
         SpamSignals {
@@ -378,61 +305,34 @@ mod tests {
             spam_threshold: Some(5.0),
             tests: vec!["BAYES_HAM".into(), "KNOWN_GOOD_SENDER".into(), "SOME_OTHER_RULE".into()],
             in_junk: false,
-            sender: SenderSignals {
-                address: "invoice@billing.example".into(),
+            sender: Some(SenderSignals {
+                address: Some("invoice@billing.example".into()),
                 earlier_messages: 4,
                 ..SenderSignals::default()
-            },
+            }),
         }
     }
 
     #[test]
-    fn verdicts_the_facts_contradict_are_lowered() {
-        let good = invoice_signals();
-        assert_eq!(held_to_facts("spam".into(), 0.9, &good), ("suspicious".into(), 0.5, Some("spam".into())));
-        assert_eq!(held_to_facts("phishing".into(), 0.3, &good), ("suspicious".into(), 0.3, Some("phishing".into())));
-        for verdict in ["legitimate", "suspicious"] {
-            assert_eq!(held_to_facts(verdict.into(), 0.9, &good), (verdict.into(), 0.9, None));
-        }
-        // Without a DMARC result, DKIM and SPF together vouch for the domain.
-        let mut no_dmarc = good.clone();
-        no_dmarc.authentication.dmarc = None;
-        assert!(clearly_good(&no_dmarc));
-        no_dmarc.authentication.spf = Some("softfail".into());
-        assert!(!clearly_good(&no_dmarc));
-        // A known sender in the address book or written to counts without earlier mail.
-        let mut contact = good.clone();
-        contact.sender.earlier_messages = 0;
-        assert!(!clearly_good(&contact));
-        contact.sender.in_contacts = true;
-        assert!(clearly_good(&contact));
-        contact.sender.in_contacts = false;
-        contact.sender.written_to = 1;
-        assert!(clearly_good(&contact));
-        // Any one fact against the mail leaves the model's verdict alone.
-        let spoiled: [fn(&mut SpamSignals); 6] = [
-            |s| s.authentication.dmarc = Some("fail".into()),
-            |s| s.spam_score = Some(0.5),
-            |s| s.spam_score = None,
-            |s| s.in_junk = true,
-            |s| s.sender.earlier_in_junk = 1,
-            |s| s.authentication = AuthenticationSignals::default(),
-        ];
-        for spoil in spoiled {
-            let mut signals = good.clone();
-            spoil(&mut signals);
-            assert_eq!(held_to_facts("spam".into(), 0.9, &signals), ("spam".into(), 0.9, None), "{signals:?}");
-        }
-    }
-
-    #[test]
-    fn findings_explain_themselves() {
-        let text = findings(&invoice_signals());
+    fn facts_explain_themselves() {
+        let signals = invoice_signals();
+        let facts = crate::assist::spam::facts(&signals, &crate::assist::spam::assess(&signals, &[], ""), rule_meaning);
+        let text = facts.iter().map(|fact| format!("{}: {}", fact.id, fact.text)).collect::<Vec<_>>().join("\n");
         assert!(text.contains("DMARC passed for billing.example"), "{text}");
-        assert!(text.contains("-5.5 points, Junk from 5.0 (fewer points mean"), "{text}");
-        assert!(text.contains("under the limit"), "{text}");
-        assert!(text.contains("  - BAYES_HAM: the filter learned"), "{text}");
-        assert!(text.contains("  - KNOWN_GOOD_SENDER: this sender's"), "{text}");
-        assert!(text.contains("  - SOME_OTHER_RULE\n"), "{text}");
+        assert!(text.contains("-5.5 points, Junk from 5.0; this mail is under the limit"), "{text}");
+        assert!(text.contains("Spam filter rule BAYES_HAM: the filter learned"), "{text}");
+        assert!(text.contains("Spam filter rule KNOWN_GOOD_SENDER: this sender's"), "{text}");
+        assert!(text.contains("Spam filter rule SOME_OTHER_RULE\n"), "{text}");
+        assert!(text.starts_with("F1: SPF: pass"), "{text}");
+    }
+
+    #[test]
+    fn a_known_authenticated_invoice_stays_legitimate_whatever_the_model_says() {
+        let signals = invoice_signals();
+        let assessment = crate::assist::spam::assess(&signals, &[], "Ihre Rechnung");
+        assert_eq!(assessment.allowed, ["legitimate"]);
+        let (verdict, confidence, moved) = crate::assist::spam::settle(&assessment, "spam", 0.9);
+        assert_eq!((verdict.as_str(), moved.as_deref()), ("legitimate", Some("spam")));
+        assert!(confidence <= 0.6);
     }
 }

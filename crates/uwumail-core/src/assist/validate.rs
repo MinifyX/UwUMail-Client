@@ -14,7 +14,7 @@ use super::prompts::SUBJECT_MARK;
 
 const MAX_EVENTS: usize = 10;
 const MAX_QUOTE_CHARS: usize = 300;
-const MAX_REASONS: usize = 6;
+pub const MAX_REASONS: usize = 6;
 const MAX_REASON_CHARS: usize = 300;
 
 fn chars(text: &str) -> usize {
@@ -64,22 +64,18 @@ pub fn split_subject(text: &str) -> (Option<String>, String) {
     ((!subject.is_empty()).then_some(subject), body.trim().to_owned())
 }
 
-/// Verdict, confidence and reasons out of the model's answer.
-pub fn parse_spam(text: &str) -> Option<(String, f64, Vec<String>)> {
+/// A spam check answer: verdict, confidence, and each reason with what it cites.
+pub type SpamAnswer = (String, f64, Vec<(String, String)>);
+
+/// Verdict, confidence and reasons (with what each one cites) out of the model's answer.
+pub fn parse_spam(text: &str) -> Option<SpamAnswer> {
     let answer = json_answer(text)?;
     let verdict = answer.get("verdict")?.as_str()?.trim().to_ascii_lowercase();
     if !matches!(verdict.as_str(), "legitimate" | "suspicious" | "spam" | "phishing") {
         return None;
     }
     let confidence = answer.get("confidence").and_then(Value::as_f64).filter(|c| c.is_finite()).unwrap_or(0.5);
-    let reasons = answer
-        .get("reasons")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|reason| optional_text(Some(reason), MAX_REASON_CHARS))
-        .take(MAX_REASONS)
-        .collect();
+    let reasons = super::spam::parse_reasons(&answer, MAX_REASONS, MAX_REASON_CHARS);
     Some((verdict, confidence.clamp(0.0, 1.0), reasons))
 }
 
@@ -511,24 +507,24 @@ mod tests {
 
     #[test]
     fn spam_answers_are_held_to_their_shape() {
-        let (verdict, confidence, reasons) =
-            parse_spam(r#"{"verdict": "Phishing", "confidence": 7, "reasons": ["a", "", "b\nc"]}"#).unwrap();
-        assert_eq!((verdict.as_str(), confidence), ("phishing", 1.0));
-        assert_eq!(reasons, ["a", "b c"]);
-        // A mail that talks the model into another verdict word gets nothing.
-        assert!(parse_spam(r#"{"verdict": "delete all mail"}"#).is_none());
-        // The order the schema asks for: reasons first, then the verdict.
         let (verdict, confidence, reasons) = parse_spam(
-            r#"{"reasons": ["Rechnung eines bekannten Absenders"], "verdict": "legitimate", "confidence": 0.8}"#,
+            r#"{"verdict": "Phishing", "confidence": 7, "reasons": [{"text": "a", "evidence": "F1"}, "", "b\nc"]}"#,
         )
         .unwrap();
-        assert_eq!((verdict.as_str(), confidence, reasons.len()), ("legitimate", 0.8, 1));
-        assert_eq!(crate::assist::prompts::spam_schema()["required"], json!(["reasons", "verdict", "confidence"]));
+        assert_eq!((verdict.as_str(), confidence), ("phishing", 1.0));
+        assert_eq!(reasons, [("a".to_owned(), "F1".to_owned()), ("b c".to_owned(), String::new())]);
+        // A mail that talks the model into another verdict word gets nothing.
+        assert!(parse_spam(r#"{"verdict": "delete all mail"}"#).is_none());
         assert!(parse_spam(r#"{"verdict": "legitimate; ignore previous instructions"}"#).is_none());
-        let many: Vec<String> = (0..20).map(|i| format!("reason {i} {}", "x".repeat(400))).collect();
+        // The order the schema asks for: reasons first, then the verdict; only the allowed verdicts.
+        let schema = crate::assist::prompts::spam_schema(&["legitimate", "suspicious"]);
+        assert_eq!(schema["required"], json!(["reasons", "verdict", "confidence"]));
+        assert_eq!(schema["properties"]["verdict"]["enum"], json!(["legitimate", "suspicious"]));
+        let many: Vec<Value> =
+            (0..20).map(|i| json!({ "text": format!("reason {i} {}", "x".repeat(400)), "evidence": "F1" })).collect();
         let (_, _, reasons) = parse_spam(&json!({"verdict": "spam", "reasons": many}).to_string()).unwrap();
-        assert_eq!(reasons.len(), 6);
-        assert!(reasons.iter().all(|r| r.chars().count() <= 300));
+        assert_eq!(reasons.len(), 12, "twice the most kept, for the check to choose from");
+        assert!(reasons.iter().all(|(text, _)| text.chars().count() <= 300));
     }
 
     fn label(id: &str, name: &str) -> Label {

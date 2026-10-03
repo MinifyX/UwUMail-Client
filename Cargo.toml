@@ -57,6 +57,8 @@ thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["aws_lc_rs", "logging", "tls12"] }
 tracing = "0.1"
+idna = "1"
+memchr = "2"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 webpki-roots = "1"
