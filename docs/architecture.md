@@ -508,9 +508,11 @@ own domain (`spam::authentic`, as on the server). Anything lower may be the send
 in what goes to a UwUMail server for a mail of another account. A results header with an unclosed comment
 or quote or a stray `)` is believed not at all (a provider may have echoed the
 sender's text into it; this also covers C6-2), and a method named twice keeps its
-worse result. Known limitation (C6-1): an emptied `Authentication-Results` of the
-receiver is skipped, so on an unusual receiver layout with several of its own
-results headers a sender can choose which of them counts. Then how often
+worse result. The sender
+history counts in full only when the From is authentic, not at all when DMARC
+failed or the results leave the From unaligned, and at half weight (at most 1.5
+in all) when the mail carries no results; payment and urgency cues stay on
+unless the known sender is also authentic (the server's M-1). Then how often
 the sender wrote before and ended in junk, whether they are in the contacts, plus the
 deterministic phishing checks of `phishing/` (a copy of UwUMail Server's:
 lookalike, homoglyph and punycode domains against a brand list and the domains
@@ -528,6 +530,21 @@ does all of this; older servers answer without `facts` and the card shows the
 old display.
 Schemas go out with their properties in the order of `required`, since
 providers make the model write them in that order.
+
+#### Known limitations (security review)
+
+Low findings of the 0.22 reviews, documented and not fixed:
+
+- An emptied `Authentication-Results` of the receiver is skipped, so on an unusual receiver layout with several of its own results headers a sender can choose which of them counts (C6-1).
+- Every device spam check downloads the whole raw message with no size check first; the 25 MiB cap applies only when parsing (`engine/assist_ops.rs`, `read_for_spam_check`).
+- `sender_history` counts across all accounts, so history from account A counts for account B (`store/assist.rs`).
+- `Device::effective` falls back to the first usable provider, so a provider set up only for writing also gets spam checks and labels unless another one is chosen per feature (info).
+- A sender taken off a label by hand blocks that label for that From address whether or not the sender is authenticated; it can only suppress labels, never add one.
+- `Store::delete_account` is not one transaction, so a failure partway can leave label data half deleted.
+- `learn_by_hand` treats an unset `nonAiLabels` as on, `auto_label` as off.
+- When the same address exists in two accounts, the composer can pick the other account's server signature (`localSignatures.ts`, `signatures.ts`).
+- Two date-title regexes (`lib/dates/detect.ts`) are quadratic on long runs without spaces: at most about 1 s when opening a crafted mail.
+- Device signatures for `@domain` or `*` stay after the last account on that domain is removed (info).
 
 **Labels.** A label is a keyword on the mail (`messages.keywords`), set with
 JMAP `Email/set` or IMAP `STORE +FLAGS`, the latter only where the folder's
