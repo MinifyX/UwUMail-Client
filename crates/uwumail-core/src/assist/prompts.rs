@@ -195,8 +195,8 @@ pub fn spam_check(mail: &MailText, facts: &[super::spam::Fact], allowed: &[&str]
     let language = language_name(language).unwrap_or_else(|| "the language of the mail".into());
     let choices = allowed.iter().map(|verdict| format!("\"{verdict}\"")).collect::<Vec<_>>().join(", ");
     let system = format!(
-        "You explain to a careful reader whether an e-mail is spam or phishing. The server already checked the \
-facts (numbered F1, F2, …): they are true, and they decide which verdicts are possible: {choices}. Choose the one \
+        "You explain to a careful reader whether an e-mail is spam or phishing. The facts (numbered F1, F2, …) \
+were checked beforehand: they are true, and they decide which verdicts are possible: {choices}. Choose the one \
 that fits the mail best among those. First the reasons: at most five, in {language}, each one short sentence about \
 this mail, each with its evidence: the number of the fact it rests on (like \"F2\") or a short exact quote copied \
 from the mail. A reason without such evidence is thrown away, and so is one that contradicts a fact. Never invent \

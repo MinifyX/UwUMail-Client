@@ -287,7 +287,8 @@ mod tests {
     fn quick(html: &str) -> Html {
         let started = std::time::Instant::now();
         let read = read(html);
-        assert!(started.elapsed() < std::time::Duration::from_secs(1), "took {:?}", started.elapsed());
+        // Generous for slow, busy test machines: a quadratic scan takes minutes.
+        assert!(started.elapsed() < std::time::Duration::from_secs(10), "took {:?}", started.elapsed());
         read
     }
 

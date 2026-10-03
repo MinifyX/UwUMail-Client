@@ -653,7 +653,7 @@ address book: {}",
         ),
         Band::Spam => format!("they clearly speak against the mail: {towards}"),
     };
-    facts.push(format!("The server's weighing of all this: {:+.1} points, {lean}", assessment.score));
+    facts.push(format!("The weighing of all this: {:+.1} points, {lean}", assessment.score));
     facts.into_iter().enumerate().map(|(index, text)| Fact { id: format!("F{}", index + 1), text }).collect()
 }
 

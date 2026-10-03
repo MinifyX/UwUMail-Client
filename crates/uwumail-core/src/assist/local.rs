@@ -46,6 +46,11 @@ fn invalid(property: &str, description: &str) -> Error {
 /// The language a base label was set up in (UwUMail Server's rule): its definition was written in
 /// the person's language when it was made, its name too.
 pub fn base_label_language(base: uwumail_labels::Base, label: &Label) -> &'static str {
+    match label.base_language.as_deref() {
+        Some("de") => return "de",
+        Some("en") => return "en",
+        _ => {}
+    }
     let description = label.description.as_str();
     if description == base.text("en").description || label.name.trim().eq_ignore_ascii_case(base.name("en")) {
         "en"
@@ -669,9 +674,14 @@ impl Device<'_> {
         for base in uwumail_labels::Base::ALL {
             match self.labels()?.into_iter().find(|label| label.base() == Some(base)) {
                 Some(mut label) => {
-                    let current = base.text(base_label_language(base, &label)).description;
-                    if label.description != current {
+                    // The server gives only a definition still as it wrote it the newer wording; on
+                    // this device a definition can't be changed, so it always is. Same language.
+                    let language =
+                        label.base_language.clone().unwrap_or_else(|| base_label_language(base, &label).into());
+                    let current = base.text(&language).description;
+                    if label.description != current || label.base_language.as_deref() != Some(language.as_str()) {
                         label.description = current.into();
+                        label.base_language = Some(language);
                         self.store.update_assist_label(&label)?;
                         made = true;
                     }
@@ -700,6 +710,7 @@ impl Device<'_> {
             let mut adopted = own.clone();
             adopted.base = Some(base.as_str().into());
             adopted.description = text.description.into();
+            adopted.base_language = Some(language.into());
             adopted.detector = adopted.detector.filter(|detector| detector != base.detector().as_str());
             self.store.update_assist_label(&adopted)?;
             return Ok(adopted);
@@ -716,6 +727,7 @@ impl Device<'_> {
         label.description = text.description.into();
         label.color = Some(base.color().into());
         label.base = Some(base.as_str().into());
+        label.base_language = Some(language.into());
         self.store.insert_assist_label(&label, now())?;
         Ok(label)
     }

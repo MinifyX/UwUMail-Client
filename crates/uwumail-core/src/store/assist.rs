@@ -132,13 +132,14 @@ CREATE TABLE label_examples (
 pub(super) const FROM_TRUSTED_MIGRATION: &str =
     "ALTER TABLE messages ADD COLUMN from_trusted INTEGER NOT NULL DEFAULT 0;";
 
-/// Labels 0.22 of UwUMail Server (docs/labels.md): which base label a label is and whether it is
-/// put on by itself at all; and the person's corrections shown to the model, a few per label: a
+/// Labels 0.22 of UwUMail Server (docs/labels.md): which base label a label is, the language its
+/// definition was written in, and whether it is put on by itself at all; and the person's corrections shown to the model, a few per label: a
 /// label put on (positive) or taken off by hand, with the sender's domain (never the address), the
 /// subject and the start of the text, cut short.
 pub(super) const BASE_LABELS_MIGRATION: &str = r#"
 ALTER TABLE assist_labels ADD COLUMN base TEXT;
 ALTER TABLE assist_labels ADD COLUMN auto INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE assist_labels ADD COLUMN base_language TEXT;
 CREATE UNIQUE INDEX assist_labels_base ON assist_labels (base) WHERE base IS NOT NULL;
 CREATE TABLE label_shots (
     label_id TEXT NOT NULL,
@@ -300,6 +301,7 @@ fn label_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Label> {
         classifier: row.get(8)?,
         base: row.get(9)?,
         auto: row.get(10)?,
+        base_language: row.get(11)?,
     })
 }
 
@@ -538,7 +540,8 @@ impl Store {
     pub fn assist_labels(&self) -> Result<Vec<Label>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, keyword, color, rules, detector, learn_senders, classifier, base, auto
+            "SELECT id, name, description, keyword, color, rules, detector, learn_senders, classifier, base, auto,
+                    base_language
              FROM assist_labels ORDER BY created_at, rowid",
         )?;
         let rows = stmt.query_map([], label_row)?;
@@ -549,8 +552,8 @@ impl Store {
         self.conn().execute(
             "INSERT INTO assist_labels
                 (id, name, description, keyword, color, created_at, rules, detector, learn_senders, classifier,
-                 base, auto)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                 base, auto, base_language)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 label.id,
                 label.name,
@@ -563,7 +566,8 @@ impl Store {
                 label.learn_senders,
                 label.classifier,
                 label.base,
-                label.auto
+                label.auto,
+                label.base_language
             ],
         )?;
         Ok(())
@@ -573,7 +577,8 @@ impl Store {
     pub fn update_assist_label(&self, label: &Label) -> Result<bool> {
         Ok(self.conn().execute(
             "UPDATE assist_labels SET name = ?2, description = ?3, color = ?4, rules = ?5, detector = ?6,
-                learn_senders = ?7, classifier = ?8, base = ?9, auto = ?10 WHERE id = ?1",
+                learn_senders = ?7, classifier = ?8, base = ?9, auto = ?10,
+                base_language = ?11 WHERE id = ?1",
             params![
                 label.id,
                 label.name,
@@ -584,7 +589,8 @@ impl Store {
                 label.learn_senders,
                 label.classifier,
                 label.base,
-                label.auto
+                label.auto,
+                label.base_language
             ],
         )? > 0)
     }

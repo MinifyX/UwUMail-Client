@@ -91,6 +91,9 @@ pub struct Label {
     /// Put on by itself at all; off, only by hand.
     #[serde(default = "on")]
     pub auto: bool,
+    /// The language a base label's definition was written in (`de`, `en`), for newer wordings.
+    #[serde(skip)]
+    pub base_language: Option<String>,
     /// A sender whose mail got it by hand twice gets it on new mail.
     #[serde(default = "on")]
     pub learn_senders: bool,
@@ -116,6 +119,7 @@ impl Label {
             detector: None,
             base: None,
             auto: true,
+            base_language: None,
             learn_senders: true,
             classifier: true,
         }
