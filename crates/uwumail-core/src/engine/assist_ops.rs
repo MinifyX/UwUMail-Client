@@ -957,7 +957,8 @@ impl Engine {
     /// A mail read from its raw form, with all its headers: for the spam check.
     async fn raw_mail(&self, message: &Message) -> Result<MailText> {
         let raw = self.raw_bytes(message).await?;
-        Ok(MailText::from_parsed(message, parse_capped(&raw).as_ref(), mail::MAX_MAIL_CHARS))
+        Ok(MailText::from_parsed(message, parse_capped(&raw).as_ref(), mail::MAX_MAIL_CHARS)
+            .without_cut_header(&raw, MAX_PARSED_RAW))
     }
 
     /// The raw form of a mail.
@@ -2363,7 +2364,8 @@ fn read_for_spam_check(
     contact_domains: &[String],
 ) -> (MailText, Vec<crate::phishing::Finding>, usize) {
     let parsed = parse_capped(raw);
-    let mail = MailText::from_parsed(message, parsed.as_ref(), mail::MAX_MAIL_CHARS);
+    let mail =
+        MailText::from_parsed(message, parsed.as_ref(), mail::MAX_MAIL_CHARS).without_cut_header(raw, MAX_PARSED_RAW);
     let Some(parsed) = parsed else { return (mail, Vec::new(), 0) };
     // Tracked links of a newsletter only pass as such when the receiving server vouches for its
     // From domain (SPAM-3), read with this device's rule for whose headers count (signals.rs).

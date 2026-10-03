@@ -335,7 +335,7 @@ fn masked(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut at = 0;
     while at < chars.len() {
-        if !chars[at].is_ascii_digit() {
+        if !chars[at].is_numeric() {
             out.push(chars[at]);
             at += 1;
             continue;
@@ -344,17 +344,17 @@ fn masked(text: &str) -> String {
         let mut end = at;
         let mut digits = 0;
         while end < chars.len() {
-            if chars[end].is_ascii_digit() {
+            if chars[end].is_numeric() {
                 digits += 1;
                 end += 1;
-            } else if matches!(chars[end], ' ' | '-') && chars.get(end + 1).is_some_and(char::is_ascii_digit) {
+            } else if matches!(chars[end], ' ' | '-') && chars.get(end + 1).is_some_and(|c| c.is_numeric()) {
                 end += 1;
             } else {
                 break;
             }
         }
         for c in &chars[at..end] {
-            out.push(if digits >= 4 && c.is_ascii_digit() { '#' } else { *c });
+            out.push(if digits >= 4 && c.is_numeric() { '#' } else { *c });
         }
         at = end;
     }
@@ -365,7 +365,7 @@ fn masked(text: &str) -> String {
 /// not a short name like `MP3` or `A4`.
 fn mixed_code(word: &str) -> bool {
     let alphanumeric = word.chars().filter(|c| c.is_alphanumeric()).count();
-    alphanumeric >= 4 && word.chars().any(|c| c.is_ascii_digit()) && word.chars().any(char::is_alphabetic)
+    alphanumeric >= 4 && word.chars().any(|c| c.is_numeric()) && word.chars().any(char::is_alphabetic)
 }
 
 fn shot_cut(text: &str, max: usize) -> String {
@@ -1389,6 +1389,15 @@ mod tests {
         assert_eq!(count("leni@example.com"), Some(1), "put on by hand again, it counts from one");
         store.delete_assist_label("g1").unwrap();
         assert!(store.label_shots().unwrap().iter().all(|s| s.label_id != "g1"));
+    }
+
+    /// Digits of any script are masked like ASCII ones (the server's R3 I-5).
+    #[test]
+    fn masking_covers_unicode_digits_and_mixed_codes() {
+        assert_eq!(masked("Kunde ４８２９１３ heute"), "Kunde ###### heute");
+        assert_eq!(masked("رقم ٤٨٢٩١٣"), "رقم ######");
+        assert_eq!(masked("Code AB７-K2X für MP3"), "Code ###-### für MP3");
+        assert_eq!(masked("Tag 12, Seite 3"), "Tag 12, Seite 3");
     }
 
     /// C3-6: codes, account numbers and links never go into a correction; a mail with a one-time

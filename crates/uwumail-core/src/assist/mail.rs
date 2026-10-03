@@ -75,7 +75,15 @@ impl MailText {
                 let headers = parsed
                     .headers_raw()
                     .take(MAX_HEADERS)
-                    .map(|(name, value)| (truncate(name, MAX_HEADER_CHARS), truncate(&unfold(value), MAX_HEADER_CHARS)))
+                    .map(|(name, value)| {
+                        // What the trust checks read is never cut, only left out (C4-1).
+                        let value = if super::signals::is_trace_header(name) {
+                            super::signals::whole_or_empty(&unfold(value))
+                        } else {
+                            truncate(&unfold(value), MAX_HEADER_CHARS)
+                        };
+                        (truncate(name, MAX_HEADER_CHARS), value)
+                    })
                     .collect();
                 (text, links, headers)
             }
@@ -194,6 +202,23 @@ pub fn cap(text: &str, max: usize) -> String {
     match text.char_indices().nth(max) {
         Some((cut, _)) => format!("{}\n[…]", &text[..cut]),
         None => text.to_owned(),
+    }
+}
+
+/// Whether the header block ends within `raw`: an empty line.
+fn header_block_ends(raw: &[u8]) -> bool {
+    raw.windows(4).any(|w| w == b"\r\n\r\n") || raw.windows(2).any(|w| w == b"\n\n")
+}
+
+impl MailText {
+    /// After parsing only the first `parsed` bytes of `raw`: when that cut lands inside the header
+    /// block, the last header read may be cut mid-word, so it is left out, never read as if whole
+    /// (C4-1, as on UwUMail Server).
+    pub fn without_cut_header(mut self, raw: &[u8], parsed: usize) -> Self {
+        if raw.len() > parsed && !header_block_ends(&raw[..parsed]) && self.headers.len() < MAX_HEADERS {
+            self.headers.pop();
+        }
+        self
     }
 }
 
@@ -434,5 +459,80 @@ mod tests {
         assert!(prompt.contains("Date: Monday, 2026-10-05 10:00 UTC"));
         let long = Message { subject: "ä".repeat(100_000), ..message };
         assert_eq!(MailText::from_stored(&long, MAX_MAIL_CHARS).subject.chars().count(), MAX_SUBJECT_CHARS);
+    }
+    /// C4-1: an `Authentication-Results` padded so that a 2,000-character cut would land right
+    /// after `victim.example` of `victim.example.attacker.example` is read whole (and so with its
+    /// `dmarc=fail`), and one too long to read whole is read as empty, never cut.
+    #[test]
+    fn a_padded_authentication_results_is_never_cut() {
+        let message = crate::model::Message {
+            id: "m".into(),
+            thread_id: "t".into(),
+            account_id: "a".into(),
+            folder_id: "f".into(),
+            from: Address { name: None, email: "x@victim.example".into() },
+            to: vec![],
+            cc: vec![],
+            bcc: vec![],
+            reply_to: vec![],
+            subject: "Rechnung".into(),
+            date: "2026-10-26T09:00:00Z".into(),
+            flags: Default::default(),
+            snippet: String::new(),
+            body_html: None,
+            body_text: None,
+            has_remote_content: false,
+            attachments: vec![],
+            unsubscribe: None,
+            keywords: vec![],
+        };
+        let raw_with = |results: &str| {
+            format!(
+                "Authentication-Results: {results}\r\nReceived: from a.example (a.example [192.0.2.1]) by mx.example.org\r\n\
+                 From: x@victim.example\r\nSubject: Rechnung\r\n\r\nHallo\r\n"
+            )
+        };
+        let start = "mx.example.org; ";
+        let tail = "dkim=pass header.i=@victim.example.attacker.example; dmarc=fail header.from=victim.example";
+        let cut_at = tail.find(".attacker").unwrap();
+        // Padding with junk DKIM results puts character 2,000 right after `victim.example`.
+        let mut pad = String::new();
+        let part = |selector: usize| format!("dkim=permerror header.s={}; ", "s".repeat(selector));
+        while 2_000 - start.len() - cut_at - pad.len() > 200 {
+            pad.push_str(&part(40));
+        }
+        pad.push_str(&part(2_000 - start.len() - cut_at - pad.len() - 26));
+        let results = format!("{start}{pad}{tail}");
+        assert_eq!(
+            &results.chars().take(2_000).collect::<String>()[2_000 - "victim.example".len()..],
+            "victim.example"
+        );
+        let mail = MailText::from_raw(&message, raw_with(&results).as_bytes(), MAX_MAIL_CHARS);
+        let auth = super::super::signals::authentication(&mail.headers, "x@victim.example");
+        assert_eq!(auth.dmarc.as_deref(), Some("fail"));
+        assert!(!super::super::signals::from_vouched(&mail.headers, "x@victim.example"));
+        assert!(!crate::mime::parse(raw_with(&results).as_bytes()).from_trusted);
+
+        // Too long to read whole: nothing of it is read.
+        let huge = format!("{start}{}{tail}", "dkim=permerror; ".repeat(1_100));
+        let mail = MailText::from_raw(&message, raw_with(&huge).as_bytes(), MAX_MAIL_CHARS);
+        assert_eq!(mail.headers[0], ("Authentication-Results".to_owned(), String::new()));
+        assert_eq!(super::super::signals::authentication(&mail.headers, "x@victim.example").dkim, None);
+    }
+
+    /// The parse cut inside the header block leaves the cut header out (C4-1, as on the server).
+    #[test]
+    fn a_header_cut_by_the_parse_limit_is_left_out() {
+        let head = b"Received: from a.example (a.example [192.0.2.1]) by mx.example.org\r\nAuthentication-Results: mx.example.org; dkim=pass header.d=victim.example.attacker.example; dmarc=fail\r\n\r\nHi";
+        let cut = head.iter().position(|b| *b == b'.').unwrap() + 60;
+        let mail = MailText {
+            headers: vec![
+                ("Received".into(), "from a.example (a.example [192.0.2.1]) by mx.example.org".into()),
+                ("Authentication-Results".into(), "mx.example.org; dkim=pass header.d=victim.example".into()),
+            ],
+            ..MailText::default()
+        };
+        assert_eq!(mail.clone().without_cut_header(head, cut).headers.len(), 1);
+        assert_eq!(mail.without_cut_header(head, head.len()).headers.len(), 2);
     }
 }

@@ -57,9 +57,10 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
         .filter(|domain| !domain.is_empty());
     let mut signals = AuthenticationSignals { from_domain, ..AuthenticationSignals::default() };
     let Some(value) = receiving_results(headers) else { return signals };
-    let parts = auth_results_parts(value);
-    let mut dkim: Vec<String> = Vec::new();
-    for part in parts.iter().skip(1) {
+    // Every part is read, however many DKIM results stand before SPF and DMARC; only what is kept
+    // of the DKIM ones is capped (C4-2, the server's R3-L1).
+    let (mut first_dkim, mut dkim_passed) = (None, false);
+    for part in auth_results_parts(value).skip(1) {
         let Some((method, result)) = part.first().and_then(|first| first.split_once('=')) else { continue };
         let result: String =
             result.chars().filter(|c| c.is_ascii_alphanumeric()).take(20).collect::<String>().to_ascii_lowercase();
@@ -88,19 +89,27 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
                 }
             }
             "dkim" => {
-                if result == "pass"
-                    && let Some(domain) = property("header.d").or_else(|| property("header.i")).and_then(domain_part)
-                {
-                    signals.dkim_pass_domains.push(domain);
+                if result == "pass" {
+                    dkim_passed = true;
+                    if signals.dkim_pass_domains.len() < MAX_DKIM_PASS_DOMAINS
+                        && let Some(domain) =
+                            property("header.d").or_else(|| property("header.i")).and_then(domain_part)
+                        && !signals.dkim_pass_domains.contains(&domain)
+                    {
+                        signals.dkim_pass_domains.push(domain);
+                    }
                 }
-                dkim.push(result);
+                first_dkim.get_or_insert(result);
             }
             _ => {}
         }
     }
-    signals.dkim = if dkim.iter().any(|r| r == "pass") { Some("pass".into()) } else { dkim.into_iter().next() };
+    signals.dkim = if dkim_passed { Some("pass".into()) } else { first_dkim };
     signals
 }
+
+/// The most DKIM signers kept from one `Authentication-Results`.
+const MAX_DKIM_PASS_DOMAINS: usize = 16;
 
 /// The domain of an `Authentication-Results` value: `header.d=signer.example`, the part after the
 /// last `@` of `smtp.mailfrom=user@envelope.example` or `header.i=@signer.example`.
@@ -109,60 +118,122 @@ fn domain_part(value: &str) -> Option<String> {
     (!domain.is_empty() && domain.len() <= 253 && domain.contains('.')).then_some(domain)
 }
 
-/// An `Authentication-Results` value split into its `;` parts, each into its words, the way
-/// RFC 8601 reads it: comments in parentheses are left out, and a quoted string is one word
-/// without its quotes. A quoted envelope sender (`"a;dmarc=pass"@attacker.example`) can neither
-/// end a part nor start a result of its own (the server's R2-M1, C3-2 here).
-pub(crate) fn auth_results_parts(value: &str) -> Vec<Vec<String>> {
-    let mut parts: Vec<Vec<String>> = vec![Vec::new()];
-    let mut word = String::new();
-    let mut quoted = false;
-    let mut depth = 0usize;
-    let mut chars = value.chars();
-    let end_word = |parts: &mut Vec<Vec<String>>, word: &mut String| {
-        if !word.is_empty()
-            && let Some(part) = parts.last_mut()
-        {
-            part.push(std::mem::take(word));
+/// UwUMail Server's `uwumail_smtp::headers` reader of `Authentication-Results` (R3-L1/R3-L2 there,
+/// C4-1/C4-2 here), kept the same.
+/// The longest word of an `Authentication-Results` value that is kept; a longer one is skipped
+/// and reading goes on behind it.
+const MAX_AUTH_WORD: usize = 1024;
+/// The most words of one `;` part; a part with more is left out as a whole.
+const MAX_AUTH_PART_WORDS: usize = 32;
+
+/// The authserv-id of an `Authentication-Results` value: the first word of its first part, read
+/// as [`auth_results_parts`] reads it, without a trailing dot.
+pub(crate) fn authserv_id(value: &str) -> Option<String> {
+    let first = auth_results_parts(value).next()?;
+    let id = first.into_iter().next()?;
+    let id = id.trim_end_matches('.');
+    (!id.is_empty()).then(|| id.to_owned())
+}
+
+/// An `Authentication-Results` value as its `;` parts, each as its words, read the way RFC 8601
+/// reads it: comments in parentheses (nested too) are left out, and a quoted string is part of a
+/// word without its quotes, so a quoted envelope sender (`"a;dmarc=pass"@attacker.example`) can
+/// neither end a part nor start a result of its own.
+///
+/// One pass, part by part, so a value of any length costs time in its length and memory in one
+/// part, and every part is read (security review 0.22 R3-L1). What a limit cuts is never kept in
+/// part: a word longer than [`MAX_AUTH_WORD`] is left out whole, and a part of more than
+/// [`MAX_AUTH_PART_WORDS`] words comes out empty — a cut `header.d=victim.example` of
+/// `victim.example.attacker.example` would otherwise read as the victim's (client review C4-1).
+/// Callers hand in the whole value, never a cut one. The assistant reads our own results with it,
+/// and the strip of forged ones its authserv-id ([`authserv_id`]).
+pub(crate) fn auth_results_parts(value: &str) -> AuthResultsParts<'_> {
+    AuthResultsParts { chars: value.chars(), done: false }
+}
+
+/// See [`auth_results_parts`].
+pub(crate) struct AuthResultsParts<'a> {
+    chars: std::str::Chars<'a>,
+    done: bool,
+}
+
+impl Iterator for AuthResultsParts<'_> {
+    type Item = Vec<String>;
+
+    fn next(&mut self) -> Option<Vec<String>> {
+        if self.done {
+            return None;
         }
-    };
-    while let Some(c) = chars.next() {
-        if quoted {
-            match c {
-                '\\' => word.extend(chars.next()),
-                '"' => quoted = false,
-                c => word.push(c),
-            }
-        } else if depth > 0 {
-            match c {
-                '\\' => {
-                    chars.next();
+        let mut part: Vec<String> = Vec::new();
+        let mut overflow = false;
+        let mut word = String::new();
+        let mut too_long = false;
+        let mut quoted = false;
+        let mut depth = 0usize;
+        let end_word = |part: &mut Vec<String>, overflow: &mut bool, word: &mut String, too_long: &mut bool| {
+            if !word.is_empty() && !*too_long {
+                if part.len() < MAX_AUTH_PART_WORDS {
+                    part.push(std::mem::take(word));
+                } else {
+                    *overflow = true;
                 }
-                '(' => depth += 1,
-                ')' => depth -= 1,
-                _ => {}
             }
-        } else {
-            match c {
-                '"' => quoted = true,
-                '(' => {
-                    end_word(&mut parts, &mut word);
-                    depth = 1;
-                }
-                ';' => {
-                    end_word(&mut parts, &mut word);
-                    parts.push(Vec::new());
-                }
-                c if c.is_whitespace() => end_word(&mut parts, &mut word),
-                c => word.push(c),
+            word.clear();
+            *too_long = false;
+        };
+        let push = |word: &mut String, too_long: &mut bool, c: char| {
+            if *too_long {
+                return;
             }
-        }
-        if parts.len() > 64 || word.len() > 1024 {
-            break;
+            if word.len() + c.len_utf8() > MAX_AUTH_WORD {
+                *too_long = true;
+                word.clear();
+            } else {
+                word.push(c);
+            }
+        };
+        loop {
+            let Some(c) = self.chars.next() else {
+                self.done = true;
+                end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                return Some(if overflow { Vec::new() } else { part });
+            };
+            if quoted {
+                match c {
+                    '\\' => {
+                        if let Some(next) = self.chars.next() {
+                            push(&mut word, &mut too_long, next);
+                        }
+                    }
+                    '"' => quoted = false,
+                    c => push(&mut word, &mut too_long, c),
+                }
+            } else if depth > 0 {
+                match c {
+                    '\\' => {
+                        self.chars.next();
+                    }
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+            } else {
+                match c {
+                    '"' => quoted = true,
+                    '(' => {
+                        end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                        depth = 1;
+                    }
+                    ';' => {
+                        end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                        return Some(if overflow { Vec::new() } else { part });
+                    }
+                    c if c.is_whitespace() => end_word(&mut part, &mut overflow, &mut word, &mut too_long),
+                    c => push(&mut word, &mut too_long, c),
+                }
+            }
         }
     }
-    end_word(&mut parts, &mut word);
-    parts
 }
 
 /// Whether `domain` (a DKIM signer, an SPF-checked envelope domain) is the From domain, a parent of
@@ -174,6 +245,22 @@ pub fn related_domains(from_domain: &str, domain: &str) -> bool {
     !from.is_empty()
         && domain.contains('.')
         && (from == domain || from.ends_with(&format!(".{domain}")) || domain.ends_with(&format!(".{from}")))
+}
+
+/// The longest value of a trace or verdict header (`Received`, `Authentication-Results`,
+/// `X-Spam-Status`) that is read at all. A longer one is read as empty, never cut: a cut
+/// `header.i=@victim.example.attacker.example` would read as the victim's, with the `dmarc=fail`
+/// behind it gone (C4-1). The readers are linear, so this is generous.
+pub const MAX_TRACE_VALUE: usize = 16_000;
+
+/// Whether a header is one the trust checks read (see [`MAX_TRACE_VALUE`]).
+pub fn is_trace_header(name: &str) -> bool {
+    ["Received", "Authentication-Results", "X-Spam-Status"].iter().any(|known| known.eq_ignore_ascii_case(name.trim()))
+}
+
+/// A trace header's value whole, or empty when it is longer than [`MAX_TRACE_VALUE`].
+pub fn whole_or_empty(value: &str) -> String {
+    if value.chars().nth(MAX_TRACE_VALUE).is_some() { String::new() } else { value.to_owned() }
 }
 
 /// Where the receiving server's own header fields end: the first `Received:` (top first) that
@@ -207,6 +294,10 @@ fn intake(headers: &[(String, String)]) -> Option<(usize, Option<String>)> {
 /// Microsoft and qmail write them (`(192.0.2.7)`, C3-7).
 fn local_hop(value: &str) -> bool {
     let lower = value.trim_start().to_ascii_lowercase();
+    // A value too long to be read whole is read as empty (C4-1): nothing shows it internal.
+    if lower.is_empty() {
+        return false;
+    }
     let Some(rest) = lower.strip_prefix("from") else { return true };
     // The from part, up to where the receiving server names itself.
     let tokens: Vec<&str> = rest.split_whitespace().take_while(|token| *token != "by").collect();
@@ -223,7 +314,9 @@ fn local_hop(value: &str) -> bool {
         if bare.starts_with("helo=") || bare.starts_with("ident=") {
             continue;
         }
-        if bare.trim_end_matches(')') == "helo" {
+        // qmail's `(HELO <name>)`: only that shape, a name closing the comment without a bracketed
+        // literal, is the HELO; a `[ip]` behind a word "helo" is never one (C4-4).
+        if *token == "(helo" && tokens.get(index + 1).is_some_and(|next| next.ends_with(')') && !next.contains('[')) {
             skip_next = true;
             continue;
         }
@@ -287,9 +380,8 @@ fn receiving_results(headers: &[(String, String)]) -> Option<&str> {
             return None;
         }
         if is_results(name) {
-            let parts = auth_results_parts(value);
-            let authserv_id = parts.first().and_then(|id| id.first()).map_or("", String::as_str);
-            return aligned(authserv_id, &host).then_some(value.as_str());
+            let id = authserv_id(value).unwrap_or_default();
+            return aligned(&id, &host).then_some(value.as_str());
         }
     }
     None
@@ -569,6 +661,42 @@ mod tests {
         assert!(local_hop("from localhost ([127.0.0.1] helo=mail.example.org) by mail.example.org"));
         assert!(local_hop("from [127.0.0.1] (helo=localhost) by mail.example.org with esmtp"));
         assert!(local_hop("from unknown (HELO mail.example.org) (127.0.0.1) by mail.example.org"));
+    }
+
+    /// C4-1/C4-2: every part is read however many come first, and a word a limit cuts is left out
+    /// whole, never read as the victim's domain.
+    #[test]
+    fn long_results_are_read_whole_and_cut_words_dropped() {
+        let read = |results: String| {
+            let headers = [
+                header("Authentication-Results", &results),
+                header("Received", "from a.example (a.example [192.0.2.1]) by mx.example.org"),
+            ];
+            (authentication(&headers, "x@victim.example"), from_vouched(&headers, "x@victim.example"))
+        };
+        let (auth, vouched) = read(format!("mx.example.org; {}spf=fail; dmarc=fail", "dkim=permerror; ".repeat(70)));
+        assert_eq!((auth.spf.as_deref(), auth.dmarc.as_deref()), (Some("fail"), Some("fail")));
+        assert!(!vouched);
+        let long_local = "a".repeat(1_100);
+        let (auth, vouched) =
+            read(format!("mx.example.org; dkim=pass header.i={long_local}@victim.example.attacker.example"));
+        assert!(auth.dkim_pass_domains.is_empty(), "{auth:?}");
+        assert!(!vouched);
+        // At most 16 signers are kept, each once.
+        let many: String = (0..40).map(|n| format!("dkim=pass header.d=s{}.example; ", n % 20)).collect();
+        assert_eq!(read(format!("mx.example.org; {many}")).0.dkim_pass_domains.len(), 16);
+        assert_eq!(authserv_id("(c) \"mx.example.org.\" ; spf=pass").as_deref(), Some("mx.example.org"));
+    }
+
+    /// C4-4: only qmail's own `(HELO name)` is skipped; a bracketed address behind a word "helo"
+    /// still counts.
+    #[test]
+    fn a_reverse_name_helo_does_not_hide_the_address() {
+        assert!(!local_hop("from [127.0.0.1] (helo [192.0.2.7]) by mx.example.org"));
+        assert!(!local_hop("from [127.0.0.1] (helo [192.0.2.7] ) by mx.example.org"));
+        assert!(local_hop("from unknown (HELO mail.example.org) (127.0.0.1) by mail.example.org"));
+        // A value too long to read whole (read as empty) is an intake line.
+        assert!(!local_hop(""));
     }
 
     /// C3-7: Microsoft and qmail write the address alone in parentheses.

@@ -65,12 +65,16 @@ pub fn mail(mail: &MailText, spam: Option<bool>) -> Value {
         // sender wrote lower down would vouch for its own mail (C-1).
         let headers: Vec<Value> = super::signals::receiving_headers(&mail.headers)
             .iter()
-            .filter(|(name, _)| {
+            // A value too long for the server is left out, never cut: the server couldn't tell a
+            // cut one from a whole one (C4-1).
+            .filter(|(name, value)| {
                 name.chars().count() <= MAX_HEADER_NAME_CHARS
+                    && !value.is_empty()
+                    && value.chars().count() <= MAX_HEADER_VALUE_CHARS
                     && SPAM_HEADERS.iter().any(|wanted| wanted.eq_ignore_ascii_case(name.trim()))
             })
             .take(MAX_HEADERS)
-            .map(|(name, value)| json!({ "name": name, "value": cut(value, MAX_HEADER_VALUE_CHARS) }))
+            .map(|(name, value)| json!({ "name": name, "value": value }))
             .collect();
         out["headers"] = Value::Array(headers);
         out["inJunk"] = Value::Bool(in_junk);
@@ -155,10 +159,20 @@ mod tests {
         };
         let sent = mail(&few, Some(false));
         let sent = sent["headers"].as_array().unwrap();
-        assert_eq!(sent.len(), 2, "only what the spam check reads, only the receiving server's: {sent:?}");
-        assert_eq!(sent[0], json!({ "name": "X-Spam-Status", "value": "No" }));
-        assert_eq!(sent[1]["name"], "Authentication-Results");
-        assert_eq!(sent[1]["value"].as_str().unwrap().chars().count(), 2000);
+        // Only what the spam check reads, only the receiving server's, and a value too long for
+        // the server left out rather than cut (C4-1).
+        assert_eq!(sent, &[json!({ "name": "X-Spam-Status", "value": "No" })], "{sent:?}");
+        let whole = MailText {
+            headers: vec![
+                ("Authentication-Results".into(), "mx.example.net; dmarc=fail".into()),
+                ("Received".into(), "from relay.example.com by mx.example.net".into()),
+            ],
+            ..text.clone()
+        };
+        assert_eq!(
+            mail(&whole, Some(false))["headers"],
+            json!([{ "name": "Authentication-Results", "value": "mx.example.net; dmarc=fail" }])
+        );
         assert_eq!(spam["inJunk"], true);
         assert!(spam["date"].as_str().unwrap().ends_with('Z'));
 

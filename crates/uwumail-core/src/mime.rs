@@ -97,7 +97,8 @@ fn from_trusted(message: &mail_parser::Message<'_>) -> bool {
             name.eq_ignore_ascii_case("Received") || name.eq_ignore_ascii_case("Authentication-Results")
         })
         .take(10)
-        .map(|(name, value)| (name.to_owned(), value.chars().take(4_000).collect()))
+        // Never cut: a cut value could read as another domain's pass (C4-1).
+        .map(|(name, value)| (name.to_owned(), crate::assist::signals::whole_or_empty(value)))
         .collect();
     crate::assist::signals::from_vouched(&headers, from)
 }
