@@ -1453,17 +1453,17 @@
       "description": "Deine eigenen Wörter für Arten von Mails. Labels erscheinen hier und in anderen Mail-Apps (als Schlagwörter). Das Modell wählt nur aus deinen Labels; es verschiebt, löscht oder beantwortet nie eine Mail.",
       "descriptionManual": "Deine eigenen Wörter für Arten von Mails, von Hand in der Leseansicht gesetzt. Sie erscheinen auch in anderen Mail-Apps (als Schlagwörter).",
       "auto": "Neue Mails automatisch labeln",
-      "autoDesc": "Eingehende Mails bekommen die passenden Labels. Dafür liest das Modell die Namen und Beschreibungen deiner Labels und den Anfang jeder Mail.",
+      "autoDesc": "Eingehende Mails bekommen das eine Label, das am besten passt, manchmal ein zweites, und keins, wenn das Modell unsicher ist. Dafür liest das Modell die Namen und Beschreibungen deiner Labels und den Anfang jeder Mail.",
       "autoNoLabels": "Leg zuerst ein paar Labels an; dann bekommen eingehende Mails die passenden.",
       "noProvider": "Gerade darf kein Modell Labels setzen, deshalb wird nichts gelabelt.",
       "new": "Neues Label",
       "newTitle": "Neues Label",
       "editTitle": "„{{name}}“ bearbeiten",
       "name": "Name",
-      "namePlaceholder": "z. B. Rechnungen",
+      "namePlaceholder": "z. B. Reisen",
       "descriptionField": "Was hierher gehört",
       "descriptionHint": "Danach entscheidet das Modell. Ein paar Wörter oder Beispiele reichen.",
-      "descriptionPlaceholder": "z. B. Rechnungen, Quittungen und Zahlungsbestätigungen",
+      "descriptionPlaceholder": "z. B. Flüge, Hotels und Bahntickets",
       "color": "Farbe",
       "noColor": "Keine Farbe",
       "create": "Label anlegen",
@@ -1479,12 +1479,6 @@
       "empty": "Noch keine Labels.",
       "full_one": "Du hast die Grenze von {{count}} Label erreicht.",
       "full_other": "Du hast die Grenze von {{count}} Labels erreicht.",
-      "startersTitle": "Mit ein paar Vorschlägen anfangen?",
-      "startersMore": "Weitere Vorschläge",
-      "addStarters_one": "{{count}} Label hinzufügen",
-      "addStarters_other": "{{count}} Labels hinzufügen",
-      "startersAdded_one": "{{count}} Label hinzugefügt",
-      "startersAdded_other": "{{count}} Labels hinzugefügt",
       "applyDesc_one": "Mails, die vor den Labels kamen, bleiben, wie sie sind. Lass das Modell jetzt deine neueste Mail im Posteingang ansehen.",
       "applyDesc_other": "Mails, die vor den Labels kamen, bleiben, wie sie sind. Lass das Modell jetzt deine {{count}} neuesten Mails im Posteingang ansehen.",
       "apply": "Neueste Mails labeln",
@@ -1509,32 +1503,6 @@
         "nameTaken": "Ein Label mit diesem Namen gibt es schon.",
         "descriptionTooLong": "Höchstens {{max}} Zeichen.",
         "control": "Zeilenumbrüche und Steuerzeichen gehen hier nicht."
-      }
-    },
-    "starter": {
-      "invoices": {
-        "name": "Rechnungen",
-        "description": "Rechnungen, Quittungen, Zahlungsbestätigungen und Mahnungen"
-      },
-      "newsletters": {
-        "name": "Newsletter",
-        "description": "Newsletter, Angebote und Werbung von Läden und Diensten"
-      },
-      "orders": {
-        "name": "Bestellungen & Versand",
-        "description": "Bestellbestätigungen, Versandmitteilungen und Lieferinfos"
-      },
-      "travel": {
-        "name": "Reisen",
-        "description": "Buchungen, Tickets, Bordkarten und Hotelbestätigungen"
-      },
-      "appointments": {
-        "name": "Termine",
-        "description": "Termine, Einladungen, Reservierungen und Terminerinnerungen"
-      },
-      "personal": {
-        "name": "Persönlich",
-        "description": "Mails von Freunden und Familie, von einem Menschen geschrieben und nicht massenhaft verschickt"
       }
     },
     "settings": {
@@ -1768,8 +1736,8 @@
       "device": "Andere Postfächer (dieses Gerät)",
       "deviceDesc": "Labels aller Postfächer, die kein UwUMail-Konto sind. Sie bleiben auf diesem Gerät und werden hier gesetzt.",
       "serverDesc": "Auf deinem UwUMail-Server gespeichert und dort gesetzt, auch wenn diese App geschlossen ist.",
-      "listTitle": "Deine Labels",
-      "description": "Neue Mails bekommen Labels zuerst über Bedingungen, Erkennungen und Gelerntes; danach beurteilt das Modell die noch fehlenden. Es verschiebt, löscht oder beantwortet nie eine Mail.",
+      "listTitle": "Deine eigenen Labels",
+      "description": "Neue Mails bekommen Labels zuerst über Bedingungen, Erkennungen und Gelerntes; wo die unsicher sind, hilft das Modell mit. Eine Mail bekommt höchstens zwei Labels, und keins, wenn es unklar ist. Es verschiebt, löscht oder beantwortet nie eine Mail.",
       "descriptionManual": "Neue Mails bekommen Labels über Bedingungen, Erkennungen und Gelerntes. Von Hand setzt du sie in der Leseansicht, per Rechtsklick in der Liste oder mit L.",
       "nonAi": "Neue Mails ohne KI labeln",
       "nonAiDesc": "Bedingungen, Erkennungen, gelernte Absender und der Klassifikator setzen Labels auf neue Mails. Dafür verlässt nichts dieses Gerät oder deinen Server.",
@@ -1813,20 +1781,29 @@
       "classifierOn": "Klassifikator aktiv ({{count}} Beispiele)",
       "classifierLearning": "Klassifikator lernt ({{count}}/{{needed}})",
       "count_one": "{{count}} Mail, {{unread}} ungelesen",
-      "count_other": "{{count}} Mails, {{unread}} ungelesen"
+      "count_other": "{{count}} Mails, {{unread}} ungelesen",
+      "switchesTitle": "Neue Mails labeln",
+      "listDescription": "Name, Farbe und was jedes Label von selbst an Mails setzt.",
+      "autoLabel": "Von selbst setzen",
+      "autoLabelDesc": "Aus: Das Label kommt nur an Mails, wenn du es von Hand setzt. Dann setzt es nichts mehr von selbst, weder seine Bedingungen noch die Erkennung, gelernte Absender, ähnliche Mails oder der Assistent."
     },
     "detector": {
       "invoice": "Rechnungen",
       "appointment": "Termine",
       "newsletter": "Newsletter",
-      "shipping": "Versand"
+      "shipping": "Versand",
+      "account": "Konto & Sicherheit",
+      "personal": "Persönliche Mails",
+      "work": "Arbeit & Geschäftliches",
+      "advertising": "Werbung"
     },
     "source": {
       "ai": "KI",
       "rule": "Bedingung",
       "sender": "Gelernter Absender",
       "detector": "Erkennung",
-      "classifier": "Klassifikator"
+      "classifier": "Klassifikator",
+      "similar": "Ähnlich wie deine Mails mit diesem Label"
     },
     "reason": {
       "from": "Absender ist {{value}}",
@@ -1849,7 +1826,16 @@
       "shippingPlain": "Sieht nach einer Sendung aus",
       "tracking": "Sendungsnummer {{number}}",
       "classifier_one": "Ähnlich wie die Mail mit diesem Label ({{percent, number(maximumFractionDigits: 1)}} % sicher)",
-      "classifier_other": "Ähnlich wie die {{count}} Mails mit diesem Label ({{percent, number(maximumFractionDigits: 1)}} % sicher)"
+      "classifier_other": "Ähnlich wie die {{count}} Mails mit diesem Label ({{percent, number(maximumFractionDigits: 1)}} % sicher)",
+      "similar": "Ähnlich wie {{count}} deiner Mails mit diesem Label ({{percent}} % gleich)",
+      "invoiceNumber": "Sieht nach einer Rechnung aus: Rechnungsnummer {{number}}, {{amount}}",
+      "accountWord": "Zu deinem Konto: „{{word}}“",
+      "accountCode": "Zu deinem Konto: ein Einmalcode",
+      "personalKnown": "Sieht persönlich aus: von einem Menschen, den du kennst",
+      "personalPrivate": "Sieht persönlich aus: von einem Menschen mit privater Adresse",
+      "workColleague": "Sieht nach Arbeit aus: von jemandem aus deiner eigenen Domain",
+      "workContact": "Sieht nach Arbeit aus: von einem Geschäftskontakt, den du kennst",
+      "advertising": "Sieht nach Werbung aus: {{words}}"
     },
     "log": {
       "title": "Zuletzt gesetzt",
@@ -1862,6 +1848,38 @@
     "chip": {
       "automatic": "Automatisch gesetzt",
       "bySource": "Automatisch gesetzt ({{source}})"
+    },
+    "base": {
+      "title": "Basis-Labels",
+      "description": "Acht feste Labels mit je einer klaren Definition, damit Mails immer gleich gelabelt werden. Name und Farbe kannst du ändern, und bei jedem einzeln festlegen, ob es von selbst gesetzt wird.",
+      "showDefinition": "Definition zeigen",
+      "hideDefinition": "Definition ausblenden",
+      "auto": "„{{name}}“ von selbst setzen",
+      "autoOn": "wird von selbst gesetzt",
+      "autoOff": "nur von Hand",
+      "missingTitle": "Gelöschte Basis-Labels",
+      "missingDescription": "Hol ein Basis-Label mit seiner Definition zurück. Mails, an denen es vorher war, bekommen es nicht wieder.",
+      "restore": "{{name}} wiederherstellen",
+      "restored": "Basis-Label „{{name}}“ ist zurück",
+      "fixedDefinition": "Die Definition eines Basis-Labels ist fest: Nach ihr wird gelabelt, von Hand wie von selbst.",
+      "detectorBuiltIn": "Hat seine eigene Erkennung schon eingebaut.",
+      "names": {
+        "invoice": "Rechnung",
+        "shipping": "Versand",
+        "appointment": "Termin",
+        "newsletter": "Newsletter",
+        "account": "Konto & Sicherheit",
+        "personal": "Persönlich",
+        "work": "Arbeit/Geschäftlich",
+        "advertising": "Werbung"
+      }
+    },
+    "overlap": {
+      "title": "Überschneidet sich mit deinen Labels",
+      "name": "„{{name}}“ heißt schon so.",
+      "meaning": "Meint dasselbe wie das Basis-Label „{{name}}“.",
+      "words": "Sehr ähnliche Wörter wie „{{name}}“: {{words}}",
+      "hint": "Speichern geht trotzdem, aber Mails bekommen dann vielleicht das falsche der beiden."
     }
   },
   "shared": {

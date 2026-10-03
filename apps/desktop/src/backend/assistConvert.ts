@@ -22,8 +22,12 @@ import {
   type AssistLabelInput,
   type AssistLabelLogEntry,
   type AssistLabelSuggestion,
+  LABEL_BASES,
   LABEL_DETECTORS,
+  type LabelBase,
   type LabelConditionField,
+  type LabelOverlap,
+  type LabelOverlapKind,
   type LabelRules,
   type LabelSource,
   type AssistModels,
@@ -58,6 +62,7 @@ export const asObject = (value: unknown): Raw | null =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Raw) : null;
 const asStrings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+const asBase = (value: unknown): LabelBase | null => LABEL_BASES.find((base) => base === value) ?? null;
 const asObjects = (value: unknown): Raw[] =>
   Array.isArray(value) ? value.map((entry) => asObject(entry)).filter((entry): entry is Raw => entry !== null) : [];
 
@@ -99,6 +104,7 @@ export function toAssistOptions(value: unknown): AssistOptions {
     maxInstructionChars: asNumber(raw.maxInstructionChars) ?? 2000,
     maxTextChars: asNumber(raw.maxTextChars) ?? 20000,
     foreignMail: raw.foreignMail === true,
+    baseLabels: asStrings(raw.baseLabels).flatMap((base) => asBase(base) ?? []),
     foreignServers: asStrings(raw.foreignServers),
   };
 }
@@ -407,6 +413,9 @@ export function toAssistLabel(raw: Raw): AssistLabel {
     description: asString(raw.description) ?? "",
     keyword: (asString(raw.keyword) ?? "").toLowerCase(),
     color: color && /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : null,
+    // Older servers know neither: every label is the person's own and may be put on automatically.
+    base: asBase(raw.base),
+    auto: raw.auto !== false,
     rules: toLabelRules(raw.rules),
     detector: LABEL_DETECTORS.find((detector) => detector === raw.detector) ?? null,
     // Both default to on, also for labels of servers before 0.21.
@@ -433,8 +442,39 @@ function rulesOut(rules: LabelRules | null): LabelRules | null {
 }
 
 export function labelCreate(input: AssistLabelInput): Raw {
-  return labelUpdate({ ...input });
+  const { auto, ...rest } = input;
+  const out = labelUpdate(rest);
+  // Only when off: on is the default, and older servers refuse a property they don't know.
+  if (auto === false) out.auto = false;
+  return out;
 }
+
+/** `AssistLabel/set` create for a deleted base label: nothing but the base (and `auto` when off). */
+export function baseLabelCreate(base: LabelBase, auto?: boolean): Raw {
+  return auto === false ? { base, auto: false } : { base };
+}
+
+const OVERLAP_KINDS: readonly LabelOverlapKind[] = ["name", "meaning", "words"];
+
+/** The answer of `AssistLabel/checkOverlap`; entries of a kind this app doesn't know are left out. */
+export function toLabelOverlaps(value: unknown): LabelOverlap[] {
+  return asObjects(asObject(value)?.overlaps).flatMap((entry) => {
+    const kind = OVERLAP_KINDS.find((each) => each === entry.kind);
+    if (!kind) return [];
+    return [
+      {
+        id: String(entry.id),
+        name: asString(entry.name) ?? "",
+        base: asBase(entry.base),
+        kind,
+        words: asStrings(entry.words),
+      },
+    ];
+  });
+}
+
+/** What `AssistLabel/checkOverlap` reads at most; longer text is not sent at all. */
+export const OVERLAP_LIMITS = { name: 100, description: 2000 } as const;
 
 export function labelUpdate(patch: Partial<AssistLabelInput>): Raw {
   const out: Raw = {};
@@ -445,10 +485,11 @@ export function labelUpdate(patch: Partial<AssistLabelInput>): Raw {
   if (patch.detector !== undefined) out.detector = patch.detector;
   if (patch.learnSenders !== undefined) out.learnSenders = patch.learnSenders;
   if (patch.classifier !== undefined) out.classifier = patch.classifier;
+  if (patch.auto !== undefined) out.auto = patch.auto;
   return out;
 }
 
-const SOURCES: readonly LabelSource[] = ["ai", "rule", "sender", "detector", "classifier"];
+const SOURCES: readonly LabelSource[] = ["ai", "rule", "sender", "detector", "classifier", "similar"];
 
 export function toLabelLogEntry(raw: Raw): AssistLabelLogEntry {
   return {

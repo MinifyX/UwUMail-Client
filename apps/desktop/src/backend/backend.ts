@@ -16,6 +16,8 @@ import type {
   AssistLabelInput,
   AssistLabelLogEntry,
   AssistLabelSuggestion,
+  LabelBase,
+  LabelOverlap,
   AssistModels,
   AssistProbeInput,
   AssistProvider,
@@ -405,6 +407,13 @@ export interface Backend {
   updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>): Promise<void>;
   /** Also takes its keyword off every mail (on the server; on this device off the mail it labelled). */
   deleteAssistLabel(scope: string, id: string): Promise<void>;
+  /** Makes a deleted base label again (the existing one when it is there). */
+  restoreBaseLabel(scope: string, base: LabelBase, auto?: boolean): Promise<AssistLabel>;
+  /**
+   * Which labels one called `name` with `description` would overlap with; `id` is the label being
+   * changed. Changes nothing; an older server without the check says none.
+   */
+  checkLabelOverlap(scope: string, name: string, description: string, id?: string): Promise<LabelOverlap[]>;
   /** Labels the model set, newest first: for these mails (message ids), or the latest. */
   assistLabelLog(scope: string, messageIds: string[] | null, limit?: number): Promise<AssistLabelLogEntry[]>;
   /** Takes labels the model set off again, by log entry. */

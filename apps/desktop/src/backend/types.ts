@@ -735,6 +735,8 @@ export interface AssistOptions {
    * `foreignMail`), see `AssistSettings.serverAssist`. Empty for a server scope.
    */
   foreignServers: string[];
+  /** The base labels the scope knows; empty on servers before 0.22. */
+  baseLabels: LabelBase[];
 }
 
 export type AssistProviderKind =
@@ -1143,17 +1145,49 @@ export interface LabelRules {
 }
 
 /** A built-in detector that puts a label on new mail. */
-export type LabelDetector = "invoice" | "appointment" | "newsletter" | "shipping";
+export type LabelDetector =
+  "invoice" | "appointment" | "newsletter" | "shipping" | "account" | "personal" | "work" | "advertising";
 
-export const LABEL_DETECTORS: readonly LabelDetector[] = ["invoice", "appointment", "newsletter", "shipping"];
+export const LABEL_DETECTORS: readonly LabelDetector[] = [
+  "invoice",
+  "appointment",
+  "newsletter",
+  "shipping",
+  "account",
+  "personal",
+  "work",
+  "advertising",
+];
+
+/**
+ * One of the eight fixed base labels every scope has: its definition is the server's (or this
+ * device's) and can't be changed, its name, colour and automatic parts can.
+ */
+export type LabelBase =
+  "invoice" | "shipping" | "appointment" | "newsletter" | "account" | "personal" | "work" | "advertising";
+/** In the server's order. */
+export const LABEL_BASES: readonly LabelBase[] = [
+  "invoice",
+  "shipping",
+  "appointment",
+  "newsletter",
+  "account",
+  "personal",
+  "work",
+  "advertising",
+];
 
 /** The person's own word for a kind of mail; set on mail as the keyword `keyword`. */
 export interface AssistLabel {
   id: string;
   name: string;
-  /** What belongs there: what the model reads. */
+  /** What belongs there: what the model reads. A base label's is its fixed definition. */
   description: string;
   keyword: string;
+  /** Which base label it is; null for the person's own. */
+  base: LabelBase | null;
+  /** Put on automatically (detectors, senders, similar mail, classifier, model); off: only by hand. */
+  auto: boolean;
   /** `#rrggbb`, or null for the default. */
   color: string | null;
   /** Conditions that put it on new mail; null for none. */
@@ -1178,6 +1212,20 @@ export interface AssistLabelInput {
   detector?: LabelDetector | null;
   learnSenders?: boolean;
   classifier?: boolean;
+  auto?: boolean;
+}
+
+/** How a label overlaps another: the same name, the meaning of a base label, or largely the same words. */
+export type LabelOverlapKind = "name" | "meaning" | "words";
+
+/** A label a new or changed one would overlap with (`AssistLabel/checkOverlap`). */
+export interface LabelOverlap {
+  id: string;
+  name: string;
+  base: LabelBase | null;
+  kind: LabelOverlapKind;
+  /** The words both share (for "words"). */
+  words: string[];
 }
 
 /** One label's verdict of "Label again" (`AssistLabel/suggest`). */
@@ -1205,8 +1253,11 @@ export interface AssistLabelSuggestion extends AssistAnswer {
   newLabels: AssistNewLabel[];
 }
 
-/** Who put a label on: the model, or without one (the label's rules, a learned sender, a detector, the classifier). */
-export type LabelSource = "ai" | "rule" | "sender" | "detector" | "classifier";
+/**
+ * Who put a label on: the model, or without one (the label's rules, a learned sender, a detector,
+ * the classifier, or its likeness to the person's mails with the label).
+ */
+export type LabelSource = "ai" | "rule" | "sender" | "detector" | "classifier" | "similar";
 
 /** A label put on a mail by itself, and why. */
 export interface AssistLabelLogEntry {
@@ -1218,7 +1269,7 @@ export interface AssistLabelLogEntry {
   source: LabelSource;
   /** English, or the model's own words; `code` and `params` say it for a translation. */
   reason: string;
-  /** `ai`, `rule`, `sender`, `classifier`, or a detector's name; new ones may come. */
+  /** `ai`, `rule`, `sender`, `classifier`, `similar`, or a detector's name; new ones may come. */
   code: string;
   params: Record<string, unknown>;
   createdAt: string;

@@ -20,7 +20,9 @@ import {
   type AssistLabelInput,
   type AssistLabelLogEntry,
   type AssistLabelSuggestion,
-  type LabelDetector,
+  LABEL_BASES,
+  type LabelBase,
+  type LabelOverlap,
   type AssistModels,
   type AssistOptions,
   type AssistPrice,
@@ -56,6 +58,7 @@ const OPTIONS: AssistOptions = {
   maxProviders: 5,
   maxLabels: 30,
   maxLabelConditions: 10,
+  baseLabels: [...LABEL_BASES],
   maxInstructionChars: 2000,
   maxTextChars: 20000,
   foreignMail: true,
@@ -199,6 +202,8 @@ function newLabel(id: string, input: AssistLabelInput, others: readonly AssistLa
       input.name.trim(),
       others.map((entry) => entry.keyword),
     ),
+    base: null,
+    auto: input.auto ?? true,
     rules: input.rules?.conditions.length ? input.rules : null,
     detector: input.detector ?? null,
     learnSenders: input.learnSenders ?? true,
@@ -292,25 +297,11 @@ export class DemoAssist {
     private readonly foreign: () => Message[] = () => [],
   ) {
     this.providers = [structuredClone(device ? DEVICE_PROVIDER : SERVER_PROVIDER)];
-    const de = lang === "de";
-    const names: [string, string, string, LabelDetector][] = de
-      ? [
-          ["Rechnungen", "Rechnungen, Quittungen und Zahlungsbestätigungen", "#f59e0b", "invoice"],
-          ["Newsletter", "Newsletter, Angebote und Werbung von Läden und Diensten", "#8b5cf6", "newsletter"],
-          ["Bestellungen & Versand", "Bestellbestätigungen, Versand- und Lieferinfos", "#0ea5e9", "shipping"],
-        ]
-      : [
-          ["Invoices", "Invoices, receipts and payment confirmations", "#f59e0b", "invoice"],
-          ["Newsletters", "Newsletters, offers and ads from shops and services", "#8b5cf6", "newsletter"],
-          ["Orders & shipping", "Order confirmations, shipping and delivery updates", "#0ea5e9", "shipping"],
-        ];
+    // Every scope starts with the eight base labels, the server's and this device's alike.
     this.labels = [];
-    for (const [name, description, color, detector] of names) {
-      this.labels.push({
-        ...newLabel(`g${this.nextId++}`, { name, description, color }, this.labels),
-        detector,
-        examples: 4,
-      });
+    for (const base of LABEL_BASES) {
+      const examples = ["invoice", "newsletter", "shipping"].includes(base) ? 4 : 0;
+      this.labels.push({ ...this.baseLabel(base), examples });
     }
     this.seedLabels();
     this.seedUsage();
@@ -342,10 +333,33 @@ export class DemoAssist {
     }
   }
 
+  /** A base label as the server makes it, in the demo's language. */
+  private baseLabel(base: LabelBase): AssistLabel {
+    const text = DEMO_BASE_LABELS[base];
+    const name = this.lang === "de" ? text.de : text.en;
+    return {
+      ...newLabel(
+        `g${this.nextId++}`,
+        {
+          name,
+          description: this.lang === "de" ? text.deDescription : text.enDescription,
+          color: text.color,
+        },
+        this.labels,
+      ),
+      base,
+    };
+  }
+
+  private byBase(base: LabelBase): AssistLabel | undefined {
+    return this.labels.find((label) => label.base === base);
+  }
+
   /** The labels "the model" put on the sample mail before the demo started. */
   private seedLabels() {
     const de = this.lang === "de";
-    const [, newsletter, orders] = this.labels;
+    const newsletter = this.byBase("newsletter");
+    const orders = this.byBase("shipping");
     for (const message of this.messages()) {
       const subject = message.subject.toLowerCase();
       if (/newsletter|aktion|deal|herbstkarte|autumn menu/.test(subject)) {
@@ -1149,7 +1163,17 @@ export class DemoAssist {
         throw new AssistError("invalidProperties", "There is a label of that name.", { properties: ["name"] });
       }
     }
-    if (input.description !== undefined && input.description.length > 300) {
+    const base = this.labels.find((label) => label.id === except)?.base;
+    if (
+      base &&
+      input.description !== undefined &&
+      input.description.trim() !== DEMO_BASE_LABELS[base][this.lang === "de" ? "deDescription" : "enDescription"]
+    ) {
+      throw new AssistError("invalidProperties", "A base label's description can't be changed.", {
+        properties: ["description"],
+      });
+    }
+    if (!base && input.description !== undefined && input.description.length > 300) {
       throw new AssistError("invalidProperties", "At most 300 characters.", { properties: ["description"] });
     }
     const conditions = input.rules?.conditions ?? [];
@@ -1168,7 +1192,10 @@ export class DemoAssist {
 
   createLabel(input: AssistLabelInput): AssistLabel {
     this.checkLabel(input);
-    if (this.labels.length >= OPTIONS.maxLabels) throw new AssistError("overQuota", "No more labels.");
+    // Base labels don't count.
+    if (this.labels.filter((label) => !label.base).length >= OPTIONS.maxLabels) {
+      throw new AssistError("overQuota", "No more labels.");
+    }
     const label = newLabel(`g${this.nextId++}`, input, this.labels);
     this.labels.push(label);
     this.changed(false);
@@ -1186,6 +1213,7 @@ export class DemoAssist {
     if (patch.detector !== undefined) label.detector = patch.detector;
     if (patch.learnSenders !== undefined) label.learnSenders = patch.learnSenders;
     if (patch.classifier !== undefined) label.classifier = patch.classifier;
+    if (patch.auto !== undefined) label.auto = patch.auto;
     for (const entry of this.log) if (entry.labelId === id) entry.name = label.name;
     this.changed(false);
   }
@@ -1201,6 +1229,29 @@ export class DemoAssist {
       }
     }
     this.changed(true);
+  }
+
+  /** A deleted base label made again; the existing one when it is there. */
+  restoreBaseLabel(base: LabelBase, auto?: boolean): AssistLabel {
+    const existing = this.byBase(base);
+    if (existing) return structuredClone(existing);
+    const label = { ...this.baseLabel(base), auto: auto ?? true };
+    // In the server's order, among the other base labels.
+    const at = this.labels.findIndex(
+      (entry) => !entry.base || LABEL_BASES.indexOf(entry.base) > LABEL_BASES.indexOf(base),
+    );
+    this.labels.splice(at === -1 ? this.labels.length : at, 0, label);
+    this.changed(false);
+    return structuredClone(label);
+  }
+
+  /** `AssistLabel/checkOverlap`, roughly: the same name, a base label's word in it, or shared words. */
+  checkOverlap(name: string, description: string, except?: string): LabelOverlap[] {
+    return demoOverlaps(
+      name,
+      description,
+      this.labels.filter((label) => label.id !== except),
+    );
   }
 
   labelLog(emailIds: string[] | null, limit: number): AssistLabelLogEntry[] {
@@ -1239,11 +1290,7 @@ export class DemoAssist {
   /** Whether a label "fits" a mail: words of its name or description are in the mail. */
   private fits(message: Message, label: { name: string; description: string }): boolean {
     const text = `${message.subject} ${this.text(message)}`.toLowerCase();
-    return `${label.name} ${label.description}`
-      .toLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter((word) => word.length > 4)
-      .some((word) => text.includes(word));
+    return words(label).some((word) => text.includes(word));
   }
 
   /**
@@ -1299,12 +1346,10 @@ export class DemoAssist {
       const message = this.messages().find((item) => item.id === id);
       if (!message) continue;
       const text = `${message.subject} ${this.text(message)}`.toLowerCase();
-      const words = (label: AssistLabel) =>
-        `${label.name} ${label.description}`
-          .toLowerCase()
-          .split(/[^\p{L}\p{N}]+/u)
-          .filter((word) => word.length > 4);
-      const fits = this.labels.filter((label) => words(label).some((word) => text.includes(word)));
+      // At most a main label and a second one, and none that may only be put on by hand.
+      const fits = this.labels
+        .filter((label) => label.auto && words(label).some((word) => text.includes(word)))
+        .slice(0, 2);
       for (const label of fits) {
         if (message.keywords?.includes(label.keyword)) continue;
         this.label(
@@ -1321,4 +1366,140 @@ export class DemoAssist {
     this.changed(true);
     return labeled;
   }
+}
+
+/**
+ * The telling words of a label: those of its name and description longer than four letters; of a
+ * base label's definition only what belongs in it, not what it names as "Not:".
+ */
+function words(label: Pick<AssistLabel, "name" | "description">): string[] {
+  const [what = ""] = label.description.split(/\b(?:Nicht|Not):/);
+  return wordsOf(`${label.name} ${what}`);
+}
+
+function wordsOf(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length > 4);
+}
+
+/** The base labels as the demo makes them: names and definitions in German and English. */
+export const DEMO_BASE_LABELS: Record<
+  LabelBase,
+  { de: string; en: string; color: string; deDescription: string; enDescription: string; stems: string[] }
+> = {
+  invoice: {
+    de: "Rechnung",
+    en: "Invoice",
+    color: "#f59e0b",
+    stems: ["rechnung", "quittung", "invoice", "receipt", "zahlung", "payment"],
+    deDescription:
+      "Ein Beleg über Geld, das du schuldest oder bezahlt hast: Rechnung, Quittung, Zahlungsbestätigung, Mahnung, Gutschrift, Kontoabbuchung mit Betrag. Nicht: Bestellbestätigungen ohne Rechnung (Versand), Werbung mit Preisen (Werbung).",
+    enDescription:
+      "A document about money you owe or paid: invoice, receipt, payment confirmation, payment reminder, credit note, a debit with its amount. Not: order confirmations without an invoice (Shipping), ads with prices (Promotions).",
+  },
+  shipping: {
+    de: "Versand",
+    en: "Shipping",
+    color: "#0ea5e9",
+    stems: ["versand", "paket", "lieferung", "bestellung", "shipping", "parcel", "delivery", "order"],
+    deDescription:
+      "Bestellte Waren und ihr Weg zu dir: Bestellbestätigung, versandt, Sendungsverfolgung, Zustellung, Abholung, Rücksendung. Nicht: die Rechnung oder der Beleg zur Bestellung (Rechnung), Bestellungen ohne Versand wie Abos und digitale Käufe (Rechnung oder Konto & Sicherheit), Werbung über kostenlosen Versand (Werbung).",
+    enDescription:
+      "Ordered goods and their way to you: order confirmation, shipped, tracking, delivery, pickup, returns. Not: the invoice or receipt for the order (Invoice), orders with nothing to ship like subscriptions and digital purchases (Invoice or Account & security), ads about free shipping (Promotions).",
+  },
+  appointment: {
+    de: "Termin",
+    en: "Appointment",
+    color: "#8b5cf6",
+    stems: ["termin", "einladung", "reservierung", "appointment", "meeting", "invitation", "reservation"],
+    deDescription:
+      "Ein fester Termin, zu dem du gehst oder an dem du teilnimmst: Termin, Einladung, Besprechung, Reservierung, Ticket; auch Bestätigung, Erinnerung, Verschiebung, Absage. Nicht: Liefertermine (Versand), Zahlungsfristen (Rechnung), beworbene Veranstaltungen und Webinare (Werbung).",
+    enDescription:
+      "A fixed date you go to or take part in: appointment, invitation, meeting, reservation, ticket; also its confirmation, reminder, rescheduling or cancellation. Not: delivery dates (Shipping), payment deadlines (Invoice), advertised events and webinars (Promotions).",
+  },
+  newsletter: {
+    de: "Newsletter",
+    en: "Newsletter",
+    color: "#64748b",
+    stems: ["newsletter", "rundbrief", "digest"],
+    deDescription:
+      "Regelmäßige Ausgaben mit Inhalten, die du abonniert hast: Nachrichten, Wochenrückblick, Blog, Neuigkeiten eines Projekts oder Vereins, Job-Alerts. Nicht: Mails, die vor allem verkaufen wollen (Werbung), Mitteilungen zu deinem Konto oder deinen Bestellungen.",
+    enDescription:
+      "Regular issues with content you subscribed to: news, weekly digests, blog posts, updates of a project or club, job alerts. Not: mail mainly selling something (Promotions), messages about your account or your orders.",
+  },
+  account: {
+    de: "Konto & Sicherheit",
+    en: "Account & security",
+    color: "#ef4444",
+    stems: ["konto", "passwort", "anmeldung", "sicherheit", "account", "password", "login", "security"],
+    deDescription:
+      "Dein eigenes Konto bei einem Dienst: Registrierung und Willkommen, E-Mail bestätigen, Anmeldecode, Passwort zurücksetzen, neue Anmeldung, Sicherheitswarnung, Änderungen an Konto, Tarif, AGB oder Datenschutz. Nicht: Werbung desselben Dienstes (Werbung), Rechnungen (Rechnung).",
+    enDescription:
+      "Your own account at a service: sign-up and welcome, confirming your e-mail, login codes, password reset, new sign-in, security alerts, changes to the account, plan, terms or privacy policy. Not: the same service's ads (Promotions), invoices (Invoice).",
+  },
+  personal: {
+    de: "Persönlich",
+    en: "Personal",
+    color: "#ec4899",
+    stems: ["persönlich", "privat", "familie", "freunde", "personal", "private", "family", "friends"],
+    deDescription:
+      "Von einem privaten Menschen an dich persönlich geschrieben: Freunde, Familie, Bekannte. Nicht massenhaft, nicht von einer Firma oder einem System. Nicht: Mails von Firmen mit deinem Namen in der Anrede, Benachrichtigungen, Kolleginnen und Geschäftliches (Arbeit/Geschäftlich).",
+    enDescription:
+      "Written to you personally by a private person: friends, family, acquaintances. Not sent in bulk, not by a company or a system. Not: company mail that greets you by name, notifications, colleagues and business (Work & business).",
+  },
+  work: {
+    de: "Arbeit/Geschäftlich",
+    en: "Work & business",
+    color: "#10b981",
+    stems: ["arbeit", "geschäft", "beruf", "kunde", "work", "business", "office", "customer"],
+    deDescription:
+      "Von einem Menschen beruflich an dich geschrieben: Kolleginnen, Kundschaft, Geschäftspartner, Bewerbungen, Angebote, die du angefragt hast, Behörden. Nicht: automatische Benachrichtigungen, Newsletter, Privates (Persönlich).",
+    enDescription:
+      "Written to you by a person in a professional context: colleagues, customers, business partners, job applications, quotes you asked for, authorities. Not: automated notifications, newsletters, private mail (Personal).",
+  },
+  advertising: {
+    de: "Werbung",
+    en: "Promotions",
+    color: "#a3a3a3",
+    stems: ["werbung", "angebot", "rabatt", "gutschein", "promotion", "advert", "discount", "coupon", "sale"],
+    deDescription:
+      "Mails, die vor allem etwas verkaufen wollen: Angebote, Rabatte, Sale, Gutscheine, Produktwerbung, Bitten um Bewertungen. Nicht: abonnierte Inhalte ohne Verkaufsabsicht (Newsletter), Bestellung, Versand oder Rechnung eines echten Kaufs.",
+    enDescription:
+      "Mail mainly meant to sell something: offers, discounts, sales, coupons, product promotion, requests for reviews. Not: subscribed content without a sales pitch (Newsletter), the order, shipping or invoice of a real purchase.",
+  },
+};
+
+/**
+ * The demo's overlap check, a simple stand-in for the server's: the same name as a label (or as a
+ * base label in either language), a base label's word in the name ("Handyrechnungen" means
+ * Rechnung), or at least half of the words shared with an own label.
+ */
+export function demoOverlaps(
+  name: string,
+  description: string,
+  labels: readonly Pick<AssistLabel, "id" | "name" | "description" | "base">[],
+): LabelOverlap[] {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return [];
+  const own = new Set(wordsOf(`${name} ${description}`));
+  const found: LabelOverlap[] = [];
+  for (const label of labels) {
+    const entry = { id: label.id, name: label.name, base: label.base };
+    const text = label.base ? DEMO_BASE_LABELS[label.base] : null;
+    const names = [label.name, ...(text ? [text.de, text.en] : [])].map((each) => each.trim().toLowerCase());
+    if (names.includes(wanted)) {
+      found.push({ ...entry, kind: "name", words: [] });
+    } else if (text) {
+      if (text.stems.some((stem) => wanted.includes(stem))) found.push({ ...entry, kind: "meaning", words: [] });
+    } else {
+      const theirs = new Set(wordsOf(`${label.name} ${label.description}`));
+      const shared = [...own].filter((word) => theirs.has(word));
+      if (shared.length > 0 && shared.length * 2 >= Math.min(own.size, theirs.size)) {
+        found.push({ ...entry, kind: "words", words: shared });
+      }
+    }
+  }
+  return found;
 }

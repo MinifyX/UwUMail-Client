@@ -10,12 +10,15 @@ import type {
   AssistLabelInput,
   AssistLabelLogEntry,
   LabelCondition,
-  LabelDetector,
+  LabelBase,
+  LabelOverlap,
   LabelRules,
 } from "@/backend/types";
 
 /** What a label has unless it says otherwise, as the server makes one. */
 export const LABEL_DEFAULTS = {
+  base: null,
+  auto: true,
   rules: null,
   detector: null,
   learnSenders: true,
@@ -75,31 +78,6 @@ export function threadKeywords(messages: readonly { keywords?: string[] }[]): st
   return [...new Set(messages.flatMap((message) => message.keywords ?? []))].sort();
 }
 
-export type StarterLabel = "invoices" | "newsletters" | "orders" | "travel" | "appointments" | "personal";
-
-/** The suggested first labels: names and descriptions come from the translations. */
-export const STARTER_LABELS: readonly { id: StarterLabel; color: string; detector: LabelDetector | null }[] = [
-  { id: "invoices", color: "#f59e0b", detector: "invoice" },
-  { id: "newsletters", color: "#8b5cf6", detector: "newsletter" },
-  { id: "orders", color: "#0ea5e9", detector: "shipping" },
-  { id: "travel", color: "#14b8a6", detector: null },
-  { id: "appointments", color: "#e11d74", detector: "appointment" },
-  { id: "personal", color: "#10b981", detector: null },
-];
-
-/** The starter labels that aren't there yet (by name, ignoring case), as ready inputs. */
-export function missingStarters(
-  labels: readonly AssistLabel[],
-  text: (id: StarterLabel) => { name: string; description: string },
-): AssistLabelInput[] {
-  const taken = new Set(labels.map((label) => label.name.trim().toLowerCase()));
-  return STARTER_LABELS.map(({ id, color, detector }) => ({
-    ...text(id),
-    color,
-    ...(detector ? { detector } : {}),
-  })).filter((input) => !taken.has(input.name.trim().toLowerCase()));
-}
-
 export type LabelProblem = "nameMissing" | "nameTooLong" | "nameTaken" | "descriptionTooLong" | "control";
 
 // Line breaks and control characters don't belong in a name, nor do the bidi controls that would
@@ -121,7 +99,11 @@ export function labelProblems(
   else if (labels.some((label) => label.id !== except && label.name.trim().toLowerCase() === name.toLowerCase())) {
     problems.name = "nameTaken";
   }
-  if ([...input.description.trim()].length > LABEL_LIMITS.description) problems.description = "descriptionTooLong";
+  // A base label's description is its fixed definition, longer than an own label's may be.
+  const base = except !== undefined && labels.some((label) => label.id === except && label.base);
+  if (!base && [...input.description.trim()].length > LABEL_LIMITS.description) {
+    problems.description = "descriptionTooLong";
+  }
   return problems;
 }
 
@@ -143,8 +125,10 @@ export function usableProposals<T extends { name: string; description: string; c
 export function labelPatch(label: AssistLabel, input: AssistLabelInput): Partial<AssistLabelInput> {
   const patch: Partial<AssistLabelInput> = {};
   if (input.name.trim() !== label.name) patch.name = input.name.trim();
-  if (input.description.trim() !== label.description) patch.description = input.description.trim();
+  // A base label's definition can't be changed; it is never sent.
+  if (!label.base && input.description.trim() !== label.description) patch.description = input.description.trim();
   if (input.color !== label.color) patch.color = input.color;
+  if (input.auto !== undefined && input.auto !== label.auto) patch.auto = input.auto;
   if (input.rules !== undefined && JSON.stringify(cleanRules(input.rules)) !== JSON.stringify(label.rules)) {
     patch.rules = cleanRules(input.rules);
   }
@@ -225,6 +209,9 @@ export function labelReason(entry: Pick<AssistLabelLogEntry, "code" | "params" |
       return t("labels.reason.sender", { address: params.address, count: Number(params.count) || 2 });
     case "invoice":
       if (text(params.attachment)) return t("labels.reason.invoiceAttachment", { name: params.attachment });
+      if (text(params.number) && text(params.amount)) {
+        return t("labels.reason.invoiceNumber", { number: params.number, amount: params.amount });
+      }
       if (!text(params.word)) break;
       return text(params.amount)
         ? t("labels.reason.invoiceAmount", { word: params.word, amount: params.amount })
@@ -246,6 +233,31 @@ export function labelReason(entry: Pick<AssistLabelLogEntry, "code" | "params" |
         ? t("labels.reason.shipping", { details: known.join(", ") })
         : t("labels.reason.shippingPlain");
     }
+    case "account":
+      if (text(params.word)) return t("labels.reason.accountWord", { word: params.word });
+      if (params.code === true) return t("labels.reason.accountCode");
+      break;
+    case "personal":
+      if (typeof params.known !== "boolean") break;
+      return t(params.known ? "labels.reason.personalKnown" : "labels.reason.personalPrivate");
+    case "work":
+      if (params.colleague === true) return t("labels.reason.workColleague");
+      if (params.known === true) return t("labels.reason.workContact");
+      break;
+    case "advertising": {
+      const words = Array.isArray(params.words) ? params.words.filter((word) => text(word) !== null) : [];
+      if (words.length === 0) break;
+      return t("labels.reason.advertising", { words: words.join(", ") });
+    }
+    case "similar": {
+      const similarity = params.similarity;
+      const count = Number(params.neighbours);
+      if (typeof similarity !== "number" || !Number.isFinite(similarity) || !(count > 0)) break;
+      return t("labels.reason.similar", {
+        count,
+        percent: Math.round(Math.min(1, Math.max(0, similarity)) * 100),
+      });
+    }
     case "classifier": {
       const probability = Number(params.probability);
       if (!Number.isFinite(probability)) break;
@@ -256,4 +268,45 @@ export function labelReason(entry: Pick<AssistLabelLogEntry, "code" | "params" |
     }
   }
   return entry.reason;
+}
+
+/**
+ * The base labels the person deleted, in the server's order: they can be made again. `known` are
+ * the ones the scope announces; an older server announces none, but one whose labels carry a
+ * base knows them all.
+ */
+export function missingBases(
+  labels: readonly Pick<AssistLabel, "base">[],
+  all: readonly LabelBase[],
+  known: readonly LabelBase[] = [],
+): LabelBase[] {
+  const candidates =
+    known.length > 0 ? all.filter((base) => known.includes(base)) : labels.some((l) => l.base) ? all : [];
+  const present = new Set(labels.map((label) => label.base));
+  return candidates.filter((base) => !present.has(base));
+}
+
+/**
+ * The overlap warning, one line per label: the same name, the meaning of a base label, or very
+ * similar words (which ones). A label named twice keeps only its first, strongest reason.
+ */
+export function overlapLines(overlaps: readonly LabelOverlap[], t: Translate): string[] {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const overlap of overlaps) {
+    if (seen.has(overlap.id)) continue;
+    seen.add(overlap.id);
+    switch (overlap.kind) {
+      case "name":
+        lines.push(t("labels.overlap.name", { name: overlap.name }));
+        break;
+      case "meaning":
+        lines.push(t("labels.overlap.meaning", { name: overlap.name }));
+        break;
+      case "words":
+        lines.push(t("labels.overlap.words", { name: overlap.name, words: overlap.words.join(", ") || "…" }));
+        break;
+    }
+  }
+  return lines;
 }

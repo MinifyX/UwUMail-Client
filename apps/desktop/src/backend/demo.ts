@@ -22,6 +22,7 @@ import type {
   AssistEventsResult,
   AssistFeatures,
   AssistLabelInput,
+  LabelBase,
   AssistProbeInput,
   AssistProviderInput,
   AssistScope,
@@ -1382,6 +1383,16 @@ export class DemoBackend implements Backend {
   async deleteAssistLabel(scope: string, id: string) {
     await wait(100);
     this.assistOf(scope).deleteLabel(id);
+  }
+
+  async restoreBaseLabel(scope: string, base: LabelBase, auto?: boolean) {
+    await wait(100);
+    return this.assistOf(scope).restoreBaseLabel(base, auto);
+  }
+
+  async checkLabelOverlap(scope: string, name: string, description: string, id?: string) {
+    await wait(40);
+    return this.assistOf(scope).checkOverlap(name, description, id);
   }
 
   async assistLabelLog(scope: string, messageIds: string[] | null, limit = 100) {

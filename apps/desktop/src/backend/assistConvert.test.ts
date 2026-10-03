@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { AssistError } from "./backend";
 import {
+  baseLabelCreate,
+  labelCreate,
   labelUpdate,
+  toAssistLabel,
+  toAssistOptions,
+  toLabelLogEntry,
+  toLabelOverlaps,
   toLabelSuggestion,
   assistSettingsUpdate,
   MAX_ASSIST_EVENTS,
@@ -99,6 +105,46 @@ describe("the assistant's answers from the engine", () => {
       rules: null,
       detector: null,
     });
+  });
+
+  it("reads base labels and their switch, and sends the switch only when it matters", () => {
+    expect(toAssistLabel({ id: "g3", name: "Old" })).toMatchObject({ base: null, auto: true });
+    expect(toAssistLabel({ id: "g4", base: "advertising", auto: false, detector: "work" })).toMatchObject({
+      base: "advertising",
+      auto: false,
+      detector: "work",
+    });
+    expect(toAssistLabel({ id: "g5", base: "horoscope", auto: "no" })).toMatchObject({ base: null, auto: true });
+    expect(labelUpdate({ auto: false })).toEqual({ auto: false });
+    // On is the default: an older server never sees the property it doesn't know.
+    expect(labelCreate({ name: "Kids", description: "", color: null, auto: true })).not.toHaveProperty("auto");
+    expect(labelCreate({ name: "Kids", description: "", color: null, auto: false })).toMatchObject({ auto: false });
+    expect(baseLabelCreate("invoice")).toEqual({ base: "invoice" });
+    expect(baseLabelCreate("work", false)).toEqual({ base: "work", auto: false });
+  });
+
+  it("reads the base labels a scope knows, dropping unknown ones", () => {
+    expect(toAssistOptions({ baseLabels: ["invoice", "gossip", "work", 3] }).baseLabels).toEqual(["invoice", "work"]);
+    expect(toAssistOptions({}).baseLabels).toEqual([]);
+  });
+
+  it("reads the overlaps, leaving out kinds this app doesn't know, and similar mail in the log", () => {
+    expect(
+      toLabelOverlaps({
+        overlaps: [
+          { id: "g1", name: "Rechnung", base: "invoice", kind: "meaning", words: [] },
+          { id: "g2", name: "Handy", base: null, kind: "words", words: ["mobilfunk", 3] },
+          { id: "g3", name: "X", kind: "astrology" },
+        ],
+      }),
+    ).toEqual([
+      { id: "g1", name: "Rechnung", base: "invoice", kind: "meaning", words: [] },
+      { id: "g2", name: "Handy", base: null, kind: "words", words: ["mobilfunk"] },
+    ]);
+    expect(toLabelOverlaps({})).toEqual([]);
+    expect(toLabelOverlaps(null)).toEqual([]);
+    expect(toLabelLogEntry({ id: "l1", emailId: "e1", labelId: "g1", source: "similar" }).source).toBe("similar");
+    expect(toLabelLogEntry({ id: "l2", emailId: "e1", labelId: "g1", source: "magic" }).source).toBe("ai");
   });
 
   it("sends rules trimmed, and none without conditions", () => {

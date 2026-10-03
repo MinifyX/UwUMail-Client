@@ -275,9 +275,6 @@
     "compose": {
       "applied": "Popped it into your draft ✿"
     },
-    "labels": {
-      "startersTitle": "Want a few labels to start with? (｀・ω・´)"
-    },
     "local": {
       "title": "Look, a local AI on this computer! ✿"
     },
@@ -296,5 +293,10 @@
   "dates": {
     "searching": "Nyu is hunting for appointments… (・ω・)",
     "noneFound": "Nyu looked everywhere: no upcoming appointment in here ( ˘ω˘ )"
+  },
+  "labels": {
+    "overlap": {
+      "title": "Hmm, that looks familiar (・・?)"
+    }
   }
 }

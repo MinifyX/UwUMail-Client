@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { AssistLabel, AssistLabelLogEntry, AssistProvider, AssistUsage } from "@/backend/types";
+import {
+  LABEL_BASES,
+  type AssistLabel,
+  type AssistLabelLogEntry,
+  type AssistProvider,
+  type AssistUsage,
+} from "@/backend/types";
 import {
   labelPatch,
   labelProblems,
   labelsOff,
   labelsOn,
-  missingStarters,
+  missingBases,
+  overlapLines,
   setByAssistant,
-  STARTER_LABELS,
   threadKeywords,
   usableProposals,
   LABEL_DEFAULTS,
@@ -84,29 +90,6 @@ describe("labels on mail", () => {
   });
 });
 
-describe("the starter labels", () => {
-  const text = (id: string) => ({ name: `${id[0]!.toUpperCase()}${id.slice(1)}`, description: `About ${id}` });
-
-  it("are six, each with a colour", () => {
-    expect(STARTER_LABELS.map((starter) => starter.id)).toEqual([
-      "invoices",
-      "newsletters",
-      "orders",
-      "travel",
-      "appointments",
-      "personal",
-    ]);
-    expect(missingStarters([], text).every((input) => /^#[0-9a-f]{6}$/.test(input.color ?? ""))).toBe(true);
-  });
-
-  it("leave out what is there already, ignoring case", () => {
-    const names = missingStarters([label("g9", " TRAVEL ", "travel"), label("g8", "invoices", "invoices")], text).map(
-      (input) => input.name,
-    );
-    expect(names).toEqual(["Newsletters", "Orders", "Appointments", "Personal"]);
-  });
-});
-
 describe("the label form", () => {
   it("needs a name that is short enough and not taken", () => {
     expect(labelProblems({ name: " ", description: "", color: null }, LABELS)).toEqual({ name: "nameMissing" });
@@ -155,6 +138,60 @@ describe("the label form", () => {
       name: "Bills",
       color: null,
     });
+    expect(labelPatch(LABELS[0]!, { name: "Rechnungen", description: "", color: "#f59e0b", auto: false })).toEqual({
+      auto: false,
+    });
+  });
+
+  it("never sends or checks a base label's fixed definition", () => {
+    const base = { ...label("g7", "Rechnung", "rechnung"), base: "invoice" as const, description: "d".repeat(400) };
+    expect(labelProblems({ name: "Rechnung", description: base.description, color: null }, [base], "g7")).toEqual({});
+    expect(labelPatch(base, { name: "Belege", description: "changed", color: null })).toEqual({ name: "Belege" });
+  });
+});
+
+describe("base labels and overlaps", () => {
+  const t = (key: string, options?: Record<string, unknown>) => `${key}${options ? JSON.stringify(options) : ""}`;
+
+  it("knows which base labels were deleted, and none on an older server", () => {
+    const base = (which: AssistLabel["base"]) => ({ base: which });
+    expect(missingBases([base("invoice"), base(null), base("work")], LABEL_BASES)).toEqual([
+      "shipping",
+      "appointment",
+      "newsletter",
+      "account",
+      "personal",
+      "advertising",
+    ]);
+    expect(missingBases(LABEL_BASES.map(base), LABEL_BASES)).toEqual([]);
+    expect(missingBases([base(null)], LABEL_BASES)).toEqual([]);
+    expect(missingBases([], LABEL_BASES)).toEqual([]);
+  });
+
+  it("offers every base label again when all were deleted in a scope that announces them", () => {
+    expect(missingBases([], LABEL_BASES, LABEL_BASES)).toEqual([...LABEL_BASES]);
+    expect(missingBases([{ base: null }], LABEL_BASES, ["invoice", "work"])).toEqual(["invoice", "work"]);
+  });
+
+  it("explains each overlap once, by its kind", () => {
+    expect(
+      overlapLines(
+        [
+          { id: "g1", name: "Rechnung", base: "invoice", kind: "name", words: [] },
+          { id: "g1", name: "Rechnung", base: "invoice", kind: "meaning", words: [] },
+          { id: "g2", name: "Werbung", base: "advertising", kind: "meaning", words: [] },
+          { id: "g3", name: "Handy", base: null, kind: "words", words: ["mobilfunk", "vertrag"] },
+          { id: "g4", name: "Leer", base: null, kind: "words", words: [] },
+        ],
+        t,
+      ),
+    ).toEqual([
+      'labels.overlap.name{"name":"Rechnung"}',
+      'labels.overlap.meaning{"name":"Werbung"}',
+      'labels.overlap.words{"name":"Handy","words":"mobilfunk, vertrag"}',
+      'labels.overlap.words{"name":"Leer","words":"…"}',
+    ]);
+    expect(overlapLines([], t)).toEqual([]);
   });
 });
 
@@ -398,6 +435,33 @@ describe("labelReason", () => {
     expect(reason("classifier", { probability: 0.9946, examples: 23 })).toBe(
       "Similar to the 23 mails with this label (99.4 % sure)",
     );
+  });
+
+  it("puts the new detectors and similar mails in the person's words", () => {
+    expect(reason("invoice", { number: "RE-4711", amount: "39,99 €" })).toBe(
+      "Looks like an invoice: invoice number RE-4711, 39,99 €",
+    );
+    expect(reason("account", { word: "Passwort", code: false })).toBe("About your account: “Passwort”");
+    expect(reason("account", { word: null, code: true })).toBe("About your account: a one-time code");
+    expect(reason("account", { word: null, code: false })).toBe("Fallback.");
+    expect(reason("personal", { known: true, freemail: false })).toBe("Looks personal: written by a person you know");
+    expect(reason("personal", { known: false, freemail: true })).toBe(
+      "Looks personal: written by a person from a private address",
+    );
+    expect(reason("personal", {})).toBe("Fallback.");
+    expect(reason("work", { colleague: true, known: false })).toBe(
+      "Looks like work: written by a colleague from your own domain",
+    );
+    expect(reason("work", { colleague: false, known: true })).toBe(
+      "Looks like work: written by a business contact you know",
+    );
+    expect(reason("work", { colleague: false, known: false })).toBe("Fallback.");
+    expect(reason("advertising", { words: ["sale", "-20 %", 3] })).toBe("Looks like advertising: sale, -20 %");
+    expect(reason("advertising", { words: [] })).toBe("Fallback.");
+    expect(reason("similar", { neighbours: 4, similarity: 0.874 })).toBe(
+      "Like 4 of your mails with this label (87 % alike)",
+    );
+    expect(reason("similar", { neighbours: 4 })).toBe("Fallback.");
   });
 
   it("falls back to the entry's own sentence", () => {

@@ -1,9 +1,11 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { i18n } from "@/i18n";
 import { AssistError, BackendError, type Backend, type BackendErrorCode } from "./backend";
 import {
   answerOf,
   assistSettingsUpdate,
+  baseLabelCreate,
   labelCreate,
   labelUpdate,
   providerCreate,
@@ -24,6 +26,8 @@ import {
   toComposeText,
   toEvents,
   toLabelLog,
+  toLabelOverlaps,
+  OVERLAP_LIMITS,
   toSpamCheck,
   toSummaryText,
   toUsage,
@@ -44,6 +48,7 @@ import type {
   AssistProbeInput,
   AssistEventsResult,
   AssistLabelInput,
+  LabelBase,
   AssistProviderInput,
   AssistSettingsPatch,
   AssistStreamEvent,
@@ -138,6 +143,9 @@ function accountSignaturesFrom(raw: { accountId: string; overview: unknown }): A
       : {};
   return { accountId: String(raw.accountId), overview: overviewFrom(overview) };
 }
+/** The app's language, for the names of base labels this device makes. */
+const uiLanguage = (): "de" | "en" => (i18n.language?.toLowerCase().startsWith("de") ? "de" : "en");
+
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(command, args);
@@ -720,11 +728,13 @@ export class TauriBackend implements Backend {
   }
 
   async assistLabels(scope: string) {
-    return toAssistLabels(await call<unknown>("assist_labels", { scope }));
+    return toAssistLabels(await call<unknown>("assist_labels", { scope, language: uiLanguage() }));
   }
 
   async createAssistLabel(scope: string, input: AssistLabelInput) {
-    return toAssistLabel(await call<Raw>("assist_create_label", { scope, input: labelCreate(input) }));
+    return toAssistLabel(
+      await call<Raw>("assist_create_label", { scope, input: labelCreate(input), language: uiLanguage() }),
+    );
   }
 
   async updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>) {
@@ -733,6 +743,31 @@ export class TauriBackend implements Backend {
 
   async deleteAssistLabel(scope: string, id: string) {
     await call<void>("assist_delete_label", { scope, labelId: id });
+  }
+
+  async restoreBaseLabel(scope: string, base: LabelBase, auto?: boolean) {
+    return toAssistLabel(
+      await call<Raw>("assist_create_label", {
+        scope,
+        input: baseLabelCreate(base, auto),
+        language: uiLanguage(),
+      }),
+    );
+  }
+
+  async checkLabelOverlap(scope: string, name: string, description: string, id?: string) {
+    const trimmed = name.trim();
+    if (!trimmed || [...trimmed].length > OVERLAP_LIMITS.name || [...description].length > OVERLAP_LIMITS.description) {
+      return [];
+    }
+    return toLabelOverlaps(
+      await call<unknown>("assist_check_overlap", {
+        scope,
+        name: trimmed,
+        description: description.trim(),
+        labelId: id ?? null,
+      }),
+    );
   }
 
   async assistLabelLog(scope: string, messageIds: string[] | null, limit?: number) {

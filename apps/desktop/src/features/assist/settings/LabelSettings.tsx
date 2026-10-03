@@ -1,14 +1,17 @@
 import clsx from "clsx";
-import { Check, Pencil, Plus, Sparkles, Tags, Trash, Wand2, X } from "lucide-react";
+import { Check, ChevronDown, Pencil, Plus, RotateCcw, Sparkles, Tags, Trash, TriangleAlert, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { AssistError, backend } from "@/backend/backend";
 import {
+  LABEL_BASES,
   LABEL_DETECTORS,
   type AssistLabel,
   type AssistLabelInput,
   type AssistOptions,
+  type LabelBase,
   type LabelConditionField,
   type LabelDetector,
+  type LabelOverlap,
   type LabelRules,
 } from "@/backend/types";
 import { NyuThinking } from "@/components/nyu/NyuThinking";
@@ -17,8 +20,8 @@ import { Field, Select, TextInput, Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
+import { useLabelOverlap } from "../../labels/useLabels";
 import {
-  chipStyle,
   CONDITION_MAX_CHARS,
   conditionProblems,
   conditionText,
@@ -26,8 +29,8 @@ import {
   LABEL_LIMITS,
   labelPatch,
   labelProblems,
-  missingStarters,
-  type StarterLabel,
+  missingBases,
+  overlapLines,
 } from "../labels";
 import { assistErrorText, useAssistLabels, useAssistScope, useAssistSettings } from "../useAssist";
 import { Note, Section } from "./common";
@@ -35,14 +38,16 @@ import { Note, Section } from "./common";
 /** How many of the newest inbox mails "label now" looks at: what `AssistLabel/apply` takes at once. */
 const APPLY_COUNT = 20;
 
-/** The labels: whether they are set by themselves, the list, new ones, suggestions, and "label now". */
+/**
+ * The labels: whether they are set by themselves and "label now", the base labels first, then the
+ * person's own ones and new ones.
+ */
 export function LabelSettings({ options }: { options: AssistOptions }) {
   const { t } = useT();
   const scope = useAssistScope();
   const { data: labels = [], isPending } = useAssistLabels();
   const { data: settings } = useAssistSettings();
   const [editing, setEditing] = useState<string | "new" | null>(null);
-  const [adding, setAdding] = useState(false);
   const [applying, setApplying] = useState(false);
   const setSettingsFormDirty = useUi((s) => s.setSettingsFormDirty);
   useEffect(() => {
@@ -50,28 +55,12 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
     return () => setSettingsFormDirty(false);
   }, [editing, setSettingsFormDirty]);
 
-  const starters = missingStarters(labels, (id: StarterLabel) => ({
-    name: t(`assist.starter.${id}.name`),
-    description: t(`assist.starter.${id}.description`),
-  })).slice(0, Math.max(0, options.maxLabels - labels.length));
-  const room = labels.length < options.maxLabels;
+  const bases = labels.filter((label) => label.base);
+  const own = labels.filter((label) => !label.base);
+  // Base labels don't count toward the limit.
+  const room = own.length < options.maxLabels;
+  const missing = missingBases(labels, LABEL_BASES, options.baseLabels);
   const auto = options.features.autoLabels;
-
-  const addStarters = async () => {
-    setAdding(true);
-    let made = 0;
-    try {
-      for (const input of starters) {
-        await backend().createAssistLabel(scope, input);
-        made += 1;
-      }
-      toast(t("assist.labels.startersAdded", { count: made }), "success");
-    } catch (error) {
-      toast(assistErrorText(error), "error");
-    } finally {
-      setAdding(false);
-    }
-  };
 
   const applyNow = async () => {
     setApplying(true);
@@ -87,128 +76,148 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
     }
   };
 
+  const rows = (list: AssistLabel[]) => (
+    <ul className="flex flex-col gap-1.5">
+      {list.map((label) =>
+        editing === label.id ? (
+          <li key={label.id}>
+            <LabelEditor
+              label={label}
+              labels={labels}
+              maxConditions={options.maxLabelConditions}
+              onDone={() => setEditing(null)}
+            />
+          </li>
+        ) : (
+          <LabelRow key={label.id} label={label} onEdit={() => setEditing(label.id)} />
+        ),
+      )}
+    </ul>
+  );
+
   return (
-    <Section
-      title={t("labels.settings.listTitle")}
-      description={auto ? t("labels.settings.description") : t("labels.settings.descriptionManual")}
-      action={
-        room &&
-        editing !== "new" && (
-          <Button size="sm" icon={Plus} onClick={() => setEditing("new")}>
-            {t("assist.labels.new")}
-          </Button>
-        )
-      }
-    >
-      {settings && (
-        <Toggle
-          checked={settings.nonAiLabels}
-          onChange={(nonAiLabels) =>
-            void backend()
-              .updateAssistSettings(scope, { nonAiLabels })
-              .catch((error: unknown) => toast(assistErrorText(error), "error"))
-          }
-          label={t("labels.settings.nonAi")}
-          description={t("labels.settings.nonAiDesc")}
-        />
-      )}
-      {auto && settings && (
-        <Toggle
-          checked={settings.autoLabels}
-          onChange={(autoLabels) =>
-            void backend()
-              .updateAssistSettings(scope, { autoLabels })
-              .catch((error: unknown) => toast(assistErrorText(error), "error"))
-          }
-          label={t("assist.labels.auto")}
-          description={labels.length === 0 ? t("assist.labels.autoNoLabels") : t("assist.labels.autoDesc")}
-        />
-      )}
-      {auto && settings && !settings.effective.autoLabels && (
-        <Note tone="warning">{t("assist.labels.noProvider")}</Note>
-      )}
-
-      {editing === "new" && (
-        <LabelEditor
-          label={null}
-          labels={labels}
-          maxConditions={options.maxLabelConditions}
-          onDone={() => setEditing(null)}
-        />
-      )}
-
-      {starters.length > 0 && editing !== "new" && (
-        <div className="flex flex-col gap-2 rounded-2xl bg-pink-tint/35 px-3.5 py-3">
-          <p className="flex items-center gap-1.5 text-[13px] font-semibold">
-            <Wand2 className="size-4 text-pink" aria-hidden />
-            {labels.length === 0 ? t("assist.labels.startersTitle") : t("assist.labels.startersMore")}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {starters.map((starter) => (
-              <span
-                key={starter.name}
-                style={chipStyle(starter.color)}
-                title={starter.description}
-                className="inline-flex h-6 items-center rounded-full border px-2 text-[11.5px] font-semibold"
-              >
-                {starter.name}
-              </span>
-            ))}
+    <>
+      <Section
+        title={t("labels.settings.switchesTitle")}
+        description={auto ? t("labels.settings.description") : t("labels.settings.descriptionManual")}
+      >
+        {settings && (
+          <Toggle
+            checked={settings.nonAiLabels}
+            onChange={(nonAiLabels) =>
+              void backend()
+                .updateAssistSettings(scope, { nonAiLabels })
+                .catch((error: unknown) => toast(assistErrorText(error), "error"))
+            }
+            label={t("labels.settings.nonAi")}
+            description={t("labels.settings.nonAiDesc")}
+          />
+        )}
+        {auto && settings && (
+          <Toggle
+            checked={settings.autoLabels}
+            onChange={(autoLabels) =>
+              void backend()
+                .updateAssistSettings(scope, { autoLabels })
+                .catch((error: unknown) => toast(assistErrorText(error), "error"))
+            }
+            label={t("assist.labels.auto")}
+            description={labels.length === 0 ? t("assist.labels.autoNoLabels") : t("assist.labels.autoDesc")}
+          />
+        )}
+        {auto && settings && !settings.effective.autoLabels && (
+          <Note tone="warning">{t("assist.labels.noProvider")}</Note>
+        )}
+        {auto && labels.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-canvas px-3.5 py-2.5">
+            <p className="min-w-[min(100%,14rem)] flex-1 text-[12.5px] text-muted">
+              {t("assist.labels.applyDesc", { count: APPLY_COUNT })}
+            </p>
+            <Button
+              size="sm"
+              icon={Sparkles}
+              busy={applying}
+              busyIndicator={<NyuThinking size="sm" fallback={<Spinner />} />}
+              onClick={() => void applyNow()}
+            >
+              {t("assist.labels.apply")}
+            </Button>
           </div>
+        )}
+      </Section>
+
+      {(bases.length > 0 || missing.length > 0) && (
+        <Section title={t("labels.base.title")} description={t("labels.base.description")}>
+          {bases.length > 0 && rows(bases)}
+          {missing.length > 0 && <MissingBases missing={missing} />}
+        </Section>
+      )}
+
+      <Section
+        title={t("labels.settings.listTitle")}
+        description={t("labels.settings.listDescription")}
+        action={
+          room &&
+          editing !== "new" && (
+            <Button size="sm" icon={Plus} onClick={() => setEditing("new")}>
+              {t("assist.labels.new")}
+            </Button>
+          )
+        }
+      >
+        {editing === "new" && (
+          <LabelEditor
+            label={null}
+            labels={labels}
+            maxConditions={options.maxLabelConditions}
+            onDone={() => setEditing(null)}
+          />
+        )}
+        {!isPending && own.length === 0 && editing !== "new" && (
+          <p className="text-[13px] text-muted">{t("assist.labels.empty")}</p>
+        )}
+        {own.length > 0 && rows(own)}
+        {!room && <p className="text-[12.5px] text-muted">{t("assist.labels.full", { count: options.maxLabels })}</p>}
+      </Section>
+    </>
+  );
+}
+
+/** Base labels the person deleted, each to be made again with its definition. */
+function MissingBases({ missing }: { missing: LabelBase[] }) {
+  const { t } = useT();
+  const scope = useAssistScope();
+  const [busy, setBusy] = useState<LabelBase | null>(null);
+  const restore = (base: LabelBase) => {
+    setBusy(base);
+    backend()
+      .restoreBaseLabel(scope, base)
+      .then((label) => toast(t("labels.base.restored", { name: label.name }), "success"))
+      .catch((error: unknown) => toast(assistErrorText(error), "error"))
+      .finally(() => setBusy(null));
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl bg-canvas px-3.5 py-3">
+      <div>
+        <p className="text-[13px] font-semibold">{t("labels.base.missingTitle")}</p>
+        <p className="text-[12.5px] text-muted">{t("labels.base.missingDescription")}</p>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {missing.map((base) => (
           <Button
+            key={base}
             size="sm"
-            variant="primary"
-            icon={Plus}
-            busy={adding}
-            className="self-start"
-            onClick={() => void addStarters()}
+            variant="ghost"
+            icon={RotateCcw}
+            busy={busy === base}
+            disabled={busy !== null && busy !== base}
+            onClick={() => restore(base)}
           >
-            {t("assist.labels.addStarters", { count: starters.length })}
+            {t("labels.base.restore", { name: t(`labels.base.names.${base}`) })}
           </Button>
-        </div>
-      )}
-
-      {!isPending && labels.length === 0 && starters.length === 0 && editing !== "new" && (
-        <p className="text-[13px] text-muted">{t("assist.labels.empty")}</p>
-      )}
-
-      {labels.length > 0 && (
-        <ul className="flex flex-col gap-1.5">
-          {labels.map((label) =>
-            editing === label.id ? (
-              <li key={label.id}>
-                <LabelEditor
-                  label={label}
-                  labels={labels}
-                  maxConditions={options.maxLabelConditions}
-                  onDone={() => setEditing(null)}
-                />
-              </li>
-            ) : (
-              <LabelRow key={label.id} label={label} onEdit={() => setEditing(label.id)} />
-            ),
-          )}
-        </ul>
-      )}
-      {!room && <p className="text-[12.5px] text-muted">{t("assist.labels.full", { count: options.maxLabels })}</p>}
-
-      {auto && labels.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-canvas px-3.5 py-2.5">
-          <p className="min-w-[min(100%,14rem)] flex-1 text-[12.5px] text-muted">
-            {t("assist.labels.applyDesc", { count: APPLY_COUNT })}
-          </p>
-          <Button
-            size="sm"
-            icon={Sparkles}
-            busy={applying}
-            busyIndicator={<NyuThinking size="sm" fallback={<Spinner />} />}
-            onClick={() => void applyNow()}
-          >
-            {t("assist.labels.apply")}
-          </Button>
-        </div>
-      )}
-    </Section>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -217,6 +226,17 @@ function LabelRow({ label, onEdit }: { label: AssistLabel; onEdit: () => void })
   const scope = useAssistScope();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [definition, setDefinition] = useState(false);
+  const [auto, setAuto] = useState<boolean | null>(null);
+  const switchAuto = (on: boolean) => {
+    setAuto(on);
+    backend()
+      .updateAssistLabel(scope, label.id, { auto: on })
+      .catch((error: unknown) => toast(assistErrorText(error), "error"))
+      .finally(() => setAuto(null));
+  };
+  // Shown as switched right away; the list catches up once the scope has it.
+  const isAuto = auto ?? label.auto;
   const remove = () => {
     setBusy(true);
     backend()
@@ -243,11 +263,42 @@ function LabelRow({ label, onEdit }: { label: AssistLabel; onEdit: () => void })
               {label.keyword}
             </code>
           </p>
-          <p className="text-[12.5px] break-words text-muted">
-            {label.description || <span className="italic">{t("assist.labels.noDescription")}</span>}
-          </p>
+          {label.base ? (
+            <>
+              <button
+                type="button"
+                aria-expanded={definition}
+                onClick={() => setDefinition((open) => !open)}
+                className="inline-flex items-center gap-1 rounded text-[12px] font-semibold text-muted hover:text-ink focus-visible:shadow-focus focus-visible:outline-none"
+              >
+                <ChevronDown
+                  className={clsx("size-3.5 transition-transform", definition && "rotate-180")}
+                  aria-hidden
+                />
+                {definition ? t("labels.base.hideDefinition") : t("labels.base.showDefinition")}
+              </button>
+              {definition && <p className="text-[12.5px] break-words text-muted">{label.description}</p>}
+            </>
+          ) : (
+            <p className="text-[12.5px] break-words text-muted">
+              {label.description || <span className="italic">{t("assist.labels.noDescription")}</span>}
+            </p>
+          )}
           <LabelAutomatic label={label} />
         </div>
+        {label.base && (
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden text-[11.5px] text-muted sm:inline">
+              {isAuto ? t("labels.base.autoOn") : t("labels.base.autoOff")}
+            </span>
+            <AutoSwitch
+              checked={isAuto}
+              label={t("labels.base.auto", { name: label.name })}
+              disabled={auto !== null}
+              onChange={switchAuto}
+            />
+          </div>
+        )}
         <IconButton icon={Pencil} size="sm" label={t("assist.labels.edit", { name: label.name })} onClick={onEdit} />
         <IconButton
           icon={Trash}
@@ -268,6 +319,42 @@ function LabelRow({ label, onEdit }: { label: AssistLabel; onEdit: () => void })
         </div>
       )}
     </li>
+  );
+}
+
+/** The per-label switch "put on by itself", small enough for a row. */
+function AutoSwitch({
+  checked,
+  label,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  disabled?: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus-visible:shadow-focus focus-visible:outline-none disabled:opacity-70",
+        checked ? "bg-pink" : "bg-line",
+      )}
+    >
+      <span
+        className={clsx(
+          "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform duration-200",
+          checked && "translate-x-4",
+        )}
+      />
+    </button>
   );
 }
 
@@ -294,6 +381,7 @@ function LabelEditor({
           detector: label.detector,
           learnSenders: label.learnSenders,
           classifier: label.classifier,
+          auto: label.auto,
         }
       : {
           name: "",
@@ -303,12 +391,16 @@ function LabelEditor({
           detector: null,
           learnSenders: true,
           classifier: true,
+          auto: true,
         },
   );
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const problems = labelProblems(form, labels, label?.id);
+  const base = label?.base ?? null;
+  // Only own labels are checked: a base label's definition is fixed.
+  const overlaps = useLabelOverlap(scope, form.name, form.description, label?.id, !base && !problems.name);
   const problemText = (field: "name" | "description") => {
     const problem = touched ? problems[field] : undefined;
     return problem ? t(`assist.labels.problem.${problem}`, { max: LABEL_LIMITS[field] }) : undefined;
@@ -361,22 +453,33 @@ function LabelEditor({
           />
         )}
       </Field>
-      <Field
-        label={t("assist.labels.descriptionField")}
-        hint={t("assist.labels.descriptionHint")}
-        error={problemText("description")}
-      >
-        {(id) => (
-          <textarea
-            id={id}
-            rows={2}
-            value={form.description}
-            placeholder={t("assist.labels.descriptionPlaceholder")}
-            onChange={(event) => change({ description: event.target.value })}
-            className="w-full resize-y rounded-control border border-line bg-surface px-3.5 py-2.5 text-sm placeholder:text-faint focus:border-pink focus:shadow-focus focus:outline-none"
-          />
-        )}
-      </Field>
+      {base ? (
+        <div className="flex flex-col gap-1">
+          <p className="text-[13px] font-semibold text-muted">{t("assist.labels.descriptionField")}</p>
+          <p className="rounded-control border border-hairline bg-canvas px-3.5 py-2.5 text-[13px] break-words">
+            {form.description}
+          </p>
+          <p className="text-[12.5px] text-muted">{t("labels.base.fixedDefinition")}</p>
+        </div>
+      ) : (
+        <Field
+          label={t("assist.labels.descriptionField")}
+          hint={t("assist.labels.descriptionHint")}
+          error={problemText("description")}
+        >
+          {(id) => (
+            <textarea
+              id={id}
+              rows={2}
+              value={form.description}
+              placeholder={t("assist.labels.descriptionPlaceholder")}
+              onChange={(event) => change({ description: event.target.value })}
+              className="w-full resize-y rounded-control border border-line bg-surface px-3.5 py-2.5 text-sm placeholder:text-faint focus:border-pink focus:shadow-focus focus:outline-none"
+            />
+          )}
+        </Field>
+      )}
+      <OverlapWarning overlaps={overlaps} />
       <div className="flex flex-col gap-1.5">
         <p className="text-[13px] font-semibold text-muted">{t("assist.labels.color")}</p>
         <div role="radiogroup" aria-label={t("assist.labels.color")} className="flex flex-wrap gap-1.5">
@@ -409,6 +512,7 @@ function LabelEditor({
         touched={touched}
         maxConditions={maxConditions}
         examples={label?.examples ?? 0}
+        base={base}
       />
       {failure && (
         <p role="alert" className="rounded-xl bg-danger-tint px-3 py-2 text-[13px] text-danger">
@@ -427,9 +531,44 @@ function LabelEditor({
   );
 }
 
+/** Labels a new or changed one overlaps with: a warning only, saving stays possible. */
+export function OverlapWarning({ overlaps }: { overlaps: LabelOverlap[] }) {
+  const { t } = useT();
+  const lines = overlapLines(overlaps, t);
+  if (lines.length === 0) return null;
+  return (
+    <div role="status" className="flex gap-2 rounded-xl bg-warning-tint px-3 py-2 text-[12.5px] text-warning">
+      <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">{t("labels.overlap.title")}</p>
+        <ul className="list-disc pl-4">
+          {lines.map((line) => (
+            <li key={line} className="break-words">
+              {line}
+            </li>
+          ))}
+        </ul>
+        <p className="text-muted">{t("labels.overlap.hint")}</p>
+      </div>
+    </div>
+  );
+}
+
 /** What puts a label on new mail by itself, in one line under its description. */
 function LabelAutomatic({ label }: { label: AssistLabel }) {
   const { t } = useT();
+  const count =
+    label.totalEmails !== null
+      ? t("labels.settings.count", { count: label.totalEmails, unread: label.unreadEmails ?? 0 })
+      : null;
+  // A base label shows its own switch; an own one says it here.
+  if (!label.auto && !label.base) {
+    return (
+      <p className="mt-0.5 text-[11.5px] break-words text-faint">
+        {[count, t("labels.base.autoOff")].filter(Boolean).join(" · ")}
+      </p>
+    );
+  }
   const parts = [
     label.detector && t(`labels.detector.${label.detector}`),
     label.rules &&
@@ -442,10 +581,6 @@ function LabelAutomatic({ label }: { label: AssistLabel }) {
         ? t("labels.settings.classifierOn", { count: label.examples })
         : t("labels.settings.classifierLearning", { count: label.examples, needed: CLASSIFIER_MIN })),
   ].filter(Boolean);
-  const count =
-    label.totalEmails !== null
-      ? t("labels.settings.count", { count: label.totalEmails, unread: label.unreadEmails ?? 0 })
-      : null;
   if (parts.length === 0 && !count) return null;
   return <p className="mt-0.5 text-[11.5px] break-words text-faint">{[count, ...parts].filter(Boolean).join(" · ")}</p>;
 }
@@ -462,12 +597,14 @@ function AutomaticEditor({
   touched,
   maxConditions,
   examples,
+  base,
 }: {
   form: AssistLabelInput;
   change: (patch: Partial<AssistLabelInput>) => void;
   touched: boolean;
   maxConditions: number;
   examples: number;
+  base: LabelBase | null;
 }) {
   const { t } = useT();
   const rules: LabelRules = form.rules ?? { match: "all", conditions: [] };
@@ -486,22 +623,32 @@ function AutomaticEditor({
         <p className="text-[13px] font-bold">{t("labels.settings.automaticTitle")}</p>
         <p className="text-[12.5px] text-muted">{t("labels.settings.automaticDesc")}</p>
       </div>
-      <Field label={t("labels.settings.detector")} hint={t("labels.settings.detectorHint")}>
-        {(id) => (
-          <Select
-            id={id}
-            value={form.detector ?? ""}
-            onChange={(event) => change({ detector: (event.target.value || null) as LabelDetector | null })}
-          >
-            <option value="">{t("labels.settings.detectorNone")}</option>
-            {LABEL_DETECTORS.map((detector) => (
-              <option key={detector} value={detector}>
-                {t(`labels.detector.${detector}`)}
-              </option>
-            ))}
-          </Select>
-        )}
-      </Field>
+      <Toggle
+        checked={form.auto ?? true}
+        onChange={(auto) => change({ auto })}
+        label={t("labels.settings.autoLabel")}
+        description={t("labels.settings.autoLabelDesc")}
+      />
+      {base ? (
+        <p className="text-[12.5px] text-muted">{t("labels.base.detectorBuiltIn")}</p>
+      ) : (
+        <Field label={t("labels.settings.detector")} hint={t("labels.settings.detectorHint")}>
+          {(id) => (
+            <Select
+              id={id}
+              value={form.detector ?? ""}
+              onChange={(event) => change({ detector: (event.target.value || null) as LabelDetector | null })}
+            >
+              <option value="">{t("labels.settings.detectorNone")}</option>
+              {LABEL_DETECTORS.map((detector) => (
+                <option key={detector} value={detector}>
+                  {t(`labels.detector.${detector}`)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      )}
 
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-muted">

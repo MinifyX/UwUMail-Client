@@ -18,6 +18,7 @@ const OPTIONS: AssistOptions = {
   maxInstructionChars: 2000,
   maxTextChars: 20000,
   maxLabelConditions: 10,
+  baseLabels: [],
   foreignMail: false,
   foreignServers: [],
 };
