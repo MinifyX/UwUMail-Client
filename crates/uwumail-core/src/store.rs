@@ -692,20 +692,25 @@ impl Store {
             "DELETE FROM messages_fts WHERE rowid IN (SELECT rowid FROM messages WHERE account_id = ?1)",
             [id],
         )?;
+        // The senders learned or taken off from its mail, unless mail of theirs is left elsewhere;
+        // other senders' choices stay (C2-3). Before its messages go, so they still say who.
+        conn.execute(
+            "DELETE FROM label_senders
+             WHERE lower(address) IN (
+                SELECT lower(json_extract(from_json, '$.email')) FROM messages
+                WHERE account_id = ?1 AND json_extract(from_json, '$.email') IS NOT NULL)
+               AND lower(address) NOT IN (
+                SELECT lower(json_extract(from_json, '$.email')) FROM messages
+                WHERE account_id <> ?1 AND json_extract(from_json, '$.email') IS NOT NULL)",
+            [id],
+        )?;
         conn.execute("DELETE FROM accounts WHERE id = ?1", [id])?;
         // What the labels of this device noted about its mail goes with it, and so does the choice
         // of its server for the AI of the other mailboxes.
         conn.execute("DELETE FROM assist_label_log WHERE account_id = ?1", [id])?;
         conn.execute("DELETE FROM label_examples WHERE message_id NOT IN (SELECT id FROM messages)", [])?;
-        // Its hand corrections (subject and start of the text, sent to the model as examples) and
-        // the senders learned or taken off from its mail, unless mail of theirs is left elsewhere.
+        // Its hand corrections (subject and start of the text, sent to the model as examples).
         conn.execute("DELETE FROM label_shots WHERE message_id NOT IN (SELECT id FROM messages)", [])?;
-        conn.execute(
-            "DELETE FROM label_senders WHERE lower(address) NOT IN (
-                SELECT lower(json_extract(from_json, '$.email')) FROM messages
-                WHERE json_extract(from_json, '$.email') IS NOT NULL)",
-            [],
-        )?;
         conn.execute("DELETE FROM assist_settings WHERE key = 'serverAssist' AND value = ?1", [id])?;
         Ok(())
     }
@@ -2256,6 +2261,7 @@ mod tests {
         store.set_assist_setting("serverAssist", Some("acc")).unwrap();
         store.keep_label_shot("g1", &id, true, "x.example", "Hi", "Hallo Mini", 1).unwrap();
         store.count_label_sender("g1", "leni@x.example").unwrap();
+        // Taken off for a sender with no mail in this account: that choice isn't this account's.
         store.block_label_sender("g1", "tom@x.example").unwrap();
         // A sender who also wrote to another mailbox stays learned there.
         let other =
@@ -2282,7 +2288,7 @@ mod tests {
         assert_eq!(store.assist_setting("serverAssist").unwrap(), None);
         assert!(store.label_shots().unwrap().is_empty(), "its corrections go to no model any more");
         assert!(store.label_senders("leni@x.example").unwrap().is_empty());
-        assert!(store.label_senders("tom@x.example").unwrap().is_empty());
+        assert_eq!(store.label_senders("tom@x.example").unwrap().get("g1"), Some(&-1));
         assert_eq!(store.label_senders("ana@x.example").unwrap().get("g1"), Some(&1));
     }
 

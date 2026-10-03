@@ -104,18 +104,23 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const signatureKind = request.mode === "new" ? "new" : "reply";
   const placement = request.mode === "new" ? "end" : "beforeQuote";
   const emailOf = (account: string, from: string) => from || accounts.find((a) => a.id === account)?.email || "";
+  // The servers' signatures per domain; the composer may have stopped waiting for them (queries.ts).
+  const { data: domainSignatures, isPending: serversPending } = useDomainSignatures();
   const [signedAtStart] = useState(() => !request.restore && signatures !== undefined && identities !== undefined);
-  const [initialBody] = useState(() => {
-    if (!signedAtStart || !signatures) return initial.html;
+  const [{ html: initialBody, signed: settledAtStart }] = useState(() => {
+    if (!signedAtStart || !signatures) return { html: initial.html, signed: false };
     const from = initial.fromEmail ?? (request.source ? replyFrom(request.source, identities ?? []) : "");
     const signature = defaultSignature(
       signatures,
       emailOf(initial.accountId || accounts[0]?.id || "", from),
       signatureKind,
     );
-    return signature ? withSignature(initial.html, signature, placement) : initial.html;
+    // Without one yet, a server's may still come: only then is the signature settled.
+    return signature
+      ? { html: withSignature(initial.html, signature, placement), signed: true }
+      : { html: initial.html, signed: !serversPending };
   });
-  const signatureAdded = useRef(signedAtStart);
+  const signatureAdded = useRef(settledAtStart);
   /** Still the automatic signature, so changing the sender changes it too. */
   const autoSignature = useRef(true);
   // The body lives outside React, so it survives minimizing (the editor unmounts meanwhile).
@@ -149,14 +154,16 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const fromEmail = draft.fromEmail ?? (request.source ? replyFrom(request.source, identities ?? []) : "");
   const senderEmail = emailOf(accountId, fromEmail);
   // The server appends the domain's mandatory company footer on sending; the composer only says so.
-  const { data: domainSignatures } = useDomainSignatures();
   const companyFooter = companyFooterForSender(domainSignatures, accountId, senderEmail);
   useEffect(() => {
     if (signatureAdded.current || request.restore || !signatures || !identities || dirty.current) return;
-    signatureAdded.current = true;
     const signature = defaultSignature(signatures, senderEmail, signatureKind);
+    // Nothing yet while a server's signatures are still on their way: they may bring one, and it
+    // goes in as long as the draft is untouched.
+    if (!signature && serversPending) return;
+    signatureAdded.current = true;
     if (signature) applySignature(signature);
-  }, [signatures, identities, senderEmail, signatureKind, request.restore, applySignature]);
+  }, [signatures, identities, senderEmail, signatureKind, request.restore, applySignature, serversPending]);
   const latest = useRef({ draft, accountId, attachments, fromEmail });
   useEffect(() => {
     latest.current = { draft, accountId, attachments, fromEmail };

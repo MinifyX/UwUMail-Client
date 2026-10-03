@@ -69,9 +69,9 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
 /// Where the receiving server's own header fields end: the first `Received:` (top first) that
 /// records the mail coming in from another host, and the host that wrote it (its `by` part).
 /// Everything above that line the receiving server wrote; everything below it came with the mail,
-/// so the sender may have written it. Hops inside the server (from localhost, or without a `from`
-/// part, like Gmail's internal ones above its intake line) don't end it. With only such hops, the
-/// first `Received:` ends it and no host is named. No `Received:` at all: nothing is the server's.
+/// so the sender may have written it. Hops inside the server (see [`local_hop`]) don't end it.
+/// With only such hops, the first `Received:` ends it and no host is named. No `Received:` at all:
+/// nothing is the server's.
 fn intake(headers: &[(String, String)]) -> Option<(usize, Option<String>)> {
     let mut first = None;
     for (index, (name, value)) in headers.iter().enumerate() {
@@ -86,12 +86,35 @@ fn intake(headers: &[(String, String)]) -> Option<(usize, Option<String>)> {
     first.map(|index| (index, None))
 }
 
-/// A `Received:` of a hop inside the receiving server.
+/// A `Received:` of a hop inside the receiving server, judged only by what that server writes
+/// itself: the IP addresses in brackets of the `from` part, which must all be loopback, private or
+/// link-local; or no `from` part at all (Gmail's internal `by …` hops). The name after `from` is
+/// the HELO the connecting side chose, so "from localhost" proves nothing (C2-1).
 fn local_hop(value: &str) -> bool {
     let lower = value.trim_start().to_ascii_lowercase();
     let Some(rest) = lower.strip_prefix("from") else { return true };
-    let host = rest.split_whitespace().next().unwrap_or_default().trim_matches(|c| c == '[' || c == ']');
-    matches!(host, "localhost" | "localhost.localdomain" | "127.0.0.1" | "::1" | "ipv6:::1")
+    // The from part without the HELO itself (it may be an address literal the sender chose), up to
+    // where the receiving server names itself.
+    let clause = rest.split_whitespace().skip(1).take_while(|token| *token != "by").collect::<Vec<_>>().join(" ");
+    let mut literals = clause
+        .split('[')
+        .skip(1)
+        .filter_map(|part| part.split(']').next())
+        .map(|literal| literal.trim().trim_start_matches("ipv6:"))
+        .peekable();
+    if literals.peek().is_none() {
+        return false;
+    }
+    literals.all(|literal| match literal.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+        Ok(std::net::IpAddr::V6(ip)) => {
+            ip.is_loopback()
+                || (ip.segments()[0] & 0xfe00) == 0xfc00
+                || (ip.segments()[0] & 0xffc0) == 0xfe80
+                || ip.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback() || v4.is_private())
+        }
+        Err(_) => false,
+    })
 }
 
 /// The host a `Received:` names after `by`.
@@ -105,10 +128,14 @@ fn by_host(value: &str) -> Option<String> {
     None
 }
 
+/// Receivers known to write their `Authentication-Results` right below their intake line, by
+/// registrable domain. Anywhere else, one there may be the sender's (C2-2).
+const RESULTS_BELOW_INTAKE: &[&str] = &["google.com", "googlemail.com"];
+
 /// The receiving server's own `Authentication-Results`, read top first: one above its intake line
-/// (see [`intake`]), or one right below it (before the next `Received:`) whose authserv-id belongs
-/// to the host that wrote the intake line, as Gmail and many servers place theirs. One the sender
-/// wrote counts for nothing, so a sender can't vouch for itself on a server that adds none.
+/// (see [`intake`]), or, for the hosts of [`RESULTS_BELOW_INTAKE`], one right below it (before the
+/// next `Received:`) whose authserv-id belongs to the host that wrote the intake line. One the
+/// sender wrote counts for nothing, so a sender can't vouch for itself on a server that adds none.
 fn receiving_results(headers: &[(String, String)]) -> Option<&str> {
     let (boundary, host) = intake(headers)?;
     let is_results = |name: &str| name.eq_ignore_ascii_case("Authentication-Results");
@@ -116,6 +143,9 @@ fn receiving_results(headers: &[(String, String)]) -> Option<&str> {
         return Some(value);
     }
     let host = host?;
+    if !psl::domain_str(&host).is_some_and(|domain| RESULTS_BELOW_INTAKE.contains(&domain)) {
+        return None;
+    }
     for (name, value) in &headers[boundary + 1..] {
         if name.eq_ignore_ascii_case("Received") {
             return None;
@@ -306,11 +336,11 @@ mod tests {
     fn only_the_receiving_servers_results_count() {
         let headers = vec![
             header("X-Spam-Status", "Yes, score=6.0 required=5.0 tests=SPF_FAIL,SPAMHAUS_ZEN"),
-            header("Received", "from mx.example.net by imap.example.org"),
             header(
                 "Authentication-Results",
                 "mx.example.org; spf=fail smtp.mailfrom=x@bank.example; dkim=none; dkim=pass header.d=bank.example; dmarc=fail header.from=bank.example",
             ),
+            header("Received", "from mx.example.net by imap.example.org"),
             header("Received", "from evil.example by mx.example.net"),
             header("Authentication-Results", "evil.example; spf=pass; dmarc=pass"),
             header("X-Spam-Status", "No, score=-50.0 required=5.0 tests=BAYES_HAM"),
@@ -321,7 +351,7 @@ mod tests {
         assert_eq!(auth.dmarc.as_deref(), Some("fail"));
         assert_eq!(auth.from_domain.as_deref(), Some("bank.example"));
         // The sender's own claim below the second Received line counts for nothing.
-        let forged = [headers[1].clone(), headers[3].clone(), headers[4].clone()];
+        let forged = [headers[2].clone(), headers[3].clone(), headers[4].clone()];
         assert_eq!(authentication(&forged, "x@bank.example").spf, None);
         assert_eq!(spam_status(&headers), (Some(6.0), Some(5.0), vec!["SPF_FAIL".into(), "SPAMHAUS_ZEN".into()]));
         let received = header("Received", "from mx.example.net by imap.example.org");
@@ -373,10 +403,57 @@ mod tests {
         assert_eq!(spam_status(&amavis).0, Some(7.1));
     }
 
+    /// C2-1: "from localhost" is only the HELO the sender chose; the receiving server's bracketed
+    /// address shows where the mail really came from.
+    #[test]
+    fn a_helo_of_localhost_does_not_make_a_hop_internal() {
+        let headers = [
+            header("Received", "from localhost (unknown [192.0.2.7]) by mx.example.org with ESMTP id z"),
+            header("X-Spam-Status", "No, score=-50.0 required=5.0 tests=BAYES_HAM"),
+            header("Authentication-Results", "mx.example.org; spf=pass; dkim=pass header.d=bank.example; dmarc=pass"),
+            header("Received", "from mail.bank.example (mail.bank.example [198.51.100.1]) by relay.bank.example"),
+        ];
+        assert_eq!(spam_status(&headers), (None, None, vec![]));
+        assert_eq!(authentication(&headers, "service@bank.example").dmarc, None);
+        assert!(!from_vouched(&headers, "service@bank.example"));
+        assert!(receiving_headers(&headers).is_empty());
+
+        assert!(local_hop("from localhost (localhost [127.0.0.1]) by mail.example.org"));
+        assert!(local_hop("from mx1.example.org (mx1.example.org [10.0.0.5]) by store.example.org"));
+        assert!(local_hop("from x (x [IPv6:::1]) by y"));
+        assert!(local_hop("from x (x [fe80::1]) by y"));
+        assert!(local_hop("by 2002:a05:6000:1::1 with SMTP id y"));
+        assert!(!local_hop("from localhost (unknown [192.0.2.7]) by mx.example.org"));
+        assert!(!local_hop("from localhost by mx.example.org"));
+        assert!(!local_hop("from [127.0.0.1] by mx.example.org"));
+        assert!(local_hop("from localhost\r\n\t(localhost [127.0.0.1])\r\n\tby mail.example.org"));
+        assert!(!local_hop("from x ([127.0.0.1] [203.0.113.9]) by y"));
+        assert!(!local_hop("from [127.0.0.1] (unknown [2001:db8::7]) by y"));
+        // A bracket in the server's own part after "by" doesn't count for the from part.
+        assert!(!local_hop("from evil.example (evil.example [192.0.2.7]) by mx [127.0.0.1]"));
+    }
+
+    /// C2-2: right below the intake line only the hosts known to put theirs there count.
+    #[test]
+    fn results_below_the_intake_line_count_only_for_known_hosts() {
+        let below = |by: &str, authserv: &str| {
+            [
+                header("Received", &format!("from mail.scam.example (mail.scam.example [192.0.2.7]) by {by}")),
+                header("Authentication-Results", &format!("{authserv}; dmarc=pass")),
+            ]
+        };
+        assert_eq!(authentication(&below("mx.example.org", "mx.example.org"), "a@bank.example").dmarc, None);
+        assert_eq!(
+            authentication(&below("mx.google.com", "mx.google.com"), "a@bank.example").dmarc.as_deref(),
+            Some("pass")
+        );
+        assert_eq!(authentication(&below("mx.google.com", "mx.example.org"), "a@bank.example").dmarc, None);
+    }
+
     #[test]
     fn only_aligned_passes_of_the_receiving_server_vouch_for_the_from_address() {
         let results = |value: &str| {
-            vec![header("Received", "from mx.example.net by mx.example.org"), header("Authentication-Results", value)]
+            vec![header("Authentication-Results", value), header("Received", "from mx.example.net by mx.example.org")]
         };
         let vouched = |value: &str, from: &str| from_vouched(&results(value), from);
         assert!(vouched("mx.example.org; dmarc=pass header.from=bank.example", "a@bank.example"));
