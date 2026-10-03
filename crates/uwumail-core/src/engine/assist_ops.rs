@@ -1626,7 +1626,6 @@ impl Engine {
             let people = run.people(self).await;
             mail.known_sender = people.iter().any(|(_, email)| *email == mail.from);
         }
-        let facts = uwumail_labels::Facts::of(&mail);
         let views = label_views(labels);
         let present: Vec<String> = message.keywords.iter().map(|k| k.to_lowercase()).collect();
         let mut knowledge = uwumail_labels::Knowledge::default();
@@ -1648,7 +1647,20 @@ impl Engine {
                 knowledge.similar = similar_by_tokens(labels, examples, &message.id, &tokens);
             }
         }
-        let mut candidates = uwumail_labels::candidates(&views, &mail, &present, &knowledge, &tokens);
+        // Off the async runtime, and the facts made once: the detectors take the same ones as the
+        // model's prompt (the server's X-1).
+        let (mail, facts, knowledge, mut candidates) = {
+            let (owned, present) = (labels.to_vec(), present.clone());
+            tokio::task::spawn_blocking(move || {
+                let facts = uwumail_labels::Facts::of(&mail);
+                let views = label_views(&owned);
+                let candidates =
+                    uwumail_labels::candidates_with_facts(&views, &mail, &facts, &present, &knowledge, &tokens);
+                (mail, facts, knowledge, candidates)
+            })
+            .await
+            .map_err(|err| Error::internal(format!("The labels couldn't be worked out: {err}")))?
+        };
         if !run.non_ai {
             // Labels without a model switched off: what the cheap ways find is only a hint.
             for candidate in &mut candidates {
