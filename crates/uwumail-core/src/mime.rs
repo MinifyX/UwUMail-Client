@@ -99,9 +99,9 @@ fn from_trusted(message: &mail_parser::Message<'_>) -> bool {
         .take(10)
         // Never cut: a cut value could read as another domain's pass (C4-1).
         .map(|(name, value)| {
-            // Unfolded first, as MailText measures it, so both see the same values (C5-6).
-            let value = value.split(['\r', '\n']).map(str::trim).filter(|line| !line.is_empty()).collect::<Vec<_>>();
-            (name.to_owned(), crate::assist::signals::whole_or_empty(&value.join(" ")))
+            // Unfolded first, as MailText unfolds and measures it, so both see the same values
+            // (C5-6, C6-3).
+            (name.to_owned(), crate::assist::signals::whole_or_empty(&crate::assist::mail::unfold(value)))
         })
         .collect();
     crate::assist::signals::from_vouched(&headers, from)

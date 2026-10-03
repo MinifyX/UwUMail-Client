@@ -193,8 +193,15 @@ pub fn escape_tags(text: &str) -> String {
     text.replace("</", "< /")
 }
 
-fn unfold(value: &str) -> String {
-    value.split(['\r', '\n']).map(str::trim).filter(|line| !line.is_empty()).collect::<Vec<_>>().join(" ")
+/// One line out of a folded value. Only ASCII whitespace is trimmed at the folds, as UwUMail
+/// Server unfolds, so a no-break space at a fold stays in its word (C6-3).
+pub(crate) fn unfold(value: &str) -> String {
+    value
+        .split(['\r', '\n'])
+        .map(|line| line.trim_matches(|c: char| c.is_ascii_whitespace()))
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// At most `max` characters, with a mark where it was cut.

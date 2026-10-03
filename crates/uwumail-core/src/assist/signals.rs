@@ -53,13 +53,17 @@ pub struct SpamSignals {
 pub fn authentication(headers: &[(String, String)], from_email: &str) -> AuthenticationSignals {
     let from_domain = from_email
         .rsplit_once('@')
-        .map(|(_, domain)| domain.trim().trim_end_matches('>').to_ascii_lowercase())
-        .filter(|domain| !domain.is_empty());
+        .map(|(_, domain)| {
+            domain.trim_matches(|c: char| c.is_ascii_whitespace()).trim_end_matches('>').to_ascii_lowercase()
+        })
+        .filter(|domain| !domain.is_empty() && !domain.chars().any(char::is_whitespace));
     let mut signals = AuthenticationSignals { from_domain, ..AuthenticationSignals::default() };
     let Some(value) = receiving_results(headers) else { return signals };
     // Every part is read, however many DKIM results stand before SPF and DMARC; only what is kept
-    // of the DKIM ones is capped (C4-2, the server's R3-L1).
-    let (mut first_dkim, mut dkim_passed) = (None, false);
+    // of the DKIM ones is capped (C4-2, the server's R3-L1). A method named twice keeps its worse
+    // result, so a result smuggled in through a provider's comment can not outvote the real one
+    // (the server's R5 L-1).
+    let (mut first_dkim, mut dkim_passed, mut dkim_unattributed_fail) = (None, false, false);
     let mut parts = auth_results_parts(value);
     for part in parts.by_ref().skip(1) {
         let Some((method, result)) = part.first().and_then(|first| first.split_once('=')) else { continue };
@@ -75,13 +79,12 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
             })
         };
         match method.to_ascii_lowercase().as_str() {
-            "spf" if signals.spf.is_none() => {
-                if result == "pass" {
-                    signals.spf_pass_domain = property("smtp.mailfrom").and_then(domain_part);
-                }
+            "spf" if signals.spf.as_deref().is_none_or(|known| badness(&result) > badness(known)) => {
+                signals.spf_pass_domain =
+                    if result == "pass" { property("smtp.mailfrom").and_then(domain_part) } else { None };
                 signals.spf = Some(result);
             }
-            "dmarc" if signals.dmarc.is_none() => {
+            "dmarc" if signals.dmarc.as_deref().is_none_or(|known| badness(&result) > badness(known)) => {
                 let other_from = property("header.from")
                     .and_then(domain_part)
                     .is_some_and(|named| signals.from_domain.as_deref().is_some_and(|from| from != named));
@@ -90,22 +93,37 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
                 }
             }
             "dkim" => {
+                let signer = property("header.d").or_else(|| property("header.i")).and_then(domain_part);
                 if result == "pass" {
                     dkim_passed = true;
                     if signals.dkim_pass_domains.len() < MAX_DKIM_PASS_DOMAINS
-                        && let Some(domain) =
-                            property("header.d").or_else(|| property("header.i")).and_then(domain_part)
+                        && let Some(domain) = signer
                         && !signals.dkim_pass_domains.contains(&domain)
                     {
                         signals.dkim_pass_domains.push(domain);
                     }
+                } else if signer.is_none() && badness(&result) == 2 {
+                    dkim_unattributed_fail = true;
                 }
                 first_dkim.get_or_insert(result);
             }
             _ => {}
         }
     }
-    signals.dkim = if dkim_passed { Some("pass".into()) } else { first_dkim };
+    // An unclosed comment or quote, or a stray `)`: what was read may be a sender's text that the
+    // provider echoed, so nothing of it is believed (the server's R5 L-1). A part dropped for a limit
+    // is a different matter, handled below: the rest was read as written.
+    if !parts.well_formed() {
+        return AuthenticationSignals { from_domain: signals.from_domain, ..AuthenticationSignals::default() };
+    }
+    // A failed DKIM result that names no signer can not be told apart from the passing one. Every
+    // result this device reads is another server's, so it outweighs them (the server's R5 L-1).
+    if dkim_unattributed_fail {
+        signals.dkim = Some("fail".into());
+        signals.dkim_pass_domains.clear();
+    } else {
+        signals.dkim = if dkim_passed { Some("pass".into()) } else { first_dkim };
+    }
     // Something was left out for a limit: the DMARC result may be what went. Then only an explicit
     // pass counts, and no DKIM or SPF pass can stand in for a missing DMARC (C5-3).
     if parts.dropped && signals.dmarc.as_deref() != Some("pass") {
@@ -115,14 +133,32 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
     signals
 }
 
+/// How bad an `Authentication-Results` result is: a pass 0, a failure 2, anything else 1.
+fn badness(result: &str) -> u8 {
+    match result {
+        "pass" => 0,
+        "fail" | "permerror" | "hardfail" => 2,
+        _ => 1,
+    }
+}
+
 /// The most DKIM signers kept from one `Authentication-Results`.
 const MAX_DKIM_PASS_DOMAINS: usize = 16;
 
 /// The domain of an `Authentication-Results` value: `header.d=signer.example`, the part after the
 /// last `@` of `smtp.mailfrom=user@envelope.example` or `header.i=@signer.example`.
+///
+/// Only ASCII whitespace is trimmed, and a domain with any whitespace left in it is none (C5-2):
+/// a no-break space at a fold point must not split `victim.example` off
+/// `victim.example<U+00A0>x.example` (C6-3).
 fn domain_part(value: &str) -> Option<String> {
-    let domain = value.rsplit('@').next().unwrap_or(value).trim().trim_end_matches('.').to_ascii_lowercase();
-    // A domain with a space of any kind in it is no domain (C5-2, defence in depth).
+    let domain = value
+        .rsplit('@')
+        .next()
+        .unwrap_or(value)
+        .trim_matches(|c: char| c.is_ascii_whitespace())
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
     (!domain.is_empty() && domain.len() <= 253 && domain.contains('.') && !domain.chars().any(char::is_whitespace))
         .then_some(domain)
 }
@@ -156,17 +192,31 @@ pub(crate) fn authserv_id(value: &str) -> Option<String> {
 /// `victim.example.attacker.example` would otherwise read as the victim's (client review C4-1).
 /// Callers hand in the whole value, never a cut one. The assistant reads our own results with it,
 /// and the strip of forged ones its authserv-id ([`authserv_id`]).
+///
+/// Whether the value was well formed is known once every part was read
+/// ([`AuthResultsParts::well_formed`]): a provider that echoes a sender's unescaped `(`, `)` or
+/// `"` into a comment leaves it unbalanced, and what follows can not be told apart from its own
+/// word (the server's R5 L-1).
 pub(crate) fn auth_results_parts(value: &str) -> AuthResultsParts<'_> {
-    AuthResultsParts { chars: value.chars(), done: false, dropped: false }
+    AuthResultsParts { chars: value.chars(), done: false, malformed: false, dropped: false }
 }
 
 /// See [`auth_results_parts`].
 pub(crate) struct AuthResultsParts<'a> {
     chars: std::str::Chars<'a>,
     done: bool,
+    malformed: bool,
     /// A word or a part was left out for a limit (this device's addition, C5-3): what was read
     /// may then lack the result that mattered.
     pub(crate) dropped: bool,
+}
+
+impl AuthResultsParts<'_> {
+    /// Whether every comment and quoted string was closed and no `)` stood outside a comment.
+    /// Final only after the last part was read; `false` before that.
+    pub(crate) fn well_formed(&self) -> bool {
+        self.done && !self.malformed
+    }
 }
 
 impl Iterator for AuthResultsParts<'_> {
@@ -208,6 +258,9 @@ impl Iterator for AuthResultsParts<'_> {
         loop {
             let Some(c) = self.chars.next() else {
                 self.done = true;
+                if quoted || depth > 0 {
+                    self.malformed = true;
+                }
                 {
                     lost |= too_long;
                     end_word(&mut part, &mut overflow, &mut word, &mut too_long);
@@ -237,6 +290,11 @@ impl Iterator for AuthResultsParts<'_> {
             } else {
                 match c {
                     '"' => quoted = true,
+                    ')' => {
+                        self.malformed = true;
+                        lost |= too_long;
+                        end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                    }
                     '(' => {
                         {
                             lost |= too_long;
@@ -264,6 +322,18 @@ impl Iterator for AuthResultsParts<'_> {
             }
         }
     }
+}
+
+/// A Unicode bidi control: an embedding, override or isolate (U+202A–U+202E, U+2066–U+2069) or
+/// a direction mark (U+200E, U+200F, U+061C). UwUMail Server's `uwumail_smtp::is_bidi_control`.
+pub fn is_bidi_control(c: char) -> bool {
+    matches!(c, '\u{200E}' | '\u{200F}' | '\u{061C}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+/// `text` without bidi controls, so mail text in a detail or quote can not reorder what stands
+/// around it on screen (the server's webmail WF-2). UwUMail Server's `uwumail_smtp::without_bidi`.
+pub fn without_bidi(text: &str) -> String {
+    text.chars().filter(|c| !is_bidi_control(*c)).collect()
 }
 
 /// Whether `domain` (a DKIM signer, an SPF-checked envelope domain) is the From domain, a parent of
@@ -766,6 +836,80 @@ mod tests {
 
     /// C4-4: only qmail's own `(HELO name)` is skipped; a bracketed address behind a word "helo"
     /// still counts.
+    /// The server's R5 L-1: whether every comment and quote was closed.
+    #[test]
+    fn well_formed_is_known_after_the_last_part() {
+        let read = |value: &str| {
+            let mut parts = auth_results_parts(value);
+            assert!(!parts.well_formed(), "not known before the end");
+            parts.by_ref().for_each(drop);
+            parts.well_formed()
+        };
+        assert!(read("mx.example.org; spf=pass (ok (nested) \\) \"q;\") smtp.mailfrom=\"a;b\"@a.example; dmarc=pass"));
+        assert!(read(""));
+        assert!(!read("mx.example.org; spf=pass (open"));
+        assert!(!read("mx.example.org; spf=pass (a (b) c"));
+        assert!(!read("mx.example.org; spf=pass smtp.mailfrom=\"open"));
+        assert!(!read("mx.example.org; spf=pass (of \"a)b\"@x.example) x; dmarc=fail"));
+        // Malformed and dropped are told apart: a word cut for its length leaves the value well formed.
+        let long = format!("mx.example.org; spf=none smtp.mailfrom={}; dmarc=fail", "a".repeat(1_100));
+        let mut parts = auth_results_parts(&long);
+        parts.by_ref().for_each(drop);
+        assert!(parts.well_formed() && parts.dropped);
+    }
+
+    /// The server's R5 L-1 (C6-2 here): the receiver's results, steered by text it echoed.
+    #[test]
+    fn foreign_results_are_read_strictly() {
+        let read = |value: &str| {
+            let headers = [
+                header("Authentication-Results", value),
+                header("Received", "from a.example (a.example [192.0.2.1]) by mx.example.net"),
+            ];
+            authentication(&headers, "service@victim.example")
+        };
+        // Unbalanced: nothing is believed.
+        let auth = read(
+            "mx.example.net; spf=fail (domain of \"a)b;dmarc=pass\"@victim.example) smtp.mailfrom=victim.example; dmarc=fail",
+        );
+        assert!(auth.spf.is_none() && auth.dmarc.is_none() && auth.dkim.is_none(), "{auth:?}");
+        assert_eq!(auth.from_domain.as_deref(), Some("victim.example"));
+        // Balanced again: the worse result wins, and a failed DKIM without a signer outweighs a pass.
+        let auth = read(
+            "mx.example.net; spf=fail (domain of \"a);dmarc=pass;dkim=pass header.d=victim.example;x=(\"@victim.example) smtp.mailfrom=victim.example; dkim=fail; dmarc=fail",
+        );
+        assert_eq!(auth.dmarc.as_deref(), Some("fail"), "{auth:?}");
+        assert_eq!(auth.dkim.as_deref(), Some("fail"), "{auth:?}");
+        assert!(auth.dkim_pass_domains.is_empty() && !super::super::spam::authentic(&auth), "{auth:?}");
+        let auth =
+            read("mx.example.net; spf=pass smtp.mailfrom=victim.example; spf=softfail smtp.mailfrom=victim.example");
+        assert_eq!((auth.spf.as_deref(), auth.spf_pass_domain.as_deref()), (Some("softfail"), None));
+        // A Unicode space keeps a signer whole, also at a fold, and a domain with one is none (C6-3).
+        for space in ['\u{a0}', '\u{2002}'] {
+            let auth = read(&format!("mx.example.net; dkim=pass header.d=victim.example{space}x.attacker.example"));
+            assert!(auth.dkim_pass_domains.is_empty(), "{auth:?}");
+            let auth = read(&format!("mx.example.net; dkim=pass header.d={space}victim.example{space}"));
+            assert!(auth.dkim_pass_domains.is_empty() && !super::super::spam::authentic(&auth), "{auth:?}");
+            let folded = format!("dkim=pass header.d=victim.example{space}\r\n x.attacker.example");
+            assert_eq!(
+                super::super::mail::unfold(&folded),
+                format!("dkim=pass header.d=victim.example{space} x.attacker.example")
+            );
+            let raw = format!(
+                "Authentication-Results: mx.example.net; {folded}\r\n\
+                 Received: from a.example (a.example [192.0.2.1]) by mx.example.net\r\n\
+                 From: <service@victim.example>\r\nSubject: Hi\r\n\r\nText\r\n"
+            );
+            assert!(!crate::mime::parse(raw.as_bytes()).from_trusted, "{space:?}");
+        }
+        assert_eq!(domain_part(" victim.example.\t").as_deref(), Some("victim.example"));
+        // Different signers side by side stay as they are.
+        let auth =
+            read("mx.example.net; dkim=fail header.d=old.example; dkim=pass header.d=victim.example; dmarc=pass");
+        assert_eq!(auth.dkim.as_deref(), Some("pass"));
+        assert!(super::super::spam::authentic(&auth), "{auth:?}");
+    }
+
     #[test]
     fn a_reverse_name_helo_does_not_hide_the_address() {
         assert!(!local_hop("from [127.0.0.1] (helo [192.0.2.7]) by mx.example.org"));

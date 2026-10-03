@@ -505,7 +505,12 @@ authserv-id belongs to the host of that line. Results are read as RFC 8601
 reads them (comments and quoted strings), and a From counts as authenticated
 only with DMARC passing or, without a DMARC policy, a DKIM or SPF pass for its
 own domain (`spam::authentic`, as on the server). Anything lower may be the sender's and counts for nothing, also
-in what goes to a UwUMail server for a mail of another account. Then how often
+in what goes to a UwUMail server for a mail of another account. A results header with an unclosed comment
+or quote or a stray `)` is believed not at all (a provider may have echoed the
+sender's text into it; this also covers C6-2), and a method named twice keeps its
+worse result. Known limitation (C6-1): an emptied `Authentication-Results` of the
+receiver is skipped, so on an unusual receiver layout with several of its own
+results headers a sender can choose which of them counts. Then how often
 the sender wrote before and ended in junk, whether they are in the contacts, plus the
 deterministic phishing checks of `phishing/` (a copy of UwUMail Server's:
 lookalike, homoglyph and punycode domains against a brand list and the domains
