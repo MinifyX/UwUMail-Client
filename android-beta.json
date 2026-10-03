@@ -1,9 +1,9 @@
 {
-  "version": "0.9.0-beta.2",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-android.apk",
-  "sha256": "ba1764cadc6ab94370da41688f9468f01a97e89a482dfa11ec38159a6d871252",
+  "version": "0.9.0-beta.3",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-android.apk",
+  "sha256": "827628570f1506bc06f01ac6a5003e4837f2360898a6c0225ffd052b7e370d4f",
   "notes": {
-    "de": "- Behoben: Auf macOS öffneten sich die Einstellungen und alle Bearbeitungsfenster nicht, es war nur eine dünne Linie zu sehen",
-    "en": "- Fixed: on macOS the settings and every edit window didn't open, only a thin line showed"
+    "de": "- Behoben: Auf macOS öffnen sich die Einstellungen und alle Bearbeitungsfenster jetzt wirklich. In 0.9.0-beta.2 war weiterhin nur eine dünne Linie zu sehen",
+    "en": "- Fixed: on macOS the settings and every edit window now really open. 0.9.0-beta.2 still showed only a thin line"
   }
 }

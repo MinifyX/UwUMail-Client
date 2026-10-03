@@ -1,43 +1,43 @@
 {
-  "version": "0.9.0-beta.2",
-  "notes": "{\"de\":\"- Behoben: Auf macOS öffneten sich die Einstellungen und alle Bearbeitungsfenster nicht, es war nur eine dünne Linie zu sehen\",\"en\":\"- Fixed: on macOS the settings and every edit window didn't open, only a thin line showed\"}",
-  "pub_date": "2026-10-03T12:34:15Z",
+  "version": "0.9.0-beta.3",
+  "notes": "{\"de\":\"- Behoben: Auf macOS öffnen sich die Einstellungen und alle Bearbeitungsfenster jetzt wirklich. In 0.9.0-beta.2 war weiterhin nur eine dünne Linie zu sehen\",\"en\":\"- Fixed: on macOS the settings and every edit window now really open. 0.9.0-beta.2 still showed only a thin line\"}",
+  "pub_date": "2026-10-03T15:13:34Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3JwZ3RxanBwNEFwRE9PdzNiVVNheHFmUXcrTjlLNTJsTzJScDBGR3BtMERsb01SelJvL3lxc2RzNGJxSE00SWpwY09qemhibWx0c0YxaDFYZXZSZ1E4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDMwODI2CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjkuMC1iZXRhLjIuZXhlCkcxRktUNlFsdEF0ako2M2lDMnRHT1k0dTZnNE41VkN2NHIwSzN6ZUlsWWlYWnBmUmd5eFZOQVlvTnE4bWNRWHNXZFlYVmc4M3NDcEhtcFRZTldkZ0F3PT0K",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-windows-x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS29FQmRUTmRENElYbTVpL0FjSkJLWGtGMlZ5ZktKcThKSzFValBQYmpKWXo1OE5zMytLdUlJN0dONXl3UHFYQ2tLNGlGbDQ4V0RoZmJCQVFPaHoyUkE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDQwMTE0CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjkuMC1iZXRhLjMuZXhlCmZXWStoMTI1d1RuSXgzOHdhOGdUUnR6UmY3clhUWFZnQVdic1JNUHhZcHJ1V3ZmbXdLbS9DWkMwL1NFclAzOXNHZUlKT2UyRWZoQ3hqd1U1ak5OdERRPT0K",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-windows-x64-setup.exe"
     },
     "windows-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3M2TkcybVFJaWVNVUEvbnQxMEFYSUNhZk1tOEd6TTl2ZVVtclIrTEl4QUFOQ1BnTGZscXRmR0NCYWNReVh6eUpObHBRZmhqdkdFTm9DbTVYY3hKT1EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDMwODI3CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjkuMC1iZXRhLjItYXJtNjQuZXhlClA1RnpXV0Z3OENCd0JYYy9XdmhWYmNudnVBYi9qUWtvVW1YaWgzWTVYbUdwNFR4TjFySVpJVVBNZUcrS082TEIvS0FsR1o5ZzJTZkp5K2R4Mk5aWERRPT0K",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-windows-arm64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS20rWHl0UDFyQ1Y3UStGU1Z5UnkvT0xiWXd5Y04wUWdwN0pMbkpwTDFIVjk4V2JQZXliY0Y3NWp3N0xHaFEwbHp3WHVzNUtXU3MvRmI3ZGpLcVNockFrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDQwMTE0CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjkuMC1iZXRhLjMtYXJtNjQuZXhlCm9mck9Cajd5dWNUNTZmWmRIUTZYY3BCTEVPZWNIK2kyVTA5TlBzcDBTcitKN2Y0aDVYL3MwOTh6N3NGNjZLTEo4SnNUOEhuNWlQNkFUeWkreUV1eEFBPT0K",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-windows-arm64-setup.exe"
     },
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2tiaWgrZ1FNaGxOUlFBZmJDWjhYMldyL3JlYWE5VkROQko5RTl4NmM0dGhydkJvemdFc1BFMWZYcHNxbnRlTDg3WHFtUUJpTXlIUFcxeENuektiblFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDMwODI3CWZpbGU6VXdVTWFpbC1VcGRhdGUtMC45LjAtYmV0YS4yLW1hY29zLWFwcGxlLXNpbGljb24KQUNSUWJZTk5WZWs1ZituYnpsOCtmMy9tbG1jSk5UN0R6Zm5Oazd5eGNlWDNHaVMza2UxdFlERVlnVWRVMmN2WnhqaHUweDdkY29iTE5PUjMrN1hFQ2c9PQo=",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-update-macos-universal"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2lwaG9QU3gyY3lDZlNaeEZodHFQMjNvZHl3R0xzZWxMU2w4cVMweE1uRTVkVVhPbDROVVJKRzJYSFhUUWlOWThrRVBic09SUGRuRjFzRlB3VDNiRVFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDQwMTE1CWZpbGU6VXdVTWFpbC1VcGRhdGUtMC45LjAtYmV0YS4zLW1hY29zLWFwcGxlLXNpbGljb24KYW5jZ2dnTms2V282RWFsamo2RFR3QTNWMGFCUmRXVElaZVBoa1lJTFkxbHhlb01sVzJaZXd2c0xXUEFma1J2amhiOGExaGRLcnM1R2VnNTNNa2dWQXc9PQo=",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-update-macos-universal"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2hHTGdNSGVZTkxTYWZaQUJ4WFBBSzFJSE1YZGZUaFdyenhnQXR2ZFpYd29QTWR0eWpuTVZzaWtkVlJkckI3OW0vNzlOZmZESG5IUzAzL05SeXhXQXdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDMwODI3CWZpbGU6VXdVTWFpbC1VcGRhdGUtMC45LjAtYmV0YS4yLW1hY29zLWludGVsCllKbjd4M2RSWUI1YVNRbDNmRFRqMVBtTEI1YStKY3RBY0tFdGdpU2FzVWZTRitaeElNNHA2cml5VzFOczhMcmx0aUFlVHFRNWJkRUpJMm9va2ZjdkN3PT0K",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-update-macos-universal"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2ppYmZ5VDNQc3dYbHhqb04zY0UxNG5EbStIbFBleXJLUjBERmRSYWNud0NVUXVqQWVObzBuVHBraklSeVY3UXNaSmlVZjhFdk9jWkU0a1U1RGFOa3dJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDQwMTE1CWZpbGU6VXdVTWFpbC1VcGRhdGUtMC45LjAtYmV0YS4zLW1hY29zLWludGVsClppcWg0d1U1dzVCMS9XRmNUQ0JXQ21GdTdIcmFYRG9uQ3g4RHk2MVdpKzJMQm1TMVd0enRCOWNPY1dZWFI5RHB3L1NScjVHeTZpS1FDcU9Vang0ZURnPT0K",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-update-macos-universal"
     },
     "linux-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3JmS3VxSmx6dkxlUU5VdGpFalhrZnBZd1poMEVSZFYzNGlpNDlQQTZwWjdISFhaSFZKYUlLTkF2cFB2TmRqbVRHN0R5SldlNjJ0eGNYeVQwM21LSEFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDMwODI4CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjkuMC1iZXRhLjIteDg2XzY0LkFwcEltYWdlCkVjNVN3MW1nd3Z3OFhqaTkxUzNPKzJTKzh2cXVZblBRUkVlN2swTk5mclFhYmtMZkhnbFJXd1RXNzJkcmhEc3VXNHp0YXBiRlJPRjBXd1g2WHdrRkJnPT0K",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-update-linux-x64.AppImage"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2dhc20za1pMTk93TFlTcFNiRjVPTXVucVgyM09VM25IeHRHRWFqNzlaQzAwK0l4Wmg2WWRtSk9kc3JpYlBNRnlkN05YOTlWZXV4VTBpQk9pSmUrdGdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDQwMTE1CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjkuMC1iZXRhLjMteDg2XzY0LkFwcEltYWdlCnpkY2dMUXNtK05TME11N01icWZGK0JlUUNkaS9ZZWlFNzI5QkFPUkEzRGNkNDJoTm1PakJvckEyZnlkT3cweGVUTnd1TkdBcXpXS0kwdmw2Qi9zWURRPT0K",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-update-linux-x64.AppImage"
     },
     "linux-x86_64-deb": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2dkVUtSamdEM2tQM2E0TXkwUi9IdS9vRGRVV0VwQ3E2OTVNOFVsS2tWT001RDk4UnFJeHpoZ2Y0VFp4V0RxVC95aElsMTdOY0hZYnJMVjNMdzA1OXdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDMwODI4CWZpbGU6VXdVTWFpbC0wLjkuMC1iZXRhLjItbGludXgteDg2XzY0LmRlYgpNcmRpUWlmbUVoK05FcHdXWjRIdTY0Qk11di9uUU1HZGRhc3I3Y2hHOXF0SElrdExnUmNvNEdyRndFYm5ENFF1MEk3aVU4LzBicWgxR3JTWHFwb21Cdz09Cg==",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-linux-x64.deb"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2c2Nzd1c3BYOVNEWTVDOFRRUGx5MnptQlFiZ3ltQkE2czlxaWJKSS92a0o5eFAzb2pwSFJ0dGtDbW0yUm5mTkN3ek1DYTh3ZlBhUlFqTnVkbXV6TndZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDQwMTE2CWZpbGU6VXdVTWFpbC0wLjkuMC1iZXRhLjMtbGludXgteDg2XzY0LmRlYgp5K0I4YTFaayt3N0czdGE3c255bXJValE5eFZ2MDUwZDUxWStWVlR3TVJaQ0poelMyWVFhczlOK1FMWW9EOXBTaFZ0dkY1RHhEUVRveDY3TDhkUDRDUT09Cg==",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-linux-x64.deb"
     },
     "linux-aarch64-deb": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3NWbW1xVGU3SFJKUlB1RUR6TFg2OUc0bkdvZmxhZDNkaVovRE5hZXR4QjRUbTM2WW02eTRndDRCMGRVd0RpR1Vwd0Q1ZjhjTTB4TDA2eGxSdkJIN0FBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDMwODI5CWZpbGU6VXdVTWFpbC0wLjkuMC1iZXRhLjItbGludXgtYWFyY2g2NC5kZWIKais1OHdhczJ3WFhhSG9yVWZyWjJRWThPaGc3bHFTOUdJOVEwZkpydzlZbm82bXk4WFNrYy93S2hzbVEwT0ZoZlowaVB1UGNNQlRoS0pCYlZMWEFaQlE9PQo=",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-linux-arm64.deb"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3RaSlltWE01Y0xEcHBISnIwQk9NS1dVc3V4R2xseUxXREVMVmtiOFF0M3VZM0NTTUxIS1VZKzByV1NGV3F3V3dXSzBMQXlZYURaY1Z2U3JMRFU4MFFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDQwMTE2CWZpbGU6VXdVTWFpbC0wLjkuMC1iZXRhLjMtbGludXgtYWFyY2g2NC5kZWIKeWVDaEdPQmJQcVZnUkFpem1wZFg4ckVsczJJYllvWHc3eWNnT25JN0Jua3pRVkhXRTYyMForaTlaSFEyZ1VlakhHVXFsT2ZNTUVkNmg4YWZmbGgrQ1E9PQo=",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-linux-arm64.deb"
     },
     "linux-x86_64-rpm": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3VUZ05BcGhHZ0wybmlBUXFiVHJoT2lWeTlmOHFwSW9mUWdDamkvMlYwSnlCTG9GNkhhQVhrNmJ4VDRqSWVSZDNQUXdhcTgrT2IvaFdYangzRmVwTFFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDMwODI5CWZpbGU6VXdVTWFpbC0wLjkuMC1iZXRhLjItbGludXgteDg2XzY0LnJwbQp4KzUrWTJvbVhIdzUrbWZQdzMxMmsxWElBV2dEWVB4NWptbDJ0c1RRSSt1THNkaEMxcXFXTWYwV1Fpc2FUeDhTQ243SkRabjdOMTdzdjBwTEpFUDZCUT09Cg==",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-linux-x64.rpm"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3VINll0dXpTSE1IOWFJaFZlNURvaUc5RzFlanBjZXcvaER5NVhTZEYwNk1GdU53RTFOTXRPREhFU3ppcGgyMUp5L2pxV0FrWWg4Q3hOZjlGQUN5cGdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDQwMTE3CWZpbGU6VXdVTWFpbC0wLjkuMC1iZXRhLjMtbGludXgteDg2XzY0LnJwbQovaE0xVkdyem9uQjNxSTFOZmVIaEc5WERTQXAxYjNic214TGJubUpnT2NTK0JFVWo2M0RNaGpqZzU0Uk5rVjdSWjJ0dk1LL3dXTFIyYWhCQTZGUDhEdz09Cg==",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-linux-x64.rpm"
     },
     "linux-aarch64-rpm": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2gzTXZaQjM5NFovdk5zcytKakg5d2dxVDRwY05QeWpXMHJ3MjcvUEZhUjlwUGRNQnNrUUlaVmRndnhaaDhEN3hwL1ZYVWllcHBpY0w3cm1zTU5hb0FjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDMwODI5CWZpbGU6VXdVTWFpbC0wLjkuMC1iZXRhLjItbGludXgtYWFyY2g2NC5ycG0KTm5xZnVta2NwZ3oyWWRFLzlKYzRzYm9ZMStQVHlpa1VsaHhBbGl1eDI3bG9xNzBDRXNENFVqTEl0eUVFS2NqSks3SWxPeWdXMmwwTEtzR1FERWhIQ2c9PQo=",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.2/UwUMail-linux-arm64.rpm"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS25ScFNUdlZ1S0VtRUkxUVRWOUxpS3YvblBObGdOR1M2TFAyOU5QS1FNTmMyQjRqMFZNYXZUL0JsUHllUjZ6ekRhUVRtbVZ2Rmgrcmt5dEtrYVBvbXdNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMDQwMTE3CWZpbGU6VXdVTWFpbC0wLjkuMC1iZXRhLjMtbGludXgtYWFyY2g2NC5ycG0KMjJxcnNvdS83VDVvWmJVVXNrR2FLNURSdFU4emhZSWgxY0hEL3pCU052eEZJQllmSncyUHFvL2JDcUZmM2tRbVgxSi9OUGZhcEZ0VU9JanpmRTVCRGc9PQo=",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.9.0-beta.3/UwUMail-linux-arm64.rpm"
     }
   }
 }
