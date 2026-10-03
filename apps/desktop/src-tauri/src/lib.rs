@@ -49,6 +49,21 @@ fn put_synced_signature(engine: State<'_, Engine>, signature: Signature) -> Comm
     engine.put_synced_signature(signature)
 }
 
+/// Signatures per domain of the accounts whose UwUMail server has them; unreachable ones are left out.
+#[tauri::command]
+async fn domain_signatures(engine: State<'_, Engine>) -> CommandResult<Vec<AccountSignatures>> {
+    engine.domain_signatures().await
+}
+
+#[tauri::command]
+async fn save_domain_signatures(
+    engine: State<'_, Engine>,
+    account_id: String,
+    change: serde_json::Value,
+) -> CommandResult<AccountSignatures> {
+    engine.save_domain_signatures(&account_id, &change).await
+}
+
 #[tauri::command]
 async fn settings_sync_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<String>> {
     engine.settings_sync_accounts().await
@@ -577,13 +592,29 @@ async fn assist_usage(
 }
 
 #[tauri::command]
-async fn assist_labels(engine: State<'_, Engine>, scope: String) -> CommandResult<Json> {
-    engine.assist_labels(&scope).await
+async fn assist_labels(engine: State<'_, Engine>, scope: String, language: Option<String>) -> CommandResult<Json> {
+    engine.assist_labels(&scope, language.as_deref()).await
 }
 
 #[tauri::command]
-async fn assist_create_label(engine: State<'_, Engine>, scope: String, input: Json) -> CommandResult<Json> {
-    engine.assist_create_label(&scope, input).await
+async fn assist_create_label(
+    engine: State<'_, Engine>,
+    scope: String,
+    input: Json,
+    language: Option<String>,
+) -> CommandResult<Json> {
+    engine.assist_create_label(&scope, input, language.as_deref()).await
+}
+
+#[tauri::command]
+async fn assist_check_overlap(
+    engine: State<'_, Engine>,
+    scope: String,
+    name: String,
+    description: String,
+    label_id: Option<String>,
+) -> CommandResult<Json> {
+    engine.assist_check_overlap(&scope, &name, &description, label_id.as_deref()).await
 }
 
 #[tauri::command]
@@ -1101,6 +1132,8 @@ pub fn run() {
             save_signature,
             delete_signature,
             put_synced_signature,
+            domain_signatures,
+            save_domain_signatures,
             settings_sync_accounts,
             load_user_settings,
             save_user_settings,
@@ -1187,6 +1220,7 @@ pub fn run() {
             assist_usage,
             assist_labels,
             assist_create_label,
+            assist_check_overlap,
             assist_update_label,
             assist_delete_label,
             assist_label_log,

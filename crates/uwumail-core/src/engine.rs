@@ -22,8 +22,10 @@ use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
 use crate::{autoconfig, calendar, contacts, folders, mime, oauth};
-use crate::{jmap_settings, jmap_sieve, jmap_sync};
+use crate::{jmap_settings, jmap_sieve, jmap_signatures, jmap_sync};
 
+/// A device signature's address for every domain; `@domain` is one for a whole domain.
+const ALL_DOMAINS: &str = "*";
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(5 * 60);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 /// The JMAP type of the shared settings.
@@ -39,6 +41,8 @@ const SEARCH_FOLDERS: usize = 25;
 const MAX_SEND_DELAY: u64 = 60;
 /// JMAP identities are asked for at most this often per account.
 const IDENTITIES_EVERY: Duration = Duration::from_secs(10 * 60);
+/// How long the composer's signatures wait for one UwUMail server's signatures per domain.
+const DOMAIN_SIGNATURES_WAIT: Duration = Duration::from_secs(4);
 /// Sign-in links waiting to be looked at; more at once only comes from someone flooding the link.
 const SIGN_IN_LINK_QUEUE: usize = 8;
 /// How long a search that found no CalDAV or CardDAV server keeps the calendar or the contacts from
@@ -407,12 +411,27 @@ impl Engine {
             return Err(Error::invalid("This signature is too big. Try a smaller picture."));
         }
         let email = signature.email.trim().to_string();
-        let identity = self
-            .list_identities()?
-            .into_iter()
-            .find(|identity| identity.email.eq_ignore_ascii_case(&email))
-            .ok_or_else(|| Error::invalid("This sender address isn't set up."))?;
-        signature.email = identity.email;
+        let identities = self.list_identities()?;
+        signature.email = if email == ALL_DOMAINS {
+            // The signature of every domain without one of its own (lib/localSignatures).
+            email
+        } else if let Some(domain) = email.strip_prefix('@') {
+            // The signature of all addresses of a domain that have none of their own.
+            let domain = domain.to_ascii_lowercase();
+            let known = identities.iter().any(|identity| {
+                identity.email.rsplit_once('@').is_some_and(|(_, own)| own.eq_ignore_ascii_case(&domain))
+            });
+            if !known {
+                return Err(Error::invalid("None of your sender addresses is on this domain."));
+            }
+            format!("@{domain}")
+        } else {
+            identities
+                .into_iter()
+                .find(|identity| identity.email.eq_ignore_ascii_case(&email))
+                .ok_or_else(|| Error::invalid("This sender address isn't set up."))?
+                .email
+        };
         signature.name = signature.name.trim().to_string();
         if signature.id.is_empty() {
             signature.id = uuid::Uuid::new_v4().to_string();
@@ -1120,6 +1139,52 @@ impl Engine {
     ) -> Result<UserSettingsSaved> {
         let client = self.inner.jmap_client(account_id).await?;
         jmap_settings::save(&client, changes, if_in_state).await
+    }
+
+    /// Signatures per domain of every account whose UwUMail server has them. Accounts that can't
+    /// be reached right now, or don't answer within [`DOMAIN_SIGNATURES_WAIT`], are left out; their
+    /// addresses keep what the composer knows. All are asked at once, so one slow server can't hold
+    /// up the signature of every new mail (C-4).
+    pub async fn domain_signatures(&self) -> Result<Vec<AccountSignatures>> {
+        let accounts: Vec<_> =
+            self.inner.store.accounts()?.into_iter().filter(|account| account.protocol == Protocol::Jmap).collect();
+        let asks = accounts.into_iter().map(|account| async move {
+            let ask = async {
+                let client = self.inner.jmap_client(&account.id).await?;
+                if client.session.signatures_account_id.is_none() {
+                    return Ok(None);
+                }
+                jmap_signatures::load(&client).await.map(Some)
+            };
+            match tokio::time::timeout(DOMAIN_SIGNATURES_WAIT, ask).await {
+                Ok(Ok(Some(overview))) => Some(AccountSignatures { account_id: account.id, overview }),
+                Ok(Ok(None)) => None,
+                Ok(Err(error)) => {
+                    tracing::debug!("Couldn't load the signatures of {}: {error}", account.id);
+                    None
+                }
+                Err(_) => {
+                    tracing::debug!("{} took too long to tell its signatures", account.id);
+                    None
+                }
+            }
+        });
+        Ok(futures::future::join_all(asks).await.into_iter().flatten().collect())
+    }
+
+    /// Changes an account's signatures per domain on its server, all or nothing; returns the
+    /// overview after the change.
+    pub async fn save_domain_signatures(
+        &self,
+        account_id: &str,
+        change: &serde_json::Value,
+    ) -> Result<AccountSignatures> {
+        if self.inner.store.account(account_id)?.protocol != Protocol::Jmap {
+            return Err(Error::not_supported("Signatures per domain need a mailbox on a UwUMail server."));
+        }
+        let client = self.inner.jmap_client(account_id).await?;
+        let overview = jmap_signatures::save(&client, change).await?;
+        Ok(AccountSignatures { account_id: account_id.to_string(), overview })
     }
 
     pub async fn unblock_sender(&self, sender: &BlockedSender) -> Result<()> {
@@ -2442,6 +2507,51 @@ mod tests {
         // Flooding only fills the small queue.
         let flood = (0..100).filter(|_| engine.finish_sign_in("app.uwumail://oauth?state=x")).count();
         assert_eq!(flood, SIGN_IN_LINK_QUEUE);
+    }
+
+    #[tokio::test]
+    async fn device_signatures_for_a_domain_or_every_domain() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::new(EngineOptions {
+            data_dir: dir.path().to_path_buf(),
+            secrets: Arc::new(crate::secrets::MemorySecrets::default()),
+            open_url: Arc::new(|_| {}),
+            recognizer: None,
+        })
+        .unwrap();
+        let server = ServerSettings { host: "mail.example.org".into(), port: 993, security: Security::Tls };
+        engine
+            .inner
+            .store
+            .insert_account(&AccountRecord {
+                id: "m".into(),
+                name: "Work".into(),
+                email: "alex@Example.org".into(),
+                display_name: "Alex".into(),
+                color: AccountColor::Sky,
+                auth: AuthKind::Password,
+                username: "alex@example.org".into(),
+                imap: server.clone(),
+                smtp: server,
+                protocol: Protocol::Imap,
+                jmap_url: None,
+            })
+            .unwrap();
+        let signature = |email: &str| Signature {
+            id: String::new(),
+            email: email.into(),
+            name: String::new(),
+            html: "<p>{name}</p>".into(),
+            for_new: true,
+            for_replies: true,
+        };
+        assert_eq!(engine.save_signature(signature(" @EXAMPLE.org ")).unwrap().email, "@example.org");
+        assert_eq!(engine.save_signature(signature("*")).unwrap().email, "*");
+        assert_eq!(engine.save_signature(signature("ALEX@example.org")).unwrap().email, "alex@Example.org");
+        for unknown in ["@other.example", "@", "other@example.org", "**"] {
+            assert!(engine.save_signature(signature(unknown)).is_err(), "{unknown}");
+        }
+        assert_eq!(engine.list_signatures().unwrap().len(), 3);
     }
 
     #[tokio::test]

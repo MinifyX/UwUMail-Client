@@ -435,7 +435,17 @@ mailboxes bring theirs from the server (`Identity/get`, checked every ten
 minutes), and aliases can be added by hand. The engine refuses a From address
 that isn't set up for that mailbox. Signatures are kept on this device per
 sender address (`signatures` table); one can be the default for new mail and
-one for replies. The composer marks the inserted block with
+one for replies. A row whose address is `@domain` is the device's signature for
+all addresses of that domain, `*` the one for every domain; these never travel
+with the settings sync (the server only takes signatures of one address).
+Mailboxes on a UwUMail server with `urn:uwumail:jmap:signatures` keep
+signatures per domain on the server instead (`SignatureSettings/get`/`set`,
+`jmap_signatures.rs`); the page checks the answer field by field
+(`backend/jmap/domainSignatures.ts`) and uses the webmail's rules
+(`lib/domainSignatures.ts`, byte-identical). What an address sends with, first
+match wins (`lib/localSignatures.ts`): its own device signatures, the server's
+effective signature for addresses the server knows, the device's domain
+signature, the device's one for every domain. The composer marks the inserted block with
 `data-uwu-signature`, so switching the sender or picking another signature
 replaces it; the marker is removed before sending.
 
@@ -485,22 +495,76 @@ checked against their schema, a label can only be one of the person's own, and
 written text is only a preview until the person clicks Insert or Replace.
 Nothing is ever sent by the assistant.
 
-**Spam check.** The model's verdict comes with local signals: the
-`Authentication-Results` added by the own server (SPF, DKIM, DMARC; only the
-one above the second `Received`), `X-Spam-Status`, how often the sender wrote
-before and ended in junk, whether they are in the contacts. The model gives
-its reasons before the verdict. When these facts clearly speak for the mail
-(known sender, DMARC passed, 0 points or less, not in junk), "spam" or
-"phishing" becomes "suspicious", at most half sure, and `modelVerdict` keeps
-what the model said (`null` otherwise; the same rule as UwUMail Server's).
+**Spam check.** Facts first, as on UwUMail Server 0.22 (`assist/spam.rs` is a
+copy of its `uwumail-assist` module). The facts are local signals: the
+`Authentication-Results` and `X-Spam-Status` the receiving server wrote: only
+headers above its intake line (the first `Received` from another host; local
+hops, judged only by the IP addresses that server writes, never by a HELO,
+don't count), or, on Gmail, an `Authentication-Results` right below it whose
+authserv-id belongs to the host of that line. Results are read as RFC 8601
+reads them (comments and quoted strings), and a From counts as authenticated
+only with DMARC passing or, without a DMARC policy, a DKIM or SPF pass for its
+own domain (`spam::authentic`, as on the server). Anything lower may be the sender's and counts for nothing, also
+in what goes to a UwUMail server for a mail of another account. A results header with an unclosed comment
+or quote or a stray `)` is believed not at all (a provider may have echoed the
+sender's text into it; this also covers C6-2), and a method named twice keeps its
+worse result. The sender
+history counts in full only when the From is authentic, not at all when DMARC
+failed or the results leave the From unaligned, and at half weight (at most 1.5
+in all) when the mail carries no results; payment and urgency cues stay on
+unless the known sender is also authentic (the server's M-1). Then how often
+the sender wrote before and ended in junk, whether they are in the contacts, plus the
+deterministic phishing checks of `phishing/` (a copy of UwUMail Server's:
+lookalike, homoglyph and punycode domains against a brand list and the domains
+of the contacts on this device, a display name that shows another address or
+domain, link text that names another site than its link, credential requests).
+`spam::assess` weighs them into a score and a band (clean to spam) that allows
+only some verdicts; the schema's verdict enum holds just those. The model
+answers with reasons `{text, evidence}`, `settle` moves a verdict outside the
+band to the band's default (`modelVerdict` keeps the model's; on the device
+"suspicious" always stays allowed), fact lines are tag-escaped like the mail, and `verify`
+drops reasons whose quote isn't in the mail, that cite no listed fact, or claim
+links or attachments the mail lacks (`reasonDetails`, `droppedReasons`). The
+answer carries the assessment as `facts`. With a UwUMail account the server
+does all of this; older servers answer without `facts` and the card shows the
+old display.
 Schemas go out with their properties in the order of `required`, since
 providers make the model write them in that order.
+
+#### Known limitations (security review)
+
+Low findings of the 0.22 reviews, documented and not fixed:
+
+- An emptied `Authentication-Results` of the receiver is skipped, so on an unusual receiver layout with several of its own results headers a sender can choose which of them counts (C6-1).
+- Every device spam check downloads the whole raw message with no size check first; the 25 MiB cap applies only when parsing (`engine/assist_ops.rs`, `read_for_spam_check`).
+- `sender_history` counts across all accounts, so history from account A counts for account B (`store/assist.rs`).
+- `Device::effective` falls back to the first usable provider, so a provider set up only for writing also gets spam checks and labels unless another one is chosen per feature (info).
+- A sender taken off a label by hand blocks that label for that From address whether or not the sender is authenticated; it can only suppress labels, never add one.
+- `Store::delete_account` is not one transaction, so a failure partway can leave label data half deleted.
+- `learn_by_hand` treats an unset `nonAiLabels` as on, `auto_label` as off.
+- When the same address exists in two accounts, the composer can pick the other account's server signature (`localSignatures.ts`, `signatures.ts`).
+- Two date-title regexes (`lib/dates/detect.ts`) are quadratic on long runs without spaces: at most about 1 s when opening a crafted mail.
+- Device signatures for `@domain` or `*` stay after the last account on that domain is removed (info).
 
 **Labels.** A label is a keyword on the mail (`messages.keywords`), set with
 JMAP `Email/set` or IMAP `STORE +FLAGS`, the latter only where the folder's
 `PERMANENTFLAGS` has `\*`. Auto-labels (device scope, opt-in) look at new
 inbox mail after a sync: at most 20 mails at once and 200 per day, each with
 its reason in the label log, undoable there. Mail is never moved or deleted.
+The deciding is `crates/uwumail-labels`, a byte-identical copy of UwUMail
+Server's crate, so the device and the server label alike (its docs/labels.md):
+the eight base labels (de/en names, fixed definitions, `auto` switch, a label of
+the same name adopted, a deleted one restorable with `{"base": …}`), then per
+mail the label's rules, its detector or its base label's, learned senders, the
+classifier and similar mails (by words), and the model only for the labels
+these leave in doubt, with the facts read from the mail, hints and the person's
+corrections (`label_shots`); "unsure" counts as no, the facts can rule a yes
+out, a model saying yes to more than two labels is not believed, and a mail
+gets at most a main label (0.8) and a second one (0.88). A label taken off a
+sender's mail by hand stays off it (count −1). With the server that does this
+device's AI, `AssistLabel/suggest` answers for the labels in doubt and the same
+rules apply. `assist_check_overlap` warns of overlapping labels (the server's
+`AssistLabel/checkOverlap`, or the crate's check on the device).
 
 **Events.** `assist_extract_events {messageId, includeImages}` asks the
 mailbox's assistant for appointments. With `includeImages` a UwUMail server

@@ -132,6 +132,27 @@ CREATE TABLE label_examples (
 pub(super) const FROM_TRUSTED_MIGRATION: &str =
     "ALTER TABLE messages ADD COLUMN from_trusted INTEGER NOT NULL DEFAULT 0;";
 
+/// Labels 0.22 of UwUMail Server (docs/labels.md): which base label a label is, the language its
+/// definition was written in, and whether it is put on by itself at all; and the person's corrections shown to the model, a few per label: a
+/// label put on (positive) or taken off by hand, with the sender's domain (never the address), the
+/// subject and the start of the text, cut short.
+pub(super) const BASE_LABELS_MIGRATION: &str = r#"
+ALTER TABLE assist_labels ADD COLUMN base TEXT;
+ALTER TABLE assist_labels ADD COLUMN auto INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE assist_labels ADD COLUMN base_language TEXT;
+CREATE UNIQUE INDEX assist_labels_base ON assist_labels (base) WHERE base IS NOT NULL;
+CREATE TABLE label_shots (
+    label_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    positive INTEGER NOT NULL,
+    sender_domain TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    snippet TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (label_id, message_id)
+);
+"#;
+
 /// Calls kept per provider, model and feature for calibration.
 const CALIBRATION_KEPT: i64 = 50;
 
@@ -278,12 +299,97 @@ fn label_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Label> {
         detector: row.get(6)?,
         learn_senders: row.get(7)?,
         classifier: row.get(8)?,
+        base: row.get(9)?,
+        auto: row.get(10)?,
+        base_language: row.get(11)?,
     })
+}
+
+/// Corrections kept per label: put on, and taken off (UwUMail Server's numbers).
+pub const MAX_SHOTS_POSITIVE: i64 = 4;
+pub const MAX_SHOTS_NEGATIVE: i64 = 3;
+const SHOT_SUBJECT_CHARS: usize = 120;
+const SHOT_SNIPPET_CHARS: usize = 200;
+
+/// One space between words, at most `max` characters (with "…" when cut).
+/// A text for a correction example with what could be a code, a number of an account or a link
+/// taken out: runs of four digits or more (spaces and hyphens inside a run count with it) become
+/// `#`, words mixing letters and digits keep only their shape, and web addresses become `[link]`.
+/// The same as UwUMail Server's `masked` (LABELS22-L3, R2 I-3; C3-6 here).
+fn masked(text: &str) -> String {
+    let words: Vec<String> = text
+        .split_whitespace()
+        .map(|word| {
+            let lower = word.to_lowercase();
+            if lower.contains("://") || lower.starts_with("www.") {
+                "[link]".to_owned()
+            } else if mixed_code(word) {
+                word.chars().map(|c| if c.is_alphanumeric() { '#' } else { c }).collect()
+            } else {
+                word.to_owned()
+            }
+        })
+        .collect();
+    let text = words.join(" ");
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    while at < chars.len() {
+        if !chars[at].is_numeric() {
+            out.push(chars[at]);
+            at += 1;
+            continue;
+        }
+        // A run: digits, with single spaces or hyphens between them.
+        let mut end = at;
+        let mut digits = 0;
+        while end < chars.len() {
+            if chars[end].is_numeric() {
+                digits += 1;
+                end += 1;
+            } else if matches!(chars[end], ' ' | '-') && chars.get(end + 1).is_some_and(|c| c.is_numeric()) {
+                end += 1;
+            } else {
+                break;
+            }
+        }
+        for c in &chars[at..end] {
+            out.push(if digits >= 4 && c.is_numeric() { '#' } else { *c });
+        }
+        at = end;
+    }
+    out
+}
+
+/// A word of four letters and digits or more that has both, like a code (`AB7-K2X`, `X9F2Q`),
+/// not a short name like `MP3` or `A4`.
+fn mixed_code(word: &str) -> bool {
+    let alphanumeric = word.chars().filter(|c| c.is_alphanumeric()).count();
+    alphanumeric >= 4 && word.chars().any(|c| c.is_numeric()) && word.chars().any(char::is_alphabetic)
+}
+
+fn shot_cut(text: &str, max: usize) -> String {
+    let text: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    match text.char_indices().nth(max) {
+        Some((end, _)) => format!("{}…", &text[..end]),
+        None => text,
+    }
+}
+
+/// One of the person's corrections, shown to the model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelShot {
+    pub label_id: String,
+    pub positive: bool,
+    pub sender_domain: String,
+    pub subject: String,
+    pub snippet: String,
 }
 
 /// A classifier example: the ids of the labels the mail has, and its token hashes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabelExample {
+    pub message_id: String,
     pub labels: Vec<String>,
     pub tokens: Vec<i64>,
 }
@@ -490,7 +596,8 @@ impl Store {
     pub fn assist_labels(&self) -> Result<Vec<Label>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, keyword, color, rules, detector, learn_senders, classifier
+            "SELECT id, name, description, keyword, color, rules, detector, learn_senders, classifier, base, auto,
+                    base_language
              FROM assist_labels ORDER BY created_at, rowid",
         )?;
         let rows = stmt.query_map([], label_row)?;
@@ -500,8 +607,9 @@ impl Store {
     pub fn insert_assist_label(&self, label: &Label, created_at: i64) -> Result<()> {
         self.conn().execute(
             "INSERT INTO assist_labels
-                (id, name, description, keyword, color, created_at, rules, detector, learn_senders, classifier)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                (id, name, description, keyword, color, created_at, rules, detector, learn_senders, classifier,
+                 base, auto, base_language)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 label.id,
                 label.name,
@@ -512,7 +620,10 @@ impl Store {
                 label.rules.as_ref().map(|rules| rules.to_json().to_string()),
                 label.detector,
                 label.learn_senders,
-                label.classifier
+                label.classifier,
+                label.base,
+                label.auto,
+                label.base_language
             ],
         )?;
         Ok(())
@@ -522,7 +633,8 @@ impl Store {
     pub fn update_assist_label(&self, label: &Label) -> Result<bool> {
         Ok(self.conn().execute(
             "UPDATE assist_labels SET name = ?2, description = ?3, color = ?4, rules = ?5, detector = ?6,
-                learn_senders = ?7, classifier = ?8 WHERE id = ?1",
+                learn_senders = ?7, classifier = ?8, base = ?9, auto = ?10,
+                base_language = ?11 WHERE id = ?1",
             params![
                 label.id,
                 label.name,
@@ -531,7 +643,10 @@ impl Store {
                 label.rules.as_ref().map(|rules| rules.to_json().to_string()),
                 label.detector,
                 label.learn_senders,
-                label.classifier
+                label.classifier,
+                label.base,
+                label.auto,
+                label.base_language
             ],
         )? > 0)
     }
@@ -541,6 +656,7 @@ impl Store {
         let conn = self.conn();
         conn.execute("DELETE FROM assist_label_log WHERE label_id = ?1", [id])?;
         conn.execute("DELETE FROM label_senders WHERE label_id = ?1", [id])?;
+        conn.execute("DELETE FROM label_shots WHERE label_id = ?1", [id])?;
         let mut stmt = conn.prepare("SELECT id, labels FROM label_examples WHERE labels != ''")?;
         let rows: Vec<(i64, String)> =
             stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
@@ -608,23 +724,110 @@ impl Store {
         if !known {
             conn.execute(
                 "DELETE FROM label_senders WHERE rowid IN (SELECT rowid FROM label_senders WHERE label_id = ?1
-                     ORDER BY count, rowid LIMIT max(0, (SELECT COUNT(*) FROM label_senders WHERE label_id = ?1) - ?2))",
+                     ORDER BY abs(count), rowid LIMIT max(0, (SELECT COUNT(*) FROM label_senders WHERE label_id = ?1) - ?2))",
                 params![label_id, i64::try_from(max.saturating_sub(1)).unwrap_or(i64::MAX)],
             )?;
         }
         conn.execute(
             "INSERT INTO label_senders (label_id, address, count) VALUES (?1, ?2, 1)
-             ON CONFLICT (label_id, address) DO UPDATE SET count = count + 1",
+             ON CONFLICT (label_id, address) DO UPDATE SET count = CASE WHEN count < 0 THEN 1 ELSE count + 1 END",
             params![label_id, address],
         )?;
         Ok(())
     }
 
-    /// Forgets a sender for a label (the label was taken off their mail by hand).
-    pub fn forget_label_sender(&self, label_id: &str, address: &str) -> Result<()> {
-        self.conn()
-            .execute("DELETE FROM label_senders WHERE label_id = ?1 AND address = ?2", params![label_id, address])?;
+    /// The label was taken off mail of `address` by hand: it no longer goes on their mail by itself,
+    /// except by the label's rules (count -1), until it is put on their mail by hand again. A new
+    /// sender beyond [`MAX_LABEL_SENDERS`] pushes out the one counted least, like counting does.
+    pub fn block_label_sender(&self, label_id: &str, address: &str) -> Result<()> {
+        if address.is_empty() || address.len() > MAX_SENDER_CHARS {
+            return Ok(());
+        }
+        let conn = self.conn();
+        let known = conn.execute(
+            "UPDATE label_senders SET count = -1 WHERE label_id = ?1 AND address = ?2",
+            params![label_id, address],
+        )?;
+        if known == 0 {
+            conn.execute(
+                "DELETE FROM label_senders WHERE rowid IN (SELECT rowid FROM label_senders WHERE label_id = ?1
+                     ORDER BY abs(count), rowid LIMIT max(0, (SELECT COUNT(*) FROM label_senders WHERE label_id = ?1) - ?2))",
+                params![label_id, i64::try_from(MAX_LABEL_SENDERS.saturating_sub(1)).unwrap_or(i64::MAX)],
+            )?;
+            conn.execute(
+                "INSERT INTO label_senders (label_id, address, count) VALUES (?1, ?2, -1)",
+                params![label_id, address],
+            )?;
+        }
         Ok(())
+    }
+
+    /// Keeps a hand-labeling as a correction for the model: the sender's domain (never the
+    /// address), the subject and the start of the text, codes and links masked ([`masked`]), cut
+    /// short; a mail with a one-time code keeps none. The newest [`MAX_SHOTS_POSITIVE`] put on and
+    /// [`MAX_SHOTS_NEGATIVE`] taken off stay per label.
+    #[allow(clippy::too_many_arguments)]
+    pub fn keep_label_shot(
+        &self,
+        label_id: &str,
+        message_id: &str,
+        positive: bool,
+        sender_domain: &str,
+        subject: &str,
+        snippet: &str,
+        now: i64,
+    ) -> Result<()> {
+        if uwumail_labels::has_one_time_code(&format!("{subject}\n{snippet}")) {
+            return Ok(());
+        }
+        let conn = self.conn();
+        conn.execute(
+            "INSERT INTO label_shots (label_id, message_id, positive, sender_domain, subject, snippet, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT (label_id, message_id) DO UPDATE SET positive = ?3, created_at = ?7",
+            params![
+                label_id,
+                message_id,
+                positive,
+                shot_cut(sender_domain, 100),
+                shot_cut(&masked(subject), SHOT_SUBJECT_CHARS),
+                shot_cut(&masked(snippet), SHOT_SNIPPET_CHARS),
+                now
+            ],
+        )?;
+        let keep = if positive { MAX_SHOTS_POSITIVE } else { MAX_SHOTS_NEGATIVE };
+        conn.execute(
+            "DELETE FROM label_shots WHERE label_id = ?1 AND positive = ?2 AND rowid NOT IN (
+                 SELECT rowid FROM label_shots WHERE label_id = ?1 AND positive = ?2
+                 ORDER BY created_at DESC, rowid DESC LIMIT ?3)",
+            params![label_id, positive, keep],
+        )?;
+        Ok(())
+    }
+
+    /// Forgets every correction: AI labels were switched off (C3-6).
+    pub fn forget_label_shots(&self) -> Result<()> {
+        self.conn().execute("DELETE FROM label_shots", [])?;
+        Ok(())
+    }
+
+    /// The person's corrections for the model, newest first.
+    pub fn label_shots(&self) -> Result<Vec<LabelShot>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT label_id, positive, sender_domain, subject, snippet FROM label_shots
+             ORDER BY created_at DESC, rowid DESC LIMIT 200",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(LabelShot {
+                label_id: row.get(0)?,
+                positive: row.get(1)?,
+                sender_domain: row.get(2)?,
+                subject: row.get(3)?,
+                snippet: row.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Learns a mail as a classifier example: with the label (`Some((id, true))`), without it
@@ -671,11 +874,11 @@ impl Store {
     /// Every classifier example.
     pub fn label_examples(&self) -> Result<Vec<LabelExample>> {
         let conn = self.conn();
-        let mut stmt = conn.prepare("SELECT labels, tokens FROM label_examples ORDER BY id")?;
+        let mut stmt = conn.prepare("SELECT labels, tokens, message_id FROM label_examples ORDER BY id")?;
         let rows = stmt.query_map([], |row| {
             let labels: String = row.get(0)?;
             let tokens: Vec<u8> = row.get(1)?;
-            Ok(LabelExample { labels: keywords_list(&labels), tokens: blob_tokens(&tokens) })
+            Ok(LabelExample { message_id: row.get(2)?, labels: keywords_list(&labels), tokens: blob_tokens(&tokens) })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
@@ -1156,6 +1359,70 @@ mod tests {
         assert!(store.assist_calibration("p1", "small", "summarize").unwrap().is_empty());
         store.forget_assist_calibration("p1").unwrap();
         assert!(store.assist_calibration("p1", "big", "spamCheck").unwrap().is_empty());
+    }
+
+    #[test]
+    fn corrections_keep_the_newest_few_and_blocked_senders_count_again() {
+        let (store, _) = store();
+        for n in 0..6 {
+            let subject = format!("Rechnung {n}   mit   Abstand {}", "x".repeat(200));
+            store.keep_label_shot("g1", &format!("m{n}"), true, "stadtwerke.example", &subject, "Anbei", n).unwrap();
+        }
+        store.keep_label_shot("g1", "m9", false, "shop.example", "Angebot", "Rabatt", 10).unwrap();
+        store.keep_label_shot("g2", "m9", true, "shop.example", "Angebot", "Rabatt", 11).unwrap();
+        let shots = store.label_shots().unwrap();
+        let positive: Vec<&LabelShot> = shots.iter().filter(|s| s.label_id == "g1" && s.positive).collect();
+        assert_eq!(positive.len() as i64, MAX_SHOTS_POSITIVE);
+        assert!(positive[0].subject.starts_with("Rechnung 5 mit Abstand"), "newest first, one space between words");
+        assert_eq!(positive[0].subject.chars().count(), SHOT_SUBJECT_CHARS + 1, "cut, with an ellipsis");
+        assert_eq!(shots.iter().filter(|s| s.label_id == "g1" && !s.positive).count(), 1);
+        assert_eq!(shots[0].label_id, "g2");
+
+        let count = |address: &str| store.label_senders(address).unwrap().get("g1").copied();
+        store.count_label_sender("g1", "leni@example.com").unwrap();
+        store.count_label_sender("g1", "leni@example.com").unwrap();
+        store.block_label_sender("g1", "leni@example.com").unwrap();
+        assert_eq!(count("leni@example.com"), Some(-1));
+        store.block_label_sender("g1", "tom@example.com").unwrap();
+        assert_eq!(count("tom@example.com"), Some(-1), "blocked without being counted first");
+        store.count_label_sender("g1", "leni@example.com").unwrap();
+        assert_eq!(count("leni@example.com"), Some(1), "put on by hand again, it counts from one");
+        store.delete_assist_label("g1").unwrap();
+        assert!(store.label_shots().unwrap().iter().all(|s| s.label_id != "g1"));
+    }
+
+    /// Digits of any script are masked like ASCII ones (the server's R3 I-5).
+    #[test]
+    fn masking_covers_unicode_digits_and_mixed_codes() {
+        assert_eq!(masked("Kunde ４８２９１３ heute"), "Kunde ###### heute");
+        assert_eq!(masked("رقم ٤٨٢٩١٣"), "رقم ######");
+        assert_eq!(masked("Code AB７-K2X für MP3"), "Code ###-### für MP3");
+        assert_eq!(masked("Tag 12, Seite 3"), "Tag 12, Seite 3");
+    }
+
+    /// C3-6: codes, account numbers and links never go into a correction; a mail with a one-time
+    /// code keeps none at all.
+    #[test]
+    fn corrections_mask_codes_and_links() {
+        let (store, _) = store();
+        store
+            .keep_label_shot(
+                "g1",
+                "m1",
+                true,
+                "bank.example",
+                "Konto 1234 5678 9012, Gutschein AB7-K2X",
+                "Zurücksetzen: https://bank.example/reset?t=abc oder www.bank.example, Bestellung 42",
+                1,
+            )
+            .unwrap();
+        let shot = &store.label_shots().unwrap()[0];
+        assert_eq!(shot.subject, "Konto #### #### ####, Gutschein ###-###");
+        assert_eq!(shot.snippet, "Zurücksetzen: [link] oder [link] Bestellung 42");
+        store.keep_label_shot("g1", "m2", true, "bank.example", "Dein Code", "Dein Code: 482913", 2).unwrap();
+        assert_eq!(store.label_shots().unwrap().len(), 1, "a one-time code mail keeps no example");
+        store.forget_label_shots().unwrap();
+        assert!(store.label_shots().unwrap().is_empty());
     }
 
     #[test]

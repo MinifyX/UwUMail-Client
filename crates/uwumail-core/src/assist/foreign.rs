@@ -61,15 +61,20 @@ pub fn mail(mail: &MailText, spam: Option<bool>) -> Value {
         "text": cut(&mail.text, MAX_TEXT_CHARS),
     });
     if let Some(in_junk) = spam {
-        let headers: Vec<Value> = mail
-            .headers
+        // Only the ones the receiving server wrote: the server takes the topmost it gets, and one a
+        // sender wrote lower down would vouch for its own mail (C-1).
+        let headers: Vec<Value> = super::signals::receiving_headers(&mail.headers)
             .iter()
-            .filter(|(name, _)| {
+            // A value too long for the server is left out, never cut: the server couldn't tell a
+            // cut one from a whole one (C4-1).
+            .filter(|(name, value)| {
                 name.chars().count() <= MAX_HEADER_NAME_CHARS
+                    && !value.is_empty()
+                    && value.chars().count() <= MAX_HEADER_VALUE_CHARS
                     && SPAM_HEADERS.iter().any(|wanted| wanted.eq_ignore_ascii_case(name.trim()))
             })
             .take(MAX_HEADERS)
-            .map(|(name, value)| json!({ "name": name, "value": cut(value, MAX_HEADER_VALUE_CHARS) }))
+            .map(|(name, value)| json!({ "name": name, "value": value }))
             .collect();
         out["headers"] = Value::Array(headers);
         out["inJunk"] = Value::Bool(in_junk);
@@ -140,24 +145,33 @@ mod tests {
         assert_eq!(plain["from"][0]["email"], "rechnung@stadtwerke.example");
 
         let spam = mail(&MailText { date: 1_790_000_000, ..text.clone() }, Some(true));
-        assert_eq!(spam["headers"].as_array().unwrap().len(), 100);
-        assert_eq!(spam["headers"][0]["value"].as_str().unwrap().len(), 2000);
-        let names: Vec<&str> =
-            spam["headers"].as_array().unwrap().iter().map(|h| h["name"].as_str().unwrap()).collect();
-        assert!(names.iter().all(|name| *name == "Authentication-Results"), "only what the spam check reads");
+        // Below the first intake line every header may be the sender's: none of them goes.
+        assert_eq!(spam["headers"], json!([]));
         let few = MailText {
             headers: vec![
-                ("Received".into(), "from mx.example.net".into()),
                 ("X-Spam-Status".into(), "No".into()),
-                ("Authentication-Results".into(), "mx.example.net; spf=pass".into()),
+                ("Authentication-Results".into(), format!("mx.example.net; {}", "v".repeat(3000))),
+                ("Received".into(), "from relay.example.com by mx.example.net".into()),
+                ("X-Spam-Status".into(), "No, score=-50".into()),
+                ("Authentication-Results".into(), "mx.example.net; dmarc=pass".into()),
             ],
             ..text.clone()
         };
         let sent = mail(&few, Some(false));
+        let sent = sent["headers"].as_array().unwrap();
+        // Only what the spam check reads, only the receiving server's, and a value too long for
+        // the server left out rather than cut (C4-1).
+        assert_eq!(sent, &[json!({ "name": "X-Spam-Status", "value": "No" })], "{sent:?}");
+        let whole = MailText {
+            headers: vec![
+                ("Authentication-Results".into(), "mx.example.net; dmarc=fail".into()),
+                ("Received".into(), "from relay.example.com by mx.example.net".into()),
+            ],
+            ..text.clone()
+        };
         assert_eq!(
-            sent["headers"],
-            json!([{ "name": "X-Spam-Status", "value": "No" },
-                   { "name": "Authentication-Results", "value": "mx.example.net; spf=pass" }])
+            mail(&whole, Some(false))["headers"],
+            json!([{ "name": "Authentication-Results", "value": "mx.example.net; dmarc=fail" }])
         );
         assert_eq!(spam["inJunk"], true);
         assert!(spam["date"].as_str().unwrap().ends_with('Z'));

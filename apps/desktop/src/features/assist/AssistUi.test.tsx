@@ -13,6 +13,8 @@ import type {
   AssistProviderInput,
   AssistSpamCheck,
   AssistStreamHandlers,
+  LabelBase,
+  LabelOverlap,
   Message,
 } from "@/backend/types";
 import { i18n } from "@/i18n";
@@ -36,6 +38,7 @@ const OPTIONS: AssistOptions = {
   maxInstructionChars: 2000,
   maxTextChars: 20000,
   maxLabelConditions: 10,
+  baseLabels: [],
   foreignMail: false,
   foreignServers: [],
 };
@@ -44,6 +47,7 @@ const ANSWER = { providerId: "q1", providerName: "Mistral (Server)", model: "mis
 
 let labels: AssistLabel[] = [];
 let log: AssistLabelLogEntry[] = [];
+let overlaps: LabelOverlap[] = [];
 /** How the next compose answer comes: streamed pieces, then the result, or a failure. */
 let compose: (request: AssistComposeRequest, handlers: AssistStreamHandlers) => Promise<unknown>;
 
@@ -87,6 +91,15 @@ const fake = {
     labels = [...labels, made];
     return made;
   }),
+  updateAssistLabel: vi.fn(async (_scope: string, id: string, patch: Partial<AssistLabelInput>) => {
+    labels = labels.map((label) => (label.id === id ? { ...label, ...patch } : label));
+  }),
+  restoreBaseLabel: vi.fn(async (_scope: string, base: LabelBase) => {
+    const made = { ...LABEL_DEFAULTS, id: `g${labels.length + 1}`, name: base, keyword: base, description: "", base };
+    labels = [...labels, { ...made, color: null }];
+    return { ...made, color: null };
+  }),
+  checkLabelOverlap: vi.fn(async () => overlaps),
   assistLabelLog: vi.fn(async () => log),
   undoAssistLabels: vi.fn(async () => {}),
   setKeywords: vi.fn(async () => {}),
@@ -96,6 +109,25 @@ const fake = {
     verdict: "phishing",
     confidence: 0.9,
     reasons: ["Asks to confirm a password through a link"],
+    reasonDetails: [{ text: "Asks to confirm a password through a link", quote: "confirm your password", fact: null }],
+    droppedReasons: 1,
+    facts: {
+      score: 6.5,
+      band: "leaningSpam",
+      evidence: [
+        { code: "DMARC_FAIL", tone: "bad", weight: 2, detail: "bank.example", phishing: false },
+        {
+          code: "LOOKALIKE_BRAND_LINK",
+          tone: "bad",
+          weight: 3,
+          detail: "paypa1.example looks like PayPal",
+          phishing: true,
+        },
+        { code: "SOMETHING_NEW", tone: "good", weight: -0.5, detail: null, phishing: false },
+      ],
+      allowed: ["suspicious", "spam", "phishing"],
+      defaultVerdict: "suspicious",
+    },
     signals: {
       authentication: { spf: "fail", dkim: null, dmarc: "fail", fromDomain: "bank.example" },
       spamScore: 4.2,
@@ -185,6 +217,7 @@ describe("the assistant's UI", () => {
     vi.clearAllMocks();
     labels = [];
     log = [];
+    overlaps = [];
     compose = async (_request, handlers) => {
       handlers.onDelta?.("Hi Leni, ");
       handlers.onDelta?.("Friday works for me.");
@@ -318,24 +351,94 @@ describe("the assistant's UI", () => {
     await waitFor(() => expect(fake.setKeywords).toHaveBeenCalledWith(["e1"], { travel: true }));
   });
 
-  it("adds the suggested starter labels in one click", async () => {
+  it("lists the base labels apart, switched one by one, with their fixed definition", async () => {
+    const base = (id: string, name: string, which: LabelBase, auto = true): AssistLabel => ({
+      ...LABEL_DEFAULTS,
+      id,
+      name,
+      keyword: name.toLowerCase(),
+      description: `${name} definition`,
+      color: null,
+      base: which,
+      auto,
+    });
+    labels = [
+      base("g1", "Invoice", "invoice"),
+      base("g2", "Personal", "personal", false),
+      { ...LABEL_DEFAULTS, id: "g3", name: "Travel", keyword: "travel", description: "Trips", color: null },
+    ];
     inScope("acc", <LabelSettings options={OPTIONS} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Add 6 labels" }));
-    await waitFor(() => expect(fake.createAssistLabel).toHaveBeenCalledTimes(6));
-    expect(fake.createAssistLabel.mock.calls.map(([, input]) => input.name)).toEqual([
-      "Invoices",
-      "Newsletters",
-      "Orders & shipping",
-      "Travel",
-      "Appointments",
-      "Personal",
-    ]);
+    expect(await screen.findByText("Base labels")).toBeTruthy();
+    expect(screen.getByText("Your own labels")).toBeTruthy();
+    // The definition is folded away until asked for.
+    expect(screen.queryByText("Invoice definition")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show definition" })[0]!);
+    expect(screen.getByText("Invoice definition")).toBeTruthy();
+    const personal = screen.getByRole("switch", { name: "Put “Personal” on by itself" });
+    expect(personal.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("switch", { name: "Put “Invoice” on by itself" }));
+    await waitFor(() => expect(fake.updateAssistLabel).toHaveBeenCalledWith("acc", "g1", { auto: false }));
+    // Six were deleted: each can come back.
+    fireEvent.click(screen.getByRole("button", { name: "Restore Shipping" }));
+    await waitFor(() => expect(fake.restoreBaseLabel).toHaveBeenCalledWith("acc", "shipping"));
+    expect(screen.getByRole("button", { name: "Restore Promotions" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restore Invoice" })).toBeNull();
+  });
+
+  it("offers every base label again when the scope announces them and all were deleted", async () => {
+    inScope("device", <LabelSettings options={{ ...OPTIONS, baseLabels: ["invoice", "work"] }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Restore Work & business" }));
+    await waitFor(() => expect(fake.restoreBaseLabel).toHaveBeenCalledWith("device", "work"));
+    expect(screen.getByRole("button", { name: "Restore Invoice" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restore Shipping" })).toBeNull();
+  });
+
+  it("edits a base label's name but never its definition", async () => {
+    labels = [
+      {
+        ...LABEL_DEFAULTS,
+        id: "g1",
+        name: "Invoice",
+        keyword: "invoice",
+        description: "Fixed definition",
+        color: null,
+        base: "invoice",
+      },
+    ];
+    inScope("acc", <LabelSettings options={OPTIONS} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Invoice" }));
+    expect(screen.queryByLabelText("What belongs here")).toBeNull();
+    expect(screen.getByText("Fixed definition")).toBeTruthy();
+    expect(screen.queryByLabelText("Detector")).toBeNull();
+    expect(screen.getByText("Has its own detector built in.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Bills" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(fake.updateAssistLabel).toHaveBeenCalledWith("acc", "g1", { name: "Bills" }));
+    expect(fake.checkLabelOverlap).not.toHaveBeenCalled();
+  });
+
+  it("warns of overlapping labels while typing, but still saves", async () => {
+    overlaps = [
+      { id: "g1", name: "Invoice", base: "invoice", kind: "meaning", words: [] },
+      { id: "g2", name: "Phone", base: null, kind: "words", words: ["mobile", "contract"] },
+    ];
+    inScope("acc", <LabelSettings options={OPTIONS} />);
+    fireEvent.click(await screen.findByRole("button", { name: "New label" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Phone bills" } });
+    fireEvent.change(screen.getByLabelText("What belongs here"), { target: { value: "mobile contract" } });
+    expect(await screen.findByText("Means the same as the base label “Invoice”.")).toBeTruthy();
+    expect(screen.getByText("Very similar words to “Phone”: mobile, contract")).toBeTruthy();
+    // Asked once, after typing rested.
+    expect(fake.checkLabelOverlap).toHaveBeenCalledTimes(1);
+    expect(fake.checkLabelOverlap).toHaveBeenCalledWith("acc", "Phone bills", "mobile contract", undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Create label" }));
+    await waitFor(() => expect(fake.createAssistLabel).toHaveBeenCalled());
   });
 
   it("checks a new label before saving it", async () => {
     labels = [{ ...LABEL_DEFAULTS, id: "g1", name: "Travel", keyword: "travel", description: "", color: null }];
     inScope("acc", <LabelSettings options={OPTIONS} />);
-    // The list is there (its keyword shows), not only the suggestions.
+    // The list is there (its keyword shows).
     await screen.findByText("travel");
     fireEvent.click(screen.getByRole("button", { name: "New label" }));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "travel" } });
@@ -405,6 +508,16 @@ describe("the assistant's UI", () => {
     expect(screen.queryByText(/%/)).toBeNull();
     expect(screen.queryByText(/The model said/)).toBeNull();
     expect(screen.getByText("Asks to confirm a password through a link")).toBeTruthy();
+    expect(screen.getByText("In the mail: “confirm your password”")).toBeTruthy();
+    expect(screen.getByText(/1 reason of the model was left out/)).toBeTruthy();
+    // The facts, strongest first, with codes the app does not know yet shown as they are.
+    expect(screen.getByText(/rather spam/)).toBeTruthy();
+    const facts = within(screen.getByRole("list", { name: "What the facts say" })).getAllByRole("listitem");
+    expect(facts.map((item) => item.textContent)).toEqual([
+      "Link imitates a known brandpaypa1.example looks like PayPal+3.0",
+      "DMARC failed: the sender may be forged" + "bank.example" + "+2.0",
+      "SOMETHING_NEW-0.5",
+    ]);
     expect(screen.getByText("4.2 of 5.0 points")).toBeTruthy();
     expect(screen.getByText("First mail from this address")).toBeTruthy();
     expect(screen.getByText("Not in your address book")).toBeTruthy();
@@ -413,7 +526,7 @@ describe("the assistant's UI", () => {
     expect(useAssistReader.getState().spamChecks.e1).toBeUndefined();
   });
 
-  it("says how sure the model is in words and when the server lowered its verdict", async () => {
+  it("says how sure the model is in words and when the facts moved its verdict", async () => {
     const result = await fake.assistSpamCheck("e1");
     fake.assistSpamCheck.mockResolvedValueOnce({
       ...result,
@@ -428,6 +541,6 @@ describe("the assistant's UI", () => {
     expect(screen.getByRole("meter", { name: "How sure the model is" }).getAttribute("aria-valuetext")).toBe(
       "fairly sure",
     );
-    expect(screen.getByText(/The model said “Spam”, but that contradicts the server’s checks/)).toBeTruthy();
+    expect(screen.getByText(/The model said “Spam”, but the facts don’t allow that/)).toBeTruthy();
   });
 });

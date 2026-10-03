@@ -10,17 +10,17 @@ use uwumail_core::birthdays::jmap as birthdays;
 use uwumail_core::birthdays::scan::{BirthdayImportEntry, BirthdayMatch};
 use uwumail_core::calendar::jmap_cal;
 use uwumail_core::calendar::jscal::{self, OccurrenceIds, OccurrenceTime};
-use uwumail_core::jmap::{BIRTHDAYS, CORE, Client, MAIL};
-use uwumail_core::jmap_sieve;
+use uwumail_core::jmap::{BIRTHDAYS, CORE, Client, MAIL, SIGNATURES};
+use uwumail_core::{jmap_sieve, jmap_signatures};
 
 const SIEVE: &str = "urn:ietf:params:jmap:sieve";
 const CALENDARS: &str = "urn:ietf:params:jmap:calendars";
 
 fn session() -> Value {
     json!({
-        "capabilities": { CORE: { "maxObjectsInGet": 0 }, MAIL: {}, SIEVE: {}, CALENDARS: {}, BIRTHDAYS: {} },
+        "capabilities": { CORE: { "maxObjectsInGet": 0 }, MAIL: {}, SIEVE: {}, CALENDARS: {}, BIRTHDAYS: {}, SIGNATURES: {} },
         "accounts": { "a1": { "name": "mini@a.test" } },
-        "primaryAccounts": { MAIL: "a1", SIEVE: "a1", CALENDARS: "a1", BIRTHDAYS: "a1" },
+        "primaryAccounts": { MAIL: "a1", SIEVE: "a1", CALENDARS: "a1", BIRTHDAYS: "a1", SIGNATURES: "a1" },
         "username": "mini@a.test",
         "apiUrl": "/api",
         "downloadUrl": "/download/{accountId}/{blobId}/{name}?type={type}",
@@ -104,6 +104,13 @@ fn answer(request: &Request) -> Response {
                 "CalendarEvent/get" => json!({ "list": hostile_events(&arguments["ids"]) }),
                 "Birthdays/scan" => hostile_scan(),
                 "Birthdays/import" => import_answer(arguments),
+                "SignatureSettings/get" => json!({ "accountId": "a1", "state": "s9", "domains": [
+                    { "domain": "a.test", "addressCount": 1, "signature": { "text": "<b>x</b>", "html": 7 } }
+                ], "identities": "nope" }),
+                "SignatureSettings/set" if arguments["domains"].get("evil.test").is_some() => {
+                    return json!(["error", { "type": "invalidArguments", "description": "evil.test is not yours" }, id]);
+                }
+                "SignatureSettings/set" => json!({ "accountId": "a1", "oldState": "s8", "newState": "s9" }),
                 _ => return json!(["error", { "type": "unknownMethod" }, id]),
             };
             json!([name, result, id])
@@ -552,4 +559,31 @@ async fn the_assistants_stream_stays_on_the_servers_site() {
         .await
         .unwrap_err();
     assert!(refused.message.contains("another site"), "{}", refused.message);
+}
+
+/// Signatures per domain go out checked, set before the overview is read again, and a refusal
+/// comes back as an error; the overview is handed on as it came (the page checks its fields).
+#[tokio::test]
+async fn signatures_per_domain_are_set_all_or_nothing() {
+    let stub = http_stub(answer).await;
+    let client = client(&stub).await;
+    let overview = jmap_signatures::load(&client).await.unwrap();
+    assert_eq!(overview["state"], "s9");
+
+    let change = json!({ "domains": { "*": { "text": "Mini" }, "a.test": null } });
+    let after = jmap_signatures::save(&client, &change).await.unwrap();
+    assert_eq!(after["state"], "s9");
+    let request: Value = serde_json::from_slice(&stub.seen().last().unwrap().body).unwrap();
+    assert!(request["using"].as_array().unwrap().contains(&json!(SIGNATURES)));
+    assert_eq!(request["methodCalls"][0][0], "SignatureSettings/set");
+    assert_eq!(request["methodCalls"][0][1]["domains"]["*"], json!({ "text": "Mini", "html": "" }));
+    assert_eq!(request["methodCalls"][1][0], "SignatureSettings/get");
+
+    let refused = jmap_signatures::save(&client, &json!({ "domains": { "evil.test": null } })).await.unwrap_err();
+    assert!(refused.message.contains("evil.test is not yours"), "{}", refused.message);
+
+    // A change that is no change never leaves the device.
+    let before = stub.seen().len();
+    assert!(jmap_signatures::save(&client, &json!({ "domains": { "a.test": 1 } })).await.is_err());
+    assert_eq!(stub.seen().len(), before);
 }

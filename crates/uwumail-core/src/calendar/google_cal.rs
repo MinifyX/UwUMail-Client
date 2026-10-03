@@ -272,13 +272,16 @@ fn times(event: &Value) -> (Value, Value) {
     let seconds = text(event, "duration").and_then(jscal::parse_duration).unwrap_or(0).max(0);
     if jscal::is_all_day(event) {
         let days = (seconds / 86_400).max(1);
-        let end = start.date().checked_add_signed(TimeDelta::days(days)).unwrap_or(start.date());
+        // A duration past what chrono holds (`P99999999999999D`) leaves the end at the start.
+        let end =
+            TimeDelta::try_days(days).and_then(|delta| start.date().checked_add_signed(delta)).unwrap_or(start.date());
         let day =
             |d: NaiveDate| json!({ "date": d.format("%Y-%m-%d").to_string(), "dateTime": null, "timeZone": null });
         (day(start.date()), day(end))
     } else {
         let zone = text(event, "timeZone").unwrap_or("UTC");
-        let end = start.checked_add_signed(TimeDelta::seconds(seconds)).unwrap_or(start);
+        // A duration past what chrono holds (`P99999999999999D`) leaves the end at the start.
+        let end = TimeDelta::try_seconds(seconds).and_then(|delta| start.checked_add_signed(delta)).unwrap_or(start);
         let at = |t: NaiveDateTime| json!({ "dateTime": format_local(t), "timeZone": zone, "date": null });
         (at(start), at(end))
     }
@@ -347,6 +350,17 @@ pub fn patch_body(current: &GoogleEvent, changed: &Value, patch: &Map<String, Va
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A duration past what chrono holds must not panic (as the server's DATES-H1).
+    #[test]
+    fn an_endless_duration_leaves_the_end_at_the_start() {
+        for all_day in [false, true] {
+            let event =
+                json!({ "start": "2026-10-03T10:00:00", "duration": "P99999999999999D", "showWithoutTime": all_day });
+            let (start, end) = times(&event);
+            assert_eq!(start, end, "{all_day}");
+        }
+    }
 
     #[test]
     fn reads_the_calendar_list() {

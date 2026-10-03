@@ -215,7 +215,7 @@ describe("relative expressions", () => {
     ["diesen Dienstag um 18 Uhr", "2026-09-29 18:00"],
     ["next Tuesday", "2026-10-06"],
     ["this Friday", "2026-10-02"],
-    ["on Monday", "2026-10-05"],
+    ["on Monday at 10", "2026-10-05 10:00"],
     ["Wir wollen Freitag ab 19 Uhr zocken", "2026-10-02 19:00"],
     ["Friday at 7pm", "2026-10-02 19:00"],
     ["am Dienstag um 9 Uhr", "2026-10-06 09:00"],

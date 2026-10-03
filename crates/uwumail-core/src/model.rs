@@ -522,6 +522,15 @@ pub struct UserSettings {
     pub values: serde_json::Map<String, serde_json::Value>,
 }
 
+/// One account's signatures per domain on its UwUMail server (`SignatureSettings/get`, see
+/// UwUMail-Server docs/jmap-signatures.md), as the server answered: the page checks every field.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountSignatures {
+    pub account_id: String,
+    pub overview: serde_json::Value,
+}
+
 /// How a write to the shared settings went. A request that didn't get through is an error instead.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

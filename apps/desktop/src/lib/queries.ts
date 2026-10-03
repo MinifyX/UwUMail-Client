@@ -1,8 +1,9 @@
 import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { backend } from "@/backend/backend";
 import { playNyu, type CameoName } from "@/components/nyu/cameo";
 import type {
+  Signature,
   LabelRef,
   FlagChange,
   Folder,
@@ -14,6 +15,7 @@ import type {
 } from "@/backend/types";
 import { translate, useT } from "@/i18n";
 import { inWorkspace, sharedFollowAccounts } from "@/lib/workspaces";
+import { senderSignatures } from "@/lib/localSignatures";
 import { useAccountSync } from "@/state/accountSync";
 import { confirmDeleteForever } from "@/state/deleteForever";
 import { useSettings } from "@/state/settings";
@@ -30,6 +32,7 @@ export const queryKeys = {
   thread: ["thread"] as const,
   identities: ["identities"] as const,
   signatures: ["signatures"] as const,
+  domainSignatures: ["domainSignatures"] as const,
   calendars: ["calendars"] as const,
   calendarEvents: ["calendarEvents"] as const,
   calendarAccounts: ["calendarAccounts"] as const,
@@ -76,6 +79,45 @@ export function useIdentities() {
 
 export function useSignatures() {
   return useQuery({ queryKey: queryKeys.signatures, queryFn: () => backend().listSignatures() });
+}
+
+/** Signatures per domain of the accounts whose UwUMail server has them (lib/localSignatures). */
+export function useDomainSignatures() {
+  return useQuery({ queryKey: queryKeys.domainSignatures, queryFn: () => backend().domainSignatures() });
+}
+
+/** How long the composer waits for the servers' signatures before it goes with the device's. */
+export const SERVER_SIGNATURES_WAIT_MS = 2000;
+
+/**
+ * What the composer offers per sender address: own device signatures, else the server's, the
+ * domain's or every domain's (lib/localSignatures). Undefined until the device's have loaded and
+ * the servers' have too, or for at most SERVER_SIGNATURES_WAIT_MS (the shell asks early): a slow
+ * server must not keep the default signature out of a draft the person starts typing in.
+ * A server that can't be reached is left out; while a refresh runs, the last answer stands.
+ */
+export function useSenderSignatures(): Signature[] | undefined {
+  const { t } = useT();
+  const { data: signatures } = useSignatures();
+  const { data: identities } = useIdentities();
+  const { data: servers, isPending } = useDomainSignatures();
+  const [gaveUp, setGaveUp] = useState(false);
+  useEffect(() => {
+    if (!isPending) return;
+    const timer = setTimeout(() => setGaveUp(true), SERVER_SIGNATURES_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [isPending]);
+  const ready = !isPending || gaveUp;
+  return useMemo(
+    () =>
+      signatures && ready
+        ? senderSignatures(identities ?? [], signatures, servers, {
+            domain: (domain) => t("compose.signatureForDomain", { domain }),
+            allDomains: t("compose.signatureForAllDomains"),
+          })
+        : undefined,
+    [signatures, identities, servers, ready, t],
+  );
 }
 
 export function useFolders() {

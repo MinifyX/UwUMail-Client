@@ -43,6 +43,45 @@ fn invalid(property: &str, description: &str) -> Error {
     Error::assist("invalidProperties", description).with_properties(vec![property.to_string()])
 }
 
+/// The language a base label was set up in (UwUMail Server's rule): its definition was written in
+/// the person's language when it was made, its name too.
+pub fn base_label_language(base: uwumail_labels::Base, label: &Label) -> &'static str {
+    match label.base_language.as_deref() {
+        Some("de") => return "de",
+        Some("en") => return "en",
+        _ => {}
+    }
+    let description = label.description.as_str();
+    if description == base.text("en").description || label.name.trim().eq_ignore_ascii_case(base.name("en")) {
+        "en"
+    } else if description == base.text("de").description
+        || label.name.trim().eq_ignore_ascii_case(base.name("de"))
+        || [" du ", " dein", " dich ", " und "].iter().any(|word| description.contains(word))
+    {
+        "de"
+    } else {
+        "en"
+    }
+}
+
+/// Which version of the base labels this device made (UwUMail Server's `BASE_LABELS_VERSION`).
+const BASE_LABELS_SETTING: &str = "baseLabels";
+pub const BASE_LABELS_VERSION: i64 = 1;
+
+/// The keyword of a new label called `name`: a lower-case ASCII form of it, `label-<form>` for a
+/// mark other programs act on, `label-<n>` when it is empty or taken.
+fn new_keyword(labels: &[Label], name: &str) -> String {
+    let taken = |keyword: &str| labels.iter().any(|l| l.keyword == keyword);
+    let mut keyword = label_keyword(name);
+    if is_reserved_keyword(&keyword) {
+        keyword = format!("label-{keyword}");
+    }
+    if keyword.is_empty() || taken(&keyword) {
+        keyword = (1..).map(|n| format!("label-{n}")).find(|k| !taken(k)).unwrap_or_default();
+    }
+    keyword
+}
+
 fn now() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
@@ -62,6 +101,7 @@ pub fn options(features: &Value, foreign_servers: &[String]) -> Value {
         "maxProviders": MAX_PROVIDERS,
         "maxLabels": MAX_LABELS,
         "maxLabelConditions": uwumail_labels::MAX_CONDITIONS,
+        "baseLabels": uwumail_labels::Base::ALL.map(uwumail_labels::Base::as_str),
         "maxInstructionChars": MAX_INSTRUCTION_CHARS,
         "maxTextChars": MAX_TEXT_CHARS,
         "foreignMail": false,
@@ -486,6 +526,10 @@ impl Device<'_> {
             }
         }
         for (key, value) in changes {
+            // Corrections only serve AI labels: switched off, they go (C3-6).
+            if key == "autoLabels" && value.as_deref() == Some("false") {
+                self.store.forget_label_shots()?;
+            }
             self.store.set_assist_setting(&key, value.as_deref())?;
         }
         Ok(())
@@ -502,7 +546,7 @@ impl Device<'_> {
         if chars == 0 || chars > MAX_LABEL_NAME_CHARS {
             return Err(invalid("name", "A label needs a name of 1 to 40 characters."));
         }
-        if label.description.chars().count() > MAX_LABEL_DESCRIPTION_CHARS {
+        if label.base.is_none() && label.description.chars().count() > MAX_LABEL_DESCRIPTION_CHARS {
             return Err(invalid("description", "The description is too long."));
         }
         if let Some(color) = &label.color
@@ -518,8 +562,9 @@ impl Device<'_> {
     }
 
     /// A label with what `input` sets: name, description, color, and the server's checks of
-    /// `rules`, `detector`, `learnSenders` and `classifier`. The counts are the device's to set and
-    /// are ignored, like `id` and `keyword`.
+    /// `rules`, `detector`, `learnSenders`, `classifier` and `auto`. The counts are the device's to
+    /// set and are ignored, like `id` and `keyword`. A base label's definition and `base` may only
+    /// come back unchanged.
     fn label_input(input: &Value, base: Label) -> Result<Label> {
         let text = |key: &str| input.get(key).and_then(Value::as_str).map(|t| t.trim().to_string());
         let mut label = base;
@@ -527,7 +572,19 @@ impl Device<'_> {
             label.name = name.chars().filter(|c| !c.is_control()).collect();
         }
         if let Some(description) = text("description") {
-            label.description = description;
+            if label.base.is_some() {
+                if description != label.description.trim() {
+                    return Err(invalid("description", "The description of a base label can't be changed."));
+                }
+            } else {
+                label.description = description;
+            }
+        }
+        match input.get("base") {
+            None => {}
+            Some(value) if value.as_str() == label.base.as_deref() => {}
+            Some(Value::Null) if label.base.is_none() => {}
+            Some(_) => return Err(invalid("base", "Which base label a label is can't be changed.")),
         }
         match input.get("color") {
             Some(Value::Null) => label.color = None,
@@ -537,16 +594,22 @@ impl Device<'_> {
         if let Some(rules) = input.get("rules") {
             label.rules = uwumail_labels::Rules::check(rules).map_err(|reason| invalid("rules", &reason))?;
         }
+        const DETECTORS: &str =
+            "A detector is invoice, appointment, newsletter, shipping, account, personal, work or advertising.";
         match input.get("detector") {
             None => {}
             Some(Value::Null) => label.detector = None,
             Some(Value::String(name)) => match uwumail_labels::Detector::parse(name) {
                 Some(detector) => label.detector = Some(detector.as_str().into()),
-                None => return Err(invalid("detector", "A detector is invoice, appointment, newsletter or shipping.")),
+                None => return Err(invalid("detector", DETECTORS)),
             },
-            Some(_) => return Err(invalid("detector", "A detector is invoice, appointment, newsletter or shipping.")),
+            Some(_) => return Err(invalid("detector", DETECTORS)),
         }
-        for (key, field) in [("learnSenders", &mut label.learn_senders), ("classifier", &mut label.classifier)] {
+        for (key, field) in [
+            ("learnSenders", &mut label.learn_senders),
+            ("classifier", &mut label.classifier),
+            ("auto", &mut label.auto),
+        ] {
             match input.get(key) {
                 None => {}
                 Some(Value::Bool(on)) => *field = *on,
@@ -556,23 +619,119 @@ impl Device<'_> {
         Ok(label)
     }
 
-    pub fn create_label(&self, input: &Value) -> Result<Label> {
+    /// Creates one of the person's own labels, or with `{"base": …}` (perhaps with `auto`) makes a
+    /// deleted base label again, named in `language` (answering the one there is).
+    pub fn create_label(&self, input: &Value, language: &str) -> Result<Label> {
+        if let Some(base) = input.get("base").filter(|value| !value.is_null()) {
+            return self.create_base_label(base, input, language);
+        }
         let labels = self.labels()?;
-        if labels.len() >= MAX_LABELS {
+        if labels.iter().filter(|label| label.base.is_none()).count() >= MAX_LABELS {
             return Err(Error::assist("overQuota", "There are as many labels as there may be."));
         }
         let mut label = Self::label_input(input, Label::named("", "", ""))?;
         self.check_label(&label, None)?;
-        let taken = |keyword: &str| labels.iter().any(|l| l.keyword == keyword);
-        let mut keyword = label_keyword(&label.name);
-        if is_reserved_keyword(&keyword) {
-            keyword = format!("label-{keyword}");
-        }
-        if keyword.is_empty() || taken(&keyword) {
-            keyword = (1..).map(|n| format!("label-{n}")).find(|k| !taken(k)).unwrap_or_default();
-        }
-        label.keyword = keyword;
+        label.keyword = new_keyword(&labels, &label.name);
         label.id = format!("g{}", uuid::Uuid::new_v4().simple());
+        self.store.insert_assist_label(&label, now())?;
+        Ok(label)
+    }
+
+    fn create_base_label(&self, base: &Value, input: &Value, language: &str) -> Result<Label> {
+        let base = base.as_str().and_then(uwumail_labels::Base::parse).ok_or_else(|| {
+            invalid(
+                "base",
+                "A base label is invoice, shipping, appointment, newsletter, account, personal, work or advertising.",
+            )
+        })?;
+        if let Some(other) = input.as_object().and_then(|o| o.keys().find(|k| !matches!(k.as_str(), "base" | "auto"))) {
+            return Err(invalid(other, "Nothing but auto can come with base."));
+        }
+        let auto = match input.get("auto") {
+            None => None,
+            Some(Value::Bool(on)) => Some(*on),
+            Some(_) => return Err(invalid("auto", "This must be on or off.")),
+        };
+        let mut label = match self.labels()?.into_iter().find(|label| label.base() == Some(base)) {
+            Some(label) => label,
+            None => self.make_base_label(base, language)?,
+        };
+        if let Some(auto) = auto.filter(|auto| *auto != label.auto) {
+            label.auto = auto;
+            self.store.update_assist_label(&label)?;
+        }
+        Ok(label)
+    }
+
+    /// Brings this device's base labels to the current set (docs/labels.md of UwUMail Server,
+    /// "Base labels"), once per version: the base labels that came after the set it had are made
+    /// (a label of the same name is adopted, the others named in `language`; a deleted one stays
+    /// deleted), and the others get the current wording of their definition, in the language it
+    /// was written in (a definition can't be changed on this device, so it is always the one
+    /// written). Answers whether anything changed.
+    pub fn ensure_base_labels(&self, language: &str) -> Result<bool> {
+        let seen: i64 = self.store.assist_setting(BASE_LABELS_SETTING)?.and_then(|v| v.parse().ok()).unwrap_or(0);
+        if seen >= BASE_LABELS_VERSION {
+            return Ok(false);
+        }
+        let mut made = false;
+        for base in uwumail_labels::Base::ALL {
+            match self.labels()?.into_iter().find(|label| label.base() == Some(base)) {
+                Some(mut label) => {
+                    // The server gives only a definition still as it wrote it the newer wording; on
+                    // this device a definition can't be changed, so it always is. Same language.
+                    let language =
+                        label.base_language.clone().unwrap_or_else(|| base_label_language(base, &label).into());
+                    let current = base.text(&language).description;
+                    if label.description != current || label.base_language.as_deref() != Some(language.as_str()) {
+                        label.description = current.into();
+                        label.base_language = Some(language);
+                        self.store.update_assist_label(&label)?;
+                        made = true;
+                    }
+                }
+                None if base.since() > seen => {
+                    self.make_base_label(base, language)?;
+                    made = true;
+                }
+                None => {}
+            }
+        }
+        self.store.set_assist_setting(BASE_LABELS_SETTING, Some(&BASE_LABELS_VERSION.to_string()))?;
+        Ok(made)
+    }
+
+    /// Makes the base label `base`, or adopts a label of the same name that is no base label yet:
+    /// that one keeps its name, keyword and color, gets the definition, and drops a detector that
+    /// is the base label's anyway.
+    fn make_base_label(&self, base: uwumail_labels::Base, language: &str) -> Result<Label> {
+        let language = if language.to_ascii_lowercase().starts_with("de") { "de" } else { "en" };
+        let text = base.text(language);
+        let labels = self.labels()?;
+        if let Some(own) =
+            labels.iter().find(|label| label.base.is_none() && uwumail_labels::Base::named(&label.name) == Some(base))
+        {
+            let mut adopted = own.clone();
+            adopted.base = Some(base.as_str().into());
+            adopted.description = text.description.into();
+            adopted.base_language = Some(language.into());
+            adopted.detector = adopted.detector.filter(|detector| detector != base.detector().as_str());
+            self.store.update_assist_label(&adopted)?;
+            return Ok(adopted);
+        }
+        let taken = |name: &str| labels.iter().any(|label| label.name.to_lowercase() == name.to_lowercase());
+        let mut name = text.name.to_owned();
+        let mut n = 1;
+        while taken(&name) {
+            n += 1;
+            name = format!("{} {n}", text.name);
+        }
+        let mut label = Label::named(&format!("g{}", uuid::Uuid::new_v4().simple()), &name, "");
+        label.keyword = new_keyword(&labels, &name);
+        label.description = text.description.into();
+        label.color = Some(base.color().into());
+        label.base = Some(base.as_str().into());
+        label.base_language = Some(language.into());
         self.store.insert_assist_label(&label, now())?;
         Ok(label)
     }
@@ -871,6 +1030,13 @@ mod tests {
         assert!(device.update_settings(&json!({ "default": { "providerId": "nope" } })).is_err());
         device.update_settings(&json!({ "autoLabels": true })).unwrap();
         assert!(device.auto_labels_on().unwrap());
+        // Switched off, AI labels take the person's corrections along (C3-6).
+        device.store.keep_label_shot("g1", "m1", true, "shop.example", "Angebot", "Rabatt", 1).unwrap();
+        device.update_settings(&json!({ "autoLabels": true })).unwrap();
+        assert_eq!(device.store.label_shots().unwrap().len(), 1);
+        device.update_settings(&json!({ "autoLabels": false })).unwrap();
+        assert!(device.store.label_shots().unwrap().is_empty());
+        device.update_settings(&json!({ "autoLabels": true })).unwrap();
 
         // Deleting a provider drops the choices that name it.
         device.delete_provider(local_id).unwrap();
@@ -883,15 +1049,18 @@ mod tests {
         let (store, secrets) = device();
         let device = Device { store: &store, secrets: &secrets, prices: None };
         let label = device
-            .create_label(&json!({ "name": "Bestellungen & Versand", "description": "Pakete", "color": "#FF66AA" }))
+            .create_label(
+                &json!({ "name": "Bestellungen & Versand", "description": "Pakete", "color": "#FF66AA" }),
+                "en",
+            )
             .unwrap();
         assert_eq!((label.keyword.as_str(), label.color.as_deref()), ("bestellungen-versand", Some("#ff66aa")));
-        assert_eq!(device.create_label(&json!({ "name": "旅行" })).unwrap().keyword, "label-1");
+        assert_eq!(device.create_label(&json!({ "name": "旅行" }), "en").unwrap().keyword, "label-1");
         // A name other programs read as a mark gets a keyword of its own.
-        assert_eq!(device.create_label(&json!({ "name": "Junk" })).unwrap().keyword, "label-junk");
-        assert_eq!(device.create_label(&json!({ "name": "Deleted" })).unwrap().keyword, "label-deleted");
-        assert!(device.create_label(&json!({ "name": "bestellungen & versand" })).is_err(), "names are unique");
-        assert!(device.create_label(&json!({ "name": "X", "color": "red" })).is_err());
+        assert_eq!(device.create_label(&json!({ "name": "Junk" }), "en").unwrap().keyword, "label-junk");
+        assert_eq!(device.create_label(&json!({ "name": "Deleted" }), "en").unwrap().keyword, "label-deleted");
+        assert!(device.create_label(&json!({ "name": "bestellungen & versand" }), "en").is_err(), "names are unique");
+        assert!(device.create_label(&json!({ "name": "X", "color": "red" }), "en").is_err());
         device.update_label(&label.id, &json!({ "name": "Pakete" })).unwrap();
         let renamed = device.labels().unwrap().into_iter().find(|l| l.id == label.id).unwrap();
         assert_eq!((renamed.name.as_str(), renamed.keyword.as_str()), ("Pakete", "bestellungen-versand"));
@@ -901,7 +1070,7 @@ mod tests {
     fn label_rules_and_switches_are_checked_like_the_servers() {
         let (store, secrets) = device();
         let device = Device { store: &store, secrets: &secrets, prices: None };
-        let property = |input: Value| device.create_label(&input).unwrap_err().assist.unwrap().properties;
+        let property = |input: Value| device.create_label(&input, "en").unwrap_err().assist.unwrap().properties;
         let condition = json!({ "field": "subject", "value": "Rechnung" });
         let many: Vec<Value> = (0..11).map(|_| condition.clone()).collect();
         assert_eq!(property(json!({ "name": "A", "rules": { "conditions": many } })), ["rules"]);
@@ -915,8 +1084,11 @@ mod tests {
         assert_eq!(property(json!({ "name": "A", "learnSenders": "yes" })), ["learnSenders"]);
 
         let label = device
-            .create_label(&json!({ "name": "Rechnungen", "detector": "invoice", "classifier": false,
-                                   "rules": { "match": "any", "conditions": [condition] } }))
+            .create_label(
+                &json!({ "name": "Rechnungen", "detector": "invoice", "classifier": false,
+                                   "rules": { "match": "any", "conditions": [condition] } }),
+                "en",
+            )
             .unwrap();
         assert_eq!(label.detector.as_deref(), Some("invoice"));
         assert!(label.learn_senders && !label.classifier);

@@ -37,6 +37,9 @@ pub const BIRTHDAYS: &str = "urn:uwumail:jmap:birthdays";
 /// UwUMail's AI assistant (the server's docs/jmap-assist.md).
 pub const ASSIST: &str = "urn:uwumail:jmap:assist";
 pub const WEBPUSH_VAPID: &str = "urn:ietf:params:jmap:webpush-vapid";
+/// Signatures per domain and company signatures (`SignatureSettings/get`/`set`, UwUMail-Server
+/// docs/jmap-signatures.md), from UwUMail-Server 0.22 on.
+pub const SIGNATURES: &str = "urn:uwumail:jmap:signatures";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -130,6 +133,8 @@ pub struct Session {
     pub vapid_key: Option<String>,
     /// The server reads the text in a mail's pictures (`Email/imageText`, a UwUMail server).
     pub image_text: bool,
+    /// The account whose signatures per domain this login manages (`urn:uwumail:jmap:signatures`).
+    pub signatures_account_id: Option<String>,
     /// The session's `state`: API answers carry it as `sessionState`, and a different one there
     /// means the session changed (RFC 8620 §2).
     pub state: Option<String>,
@@ -176,6 +181,7 @@ impl Session {
         let remote_url = |key: &str| remote.and_then(|r| r.get(key)).and_then(Value::as_str).map(|u| absolute(base, u));
         let contacts_account_id = extension_account(CONTACTS);
         let birthdays_account_id = extension_account(BIRTHDAYS);
+        let signatures_account_id = extension_account(SIGNATURES);
         let limit = |key: &str, fallback: usize| {
             core.and_then(|c| c.get(key)).and_then(Value::as_u64).map_or(fallback, |n| n.clamp(1, 10_000) as usize)
         };
@@ -219,6 +225,7 @@ impl Session {
                 .filter(|key| !key.is_empty())
                 .map(String::from),
             image_text: capabilities.contains_key(IMAGETEXT),
+            signatures_account_id,
             state: text("state").map(String::from),
             assist,
         })
@@ -459,6 +466,9 @@ impl Client {
         }
         if self.session.assist.is_some() {
             using.push(ASSIST);
+        }
+        if self.session.signatures_account_id.is_some() {
+            using.push(SIGNATURES);
         }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self
@@ -1340,6 +1350,21 @@ mod tests {
         assert!(Session::parse(&document, &base).unwrap().user_settings);
         document["capabilities"].as_object_mut().unwrap().remove(SETTINGS);
         assert!(!Session::parse(&document, &base).unwrap().user_settings);
+    }
+
+    #[test]
+    fn notices_signatures_per_domain() {
+        let base = Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let mut document = json!({
+            "capabilities": { CORE: {}, MAIL: {}, SIGNATURES: { "maxSize": 262_144 } },
+            "primaryAccounts": { MAIL: "a1" },
+            "apiUrl": "/jmap/api", "downloadUrl": "/jmap/download", "uploadUrl": "/jmap/upload",
+        });
+        assert_eq!(Session::parse(&document, &base).unwrap().signatures_account_id.as_deref(), Some("a1"));
+        document["primaryAccounts"][SIGNATURES] = json!("a2");
+        assert_eq!(Session::parse(&document, &base).unwrap().signatures_account_id.as_deref(), Some("a2"));
+        document["capabilities"].as_object_mut().unwrap().remove(SIGNATURES);
+        assert!(Session::parse(&document, &base).unwrap().signatures_account_id.is_none());
     }
 
     #[test]

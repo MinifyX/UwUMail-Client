@@ -166,7 +166,10 @@
     "draftLocal": "Only saved on this device",
     "signature": "Signature",
     "noSignature": "No signature",
-    "editSignatures": "Edit signatures …"
+    "editSignatures": "Edit signatures …",
+    "companyFooter": "The server adds your organisation's footer when sending.",
+    "signatureForDomain": "Signature for {{domain}}",
+    "signatureForAllDomains": "Signature for all domains"
   },
   "toast": {
     "sent": "Message sent",
@@ -433,7 +436,6 @@
     "removeSender": "Remove {{email}}",
     "senderAdded": "You can write from {{email}} now",
     "signatures": "Signatures",
-    "signaturesDesc": "Per sender address, with bold, links and pictures. Add several and choose which one is added to new mail and which one to replies.",
     "signatureFor": "Sender address",
     "signaturesEmpty": "There's no signature for this address yet.",
     "newSignature": "New signature",
@@ -483,7 +485,29 @@
     "senderFonts": "Sender fonts",
     "senderFontsDesc": "Many HTML mails are set in Times or another serif font. Mails without a font of their own always get yours.",
     "senderFontsReplace": "Replace serif fonts with mine",
-    "senderFontsKeep": "As the sender set them"
+    "senderFontsKeep": "As the sender set them",
+    "signaturesDomainsDesc": "Pick a domain and write one signature for all your addresses there. Single addresses can have their own. {name}, {adresse} and {domain} are filled in per address.",
+    "signaturesNoAddresses": "Add a mailbox first, then you can write signatures.",
+    "signatureDomain": "Domain",
+    "signatureDomainOption_one": "{{domain}} (1 address)",
+    "signatureDomainOption_other": "{{domain}} ({{count}} addresses)",
+    "signatureOnDevice": "on this device",
+    "signatureOnServerDesc": "Lives on your UwUMail server: the webmail, the portal and your other mail apps use the same one.",
+    "signatureOnDeviceDesc": "Stays on this device. Signatures of single addresses sync with your UwUMail account as before.",
+    "signatureAppliesTo": "Applies to",
+    "signatureAllDomains": "All domains (including future ones)",
+    "signatureReplaces": "Replaces the own signatures of {{domains}}.",
+    "signatureRemove": "Remove signature",
+    "signatureFromTemplate": "This is your organisation's template. Change it and save it as your own.",
+    "signatureFromAllDomains": "This domain uses your signature for all domains.",
+    "signatureCompanyFooter": "When you send from this domain, the server adds this footer automatically:",
+    "signatureExceptions": "Different signature for single addresses ({{count}})",
+    "signatureOwn": "Own signature",
+    "signatureFollowsDomain": "Uses the domain signature",
+    "signatureOverride": "Own signature for this address",
+    "signatureBackToDomain": "Use the domain signature",
+    "signatureDeviceFirst": "In this app these addresses have signatures of their own. Here they go before the server's signature. Delete them if the server's should apply.",
+    "signatureTooBig": "This signature is too big. Try a smaller picture."
   },
   "theme": {
     "system": "System",
@@ -1346,7 +1370,7 @@
         "fairly": "fairly sure",
         "sure": "sure"
       },
-      "modelVerdict": "The model said “{{verdict}}”, but that contradicts the server’s checks (sender verified, spam filter calm, written to each other before).",
+      "modelVerdict": "The model said “{{verdict}}”, but the facts don’t allow that, so the verdict stays within what they support.",
       "serverTitle": "What the server found",
       "auth": "Sender check",
       "authNone": "Not checked: the mail didn't come from another server.",
@@ -1373,24 +1397,73 @@
       "contactsLabel": "Address book",
       "inContacts": "In your address book",
       "notInContacts": "Not in your address book",
-      "firstSeen": "First mail"
+      "firstSeen": "First mail",
+      "factsTitle": "What the facts say",
+      "factsScore": "{{score}} points",
+      "band": {
+        "clean": "clearly fine",
+        "leaningClean": "rather fine",
+        "unclear": "unclear",
+        "leaningSpam": "rather spam",
+        "spam": "clearly spam"
+      },
+      "reasonQuote": "In the mail: “{{quote}}”",
+      "reasonFact": "Based on the checked facts",
+      "dropped_one": "{{count}} reason of the model was left out because nothing in the mail backs it.",
+      "dropped_other": "{{count}} reasons of the model were left out because nothing in the mail backs them.",
+      "evidence": {
+        "FILTER_WANTED": "The spam filter found nothing worrying",
+        "FILTER_OVER_LIMIT": "Over the spam filter’s limit",
+        "FILTER_SOME_POINTS": "Some points from the spam filter",
+        "DMARC_PASS": "DMARC passed: really from this domain",
+        "DMARC_FAIL": "DMARC failed: the sender may be forged",
+        "SPF_DKIM_PASS": "SPF or DKIM passed",
+        "SPF_DKIM_FAIL": "SPF or DKIM failed",
+        "NO_AUTHENTICATION": "No authentication at all",
+        "WRITTEN_TO": "You wrote to this sender before",
+        "IN_CONTACTS": "In your address book",
+        "KNOWN_SENDER": "Has written to you before",
+        "EARLIER_IN_JUNK": "Earlier mail from this sender ended up in Junk",
+        "FIRST_MAIL": "First mail from this sender",
+        "IN_JUNK": "Lies in Junk",
+        "PAYMENT_REQUEST": "Asks for money or payment data",
+        "URGENCY": "Pushes for haste",
+        "LOOKALIKE_BRAND_FROM": "Sender domain imitates a known brand",
+        "BRAND_IN_FROM_DOMAIN": "Sender domain carries a brand name",
+        "LOOKALIKE_CONTACT_FROM": "Sender domain imitates one of your contacts",
+        "FROM_NAME_SPOOFS_ADDRESS": "Display name shows a different address",
+        "FROM_NAME_SHOWS_DOMAIN": "Display name shows a different domain",
+        "BRAND_IN_FROM_NAME": "Brand name in the display name, sent from elsewhere",
+        "REPLY_TO_OTHER_SITE": "Replies go to a different site",
+        "LOOKALIKE_BRAND_LINK": "Link imitates a known brand",
+        "BRAND_LINK_TEXT": "Link text names a brand, the link goes elsewhere",
+        "TRACKED_LINK_TEXT": "Link text and target differ (tracking link)",
+        "PHISHING_LINK_TEXT": "Link text shows a different address than the target",
+        "BRAND_IN_SUBJECT": "Brand name in the subject with a warning",
+        "CREDENTIAL_REQUEST": "Asks for login details off the brand’s own site",
+        "LOOKALIKE_LINK": "Link to a lookalike domain",
+        "LINK_TO_IP": "Link to a bare IP address",
+        "HTML_ATTACHMENT": "HTML attachment (often a fake login page)",
+        "MALWARE_LINK": "Link to a known malware site",
+        "SPAMHAUS_DBL_MALICIOUS": "Link to a domain listed as malicious"
+      }
     },
     "labels": {
       "title": "Labels",
       "description": "Your own words for kinds of mail. Labels show up on mail here and in other mail apps (as keywords). The model only ever picks among your labels; it never moves, deletes or answers mail.",
       "descriptionManual": "Your own words for kinds of mail, set by hand from the reader. They show up in other mail apps too (as keywords).",
       "auto": "Label new mail automatically",
-      "autoDesc": "Incoming mail gets the labels that fit. For that the model reads your labels' names and descriptions and the start of each mail.",
+      "autoDesc": "Incoming mail gets the one label that fits best, sometimes a second one, and none when the model isn't sure. For that the model reads your labels' names and descriptions and the start of each mail.",
       "autoNoLabels": "Add a few labels first; then incoming mail gets the ones that fit.",
       "noProvider": "No model may set labels at the moment, so nothing is labelled.",
       "new": "New label",
       "newTitle": "New label",
       "editTitle": "Edit “{{name}}”",
       "name": "Name",
-      "namePlaceholder": "e.g. Invoices",
+      "namePlaceholder": "e.g. Travel",
       "descriptionField": "What belongs here",
       "descriptionHint": "The model reads this to decide. A few words or examples are enough.",
-      "descriptionPlaceholder": "e.g. Invoices, receipts and payment confirmations",
+      "descriptionPlaceholder": "e.g. Flights, hotels and train tickets",
       "color": "Colour",
       "noColor": "No colour",
       "create": "Create label",
@@ -1406,12 +1479,6 @@
       "empty": "No labels yet.",
       "full_one": "You've reached the limit of {{count}} label.",
       "full_other": "You've reached the limit of {{count}} labels.",
-      "startersTitle": "Start with a few suggestions?",
-      "startersMore": "More suggestions",
-      "addStarters_one": "Add {{count}} label",
-      "addStarters_other": "Add {{count}} labels",
-      "startersAdded_one": "{{count}} label added",
-      "startersAdded_other": "{{count}} labels added",
       "applyDesc_one": "Mail that came before the labels were on stays as it is. Let the model look at your newest inbox mail now.",
       "applyDesc_other": "Mail that came before the labels were on stays as it is. Let the model look at your {{count}} newest inbox mails now.",
       "apply": "Label recent mail",
@@ -1436,32 +1503,6 @@
         "nameTaken": "You already have a label with that name.",
         "descriptionTooLong": "At most {{max}} characters.",
         "control": "Line breaks and control characters don't work here."
-      }
-    },
-    "starter": {
-      "invoices": {
-        "name": "Invoices",
-        "description": "Invoices, receipts, payment confirmations and reminders"
-      },
-      "newsletters": {
-        "name": "Newsletters",
-        "description": "Newsletters, offers and advertising from shops and services"
-      },
-      "orders": {
-        "name": "Orders & shipping",
-        "description": "Order confirmations, shipping notices and delivery updates"
-      },
-      "travel": {
-        "name": "Travel",
-        "description": "Bookings, tickets, boarding passes and hotel confirmations"
-      },
-      "appointments": {
-        "name": "Appointments",
-        "description": "Appointments, invitations, reservations and reminders of dates"
-      },
-      "personal": {
-        "name": "Personal",
-        "description": "Mail from friends and family written by a person, not sent in bulk"
       }
     },
     "settings": {
@@ -1695,8 +1736,8 @@
       "device": "Other mailboxes (this device)",
       "deviceDesc": "Labels of every mailbox that isn't a UwUMail account. They stay on this device and are set here.",
       "serverDesc": "Kept on your UwUMail server and set there, also while this app is closed.",
-      "listTitle": "Your labels",
-      "description": "New mail gets labels by their rules, detectors and learning first; then the model judges the ones still missing. It never moves, deletes or answers a mail.",
+      "listTitle": "Your own labels",
+      "description": "New mail gets labels by their rules, detectors and learning first; the model helps where those aren't sure. A mail gets at most two labels, and none when it's unclear. It never moves, deletes or answers a mail.",
       "descriptionManual": "New mail gets labels by their rules, detectors and learning. You can also put them on by hand in the reader, with a right-click in the list or with L.",
       "nonAi": "Label new mail without AI",
       "nonAiDesc": "Rules, detectors, learned senders and the classifier put labels on new mail. Nothing leaves this device or your server for it.",
@@ -1740,20 +1781,29 @@
       "classifierOn": "classifier on ({{count}} examples)",
       "classifierLearning": "classifier learning ({{count}}/{{needed}})",
       "count_one": "{{count}} mail, {{unread}} unread",
-      "count_other": "{{count}} mails, {{unread}} unread"
+      "count_other": "{{count}} mails, {{unread}} unread",
+      "switchesTitle": "Labelling new mail",
+      "listDescription": "Name, colour and what puts each label on mail by itself.",
+      "autoLabel": "Put on by itself",
+      "autoLabelDesc": "Off: the label only goes on when you put it on by hand. Nothing sets it by itself then, not its conditions, the detector, learned senders, similar mails or the assistant."
     },
     "detector": {
       "invoice": "Invoices",
       "appointment": "Appointments",
       "newsletter": "Newsletters",
-      "shipping": "Shipping"
+      "shipping": "Shipping",
+      "account": "Account & security",
+      "personal": "Personal mail",
+      "work": "Work & business",
+      "advertising": "Promotions"
     },
     "source": {
       "ai": "AI",
       "rule": "Rule",
       "sender": "Learned sender",
       "detector": "Detector",
-      "classifier": "Classifier"
+      "classifier": "Classifier",
+      "similar": "Like your mails with this label"
     },
     "reason": {
       "from": "sender is {{value}}",
@@ -1776,7 +1826,16 @@
       "shippingPlain": "Looks like a shipment",
       "tracking": "tracking number {{number}}",
       "classifier_one": "Similar to the mail with this label ({{percent, number(maximumFractionDigits: 1)}} % sure)",
-      "classifier_other": "Similar to the {{count}} mails with this label ({{percent, number(maximumFractionDigits: 1)}} % sure)"
+      "classifier_other": "Similar to the {{count}} mails with this label ({{percent, number(maximumFractionDigits: 1)}} % sure)",
+      "similar": "Like {{count}} of your mails with this label ({{percent}} % alike)",
+      "invoiceNumber": "Looks like an invoice: invoice number {{number}}, {{amount}}",
+      "accountWord": "About your account: “{{word}}”",
+      "accountCode": "About your account: a one-time code",
+      "personalKnown": "Looks personal: written by a person you know",
+      "personalPrivate": "Looks personal: written by a person from a private address",
+      "workColleague": "Looks like work: written by a colleague from your own domain",
+      "workContact": "Looks like work: written by a business contact you know",
+      "advertising": "Looks like advertising: {{words}}"
     },
     "log": {
       "title": "Set lately",
@@ -1789,6 +1848,38 @@
     "chip": {
       "automatic": "Set automatically",
       "bySource": "Set automatically ({{source}})"
+    },
+    "base": {
+      "title": "Base labels",
+      "description": "Eight fixed labels, each with a sharp definition, so mail gets the same label every time. Rename them or change their colour as you like, and choose for each one whether it goes on by itself.",
+      "showDefinition": "Show definition",
+      "hideDefinition": "Hide definition",
+      "auto": "Put “{{name}}” on by itself",
+      "autoOn": "goes on by itself",
+      "autoOff": "only by hand",
+      "missingTitle": "Deleted base labels",
+      "missingDescription": "Bring a base label back with its definition. Mail it was on before doesn't get it back.",
+      "restore": "Restore {{name}}",
+      "restored": "Base label “{{name}}” is back",
+      "fixedDefinition": "A base label's definition is fixed: labelling goes by it, by hand and by itself.",
+      "detectorBuiltIn": "Has its own detector built in.",
+      "names": {
+        "invoice": "Invoice",
+        "shipping": "Shipping",
+        "appointment": "Appointment",
+        "newsletter": "Newsletter",
+        "account": "Account & security",
+        "personal": "Personal",
+        "work": "Work & business",
+        "advertising": "Promotions"
+      }
+    },
+    "overlap": {
+      "title": "Overlaps with your labels",
+      "name": "“{{name}}” already has this name.",
+      "meaning": "Means the same as the base label “{{name}}”.",
+      "words": "Very similar words to “{{name}}”: {{words}}",
+      "hint": "You can still save it, but mail might then get the wrong one of the two."
     }
   },
   "shared": {

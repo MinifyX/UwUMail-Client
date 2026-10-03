@@ -275,9 +275,6 @@
     "compose": {
       "applied": "Popped it into your draft ✿"
     },
-    "labels": {
-      "startersTitle": "Want a few labels to start with? (｀・ω・´)"
-    },
     "local": {
       "title": "Look, a local AI on this computer! ✿"
     },
@@ -290,11 +287,16 @@
         "fairly": "pretty sure (・ω・)",
         "sure": "totally sure ✿"
       },
-      "modelVerdict": "The model thought “{{verdict}}”, but the server disagrees: sender verified, spam filter calm, you two go way back (｀・ω・´)"
+      "modelVerdict": "The model thought “{{verdict}}”, but the facts say otherwise, so it stays within what they allow (｀・ω・´)"
     }
   },
   "dates": {
     "searching": "Nyu is hunting for appointments… (・ω・)",
     "noneFound": "Nyu looked everywhere: no upcoming appointment in here ( ˘ω˘ )"
+  },
+  "labels": {
+    "overlap": {
+      "title": "Hmm, that looks familiar (・・?)"
+    }
   }
 }

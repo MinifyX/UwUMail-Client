@@ -1,4 +1,5 @@
 import type {
+  AccountDomainSignatures,
   LabelCount,
   LabelRef,
   BlockedSender,
@@ -15,6 +16,8 @@ import type {
   AssistLabelInput,
   AssistLabelLogEntry,
   AssistLabelSuggestion,
+  LabelBase,
+  LabelOverlap,
   AssistModels,
   AssistProbeInput,
   AssistProvider,
@@ -67,6 +70,7 @@ import type {
   UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
+import type { DomainSignatureChange } from "@/lib/domainSignatures";
 import type { ImageProxy } from "@/lib/remoteImages";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 
@@ -163,6 +167,13 @@ export interface Backend {
   deleteSignature(signatureId: string): Promise<void>;
   /** Stores a signature from the settings sync as it came, whether or not its address is set up here. */
   putSyncedSignature(signature: Signature): Promise<Signature>;
+  /**
+   * Signatures per domain of every account whose UwUMail server has them
+   * (`urn:uwumail:jmap:signatures`, lib/domainSignatures); unreachable ones are left out.
+   */
+  domainSignatures(): Promise<AccountDomainSignatures[]>;
+  /** Sets or removes an account's signatures on its server, all or none; returns them after the change. */
+  saveDomainSignatures(accountId: string, change: DomainSignatureChange): Promise<AccountDomainSignatures>;
   /** Accounts whose UwUMail server keeps settings for its apps; unreachable ones are left out. */
   settingsSyncAccounts(): Promise<string[]>;
   /** The settings an account's server keeps for all devices, see lib/settingsSync. */
@@ -396,6 +407,13 @@ export interface Backend {
   updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>): Promise<void>;
   /** Also takes its keyword off every mail (on the server; on this device off the mail it labelled). */
   deleteAssistLabel(scope: string, id: string): Promise<void>;
+  /** Makes a deleted base label again (the existing one when it is there). */
+  restoreBaseLabel(scope: string, base: LabelBase, auto?: boolean): Promise<AssistLabel>;
+  /**
+   * Which labels one called `name` with `description` would overlap with; `id` is the label being
+   * changed. Changes nothing; an older server without the check says none.
+   */
+  checkLabelOverlap(scope: string, name: string, description: string, id?: string): Promise<LabelOverlap[]>;
   /** Labels the model set, newest first: for these mails (message ids), or the latest. */
   assistLabelLog(scope: string, messageIds: string[] | null, limit?: number): Promise<AssistLabelLogEntry[]>;
   /** Takes labels the model set off again, by log entry. */

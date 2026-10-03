@@ -18,6 +18,7 @@ pub mod prompts;
 pub mod provider;
 pub mod server;
 pub mod signals;
+pub mod spam;
 pub mod sse;
 pub mod validate;
 
@@ -80,10 +81,19 @@ pub struct Label {
     /// Conditions that put it on new mail (docs/labels.md of UwUMail Server); `None` for none.
     #[serde(default)]
     pub rules: Option<uwumail_labels::Rules>,
-    /// A built-in detector that puts it on new mail: `invoice`, `appointment`, `newsletter` or
-    /// `shipping`.
+    /// A built-in detector that puts it on new mail: `invoice`, `appointment`, `newsletter`,
+    /// `shipping`, `account`, `personal`, `work` or `advertising`. A base label uses its own without.
     #[serde(default)]
     pub detector: Option<String>,
+    /// Which of the eight base labels it is (`uwumail_labels::Base`), `None` for the person's own.
+    #[serde(default)]
+    pub base: Option<String>,
+    /// Put on by itself at all; off, only by hand.
+    #[serde(default = "on")]
+    pub auto: bool,
+    /// The language a base label's definition was written in (`de`, `en`), for newer wordings.
+    #[serde(skip)]
+    pub base_language: Option<String>,
     /// A sender whose mail got it by hand twice gets it on new mail.
     #[serde(default = "on")]
     pub learn_senders: bool,
@@ -107,8 +117,16 @@ impl Label {
             color: None,
             rules: None,
             detector: None,
+            base: None,
+            auto: true,
+            base_language: None,
             learn_senders: true,
             classifier: true,
         }
+    }
+
+    /// Which base label it is.
+    pub fn base(&self) -> Option<uwumail_labels::Base> {
+        self.base.as_deref().and_then(uwumail_labels::Base::parse)
     }
 }

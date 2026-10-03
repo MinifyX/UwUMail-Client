@@ -1303,7 +1303,7 @@ mod tests {
     #[test]
     fn schemas_go_out_in_the_order_of_their_required_list() {
         let at = |text: &str, key: &str| text.find(&format!("\"{key}\":")).unwrap();
-        let spam = json!({ "model": "m", "response_format": { "json_schema": { "schema": super::super::prompts::spam_schema() } } });
+        let spam = json!({ "model": "m", "response_format": { "json_schema": { "schema": super::super::prompts::spam_schema(&super::super::spam::VERDICTS) } } });
         let text = ordered_json(&spam);
         assert!(
             at(&text, "reasons") < at(&text, "verdict") && at(&text, "verdict") < at(&text, "confidence"),

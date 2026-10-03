@@ -64,7 +64,7 @@ export function LabelsSettings() {
   );
 }
 
-const SOURCES = ["ai", "rule", "sender", "detector", "classifier"] as const;
+const SOURCES = ["ai", "rule", "sender", "detector", "classifier", "similar"] as const;
 
 /** The labels put on lately by themselves, newest first: who, why, and undo. */
 function LabelLog() {

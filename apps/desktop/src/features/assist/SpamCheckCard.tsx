@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import {
   BookUser,
+  ClipboardList,
   CircleCheck,
   CircleHelp,
   CircleX,
@@ -9,6 +10,7 @@ import {
   Inbox,
   KeyRound,
   Mail,
+  Quote,
   RotateCcw,
   Send,
   ShieldAlert,
@@ -19,7 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
-import type { AssistSpamCheck, AssistVerdict, Message } from "@/backend/types";
+import type { AssistSpamCheck, AssistSpamFacts, AssistVerdict, Message } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { useT } from "@/i18n";
 import { formatLongDate } from "@/lib/format";
@@ -49,9 +51,10 @@ interface SpamCheckCardProps {
 }
 
 /**
- * A second opinion on a mail: the model's verdict and reasons next to what the server itself
- * found (authentication, spam score, the sender's history), and the usual "Spam" / "Not spam"
- * to decide with. The model decides nothing.
+ * A second opinion on a mail: the facts the server weighed first (they set the range of verdicts),
+ * the model's verdict and reasons with what each rests on, what the server itself found
+ * (authentication, spam score, the sender's history), and the usual "Spam" / "Not spam" to decide
+ * with. The model decides nothing.
  */
 export function SpamCheckCard({ message, inJunk }: SpamCheckCardProps) {
   const { t, i18n } = useT();
@@ -134,6 +137,7 @@ export function SpamCheckCard({ message, inJunk }: SpamCheckCardProps) {
         </div>
       )}
       {!state.working && state.error === null && saved && <Verdict result={saved} />}
+      {!state.working && state.error === null && saved?.facts && <Facts facts={saved.facts} language={i18n.language} />}
       {!state.working && state.error === null && saved && <Signals result={saved} language={i18n.language} />}
 
       <footer className="flex flex-wrap items-center gap-2 border-t border-hairline pt-3">
@@ -169,6 +173,11 @@ function Verdict({ result }: { result: AssistSpamCheck }) {
   const Icon = look.icon;
   const share = percent(result.confidence);
   const sure = t(`assist.spam.certainty.${certainty(result.confidence)}`);
+  // Older servers send the reasons only as text.
+  const reasons =
+    result.reasonDetails.length > 0
+      ? result.reasonDetails
+      : result.reasons.map((text) => ({ text, quote: null, fact: null }));
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-center gap-3">
@@ -202,14 +211,82 @@ function Verdict({ result }: { result: AssistSpamCheck }) {
           {t("assist.spam.modelVerdict", { verdict: t(`assist.spam.verdict.${result.modelVerdict}`) })}
         </p>
       )}
-      {result.reasons.length > 0 && (
-        <ul className="selectable flex flex-col gap-1 text-[13.5px]">
-          {result.reasons.map((reason, index) => (
+      {reasons.length > 0 && (
+        <ul className="selectable flex flex-col gap-1.5 text-[13.5px]">
+          {reasons.map((reason, index) => (
             <li key={index} className="flex gap-2 leading-snug">
               <span className={clsx("mt-[7px] size-1.5 shrink-0 rounded-full", look.bar)} aria-hidden />
-              <span className="min-w-0">{reason}</span>
+              <span className="min-w-0">
+                {reason.text}
+                {reason.quote ? (
+                  <span className="mt-0.5 flex items-start gap-1 text-[12px] text-muted">
+                    <Quote className="mt-0.5 size-3 shrink-0" aria-hidden />
+                    <span className="min-w-0 break-words italic">
+                      {t("assist.spam.reasonQuote", { quote: reason.quote })}
+                    </span>
+                  </span>
+                ) : (
+                  reason.fact && (
+                    <span className="mt-0.5 block text-[12px] text-muted">{t("assist.spam.reasonFact")}</span>
+                  )
+                )}
+              </span>
             </li>
           ))}
+        </ul>
+      )}
+      {result.droppedReasons > 0 && (
+        <p className="text-[12px] text-muted">{t("assist.spam.dropped", { count: result.droppedReasons })}</p>
+      )}
+    </div>
+  );
+}
+
+/** What the server weighed before the model said a word, strongest first. */
+function Facts({ facts, language }: { facts: AssistSpamFacts; language: string }) {
+  const { t } = useT();
+  const points = new Intl.NumberFormat(language, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    signDisplay: "exceptZero",
+  });
+  const evidence = [...facts.evidence].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
+  const bad = facts.band === "leaningSpam" || facts.band === "spam";
+  const good = facts.band === "clean" || facts.band === "leaningClean";
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-bold tracking-wide text-muted uppercase">
+        <ClipboardList className="size-3.5" aria-hidden />
+        <span>{t("assist.spam.factsTitle")}</span>
+        <span
+          className={clsx(
+            "rounded-full px-2 py-px text-[11px] font-bold tracking-normal normal-case",
+            bad ? "bg-danger-tint text-danger" : good ? "bg-success-tint text-success" : "bg-warning-tint text-warning",
+          )}
+        >
+          {t(`assist.spam.band.${facts.band}`)} · {t("assist.spam.factsScore", { score: points.format(facts.score) })}
+        </span>
+      </p>
+      {evidence.length > 0 && (
+        <ul className="flex flex-col gap-1 text-[12.5px]" aria-label={t("assist.spam.factsTitle")}>
+          {evidence.map((item) => {
+            const look = TONE_LOOK[item.tone];
+            const Icon = look.icon;
+            return (
+              <li key={item.code} className="flex min-w-0 items-start gap-2 rounded-xl bg-surface px-3 py-1.5">
+                <Icon className={clsx("mt-0.5 size-3.5 shrink-0", look.className)} aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block">{t(`assist.spam.evidence.${item.code}`, { defaultValue: item.code })}</span>
+                  {item.detail && (
+                    <span className="selectable block font-mono text-[11px] break-all text-muted">{item.detail}</span>
+                  )}
+                </span>
+                <span className={clsx("shrink-0 font-mono text-[11px] font-semibold", look.className)}>
+                  {points.format(item.weight)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

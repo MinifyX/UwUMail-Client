@@ -1,9 +1,11 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { i18n } from "@/i18n";
 import { AssistError, BackendError, type Backend, type BackendErrorCode } from "./backend";
 import {
   answerOf,
   assistSettingsUpdate,
+  baseLabelCreate,
   labelCreate,
   labelUpdate,
   providerCreate,
@@ -24,6 +26,8 @@ import {
   toComposeText,
   toEvents,
   toLabelLog,
+  toLabelOverlaps,
+  OVERLAP_LIMITS,
   toSpamCheck,
   toSummaryText,
   toUsage,
@@ -31,6 +35,7 @@ import {
   toLocalModelServers,
 } from "./assistConvert";
 import type {
+  AccountDomainSignatures,
   LabelCount,
   LabelRef,
   BlockedSender,
@@ -43,6 +48,7 @@ import type {
   AssistProbeInput,
   AssistEventsResult,
   AssistLabelInput,
+  LabelBase,
   AssistProviderInput,
   AssistSettingsPatch,
   AssistStreamEvent,
@@ -89,6 +95,9 @@ import type {
 import type { ImageProxy } from "@/lib/remoteImages";
 import { cardFromInput, patchFromInput, toContactRecord, type JmapCard } from "./contacts";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
+import type { DomainSignatureChange, SignatureText } from "@/lib/domainSignatures";
+import { foreignHtml } from "@/lib/safeHtml";
+import { overviewFrom } from "./jmap/domainSignatures";
 
 /** Where the app hands out a mail's remote pictures (`uwuimg:` in Rust), spelled for this platform. */
 let picturesBase: string | null = null;
@@ -125,6 +134,17 @@ export function engineError(error: unknown): BackendError {
   }
   return new BackendError(error.code, error.message);
 }
+
+/** An account's signatures per domain as the engine hands them on, checked field by field. */
+function accountSignaturesFrom(raw: { accountId: string; overview: unknown }): AccountDomainSignatures {
+  const overview =
+    raw.overview && typeof raw.overview === "object" && !Array.isArray(raw.overview)
+      ? (raw.overview as Record<string, unknown>)
+      : {};
+  return { accountId: String(raw.accountId), overview: overviewFrom(overview) };
+}
+/** The app's language, for the names of base labels this device makes. */
+const uiLanguage = (): "de" | "en" => (i18n.language?.toLowerCase().startsWith("de") ? "de" : "en");
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -241,6 +261,23 @@ export class TauriBackend implements Backend {
 
   putSyncedSignature(signature: Signature) {
     return call<Signature>("put_synced_signature", { signature });
+  }
+
+  async domainSignatures() {
+    const found = await call<{ accountId: string; overview: unknown }[]>("domain_signatures");
+    return found.map(accountSignaturesFrom);
+  }
+
+  async saveDomainSignatures(accountId: string, change: DomainSignatureChange) {
+    const clean = (signature: SignatureText | null) =>
+      signature && { text: signature.text, html: signature.html.trim() ? foreignHtml(signature.html) : "" };
+    const mapped = (entries: Record<string, SignatureText | null> | undefined) =>
+      Object.fromEntries(Object.entries(entries ?? {}).map(([key, signature]) => [key, clean(signature)]));
+    const saved = await call<{ accountId: string; overview: unknown }>("save_domain_signatures", {
+      accountId,
+      change: { domains: mapped(change.domains), identities: mapped(change.identities) },
+    });
+    return accountSignaturesFrom(saved);
   }
 
   settingsSyncAccounts() {
@@ -691,11 +728,13 @@ export class TauriBackend implements Backend {
   }
 
   async assistLabels(scope: string) {
-    return toAssistLabels(await call<unknown>("assist_labels", { scope }));
+    return toAssistLabels(await call<unknown>("assist_labels", { scope, language: uiLanguage() }));
   }
 
   async createAssistLabel(scope: string, input: AssistLabelInput) {
-    return toAssistLabel(await call<Raw>("assist_create_label", { scope, input: labelCreate(input) }));
+    return toAssistLabel(
+      await call<Raw>("assist_create_label", { scope, input: labelCreate(input), language: uiLanguage() }),
+    );
   }
 
   async updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>) {
@@ -704,6 +743,31 @@ export class TauriBackend implements Backend {
 
   async deleteAssistLabel(scope: string, id: string) {
     await call<void>("assist_delete_label", { scope, labelId: id });
+  }
+
+  async restoreBaseLabel(scope: string, base: LabelBase, auto?: boolean) {
+    return toAssistLabel(
+      await call<Raw>("assist_create_label", {
+        scope,
+        input: baseLabelCreate(base, auto),
+        language: uiLanguage(),
+      }),
+    );
+  }
+
+  async checkLabelOverlap(scope: string, name: string, description: string, id?: string) {
+    const trimmed = name.trim();
+    if (!trimmed || [...trimmed].length > OVERLAP_LIMITS.name || [...description].length > OVERLAP_LIMITS.description) {
+      return [];
+    }
+    return toLabelOverlaps(
+      await call<unknown>("assist_check_overlap", {
+        scope,
+        name: trimmed,
+        description: description.trim(),
+        labelId: id ?? null,
+      }),
+    );
   }
 
   async assistLabelLog(scope: string, messageIds: string[] | null, limit?: number) {

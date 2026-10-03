@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { backend } from "@/backend/backend";
-import type { AssistLabel } from "@/backend/types";
+import type { AssistLabel, LabelOverlap } from "@/backend/types";
 import { labelRef, type LabelEntry } from "@/lib/labelFilter";
 import { queryKeys, useVisibleAccounts } from "@/lib/queries";
 import { useAssistScopes } from "../assist/useAssist";
@@ -60,4 +61,47 @@ export function useAccountLabels(accountId: string) {
     enabled: Boolean(scope),
     staleTime: 5 * 60_000,
   });
+}
+
+/** How long typing rests before the overlap check asks the scope. */
+export const OVERLAP_DELAY = 400;
+
+/**
+ * The labels of `scope` one called `name` with `description` would overlap with (`id` is the
+ * label being edited), asked a moment after typing rests. Nothing while it's off or the name is
+ * empty; a failed check warns of nothing.
+ */
+export function useLabelOverlap(
+  scope: string,
+  name: string,
+  description: string,
+  id: string | undefined,
+  enabled: boolean,
+): LabelOverlap[] {
+  const query = enabled && name.trim() ? JSON.stringify([scope, name.trim(), description.trim(), id ?? null]) : null;
+  const [result, setResult] = useState<{ query: string; overlaps: LabelOverlap[] } | null>(null);
+  useEffect(() => {
+    if (!query) return;
+    let live = true;
+    const [wantedScope, wantedName, wantedDescription, wantedId] = JSON.parse(query) as [
+      string,
+      string,
+      string,
+      string | null,
+    ];
+    const timer = setTimeout(() => {
+      backend()
+        .checkLabelOverlap(wantedScope, wantedName, wantedDescription, wantedId ?? undefined)
+        .then(
+          (overlaps) => live && setResult({ query, overlaps }),
+          () => live && setResult({ query, overlaps: [] }),
+        );
+    }, OVERLAP_DELAY);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
+  // A result for older text doesn't show once the text changed.
+  return query && result?.query === query ? result.overlaps : [];
 }

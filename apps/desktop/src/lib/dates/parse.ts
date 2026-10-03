@@ -104,7 +104,7 @@ const NUMERIC_WEAK = pattern(
   `${NOT_AFTER}${DAY}\\.(1[0-2]|0?[1-9])(?![\\d.]|,\\d|\\s?(?:uhr|h${RB}|%|€|eur|usd|chf|\\$|kg|km|mb|gb|cm|mm|m${RB}|l${RB}))`,
 );
 const ISO = pattern(
-  "(?<![\\d./-])((?:19|20)\\d{2})-(0[1-9]|1[0-2])-(3[01]|[12]\\d|0[1-9])(?:[T ]([01]\\d|2[0-3]):([0-5]\\d)(?::[0-5]\\d(?:\\.\\d{1,6})?)?(Z)?)?(?![\\d-])",
+  "(?<![\\p{L}\\d./_-])((?:19|20)\\d{2})-(0[1-9]|1[0-2])-(3[01]|[12]\\d|0[1-9])(?:[T ]([01]\\d|2[0-3]):([0-5]\\d)(?::[0-5]\\d(?:\\.\\d{1,6})?)?(Z)?)?(?![\\d-])",
 );
 const SLASH = pattern("(?<![\\p{L}\\d./:-])(\\d{1,2})/(\\d{1,2})/((?:19|20)\\d{2}|\\d{2})(?![\\d/]|[.,]\\d)");
 const SLASH_WEAK = pattern("(?<![\\p{L}\\d./:-])(\\d{1,2})/(\\d{1,2})(?![\\d/]|[.,]\\d|\\s?(?:%|€|\\$))");
@@ -118,16 +118,24 @@ const DAY_AFTER = pattern(
   `^${DASH}${DAY}(?:st|nd|rd|th)?(?![\\p{L}\\d]|[.:]\\d|\\s{0,2}(?:[ap]\\.?m|uhr|h${RB}))(?:\\s{0,3},?\\s{0,3}${YEAR})?`,
   "iu",
 );
+/** "zwischen Mi. 22. und Do. 23. Januar": the first day of a range written with "und". */
+const BETWEEN_DAY_BEFORE = pattern(
+  `(?<![\\p{L}])(?:zwischen|zw\\.|between)\\s{1,3}(?:${WEEKDAY_ANY}\\.?,?\\s{1,3})?${DAY}(?:\\.|st|nd|rd|th)?\\s{1,3}(?:und|and)\\s{1,3}(?:${WEEKDAY_ANY}\\.?,?\\s{1,3})?$`,
+  "iu",
+);
 /** Words that make a weak date ("am 17.10") count. */
 const CUE_BEFORE =
   /(?<![\p{L}])(am|vom|bis|ab|zum|seit|den|dem|on|from|until|till|by|due|wann|when|datum|date|termin)\s{0,2}:?\s{1,3}$/iu;
 const RANGE_BETWEEN = pattern(`^${DASH}$`, "iu");
+/** "zwischen Fr. 31. Januar und Fr. 7. Februar": "und" joins two dates only after "zwischen". */
+const RANGE_AND = /^\s{1,3}(?:und|and)\s{1,3}$/iu;
+const BETWEEN_BEFORE = /(?<![\p{L}])(?:zwischen|zw\.|between)\s{1,3}$/iu;
 
 const REL_DAY = pattern(
   `${LB}(übermorgen|uebermorgen|morgen|heute|today|tonight|tomorrow|(?:the\\s{1,3})?day\\s{1,3}after\\s{1,3}tomorrow)${RB}(?:\\s{1,3}(abend|abends|früh|morgen|vormittag|nachmittag|mittag|nacht|evening|morning|afternoon|night))?`,
 );
 const REL_WEEKDAY = pattern(
-  `${LB}(?:(nächsten|nächste|nächster|naechsten|kommenden|kommende|diesen|dieser|diese|am|next|this\\s{1,3}coming|this|coming|on)\\s{1,3})?${WEEKDAY_FULL}${RB}(?:\\s{1,3}(abend|abends|früh|morgen|vormittag|nachmittag|mittag|nacht|evening|morning|afternoon|night))?`,
+  `${LB}(?:(?:am|on)\\s{1,3}(?=nächst|naechst|kommend|next|coming))?(?:(nächsten|nächste|nächster|naechsten|kommenden|kommende|diesen|dieser|diese|am|next|this\\s{1,3}coming|this|coming|on)\\s{1,3})?${WEEKDAY_FULL}${RB}(?:\\s{1,3}(abend|abends|früh|morgen|vormittag|nachmittag|mittag|nacht|evening|morning|afternoon|night))?`,
 );
 /** Where "morgen" is the morning or a greeting, or a weekday means every week or the past. */
 const REL_BLOCKED_BEFORE =
@@ -135,13 +143,52 @@ const REL_BLOCKED_BEFORE =
 const EVENING_WORDS = /^(abend|abends|nachmittag|nacht|evening|afternoon|night|tonight)$/i;
 
 // Times, read at one position (sticky).
-const T_AMPM = /(1[0-2]|0?[1-9])(?::([0-5]\d))?\s?([ap])\.?\s?m\.?(?!\p{L})/iuy;
+const T_AMPM = /(1[0-2]|0?[1-9])(?:[:.]([0-5]\d))?\s?([ap])\.?\s?m\.?(?!\p{L})/iuy;
 const T_H24 = /([01]?\d|2[0-3])(?:[:.]([0-5]\d))?\s?(?:uhr|h)(?!\p{L})/iuy;
 const T_COLON = /([01]?\d|2[0-3]):([0-5]\d)(?!\d|:\d)/uy;
 const T_WORD = /(noon|midday|midnight|mitternacht)(?!\p{L})/iuy;
+/** "10.00" without "Uhr": a time only in a range or after "um", "von", "zwischen" … like a lone hour. */
+const T_DOTTED =
+  /([01]?\d|2[0-3])\.([0-5]\d)(?![\d.,]|\s?(?:%|€|\$|eur|usd|chf|kg|km|mb|gb|cm|mm|m(?!\p{L})|l(?!\p{L})|v(?!\p{L})|prozent))/iuy;
 const T_BARE =
   /([01]?\d|2[0-3])(?![\d:.,]|\s?(?:%|€|\$|eur|min|std|stunden|hours?|tage?|days?|jahre?|years?|personen|people|leute|x(?!\p{L})|mal|times|euro|dollar|punkte|points|stück|pcs|°|\/))/iuy;
 const T_DASH = /\s{0,3}(?:[-–—‐‑]|bis|to|until|till)\s{0,3}/iuy;
+/** After "zwischen"/"between", "und"/"and" ends the range too. */
+const T_DASH_BETWEEN = /\s{0,3}(?:[-–—‐‑]|bis|to|until|till|und|and)\s{0,3}/iuy;
+/** German hours as words, for "halb drei", "Viertel nach zehn", "elf Uhr". */
+const HOUR_WORDS: Record<string, number> = {
+  eins: 1,
+  ein: 1,
+  zwei: 2,
+  drei: 3,
+  vier: 4,
+  fünf: 5,
+  fuenf: 5,
+  sechs: 6,
+  sieben: 7,
+  acht: 8,
+  neun: 9,
+  zehn: 10,
+  elf: 11,
+  zwölf: 12,
+  zwoelf: 12,
+};
+const HOUR_WORD = "(zwölf|zwoelf|sieben|sechs|fünf|fuenf|eins|zwei|drei|vier|acht|neun|zehn|elf|ein|1[0-2]|0?[1-9])";
+/** "halb drei", "Viertel nach zehn", "Viertel vor acht", "dreiviertel acht". */
+const T_GERMAN = new RegExp(
+  `(?:(halb)|(viertel\\s{1,2}nach)|(viertel\\s{1,2}vor|dreiviertel|drei\\s?viertel))\\s{1,2}${HOUR_WORD}(?:\\s{0,2}uhr)?(?!\\p{L})`,
+  "iuy",
+);
+/** "drei Uhr", "elf Uhr". */
+const T_HOUR_WORD = new RegExp(
+  `(zwölf|zwoelf|sieben|sechs|fünf|fuenf|eins|zwei|drei|vier|acht|neun|zehn|elf|ein)\\s{1,2}uhr(?!\\p{L})`,
+  "iuy",
+);
+/** Words after a time that say which half of the day: "drei Uhr nachmittags", "8 Uhr morgens". */
+const T_DAYPART =
+  /\s{0,2}(nachmittags|abends|nachts|morgens|vormittags|früh|mittags|in\s{1,2}the\s{1,2}(?:morning|afternoon|evening)|at\s{1,2}night)(?!\p{L})/iuy;
+/** The academic quarter: "14 Uhr c.t." starts at 14:15, "s.t." on the hour. */
+const T_ACADEMIC = /\s{0,2}([cs])\.\s?t\.?(?!\p{L})/iuy;
 const T_ZONE = /\s{0,2}\(?(MESZ|MEZ|CEST|CET|UTC|GMT|BST|EST|EDT|ET|CST|CDT|CT|MST|MDT|PST|PDT|PT)\)?(?!\p{L})/uy;
 /**
  * What may stand between a date and its time: a label on the next line, the time alone on the next
@@ -149,15 +196,19 @@ const T_ZONE = /\s{0,2}\(?(MESZ|MEZ|CEST|CET|UTC|GMT|BST|EST|EDT|ET|CST|CDT|CT|M
  * that lets a bare hour count.
  */
 const TIME_AFTER =
-  /(?:[ \t]{0,3}\n\s{0,3}(uhrzeit|zeit|time|beginn|start|einlass|doors)[ \t]{0,2}:[ \t]{0,3}|[ \t]{0,3}\n[ \t]{0,3}(?=\d{1,2}(?:[:.]\d{2}|\s?(?:uhr|[ap]\.?m)))|[ \t]{0,3}[,|·•@/–—-]?[ \t]{0,3}(?:(um|ab|at|from|von|gegen|jeweils|ca\.?|circa|starting at|beginning at|beginnt um|beginn(?:t)?|starts? at|starts?|einlass(?: ab| um)?|doors(?: open)?(?: at)?)[: \t]{1,3})?)/iuy;
+  /(?:[ \t]{0,3}\n\s{0,3}(uhrzeit|zeitfenster|lieferzeitfenster|zeitraum|zeit|time|time slot|beginn|start|einlass|doors)[ \t]{0,2}:[ \t]{0,3}(?:(?:um|ab|von|zwischen|zw\.|from|at|between)[ \t]{1,3})?|[ \t]{0,3}\n[ \t]{0,3}(?=\d{1,2}(?:[:.]\d{2}|\s?(?:uhr|[ap]\.?m)))|[ \t]{0,3}\n[ \t]{0,3}(zwischen|zw\.|between|von|from|ab|um|at)[ \t]{1,3}(?=\d)|[ \t]{0,3}[,|·•@/–—-]?[ \t]{0,3}(?:(um|ab|at|from|von|gegen|jeweils|zwischen|zw\.|between|in der zeit (?:von|zwischen)|ca\.?|circa|starting at|beginning at|beginnt um|beginn(?:t)?|starts? at|starts?|einlass(?: ab| um)?|doors(?: open)?(?: at)?)[: \t]{1,3})?)/iuy;
 const TIME_BEFORE_GAP = /^\s{0,3},?\s{0,3}(?:(?:am|on|den|dem|,)\s{1,3}){0,2}$/iu;
-const BARE_OK_BEFORE = /(?<![\p{L}])(um|at|ab|gegen|von|from|ca\.?|circa)\s{1,3}$/iu;
+const BARE_OK_BEFORE = /(?<![\p{L}])(um|at|ab|gegen|von|from|zwischen|zw\.|between|ca\.?|circa)\s{1,3}$/iu;
+/** Right before a time: "zwischen 10 und 12". */
+const BETWEEN_AT = /(?<![\p{L}])(?:zwischen|zw\.|between)\s{1,3}$/iu;
 
 interface ClockHit {
   clock: Clock;
   end: number;
   meridiem: "a" | "p" | null;
   bare: boolean;
+  /** Said in words ("halb drei"): the hour may mean the afternoon. */
+  spoken?: boolean;
 }
 
 function exec(re: RegExp, text: string, at: number): RegExpExecArray | null {
@@ -186,12 +237,40 @@ function clockAt(text: string, at: number, allowBare: boolean): ClockHit | null 
       bare: false,
     };
   }
+  match = exec(T_GERMAN, text, at);
+  if (match) {
+    const named = HOUR_WORDS[match[4]!.toLowerCase()] ?? Number(match[4]);
+    // "halb drei" is half past two; without "morgens" an afternoon, as appointments mostly are.
+    let hour = match[1] || match[3] ? named - 1 : named;
+    if (hour === 0) hour = 12;
+    const min = match[1] ? 30 : match[2] ? 15 : 45;
+    return { clock: { h: hour, min }, end: at + match[0].length, meridiem: null, bare: false, spoken: true };
+  }
+  match = exec(T_HOUR_WORD, text, at);
+  if (match) {
+    return {
+      clock: { h: HOUR_WORDS[match[1]!.toLowerCase()]!, min: 0 },
+      end: at + match[0].length,
+      meridiem: null,
+      bare: false,
+      spoken: true,
+    };
+  }
   match = exec(T_WORD, text, at);
   if (match) {
     const midnight = /^(midnight|mitternacht)$/i.test(match[1]!);
     return { clock: { h: midnight ? 0 : 12, min: 0 }, end: at + match[0].length, meridiem: null, bare: false };
   }
   if (!allowBare) return null;
+  match = exec(T_DOTTED, text, at);
+  if (match) {
+    return {
+      clock: { h: Number(match[1]), min: Number(match[2]) },
+      end: at + match[0].length,
+      meridiem: null,
+      bare: true,
+    };
+  }
   match = exec(T_BARE, text, at);
   if (match) return { clock: { h: Number(match[1]), min: 0 }, end: at + match[0].length, meridiem: null, bare: true };
   return null;
@@ -207,20 +286,68 @@ export interface TimeRange {
   bare: boolean;
 }
 
-/** "19:30", "14–16 Uhr", "3-5pm", "von 14 bis 16 Uhr" (from the number on), with a zone. */
+/** "nachmittags", "abends" … after a time: where it falls in the day. Null when none follows. */
+function daypartAt(text: string, at: number): { length: number; later: boolean | null } | null {
+  const match = exec(T_DAYPART, text, at);
+  if (!match) return null;
+  const word = match[1]!.toLowerCase().replace(/\s+/g, " ");
+  const later = /^(nachmittags|abends|nachts|in the afternoon|in the evening|at night)$/.test(word)
+    ? true
+    : /^(morgens|vormittags|früh|in the morning)$/.test(word)
+      ? false
+      : null;
+  return { length: match[0].length, later };
+}
+
+function toAfternoon(clock: Clock): Clock {
+  return clock.h < 12 ? { h: clock.h + 12, min: clock.min } : clock;
+}
+
+/**
+ * "19:30", "14–16 Uhr", "3-5pm", "von 14 bis 16 Uhr" (from the number on), "zwischen 10 und 12",
+ * "halb drei", "14 Uhr c.t.", with a zone.
+ */
 export function timeRangeAt(text: string, at: number, bareOk: boolean): TimeRange | null {
+  const between = BETWEEN_AT.test(text.slice(Math.max(0, at - 12), at));
   const first = clockAt(text, at, true);
   if (!first) return null;
   let end = first.end;
   let second: ClockHit | null = null;
-  const dash = exec(T_DASH, text, end);
-  if (dash && dash[0].length > 0) second = clockAt(text, end + dash[0].length, false);
+  const dash = exec(between ? T_DASH_BETWEEN : T_DASH, text, end);
+  if (dash && dash[0].length > 0) {
+    // "von 10 bis 12", "zwischen 10 und 12": a second lone number counts once the first was asked for.
+    second = clockAt(text, end + dash[0].length, !first.bare || bareOk || between);
+    // "10 bis 12 Minuten" is no time at all.
+    if (second && first.bare && second.bare && !(bareOk || between)) second = null;
+  }
   if (second) end = second.end;
   if (first.bare && !second && !bareOk) return null;
-  const start = { ...first.clock };
+  let start = { ...first.clock };
+  let last = second ? { ...second.clock } : null;
   if (second && first.meridiem === null && second.meridiem === "p" && start.h < 12) {
     // "3-5pm", "11-1pm": the first end takes the afternoon when it still comes first.
     if (start.h + 12 <= second.clock.h) start.h += 12;
+  }
+  const academic = exec(T_ACADEMIC, text, end);
+  if (academic) {
+    if (academic[1]!.toLowerCase() === "c") {
+      const minutes = start.h * 60 + start.min + 15;
+      start = { h: Math.floor(minutes / 60) % 24, min: minutes % 60 };
+    }
+    end += academic[0].length;
+  }
+  const daypart = daypartAt(text, end);
+  if (daypart) end += daypart.length;
+  const spoken = first.spoken || second?.spoken;
+  if (daypart?.later === true && first.meridiem === null) {
+    // "um 7 Uhr abends", "11 Uhr nachts" (but "2 Uhr nachts" stays at night).
+    const night = /nacht|night/i.test(text.slice(end - daypart.length, end));
+    if (!(night && start.h < 5)) start = toAfternoon(start);
+    if (last && second?.meridiem === null && last.h < 12 && last.h + 12 > start.h) last = toAfternoon(last);
+  } else if (spoken && daypart?.later !== false && first.meridiem === null && start.h >= 1 && start.h <= 7) {
+    // "halb drei", "Viertel vor acht": spoken hours up to seven are the afternoon or evening.
+    start = toAfternoon(start);
+    if (last && last.h < 12 && last.h + 12 > start.h) last = toAfternoon(last);
   }
   let timeZone: string | null = null;
   const zone = exec(T_ZONE, text, end);
@@ -228,7 +355,7 @@ export function timeRangeAt(text: string, at: number, bareOk: boolean): TimeRang
     timeZone = ZONES[zone[1]!] ?? null;
     end += zone[0].length;
   }
-  return { from: at, to: end, start, end: second?.clock ?? null, timeZone, bare: first.bare && !second };
+  return { from: at, to: end, start, end: last, timeZone, bare: first.bare && !second };
 }
 
 function isTimeStart(text: string, index: number): boolean {
@@ -373,8 +500,28 @@ function extend(text: string, exprs: Expr[]) {
     const expr = exprs[index]!;
     const previousEnd = index > 0 ? exprs[index - 1]!.to : 0;
     if (expr.form === "dayFirst" || expr.form === "numeric") {
+      const wide = text.slice(Math.max(previousEnd, expr.from - 44), expr.from);
+      const between = BETWEEN_DAY_BEFORE.exec(wide);
       const before = text.slice(Math.max(previousEnd, expr.from - 16), expr.from);
-      const match = DAY_BEFORE.exec(before);
+      const match = between ? null : DAY_BEFORE.exec(before);
+      if (between) {
+        const day = Number(between[2]);
+        let { y, m } = expr.start;
+        if (day > expr.start.d) {
+          m -= 1;
+          if (m === 0) {
+            m = 12;
+            if (y !== null) y -= 1;
+          }
+        }
+        if (day !== expr.start.d) {
+          expr.end = expr.start;
+          expr.start = { y, m, d: day };
+          expr.from -= wide.length - between.index;
+          expr.supported = true;
+          continue;
+        }
+      }
       // The German way ("6.–9.10.") needs its dot; "6–9 October" goes without.
       if (match && (expr.form === "dayFirst" || match[2] === ".")) {
         const day = Number(match[1]);
@@ -428,12 +575,26 @@ function attachTimes(text: string, exprs: Expr[], times: TimeRange[]) {
   const free = times.filter((time) => !exprs.some((expr) => time.from < expr.to && time.to > expr.from));
   for (let index = 0; index < exprs.length; index++) {
     const expr = exprs[index]!;
-    if (expr.startTime) continue;
     const limit = exprs[index + 1]?.from ?? text.length;
+    if (expr.startTime) {
+      // An ISO date brings its own start: "2026-10-03 10:00–12:00", "2026-09-29 07:14 UTC".
+      const tail = exec(T_DASH, text, expr.to);
+      const second = tail && tail[0].length > 0 ? clockAt(text, expr.to + tail[0].length, false) : null;
+      if (second && second.end <= limit) {
+        expr.endTime = second.clock;
+        expr.to = second.end;
+      }
+      const zone = exec(T_ZONE, text, expr.to);
+      if (zone && expr.to + zone[0].length <= limit) {
+        expr.timeZone = ZONES[zone[1]!] ?? expr.timeZone;
+        expr.to += zone[0].length;
+      }
+      continue;
+    }
     const gap = exec(TIME_AFTER, text, expr.to);
     const at = expr.to + (gap?.[0].length ?? 0);
     if (at < limit) {
-      const bareOk = !!gap?.[1] || !!gap?.[2];
+      const bareOk = !!gap?.[1] || !!gap?.[2] || !!gap?.[3];
       const time =
         free.find((candidate) => candidate.from === at && !used.has(candidate)) ?? timeRangeAt(text, at, bareOk);
       if (time && time.to <= limit) {
@@ -451,7 +612,9 @@ function attachTimes(text: string, exprs: Expr[], times: TimeRange[]) {
       used.add(before);
       setTime(expr, before);
       // "um 19 Uhr am Freitag": the whole phrase is the hit.
-      const keyword = /(?<![\p{L}])(um|at|ab|gegen|von|from)\s{1,3}$/iu.exec(text.slice(previousEnd, before.from));
+      const keyword = /(?<![\p{L}])(um|at|ab|gegen|von|from|zwischen|zw\.|between)\s{1,3}$/iu.exec(
+        text.slice(previousEnd, before.from),
+      );
       expr.from = keyword ? before.from - (text.slice(previousEnd, before.from).length - keyword.index) : before.from;
     }
   }
@@ -480,11 +643,15 @@ function mergeRanges(text: string, exprs: Expr[]): Expr[] {
       !expr.end &&
       last.form !== "relative" &&
       expr.form !== "relative" &&
-      RANGE_BETWEEN.test(text.slice(last.to, expr.from))
+      (RANGE_BETWEEN.test(text.slice(last.to, expr.from)) ||
+        (RANGE_AND.test(text.slice(last.to, expr.from)) &&
+          BETWEEN_BEFORE.test(text.slice(Math.max(0, last.from - 12), last.from))))
     ) {
       last.end = expr.start;
       last.to = expr.to;
       last.supported ||= expr.supported;
+      // "Fri, Aug 28 7:00 PM – Sat, Aug 29 2:00 AM CEST": the zone at the end counts for both.
+      last.timeZone ??= expr.timeZone;
       if (last.startTime && expr.startTime) last.endTime = expr.startTime;
       else if (!last.startTime && expr.startTime) {
         last.startTime = expr.startTime;
@@ -529,7 +696,8 @@ function relatives(text: string, exprs: Expr[], reference: DateKey): Expr[] {
     const next = /^(nächste|naechste|kommende|next|coming|this coming)/.test(modifier);
     const expr = relative(from, to, "weekday", reference, EVENING_WORDS.test(match[3] ?? ""));
     expr.weekday = target;
-    expr.supported = modifier !== "";
+    // "on Monday" alone is mostly news ("Apple said on Monday"); with a time it's a plan.
+    expr.supported = modifier !== "" && modifier !== "on";
     // "this Friday" on a Friday is today; "am Freitag" on a Friday usually the next one, unless
     // a time says otherwise (decided once the times are attached).
     if (offset === 0 && next) offset = 7;

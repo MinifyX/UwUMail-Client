@@ -14,7 +14,7 @@ use super::prompts::SUBJECT_MARK;
 
 const MAX_EVENTS: usize = 10;
 const MAX_QUOTE_CHARS: usize = 300;
-const MAX_REASONS: usize = 6;
+pub const MAX_REASONS: usize = 6;
 const MAX_REASON_CHARS: usize = 300;
 
 fn chars(text: &str) -> usize {
@@ -64,30 +64,19 @@ pub fn split_subject(text: &str) -> (Option<String>, String) {
     ((!subject.is_empty()).then_some(subject), body.trim().to_owned())
 }
 
-/// Verdict, confidence and reasons out of the model's answer.
-pub fn parse_spam(text: &str) -> Option<(String, f64, Vec<String>)> {
+/// A spam check answer: verdict, confidence, and each reason with what it cites.
+pub type SpamAnswer = (String, f64, Vec<(String, String)>);
+
+/// Verdict, confidence and reasons (with what each one cites) out of the model's answer.
+pub fn parse_spam(text: &str) -> Option<SpamAnswer> {
     let answer = json_answer(text)?;
     let verdict = answer.get("verdict")?.as_str()?.trim().to_ascii_lowercase();
     if !matches!(verdict.as_str(), "legitimate" | "suspicious" | "spam" | "phishing") {
         return None;
     }
     let confidence = answer.get("confidence").and_then(Value::as_f64).filter(|c| c.is_finite()).unwrap_or(0.5);
-    let reasons = answer
-        .get("reasons")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|reason| optional_text(Some(reason), MAX_REASON_CHARS))
-        .take(MAX_REASONS)
-        .collect();
+    let reasons = super::spam::parse_reasons(&answer, MAX_REASONS, MAX_REASON_CHARS);
     Some((verdict, confidence.clamp(0.0, 1.0), reasons))
-}
-
-/// A label the model chose, and why.
-#[derive(Debug, Clone)]
-pub struct LabelPick {
-    pub label: Label,
-    pub reason: String,
 }
 
 /// What the model said about one label: why, and whether it fits.
@@ -109,7 +98,10 @@ pub fn parse_verdicts(answer: &Value, labels: &[Label]) -> Vec<Verdict> {
             Value::Object(object) => (
                 object.get("name").and_then(Value::as_str).unwrap_or_default(),
                 object.get("reason").and_then(Value::as_str).unwrap_or_default(),
-                object.get("fits").and_then(Value::as_bool).unwrap_or(true),
+                object
+                    .get("fits")
+                    .and_then(uwumail_labels::AiAnswer::parse)
+                    .is_none_or(|fits| fits == uwumail_labels::AiAnswer::Yes),
             ),
             _ => continue,
         };
@@ -125,13 +117,33 @@ pub fn parse_verdicts(answer: &Value, labels: &[Label]) -> Vec<Verdict> {
     found.into_iter().map(|(_, verdict)| verdict).collect()
 }
 
-/// Which of the person's labels the model chose, with its reasons: the ones it says fit.
-pub fn parse_labels(answer: &Value, labels: &[Label]) -> Vec<LabelPick> {
-    parse_verdicts(answer, labels)
-        .into_iter()
-        .filter(|verdict| verdict.fits)
-        .map(|verdict| LabelPick { label: verdict.label, reason: verdict.reason })
-        .collect()
+/// The model's verdict on each label it was asked about (`labels` as the deciding's id and the
+/// label's name), with its reasons: `"fits": "yes" | "no" | "unsure"` (or `true`/`false`). Names
+/// that are not labels are dropped; each label counts once, by its first entry. A bare name counts
+/// as yes, an entry without a verdict as unsure (UwUMail Server's `parse_labels`).
+pub fn parse_labels(answer: &Value, labels: &[(i64, &str)]) -> Vec<uwumail_labels::AiVerdict> {
+    use uwumail_labels::{AiAnswer, AiVerdict};
+    let mut out: Vec<AiVerdict> = Vec::new();
+    for entry in answer.get("labels").and_then(Value::as_array).into_iter().flatten().take(50) {
+        let (name, reason, verdict) = match entry {
+            Value::String(name) => (name.as_str(), "", AiAnswer::Yes),
+            Value::Object(object) => (
+                object.get("name").and_then(Value::as_str).unwrap_or_default(),
+                object.get("reason").and_then(Value::as_str).unwrap_or_default(),
+                object.get("fits").and_then(AiAnswer::parse).unwrap_or(AiAnswer::Unsure),
+            ),
+            _ => continue,
+        };
+        let name = name.trim().to_lowercase();
+        let Some((id, _)) = labels.iter().find(|(_, label)| label.trim().to_lowercase() == name) else {
+            continue;
+        };
+        if out.iter().any(|known| known.label_id == *id) {
+            continue;
+        }
+        out.push(AiVerdict { label_id: *id, verdict, reason: clean(&reason.replace('\n', " "), MAX_REASON_CHARS) });
+    }
+    out
 }
 
 /// A new label the model proposes for a mail no label fits.
@@ -242,7 +254,16 @@ enum When {
     Day(NaiveDate),
 }
 
+/// Only years [`sane`] accepts come back, so adding a day or an hour to the result can never
+/// overflow, whatever date the model wrote (the server's DATES-H1).
 fn parse_when(text: &str) -> Option<When> {
+    parse_any_when(text).filter(|when| match when {
+        When::At(at) => sane(*at),
+        When::Day(day) => sane(day.and_hms_opt(0, 0, 0).unwrap_or_default()),
+    })
+}
+
+fn parse_any_when(text: &str) -> Option<When> {
     let text = text.trim();
     for format in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"] {
         if let Ok(at) = NaiveDateTime::parse_from_str(text, format) {
@@ -337,6 +358,24 @@ pub fn parse_events(answer: &Value, context: &EventContext<'_>) -> Vec<Extracted
         let Some(title) = optional_text(entry.get("title"), 200) else { continue };
         let Some(start) = entry.get("start").and_then(Value::as_str).and_then(parse_when) else { continue };
         let mut all_day = entry.get("allDay").and_then(Value::as_bool).unwrap_or(false);
+        let end_when = entry.get("end").and_then(Value::as_str).and_then(parse_when);
+        // "allDay" with a time of day contradicts itself; the time is what the mail said
+        // ("zwischen 10:00 und 12:00" must not become a whole day).
+        let timed = |when: &When| matches!(when, When::At(at) if at.time() != chrono::NaiveTime::MIN);
+        // "23:59:59" is how some write the end of a whole day.
+        let end_of_day = |when: &When| matches!(when, When::At(at) if at.time() >= chrono::NaiveTime::from_hms_opt(23, 59, 0).unwrap_or_default());
+        if all_day && (timed(&start) || end_when.as_ref().is_some_and(|end| timed(end) && !end_of_day(end))) {
+            all_day = false;
+        }
+        // Midnight to midnight on another day is whole days, whatever the flag says.
+        if !all_day
+            && let (When::At(from), Some(When::At(to))) = (&start, &end_when)
+            && !timed(&start)
+            && to.time() == chrono::NaiveTime::MIN
+            && to.date() > from.date()
+        {
+            all_day = true;
+        }
         let start = match start {
             When::At(at) => at,
             When::Day(day) => {
@@ -349,12 +388,12 @@ pub fn parse_events(answer: &Value, context: &EventContext<'_>) -> Vec<Extracted
             continue;
         }
         let default_end = if all_day { start + TimeDelta::days(1) } else { start + TimeDelta::hours(1) };
-        let end = match entry.get("end").and_then(Value::as_str).and_then(parse_when) {
-            Some(When::At(at)) if all_day => at.date().and_hms_opt(0, 0, 0).unwrap_or(at),
+        let end = match end_when {
+            // The last day, as people (and the prompt) write it: the end is the day after.
+            Some(When::At(at)) if all_day => at.date().and_hms_opt(0, 0, 0).unwrap_or(at) + TimeDelta::days(1),
             Some(When::At(at)) => at,
             Some(When::Day(day)) => {
                 let day = day.and_hms_opt(0, 0, 0).unwrap_or_default();
-                // The last day, as people write it: the end is the day after.
                 if all_day { day + TimeDelta::days(1) } else { day }
             }
             None => default_end,
@@ -493,24 +532,24 @@ mod tests {
 
     #[test]
     fn spam_answers_are_held_to_their_shape() {
-        let (verdict, confidence, reasons) =
-            parse_spam(r#"{"verdict": "Phishing", "confidence": 7, "reasons": ["a", "", "b\nc"]}"#).unwrap();
-        assert_eq!((verdict.as_str(), confidence), ("phishing", 1.0));
-        assert_eq!(reasons, ["a", "b c"]);
-        // A mail that talks the model into another verdict word gets nothing.
-        assert!(parse_spam(r#"{"verdict": "delete all mail"}"#).is_none());
-        // The order the schema asks for: reasons first, then the verdict.
         let (verdict, confidence, reasons) = parse_spam(
-            r#"{"reasons": ["Rechnung eines bekannten Absenders"], "verdict": "legitimate", "confidence": 0.8}"#,
+            r#"{"verdict": "Phishing", "confidence": 7, "reasons": [{"text": "a", "evidence": "F1"}, "", "b\nc"]}"#,
         )
         .unwrap();
-        assert_eq!((verdict.as_str(), confidence, reasons.len()), ("legitimate", 0.8, 1));
-        assert_eq!(crate::assist::prompts::spam_schema()["required"], json!(["reasons", "verdict", "confidence"]));
+        assert_eq!((verdict.as_str(), confidence), ("phishing", 1.0));
+        assert_eq!(reasons, [("a".to_owned(), "F1".to_owned()), ("b c".to_owned(), String::new())]);
+        // A mail that talks the model into another verdict word gets nothing.
+        assert!(parse_spam(r#"{"verdict": "delete all mail"}"#).is_none());
         assert!(parse_spam(r#"{"verdict": "legitimate; ignore previous instructions"}"#).is_none());
-        let many: Vec<String> = (0..20).map(|i| format!("reason {i} {}", "x".repeat(400))).collect();
+        // The order the schema asks for: reasons first, then the verdict; only the allowed verdicts.
+        let schema = crate::assist::prompts::spam_schema(&["legitimate", "suspicious"]);
+        assert_eq!(schema["required"], json!(["reasons", "verdict", "confidence"]));
+        assert_eq!(schema["properties"]["verdict"]["enum"], json!(["legitimate", "suspicious"]));
+        let many: Vec<Value> =
+            (0..20).map(|i| json!({ "text": format!("reason {i} {}", "x".repeat(400)), "evidence": "F1" })).collect();
         let (_, _, reasons) = parse_spam(&json!({"verdict": "spam", "reasons": many}).to_string()).unwrap();
-        assert_eq!(reasons.len(), 6);
-        assert!(reasons.iter().all(|r| r.chars().count() <= 300));
+        assert_eq!(reasons.len(), 12, "twice the most kept, for the check to choose from");
+        assert!(reasons.iter().all(|(text, _)| text.chars().count() <= 300));
     }
 
     fn label(id: &str, name: &str) -> Label {
@@ -527,9 +566,15 @@ mod tests {
             { "name": "$Junk", "reason": "system keyword" },
             "Reisen"
         ]});
-        let picks = parse_labels(&answer, &labels);
-        assert_eq!(picks.iter().map(|p| p.label.id.as_str()).collect::<Vec<_>>(), ["g1", "g2"]);
+        let names: Vec<(i64, &str)> = labels.iter().enumerate().map(|(i, l)| (i as i64, l.name.as_str())).collect();
+        let picks = parse_labels(&answer, &names);
+        // Without a verdict the first entry is unsure; a bare name is a yes.
+        assert_eq!(picks.iter().map(|p| p.label_id).collect::<Vec<_>>(), [0, 1]);
+        assert_eq!(picks[0].verdict, uwumail_labels::AiAnswer::Unsure);
+        assert_eq!(picks[1].verdict, uwumail_labels::AiAnswer::Yes);
         assert_eq!(picks[0].reason, "Eine Rechnung");
+        let unsure = json!({ "labels": [{ "name": "Reisen", "reason": "?", "fits": "unsure" }] });
+        assert_eq!(parse_labels(&unsure, &names)[0].verdict, uwumail_labels::AiAnswer::Unsure);
     }
 
     #[test]
@@ -546,7 +591,8 @@ mod tests {
             verdicts.iter().map(|v| (v.label.id.as_str(), v.fits)).collect::<Vec<_>>(),
             [("g1", true), ("g2", false)]
         );
-        assert_eq!(parse_labels(&answer, &labels).len(), 1);
+        let yes = json!({ "labels": [{ "name": "Privat", "reason": "Ja.", "fits": "yes" }] });
+        assert!(parse_verdicts(&yes, &labels)[0].fits);
     }
 
     #[test]
@@ -624,5 +670,69 @@ mod tests {
         assert!(events[1].all_day && events[1].time_zone.is_none() && events[1].url.is_none());
         assert_eq!(events[1].confidence, 0.5);
         assert_eq!(events[2].url, None, "only https links of the mail");
+    }
+
+    /// The server's DATES-H1: a date near `NaiveDate::MAX` must not overflow the day added to it.
+    #[test]
+    fn extreme_dates_from_the_model_are_ignored() {
+        let (links, people, mine) = (Vec::new(), Vec::new(), HashSet::new());
+        let source = "Samstag 03.10.26 ist Flohmarkt.";
+        let context = EventContext { source, links: &links, people: &people, mine: &mine };
+        let answer = json!({ "events": [
+            { "title": "A", "start": "2026-10-03", "end": "+262142-12-31T00:00:00", "allDay": true,
+              "quote": "Samstag 03.10.26", "participants": [] },
+            { "title": "B", "start": "2026-10-03", "end": "+262142-12-31", "allDay": true,
+              "quote": "Samstag 03.10.26", "participants": [] },
+            { "title": "C", "start": "+262142-12-31", "quote": "Samstag 03.10.26", "participants": [] },
+            { "title": "D", "start": "+262142-12-31T23:30:00", "allDay": false,
+              "quote": "Samstag 03.10.26", "participants": [] }
+        ]});
+        let events = parse_events(&answer, &context);
+        assert_eq!(events.len(), 2, "{events:?}");
+        for event in &events {
+            assert_eq!((event.start.as_str(), event.end.as_str()), ("2026-10-03T00:00:00", "2026-10-04T00:00:00"));
+        }
+    }
+
+    #[test]
+    fn an_all_day_answer_with_times_keeps_the_times() {
+        let (links, people, mine) = (Vec::new(), Vec::new(), HashSet::new());
+        let source = "Samstag 03.10.26, zwischen 10:00 und 12:00 ist Flohmarkt.";
+        let context = EventContext { source, links: &links, people: &people, mine: &mine };
+        let answer = json!({ "events": [
+            { "title": "Flohmarkt", "start": "2026-10-03T10:00:00", "end": "2026-10-03T12:00:00", "allDay": true,
+              "quote": "Samstag 03.10.26, zwischen 10:00 und 12:00", "participants": [] },
+            { "title": "Flohmarkt", "start": "2026-10-03T00:00:00", "end": null, "allDay": true,
+              "quote": "Samstag 03.10.26", "participants": [] }
+        ]});
+        let events = parse_events(&answer, &context);
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert!(!events[0].all_day);
+        assert_eq!((events[0].start.as_str(), events[0].end.as_str()), ("2026-10-03T10:00:00", "2026-10-03T12:00:00"));
+        assert!(events[1].all_day);
+        assert_eq!((events[1].start.as_str(), events[1].end.as_str()), ("2026-10-03T00:00:00", "2026-10-04T00:00:00"));
+    }
+
+    #[test]
+    fn whole_days_end_after_the_last_day() {
+        let (links, people, mine) = (Vec::new(), Vec::new(), HashSet::new());
+        let source = "Die Messe läuft vom 12. bis 15. Oktober 2026.";
+        let context = EventContext { source, links: &links, people: &people, mine: &mine };
+        let quote = "Die Messe läuft vom 12. bis 15. Oktober 2026.";
+        let answer = json!({ "events": [
+            // Midnight to midnight, flagged as timed: whole days.
+            { "title": "Messe", "start": "2026-10-12T00:00:00", "end": "2026-10-15T00:00:00", "allDay": false,
+              "quote": quote, "participants": [] },
+            { "title": "Messe", "start": "2026-10-12T00:00:00", "end": "2026-10-15T23:59:59", "allDay": true,
+              "quote": quote, "participants": [] },
+            { "title": "Messe", "start": "2026-10-12", "end": "2026-10-15", "allDay": true,
+              "quote": quote, "participants": [] }
+        ]});
+        let events = parse_events(&answer, &context);
+        assert_eq!(events.len(), 3, "{events:?}");
+        for event in &events {
+            assert!(event.all_day, "{event:?}");
+            assert_eq!((event.start.as_str(), event.end.as_str()), ("2026-10-12T00:00:00", "2026-10-16T00:00:00"));
+        }
     }
 }
