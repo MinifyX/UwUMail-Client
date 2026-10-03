@@ -60,7 +60,8 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
     // Every part is read, however many DKIM results stand before SPF and DMARC; only what is kept
     // of the DKIM ones is capped (C4-2, the server's R3-L1).
     let (mut first_dkim, mut dkim_passed) = (None, false);
-    for part in auth_results_parts(value).skip(1) {
+    let mut parts = auth_results_parts(value);
+    for part in parts.by_ref().skip(1) {
         let Some((method, result)) = part.first().and_then(|first| first.split_once('=')) else { continue };
         let result: String =
             result.chars().filter(|c| c.is_ascii_alphanumeric()).take(20).collect::<String>().to_ascii_lowercase();
@@ -105,6 +106,12 @@ pub fn authentication(headers: &[(String, String)], from_email: &str) -> Authent
         }
     }
     signals.dkim = if dkim_passed { Some("pass".into()) } else { first_dkim };
+    // Something was left out for a limit: the DMARC result may be what went. Then only an explicit
+    // pass counts, and no DKIM or SPF pass can stand in for a missing DMARC (C5-3).
+    if parts.dropped && signals.dmarc.as_deref() != Some("pass") {
+        signals.dkim_pass_domains.clear();
+        signals.spf_pass_domain = None;
+    }
     signals
 }
 
@@ -115,7 +122,9 @@ const MAX_DKIM_PASS_DOMAINS: usize = 16;
 /// last `@` of `smtp.mailfrom=user@envelope.example` or `header.i=@signer.example`.
 fn domain_part(value: &str) -> Option<String> {
     let domain = value.rsplit('@').next().unwrap_or(value).trim().trim_end_matches('.').to_ascii_lowercase();
-    (!domain.is_empty() && domain.len() <= 253 && domain.contains('.')).then_some(domain)
+    // A domain with a space of any kind in it is no domain (C5-2, defence in depth).
+    (!domain.is_empty() && domain.len() <= 253 && domain.contains('.') && !domain.chars().any(char::is_whitespace))
+        .then_some(domain)
 }
 
 /// UwUMail Server's `uwumail_smtp::headers` reader of `Authentication-Results` (R3-L1/R3-L2 there,
@@ -148,13 +157,16 @@ pub(crate) fn authserv_id(value: &str) -> Option<String> {
 /// Callers hand in the whole value, never a cut one. The assistant reads our own results with it,
 /// and the strip of forged ones its authserv-id ([`authserv_id`]).
 pub(crate) fn auth_results_parts(value: &str) -> AuthResultsParts<'_> {
-    AuthResultsParts { chars: value.chars(), done: false }
+    AuthResultsParts { chars: value.chars(), done: false, dropped: false }
 }
 
 /// See [`auth_results_parts`].
 pub(crate) struct AuthResultsParts<'a> {
     chars: std::str::Chars<'a>,
     done: bool,
+    /// A word or a part was left out for a limit (this device's addition, C5-3): what was read
+    /// may then lack the result that mattered.
+    pub(crate) dropped: bool,
 }
 
 impl Iterator for AuthResultsParts<'_> {
@@ -170,6 +182,7 @@ impl Iterator for AuthResultsParts<'_> {
         let mut too_long = false;
         let mut quoted = false;
         let mut depth = 0usize;
+        let mut lost = false;
         let end_word = |part: &mut Vec<String>, overflow: &mut bool, word: &mut String, too_long: &mut bool| {
             if !word.is_empty() && !*too_long {
                 if part.len() < MAX_AUTH_PART_WORDS {
@@ -195,7 +208,11 @@ impl Iterator for AuthResultsParts<'_> {
         loop {
             let Some(c) = self.chars.next() else {
                 self.done = true;
-                end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                {
+                    lost |= too_long;
+                    end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                }
+                self.dropped |= lost || overflow;
                 return Some(if overflow { Vec::new() } else { part });
             };
             if quoted {
@@ -221,14 +238,27 @@ impl Iterator for AuthResultsParts<'_> {
                 match c {
                     '"' => quoted = true,
                     '(' => {
-                        end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                        {
+                            lost |= too_long;
+                            end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                        }
                         depth = 1;
                     }
                     ';' => {
-                        end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                        {
+                            lost |= too_long;
+                            end_word(&mut part, &mut overflow, &mut word, &mut too_long);
+                        }
+                        self.dropped |= lost || overflow;
                         return Some(if overflow { Vec::new() } else { part });
                     }
-                    c if c.is_whitespace() => end_word(&mut part, &mut overflow, &mut word, &mut too_long),
+                    // Only the whitespace of RFC 8601's CFWS: a DKIM `d=` may carry a no-break or other
+                    // Unicode space, and `victim.example<U+00A0>x` must stay one word, never read as
+                    // `victim.example` (C5-2, the server's R4 I-2).
+                    ' ' | '\t' | '\r' | '\n' => {
+                        lost |= too_long;
+                        end_word(&mut part, &mut overflow, &mut word, &mut too_long)
+                    }
                     c => push(&mut word, &mut too_long, c),
                 }
             }
@@ -368,7 +398,8 @@ const RESULTS_BELOW_INTAKE: &[&str] = &["google.com", "googlemail.com"];
 fn receiving_results(headers: &[(String, String)]) -> Option<&str> {
     let (boundary, host) = intake(headers)?;
     let is_results = |name: &str| name.eq_ignore_ascii_case("Authentication-Results");
-    if let Some((_, value)) = headers[..boundary].iter().find(|(name, _)| is_results(name)) {
+    // One emptied for its length (see [`whole_or_empty`]) hides no second one of the server (C5-5).
+    if let Some((_, value)) = headers[..boundary].iter().find(|(name, value)| is_results(name) && !value.is_empty()) {
         return Some(value);
     }
     let host = host?;
@@ -686,6 +717,51 @@ mod tests {
         let many: String = (0..40).map(|n| format!("dkim=pass header.d=s{}.example; ", n % 20)).collect();
         assert_eq!(read(format!("mx.example.org; {many}")).0.dkim_pass_domains.len(), 16);
         assert_eq!(authserv_id("(c) \"mx.example.org.\" ; spf=pass").as_deref(), Some("mx.example.org"));
+    }
+
+    /// C5-2: only ASCII whitespace ends a word, and a domain with any space in it is none.
+    #[test]
+    fn unicode_spaces_do_not_split_a_word() {
+        for space in ['\u{a0}', '\u{2002}', '\u{3000}'] {
+            let value = format!("mx.example.org; dkim=pass header.d=victim.example{space}x.attacker.example");
+            let parts: Vec<Vec<String>> = auth_results_parts(&value).collect();
+            assert_eq!(parts[1], ["dkim=pass".to_owned(), format!("header.d=victim.example{space}x.attacker.example")]);
+            let headers = [
+                header("Authentication-Results", &format!("{value}; dmarc=none")),
+                header("Received", "from a.example (a.example [192.0.2.1]) by mx.example.org"),
+            ];
+            assert!(authentication(&headers, "x@victim.example").dkim_pass_domains.is_empty());
+            assert!(!from_vouched(&headers, "x@victim.example"));
+        }
+        let parts: Vec<Vec<String>> =
+            auth_results_parts("mx.example.org;\tspf=pass\r\n smtp.mailfrom=a.example").collect();
+        assert_eq!(parts[1], ["spf=pass", "smtp.mailfrom=a.example"]);
+    }
+
+    /// C5-3: when the reader left something out, only an explicit DMARC pass counts.
+    #[test]
+    fn a_dropped_part_leaves_only_an_explicit_dmarc_pass() {
+        let read = |results: String| {
+            let headers = [
+                header("Authentication-Results", &results),
+                header("Received", "from a.example (a.example [192.0.2.1]) by mx.example.org"),
+            ];
+            from_vouched(&headers, "x@victim.example")
+        };
+        let crowded = format!("dmarc=fail {}", "x=y ".repeat(40));
+        assert!(!read(format!("mx.example.org; dkim=pass header.d=victim.example; {crowded}")));
+        let long = "a".repeat(1_100);
+        assert!(!read(format!("mx.example.org; dkim=pass header.d=victim.example; spf=none smtp.mailfrom={long}")));
+        assert!(read(format!("mx.example.org; dkim=pass header.d=victim.example; dmarc=pass; {crowded}")));
+        // Nothing left out: the aligned fallback still works.
+        assert!(read("mx.example.org; dkim=pass header.d=victim.example; dmarc=none".into()));
+        // An emptied first header hides no second one of the server (C5-5).
+        let headers = [
+            header("Authentication-Results", ""),
+            header("Authentication-Results", "mx.example.org; dmarc=fail"),
+            header("Received", "from a.example (a.example [192.0.2.1]) by mx.example.org"),
+        ];
+        assert_eq!(authentication(&headers, "x@victim.example").dmarc.as_deref(), Some("fail"));
     }
 
     /// C4-4: only qmail's own `(HELO name)` is skipped; a bracketed address behind a word "helo"
