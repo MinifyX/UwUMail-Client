@@ -17,7 +17,7 @@ use crate::assist::prompts::{self, ComposeRequest, Prompt, SUBJECT_MARK};
 use crate::assist::provider::{self, ProviderKind};
 use crate::assist::validate::{self, EventContext};
 use crate::assist::{Feature, Label, StreamEvent, StreamSink, discover, foreign, server, signals, spam};
-use crate::store::{LabelExample, LabelHeaders, LabelLogRecord};
+use crate::store::{LabelExample, LabelHeaders, LabelLogRecord, LabelShot};
 
 /// At most this much picture text goes along when the assistant reads a mail's appointments.
 const IMAGE_TEXT_CHARS: usize = 8_000;
@@ -396,10 +396,85 @@ impl Engine {
 
     // ----------------------------------------------------------- labels
 
-    pub async fn assist_labels(&self, scope: &str) -> Result<Value> {
+    /// A scope's labels. This device's get their base labels the first time, named in `language`
+    /// (the app's), which also names those made later in the background.
+    pub async fn assist_labels(&self, scope: &str, language: Option<&str>) -> Result<Value> {
         match self.scope_target(scope).await? {
             Target::Server(client) => server::labels(&client).await,
-            _ => self.device_labels_json().await,
+            _ => {
+                let language = self.label_language(language)?;
+                if self.device().ensure_base_labels(&language)? {
+                    self.assist_changed(None);
+                }
+                self.device_labels_json().await
+            }
+        }
+    }
+
+    /// The language base labels of this device are named in: `language` when the page names one
+    /// (and kept for later), else the last one named, else English.
+    fn label_language(&self, language: Option<&str>) -> Result<String> {
+        let store = &self.inner.store;
+        match language.map(|l| if l.to_ascii_lowercase().starts_with("de") { "de" } else { "en" }) {
+            Some(language) => {
+                if store.assist_setting(LABEL_LANGUAGE)?.as_deref() != Some(language) {
+                    store.set_assist_setting(LABEL_LANGUAGE, Some(language))?;
+                }
+                Ok(language.to_owned())
+            }
+            None => Ok(store.assist_setting(LABEL_LANGUAGE)?.unwrap_or_else(|| "en".into())),
+        }
+    }
+
+    /// Which labels of a scope one called `name` with `description` would overlap with
+    /// (`AssistLabel/checkOverlap`); `label_id` is the label being changed. Changes nothing.
+    pub async fn assist_check_overlap(
+        &self,
+        scope: &str,
+        name: &str,
+        description: &str,
+        label_id: Option<&str>,
+    ) -> Result<Value> {
+        if name.chars().count() > OVERLAP_MAX_NAME_CHARS || description.chars().count() > OVERLAP_MAX_DESCRIPTION_CHARS
+        {
+            return Err(Error::invalid("The name or description is too long."));
+        }
+        match self.scope_target(scope).await? {
+            Target::Server(client) => server::check_overlap(&client, name, description, label_id).await,
+            _ => {
+                let labels = self.device().labels()?;
+                let others: Vec<(usize, uwumail_labels::OverlapLabel<'_>)> = labels
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, label)| Some(label.id.as_str()) != label_id)
+                    .map(|(index, label)| {
+                        (
+                            index,
+                            uwumail_labels::OverlapLabel {
+                                id: index as i64,
+                                name: &label.name,
+                                description: &label.description,
+                                base: label.base(),
+                            },
+                        )
+                    })
+                    .collect();
+                let views: Vec<uwumail_labels::OverlapLabel<'_>> = others.iter().map(|(_, view)| *view).collect();
+                let found: Vec<Value> = uwumail_labels::overlaps(name, description, &views)
+                    .into_iter()
+                    .filter_map(|overlap| {
+                        let label = labels.get(usize::try_from(overlap.id).ok()?)?;
+                        Some(json!({
+                            "id": label.id,
+                            "name": label.name,
+                            "base": label.base,
+                            "kind": overlap.kind,
+                            "words": overlap.words,
+                        }))
+                    })
+                    .collect();
+                Ok(json!({ "overlaps": found }))
+            }
         }
     }
 
@@ -427,10 +502,15 @@ impl Engine {
         Ok(Value::Array(list))
     }
 
-    pub async fn assist_create_label(&self, scope: &str, input: Value) -> Result<Value> {
+    /// Creates a label, or with `{"base": …}` makes a deleted base label again (named in
+    /// `language` on this device).
+    pub async fn assist_create_label(&self, scope: &str, input: Value, language: Option<&str>) -> Result<Value> {
         let created = match self.scope_target(scope).await? {
             Target::Server(client) => server::create_label(&client, input).await?,
-            _ => label_json(&self.device().create_label(&input)?, 0, 0, 0),
+            _ => {
+                let language = self.label_language(language)?;
+                label_json(&self.device().create_label(&input, &language)?, 0, 0, 0)
+            }
         };
         self.assist_changed(None);
         Ok(created)
@@ -1345,11 +1425,15 @@ impl Engine {
     // ------------------------------------------------------------ labels
 
     /// Learns from labels of this device the person put on or took off by hand, in mailboxes this
-    /// device serves: putting one on counts the From address for it, makes the mail an example
-    /// with it and learns one ordinary inbox mail as an example without any label; taking one off
-    /// forgets the address for it and makes the mail an example without it.
+    /// device serves, as UwUMail Server does (docs/labels.md): with AI labels on, the change is kept
+    /// as a correction for the model; with labels without a model on, putting one on counts the
+    /// From address for it (when it learns senders), makes the mail an example with it and learns
+    /// one ordinary inbox mail as an example without any label (when it has a classifier); taking
+    /// one off keeps the label off that sender's mail from then on and makes the mail an example
+    /// without it.
     async fn learn_by_hand(&self, before: &[Message], changes: &HashMap<String, bool>) -> Result<()> {
-        let labels = self.device().labels()?;
+        let device = self.device();
+        let labels = device.labels()?;
         let changed: Vec<(&Label, bool)> = changes
             .iter()
             .filter_map(|(keyword, on)| {
@@ -1358,6 +1442,11 @@ impl Engine {
             })
             .collect();
         if changed.is_empty() {
+            return Ok(());
+        }
+        let shots = device.auto_labels_on().unwrap_or(false);
+        let learn = device.non_ai_labels_on().unwrap_or(true);
+        if !shots && !learn {
             return Ok(());
         }
         let mut served: HashMap<String, bool> = HashMap::new();
@@ -1372,17 +1461,34 @@ impl Engine {
             }
             let mail = self.label_mail(message)?;
             let tokens = token_hashes(&mail);
+            let store = &self.inner.store;
             for (label, on) in &changed {
                 if message.keywords.contains(&label.keyword) == *on {
                     continue;
                 }
-                let store = &self.inner.store;
-                if !mail.from.is_empty() {
+                if shots {
+                    store.keep_label_shot(
+                        &label.id,
+                        &message.id,
+                        *on,
+                        mail.from_domain(),
+                        &message.subject,
+                        &message.snippet,
+                        now,
+                    )?;
+                }
+                if !learn {
+                    continue;
+                }
+                if label.learn_senders && !mail.from.is_empty() {
                     if *on {
                         store.count_label_sender(&label.id, &mail.from)?;
                     } else {
-                        store.forget_label_sender(&label.id, &mail.from)?;
+                        store.block_label_sender(&label.id, &mail.from)?;
                     }
+                }
+                if !label.classifier {
+                    continue;
                 }
                 let newly = store.learn_label_example(
                     &message.id,
@@ -1428,7 +1534,8 @@ impl Engine {
     }
 
     /// A stored mail as labels without a model see it. Mail stored before its list headers were
-    /// kept shows what its unsubscribe link says of them.
+    /// kept shows what its unsubscribe link says of them. The sender is known when the person wrote
+    /// to them; [`LabelRun`] adds the address books.
     fn label_mail(&self, message: &Message) -> Result<uwumail_labels::Mail> {
         let LabelHeaders { mut headers, calendar, from_trusted } = self.inner.store.label_headers(&message.id)?;
         if headers.is_empty()
@@ -1460,68 +1567,223 @@ impl Engine {
         );
         // Learned senders only label mail whose From address the receiving server vouched for.
         mail.from_trusted = from_trusted;
+        mail.from_name = message
+            .from
+            .name
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .chars()
+            .take(uwumail_labels::MAX_FIELD_CHARS)
+            .collect();
+        mail.to = message
+            .to
+            .iter()
+            .chain(&message.cc)
+            .map(|address| address.email.trim())
+            .filter(|email| !email.is_empty())
+            .take(uwumail_labels::MAX_RECIPIENTS)
+            .map(|email| email.chars().take(uwumail_labels::MAX_FIELD_CHARS).collect::<String>().to_lowercase())
+            .collect();
+        if !mail.from.is_empty() {
+            let (_, _, written_to, _) = self.inner.store.sender_history(&mail.from, i64::MAX)?;
+            mail.known_sender = written_to > 0;
+        }
         Ok(mail)
     }
 
-    /// Puts this device's labels on a new mail by their rules, detectors, learned senders and
-    /// classifiers, and logs each. `examples` holds the classifier's examples once read. Returns
-    /// the label ids set.
-    async fn label_without_ai(
+    /// Puts this device's labels on one mail as UwUMail Server's label worker does (docs/labels.md,
+    /// "How a label is chosen"): the cheap ways first (the label's rules, its detector or its base
+    /// label's, learned senders, the classifier, and with a model also similar mails), then the
+    /// model (`ai`: this device's provider or the server that does its AI) only for the labels they
+    /// leave in doubt, held to the facts read from the mail, and at most a main label and a second
+    /// one; labels on the mail count against those two, none is taken off. Without a model, or
+    /// when it fails after the cheap ways were sure of something, their labels go on alone. Logs
+    /// each label set and answers their ids.
+    async fn label_message(
         &self,
         message: &Message,
         labels: &[Label],
-        examples: &mut Option<Vec<LabelExample>>,
+        run: &mut LabelRun,
+        ai: Option<&Target>,
     ) -> Result<Vec<String>> {
-        let mail = self.label_mail(message)?;
-        let rules: Vec<uwumail_labels::Label<'_>> = labels
-            .iter()
-            .enumerate()
-            .map(|(index, label)| uwumail_labels::Label {
-                id: index as i64,
-                keyword: &label.keyword,
-                rules: label.rules.as_ref(),
-                detector: label.detector.as_deref().and_then(uwumail_labels::Detector::parse),
-                learn_senders: label.learn_senders,
-                classifier: label.classifier,
-            })
-            .collect();
-        let index_of = |id: &str| labels.iter().position(|label| label.id == id).map(|index| index as i64);
+        if labels.iter().all(|label| !label.auto) {
+            return Ok(Vec::new());
+        }
+        let mut mail = self.label_mail(message)?;
+        if ai.is_some() && !mail.from.is_empty() && !mail.known_sender {
+            let people = run.people(self).await;
+            mail.known_sender = people.iter().any(|(_, email)| *email == mail.from);
+        }
+        let facts = uwumail_labels::Facts::of(&mail);
+        let views = label_views(labels);
+        let present: Vec<String> = message.keywords.iter().map(|k| k.to_lowercase()).collect();
         let mut knowledge = uwumail_labels::Knowledge::default();
         if !mail.from.is_empty() {
             for (id, count) in self.inner.store.label_senders(&mail.from)? {
-                if let Some(index) = index_of(&id) {
-                    knowledge.senders.insert(index, count);
+                if let Some(index) = labels.iter().position(|label| label.id == id) {
+                    knowledge.senders.insert(index as i64, count);
                 }
             }
         }
         let tokens = token_hashes(&mail);
-        if labels.iter().any(|label| label.classifier) {
-            if examples.is_none() {
-                *examples = Some(self.inner.store.label_examples()?);
+        let classifiers = labels.iter().any(|label| label.classifier);
+        if classifiers || ai.is_some() {
+            let examples = run.examples(self)?;
+            if classifiers {
+                knowledge.models = models(labels, examples, &tokens);
             }
-            knowledge.models = models(labels, examples.as_deref().unwrap_or_default(), &tokens);
+            if ai.is_some() {
+                knowledge.similar = similar_by_tokens(labels, examples, &message.id, &tokens);
+            }
         }
-        let decisions = uwumail_labels::decide(&rules, &mail, &message.keywords, &knowledge, &tokens);
-        if decisions.is_empty() {
+        let mut candidates = uwumail_labels::candidates(&views, &mail, &present, &knowledge, &tokens);
+        if !run.non_ai {
+            // Labels without a model switched off: what the cheap ways find is only a hint.
+            for candidate in &mut candidates {
+                candidate.confidence = candidate.confidence.min(HINT_ONLY);
+            }
+        }
+        let mut from_model = Vec::new();
+        let mut who = None;
+        if let Some(target) = ai {
+            let sure = uwumail_labels::choose(&views, &present, candidates.clone());
+            let mut asked = uwumail_labels::ask_about(&views, &present, &candidates);
+            // A label the person took off this sender's mail by hand is not asked about either.
+            if !mail.from.is_empty() {
+                asked.retain(|id| knowledge.senders.get(id).is_none_or(|count| *count >= 0));
+            }
+            if !asked.is_empty() {
+                match self.ask_labels(message, labels, &asked, &facts, &candidates, run, target).await {
+                    Ok((verdicts, used)) => {
+                        from_model = uwumail_labels::ai_candidates(&views, &facts, &asked, &verdicts, &candidates);
+                        who = Some(used);
+                    }
+                    Err(error) if sure.is_empty() => return Err(error),
+                    Err(error) => tracing::debug!("The model gave no labels, keeping the sure ones: {error}"),
+                }
+            }
+        }
+        let chosen = uwumail_labels::choose(&views, &present, uwumail_labels::merge(candidates, from_model));
+        if chosen.is_empty() {
             return Ok(Vec::new());
         }
-        let wanted: HashMap<String, bool> = decisions.iter().map(|d| (d.keyword.clone(), true)).collect();
+        let wanted: HashMap<String, bool> = chosen.iter().map(|d| (d.keyword.clone(), true)).collect();
         self.apply_keywords(std::slice::from_ref(&message.id), &wanted).await?;
         let mut set = Vec::new();
-        for decision in decisions {
-            let label = &labels[decision.label_id as usize];
+        for decision in chosen {
+            let Some(label) = usize::try_from(decision.label_id).ok().and_then(|index| labels.get(index)) else {
+                continue;
+            };
+            let ai = decision.source == uwumail_labels::Source::Ai;
+            let mut params = decision.params.clone();
+            if let Some(object) = params.as_object_mut() {
+                object.insert("confidence".into(), json!((decision.confidence * 100.0).round() / 100.0));
+            }
             self.log_label(
                 message,
                 label,
                 decision.source.as_str(),
                 decision.code,
-                &decision.params,
+                &params,
                 decision.reason,
-                None,
+                if ai { who.clone() } else { None },
             )?;
             set.push(label.id.clone());
         }
         Ok(set)
+    }
+
+    /// What the model says of the labels `asked` (their indexes in `labels`): this device's
+    /// provider with the facts, the hints of the cheap ways and the person's corrections, or the
+    /// server that does this device's AI (`AssistLabel/suggest`, which reads the mail alone). With
+    /// who answered (provider name, model).
+    #[allow(clippy::too_many_arguments)]
+    async fn ask_labels(
+        &self,
+        message: &Message,
+        labels: &[Label],
+        asked: &[i64],
+        facts: &uwumail_labels::Facts,
+        candidates: &[uwumail_labels::Decision],
+        run: &mut LabelRun,
+        target: &Target,
+    ) -> Result<(Vec<uwumail_labels::AiVerdict>, (String, String))> {
+        let asked_labels: Vec<(i64, &Label)> =
+            asked.iter().filter_map(|id| Some((*id, labels.get(usize::try_from(*id).ok()?)?))).collect();
+        let names: Vec<(i64, &str)> = asked_labels.iter().map(|(id, label)| (*id, label.name.as_str())).collect();
+        match target {
+            Target::Foreign(client) => {
+                self.count_server_auto_label()?;
+                let mail = MailText::from_stored(message, mail::MAX_MAIL_CHARS);
+                let owned: Vec<Label> = asked_labels.iter().map(|(_, label)| (*label).clone()).collect();
+                let arguments = foreign_suggest_arguments(&mail, &owned, &message.keywords, false, None);
+                let answer = server::call(client, "AssistLabel/suggest", arguments).await?;
+                let verdicts = answer
+                    .get("verdicts")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .take(100)
+                    .filter_map(|verdict| {
+                        let name = verdict.get("name").and_then(Value::as_str)?.trim().to_lowercase();
+                        let (id, _) = names.iter().find(|(_, label)| label.trim().to_lowercase() == name)?;
+                        let fits = verdict.get("fits").and_then(uwumail_labels::AiAnswer::parse)?;
+                        let reason = verdict.get("reason").and_then(Value::as_str).unwrap_or_default();
+                        Some(uwumail_labels::AiVerdict {
+                            label_id: *id,
+                            verdict: fits,
+                            reason: validate::clean(&reason.replace('\n', " "), 300),
+                        })
+                    })
+                    .collect();
+                let text = |key: &str| answer.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
+                Ok((verdicts, (text("providerName"), text("model"))))
+            }
+            Target::Device => {
+                let mail = MailText::from_stored(message, mail::LABEL_MAIL_CHARS);
+                let list: Vec<prompts::PromptLabel> =
+                    asked_labels.iter().map(|(_, label)| prompt_label(label)).collect();
+                let hints: Vec<(String, String)> = candidates
+                    .iter()
+                    .filter(|candidate| candidate.confidence >= HINT_MIN)
+                    .filter_map(|candidate| {
+                        let (_, name) = names.iter().find(|(id, _)| *id == candidate.label_id)?;
+                        let sure =
+                            if candidate.confidence >= uwumail_labels::MAIN_THRESHOLD { "" } else { " (not sure)" };
+                        Some((name.to_string(), format!("{}{sure}", candidate.reason)))
+                    })
+                    .collect();
+                let shots: Vec<prompts::PromptShot> = run
+                    .shots(self)?
+                    .iter()
+                    .filter_map(|shot| {
+                        let (_, label) = asked_labels.iter().find(|(_, label)| label.id == shot.label_id)?;
+                        Some(prompts::PromptShot {
+                            label: label.name.clone(),
+                            positive: shot.positive,
+                            sender_domain: shot.sender_domain.clone(),
+                            subject: shot.subject.clone(),
+                            snippet: shot.snippet.clone(),
+                        })
+                    })
+                    .take(prompts::MAX_PROMPT_SHOTS)
+                    .collect();
+                let prompt = prompts::labels(&mail, &list, &facts.for_prompt(), &hints, &shots);
+                let answer = estimate::Answer::Labels { labels: list.len(), suggest_new: false };
+                let typical = estimate::output_tokens(answer, &prompt);
+                let (answer, effective) =
+                    self.device().ask(self.assist_http()?, Feature::AutoLabels, &prompt, typical, None).await?;
+                let Some(parsed) = validate::json_answer(&answer.text) else {
+                    return Err(Error::assist("providerFailed", "The model's answer had no labels in the asked form."));
+                };
+                Ok((
+                    validate::parse_labels(&parsed, &names),
+                    (effective.provider.name.clone(), effective.model.clone()),
+                ))
+            }
+            Target::Server(_) => Err(Error::assist("assistUnavailable", "Its server labels this mail.")),
+        }
     }
 
     /// Keeps a label put on by itself in the log.
@@ -1556,9 +1818,8 @@ impl Engine {
         })
     }
 
-    /// Asks a model which of this device's labels not on a mail yet fit (never taking one off):
-    /// this device's provider, or the server that does its AI. Sets those and logs each. Returns
-    /// the label ids set.
+    /// Labels one mail now, with the model when there is one (`AssistLabel/apply`): this device's
+    /// provider, or the server that does its AI. Answers the label ids set.
     async fn label_with_ai(&self, message_id: &str, target: &Target) -> Result<Vec<String>> {
         let message = self
             .inner
@@ -1566,66 +1827,17 @@ impl Engine {
             .messages_by_ids(&[message_id.to_string()])?
             .pop()
             .ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
-        let missing: Vec<Label> =
-            self.device().labels()?.into_iter().filter(|label| !message.keywords.contains(&label.keyword)).collect();
-        if missing.is_empty() {
+        if let Ok(account) = self.inner.store.account(&message.account_id)
+            && message.from.email.eq_ignore_ascii_case(&account.email)
+        {
             return Ok(Vec::new());
         }
-        let (picks, who): (Vec<(Label, String)>, (String, String)) = match target {
-            Target::Foreign(client) => {
-                self.count_server_auto_label()?;
-                let mail = MailText::from_stored(&message, mail::MAX_MAIL_CHARS);
-                let arguments = foreign_suggest_arguments(&mail, &missing, &message.keywords, false, None);
-                let answer = server::call(client, "AssistLabel/suggest", arguments).await?;
-                let picks = answer
-                    .get("verdicts")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter(|verdict| verdict.get("fits").and_then(Value::as_bool) == Some(true))
-                    .filter_map(|verdict| {
-                        let name = verdict.get("name").and_then(Value::as_str)?.trim().to_lowercase();
-                        let label = missing.iter().find(|label| label.name.to_lowercase() == name)?;
-                        let reason = verdict.get("reason").and_then(Value::as_str).unwrap_or_default();
-                        Some((label.clone(), validate::clean(&reason.replace('\n', " "), 300)))
-                    })
-                    .collect();
-                let text = |key: &str| answer.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
-                (picks, (text("providerName"), text("model")))
-            }
-            Target::Device => {
-                let mail = MailText::from_stored(&message, mail::LABEL_MAIL_CHARS);
-                let list: Vec<(String, String)> =
-                    missing.iter().map(|l| (l.name.clone(), l.description.clone())).collect();
-                let prompt = prompts::labels(&mail, &list);
-                let answer = estimate::Answer::Labels { labels: missing.len(), suggest_new: false };
-                let typical = estimate::output_tokens(answer, &prompt);
-                let (answer, effective) =
-                    self.device().ask(self.assist_http()?, Feature::AutoLabels, &prompt, typical, None).await?;
-                let Some(parsed) = validate::json_answer(&answer.text) else {
-                    return Err(Error::assist("providerFailed", "The model's answer had no labels in the asked form."));
-                };
-                let picks = validate::parse_labels(&parsed, &missing)
-                    .into_iter()
-                    .map(|pick| (pick.label, pick.reason))
-                    .collect();
-                (picks, (effective.provider.name.clone(), effective.model.clone()))
-            }
-            Target::Server(_) => return Err(Error::assist("assistUnavailable", "Its server labels this mail.")),
-        };
-        let picks: Vec<(Label, String)> =
-            picks.into_iter().filter(|(l, _)| !message.keywords.contains(&l.keyword)).collect();
-        if picks.is_empty() {
-            return Ok(Vec::new());
-        }
-        let wanted: HashMap<String, bool> = picks.iter().map(|(label, _)| (label.keyword.clone(), true)).collect();
-        self.apply_keywords(std::slice::from_ref(&message.id), &wanted).await?;
-        let mut set = Vec::new();
-        for (label, reason) in picks {
-            self.log_label(&message, &label, "ai", "ai", &json!({}), reason, Some(who.clone()))?;
-            set.push(label.id);
-        }
-        Ok(set)
+        let device = self.device();
+        let language = self.inner.store.assist_setting(LABEL_LANGUAGE)?.unwrap_or_else(|| "en".into());
+        device.ensure_base_labels(&language)?;
+        let labels = device.labels()?;
+        let mut run = LabelRun::new(device.non_ai_labels_on().unwrap_or(true));
+        self.label_message(&message, &labels, &mut run, Some(target)).await
     }
 
     /// Counts a request of auto-labels to the server that does this device's AI, today's.
@@ -1658,19 +1870,26 @@ impl Engine {
         used.unwrap_or(u64::MAX) < local::AUTO_LABELS_PER_DAY
     }
 
-    /// Labels new inbox mail of a mailbox this device serves: first without a model (with
-    /// `nonAiLabels` on, which needs no provider at all), then the model judges the labels still
-    /// missing (with `autoLabels` on and a provider, or the server that does this device's AI),
-    /// within the day's limit.
+    /// Labels new inbox mail of a mailbox this device serves, like UwUMail Server's label worker:
+    /// with `autoLabels` on and a provider (or the server that does this device's AI), within the
+    /// day's limit, the cheap ways and the model in doubt; otherwise, with `nonAiLabels` on (which
+    /// needs no provider at all), the cheap ways alone.
     async fn auto_label(&self, account_id: &str, message_ids: Vec<String>) {
         let device = self.device();
-        let Ok(labels) = device.labels() else { return };
         let non_ai = device.non_ai_labels_on().unwrap_or(false);
         let ai_on = device.auto_labels_on().unwrap_or(false);
-        if labels.is_empty() || (!non_ai && !ai_on) {
+        if !non_ai && !ai_on {
             return;
         }
         let Ok(Target::Device) = self.assist_target(account_id).await else { return };
+        let language = self.inner.store.assist_setting(LABEL_LANGUAGE).ok().flatten().unwrap_or_else(|| "en".into());
+        if let Err(error) = device.ensure_base_labels(&language) {
+            tracing::debug!("The base labels couldn't be made: {error}");
+        }
+        let Ok(labels) = device.labels() else { return };
+        if labels.iter().all(|label| !label.auto) {
+            return;
+        }
         let mut ai = match ai_on {
             true => match self.foreign_server().await {
                 Ok(Some(client)) => Some(Target::Foreign(client)),
@@ -1683,7 +1902,7 @@ impl Engine {
         };
         let Ok(account) = self.inner.store.account(account_id) else { return };
         let Ok(roles) = self.inner.store.message_roles(&message_ids) else { return };
-        let mut examples = None;
+        let mut run = LabelRun::new(non_ai);
         let mut labelled = false;
         for (id, _, _) in roles.into_iter().filter(|(_, _, role)| role.as_deref() == Some("inbox")).take(LABELS_AT_ONCE)
         {
@@ -1695,26 +1914,20 @@ impl Engine {
             if message.from.email.eq_ignore_ascii_case(&account.email) {
                 continue;
             }
-            if non_ai {
-                match self.label_without_ai(&message, &labels, &mut examples).await {
-                    Ok(set) => labelled |= !set.is_empty(),
-                    // The server keeps no own keywords: nothing more to do for this mailbox now.
-                    Err(error) if error.code == ErrorCode::NotSupported => break,
-                    Err(error) => tracing::debug!("Labels without a model skipped a mail: {error}"),
-                }
-            }
-            let Some(target) = &ai else { continue };
-            if !self.ai_labels_left(target) {
+            if ai.as_ref().is_some_and(|target| !self.ai_labels_left(target)) {
                 tracing::debug!("Auto-labels reached today's limit");
                 ai = None;
-                continue;
             }
-            match self.label_with_ai(&id, target).await {
+            if ai.is_none() && !non_ai {
+                break;
+            }
+            match self.label_message(&message, &labels, &mut run, ai.as_ref()).await {
                 Ok(set) => labelled |= !set.is_empty(),
+                // The server keeps no own keywords: nothing more to do for this mailbox now.
                 Err(error) if error.code == ErrorCode::NotSupported => break,
                 Err(error) => {
                     tracing::debug!("Auto-labels skipped a mail: {error}");
-                    if error.assist_kind() != Some("providerFailed") {
+                    if ai.is_some() && error.assist_kind() != Some("providerFailed") {
                         ai = None;
                     }
                 }
@@ -1796,6 +2009,115 @@ impl Engine {
         };
         answer["emailId"] = json!(message_id);
         Ok(answer)
+    }
+}
+
+/// Longest name and description an overlap check reads (the server's limits).
+const OVERLAP_MAX_NAME_CHARS: usize = 100;
+const OVERLAP_MAX_DESCRIPTION_CHARS: usize = 2000;
+/// A cheap way's finding this sure is shown to the model as a hint.
+const HINT_MIN: f64 = 0.3;
+/// With labels without a model switched off, the cheap ways only give hints: no surer than this.
+const HINT_ONLY: f64 = 0.79;
+/// The app's language, the last the page named: base labels made in the background are named in it.
+const LABEL_LANGUAGE: &str = "labelLanguage";
+
+/// What one round of labeling reads once: the classifier's examples, the address books and the
+/// person's corrections.
+struct LabelRun {
+    non_ai: bool,
+    examples: Option<Vec<LabelExample>>,
+    people: Option<Vec<(String, String)>>,
+    shots: Option<Vec<LabelShot>>,
+}
+
+impl LabelRun {
+    fn new(non_ai: bool) -> Self {
+        Self { non_ai, examples: None, people: None, shots: None }
+    }
+
+    fn examples(&mut self, engine: &Engine) -> Result<&[LabelExample]> {
+        if self.examples.is_none() {
+            self.examples = Some(engine.inner.store.label_examples()?);
+        }
+        Ok(self.examples.as_deref().unwrap_or_default())
+    }
+
+    async fn people(&mut self, engine: &Engine) -> &[(String, String)] {
+        if self.people.is_none() {
+            self.people = Some(engine.address_book().await);
+        }
+        self.people.as_deref().unwrap_or_default()
+    }
+
+    fn shots(&mut self, engine: &Engine) -> Result<&[LabelShot]> {
+        if self.shots.is_none() {
+            self.shots = Some(engine.inner.store.label_shots()?);
+        }
+        Ok(self.shots.as_deref().unwrap_or_default())
+    }
+}
+
+/// This device's labels as `uwumail_labels` sees them: their index is their id there.
+fn label_views(labels: &[Label]) -> Vec<uwumail_labels::Label<'_>> {
+    labels
+        .iter()
+        .enumerate()
+        .map(|(index, label)| uwumail_labels::Label {
+            id: index as i64,
+            keyword: &label.keyword,
+            rules: label.rules.as_ref(),
+            detector: label.detector.as_deref().and_then(uwumail_labels::Detector::parse),
+            learn_senders: label.learn_senders,
+            classifier: label.classifier,
+            base: label.base(),
+            auto: label.auto,
+        })
+        .collect()
+}
+
+/// How like the person's labeled mails (the classifier's examples) one is, by their words (this
+/// device has no embeddings): per label index.
+fn similar_by_tokens(
+    labels: &[Label],
+    examples: &[LabelExample],
+    message_id: &str,
+    tokens: &[i64],
+) -> HashMap<i64, uwumail_labels::Likeness> {
+    use uwumail_labels::similar;
+    let neighbours = examples
+        .iter()
+        .filter(|example| example.message_id != message_id)
+        .map(|example| similar::Neighbour {
+            similarity: similar::jaccard(tokens, &example.tokens),
+            labels: example
+                .labels
+                .iter()
+                .filter_map(|id| labels.iter().position(|label| label.id == *id).map(|index| index as i64))
+                .collect(),
+        })
+        .collect();
+    similar::vote(neighbours, similar::TOKENS)
+}
+
+/// A label for the prompt: a base label with its definition and examples in the language it was
+/// set up in, one of the person's own with their description.
+fn prompt_label(label: &Label) -> prompts::PromptLabel {
+    match label.base() {
+        Some(base) => {
+            let text = base.text(local::base_label_language(base, label));
+            prompts::PromptLabel {
+                name: label.name.clone(),
+                description: text.description.to_owned(),
+                examples: text.examples.iter().map(|e| e.to_string()).collect(),
+                counter_examples: text.counter_examples.iter().map(|e| e.to_string()).collect(),
+            }
+        }
+        None => prompts::PromptLabel {
+            name: label.name.clone(),
+            description: label.description.clone(),
+            ..Default::default()
+        },
     }
 }
 
@@ -2454,15 +2776,15 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         let (_dir, engine, first) = engine_with_mail();
         engine.inner.store.unlink_for_tests(&first);
         let invoices = engine
-            .assist_create_label(DEVICE_SCOPE, json!({ "name": "Rechnungen", "detector": "invoice" }))
+            .assist_create_label(DEVICE_SCOPE, json!({ "name": "Rechnungen", "detector": "invoice" }), None)
             .await
             .unwrap();
         assert_eq!((invoices["learnSenders"].as_bool(), invoices["classifier"].as_bool()), (Some(true), Some(true)));
         assert_eq!((invoices["totalEmails"].as_u64(), invoices["examples"].as_u64()), (Some(0), Some(0)));
         let rules = json!({ "match": "any", "conditions": [{ "field": "subject", "value": " sommerfest " }] });
-        engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Feiern", "rules": rules })).await.unwrap();
+        engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Feiern", "rules": rules }), None).await.unwrap();
         engine
-            .assist_create_label(DEVICE_SCOPE, json!({ "name": "Newsletter", "detector": "newsletter" }))
+            .assist_create_label(DEVICE_SCOPE, json!({ "name": "Newsletter", "detector": "newsletter" }), None)
             .await
             .unwrap();
         let bill = add_mail(
@@ -2478,7 +2800,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
             &engine,
             3,
             "Shop <news@shop.example>",
-            "Neues im Herbst",
+            "Newsletter: Neues im Herbst",
             "Hallo",
             &["List-Unsubscribe: <https://shop.example/u>", "List-Id: <herbst.shop.example>"],
             None,
@@ -2495,13 +2817,13 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         let log = engine.assist_label_log(DEVICE_SCOPE, Some(vec![bill.clone()]), None).await.unwrap();
         assert_eq!(log[0]["source"], "detector");
         assert_eq!(log[0]["code"], "invoice");
-        assert_eq!(log[0]["params"], json!({ "attachment": "Rechnung_4711.pdf" }));
+        assert_eq!(log[0]["params"], json!({ "attachment": "Rechnung_4711.pdf", "confidence": 0.95 }));
         assert_eq!(log[0]["reason"], "Looks like an invoice: PDF attachment \"Rechnung_4711.pdf\"");
         assert!(log[0]["providerName"].is_null());
         let log = engine.assist_label_log(DEVICE_SCOPE, Some(vec![first.clone()]), None).await.unwrap();
         assert_eq!((log[0]["source"].as_str(), log[0]["params"]["match"].as_str()), (Some("rule"), Some("any")));
 
-        let labels = engine.assist_labels(DEVICE_SCOPE).await.unwrap();
+        let labels = engine.assist_labels(DEVICE_SCOPE, None).await.unwrap();
         assert_eq!(labels[0]["totalEmails"], 1);
         assert_eq!(labels[1]["rules"]["conditions"][0]["value"], "sommerfest", "trimmed");
 
@@ -2524,7 +2846,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
     #[tokio::test]
     async fn senders_are_learned_from_hand_labels_only_and_forgotten() {
         let (_dir, engine, _) = engine_with_mail();
-        let label = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Leni" })).await.unwrap();
+        let label = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Leni" }), None).await.unwrap();
         let label_id = label["id"].as_str().unwrap().to_string();
         let from = "Leni <leni@example.com>";
         let vouched = ["Authentication-Results: mx.example.org; dkim=pass header.d=example.com"];
@@ -2551,27 +2873,28 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         let examples = engine.inner.store.label_examples().unwrap();
         assert_eq!(examples.iter().filter(|e| e.labels == [label_id.clone()]).count(), 2);
         assert!((3..=4).contains(&examples.len()), "{examples:?}");
-        assert_eq!(engine.assist_labels(DEVICE_SCOPE).await.unwrap()[0]["examples"], 2);
+        assert_eq!(engine.assist_labels(DEVICE_SCOPE, None).await.unwrap()[0]["examples"], 2);
 
         engine.auto_label("acc", vec![mails[2].clone(), other.clone(), forged.clone()]).await;
         assert_eq!(keywords(&engine, &mails[2]), ["leni"]);
         assert!(keywords(&engine, &other).is_empty());
         assert!(keywords(&engine, &forged).is_empty(), "a From address nobody vouched for");
         let log = engine.assist_label_log(DEVICE_SCOPE, Some(vec![mails[2].clone()]), None).await.unwrap();
-        assert_eq!(log[0]["params"], json!({ "address": "leni@example.com", "count": 2 }));
+        assert_eq!(log[0]["params"], json!({ "address": "leni@example.com", "count": 2, "confidence": 0.9 }));
         assert_eq!(log[0]["reason"], "leni@example.com got this label by hand 2 times");
 
-        // Undoing counts as by hand: the sender is forgotten.
+        // Undoing counts as by hand: the label stays off the sender's mail from then on.
         let log_id = log[0]["id"].as_str().unwrap().to_string();
         engine.assist_undo_labels(DEVICE_SCOPE, &[log_id]).await.unwrap();
         assert!(keywords(&engine, &mails[2]).is_empty());
-        assert_eq!(senders(), None);
+        assert_eq!(senders(), Some(-1));
         engine.auto_label("acc", vec![mails[3].clone()]).await;
         assert!(keywords(&engine, &mails[3]).is_empty());
 
         // Deleting the label forgets what it learned.
         engine.set_keywords(&mails[..1], &off).await.unwrap();
         engine.set_keywords(&mails[..1], &on).await.unwrap();
+        assert_eq!(senders(), Some(1), "put on by hand again, counting starts anew");
         engine.assist_delete_label(DEVICE_SCOPE, &label_id).await.unwrap();
         assert_eq!(senders(), None);
         assert!(engine.inner.store.label_example_counts().unwrap().is_empty());
@@ -2581,8 +2904,8 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
     async fn a_deleted_label_comes_off_all_its_mail_not_only_the_logged() {
         let (_dir, engine, first) = engine_with_mail();
         engine.inner.store.unlink_for_tests(&first);
-        let label = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Verein" })).await.unwrap();
-        let keep = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Privat" })).await.unwrap();
+        let label = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Verein" }), None).await.unwrap();
+        let keep = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Privat" }), None).await.unwrap();
         let mut mails = vec![first];
         mails.extend((2..6).map(|uid| add_mail(&engine, uid, "Leni <leni@example.com>", "Hallo", "x", &[], None)));
         // Put on by hand, by the engine and by other programs: none of it is in the log.
@@ -2598,11 +2921,190 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
             assert!(keywords(&engine, id).is_empty(), "{id}");
         }
         assert_eq!(keywords(&engine, &mails[0]), ["privat"], "other labels stay");
-        let labels = engine.assist_labels(DEVICE_SCOPE).await.unwrap();
-        assert_eq!(labels.as_array().unwrap().len(), 1);
-        assert_eq!(labels[0]["id"], keep["id"]);
+        let labels = engine.assist_labels(DEVICE_SCOPE, None).await.unwrap();
+        let labels = labels.as_array().unwrap();
+        assert!(labels.iter().any(|l| l["id"] == keep["id"]));
+        assert!(!labels.iter().any(|l| l["id"] == label["id"]));
         let gone = engine.assist_delete_label(DEVICE_SCOPE, label["id"].as_str().unwrap()).await.unwrap_err();
         assert_eq!(gone.assist_kind(), Some("notFound"));
+    }
+
+    /// A provider on 127.0.0.1 that answers each chat request with the next of `answers` (the
+    /// model's text) and records the requests' bodies.
+    async fn fake_model(answers: Vec<Value>) -> (String, Arc<Mutex<Vec<Value>>>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let log = seen.clone();
+        tokio::spawn(async move {
+            for answer in answers {
+                let Ok((mut socket, _)) = listener.accept().await else { return };
+                let mut buffer = Vec::new();
+                let mut chunk = [0u8; 8192];
+                let body = loop {
+                    let Ok(read) = socket.read(&mut chunk).await else { return };
+                    if read == 0 {
+                        return;
+                    }
+                    buffer.extend_from_slice(&chunk[..read]);
+                    let Some(end) = buffer.windows(4).position(|w| w == b"\r\n\r\n") else { continue };
+                    let head = String::from_utf8_lossy(&buffer[..end]).to_ascii_lowercase();
+                    let length: usize = head
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length:"))
+                        .and_then(|value| value.trim().parse().ok())
+                        .unwrap_or(0);
+                    if buffer.len() >= end + 4 + length {
+                        break buffer[end + 4..end + 4 + length].to_vec();
+                    }
+                };
+                log.lock().unwrap().push(serde_json::from_slice::<Value>(&body).unwrap_or(Value::Null));
+                let reply = json!({
+                    "choices": [{ "message": { "role": "assistant", "content": answer.to_string() },
+                                  "finish_reason": "stop" }],
+                    "usage": { "prompt_tokens": 500, "completion_tokens": 60 }
+                })
+                .to_string();
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                    reply.len()
+                );
+                let _ = socket.write_all(head.as_bytes()).await;
+                let _ = socket.write_all(reply.as_bytes()).await;
+                let _ = socket.shutdown().await;
+            }
+        });
+        (base, seen)
+    }
+
+    #[tokio::test]
+    async fn base_labels_are_made_once_adopted_switchable_and_restorable() {
+        let (_dir, engine, _) = engine_with_mail();
+        engine
+            .assist_create_label(
+                DEVICE_SCOPE,
+                json!({ "name": "Rechnungen", "detector": "invoice", "color": "#123456" }),
+                None,
+            )
+            .await
+            .unwrap();
+        let labels = engine.assist_labels(DEVICE_SCOPE, Some("de-DE")).await.unwrap();
+        let labels = labels.as_array().unwrap().clone();
+        assert_eq!(labels.len(), 8, "{labels:?}");
+        let invoice = labels.iter().find(|l| l["base"] == "invoice").unwrap();
+        assert_eq!((invoice["name"].as_str(), invoice["keyword"].as_str()), (Some("Rechnungen"), Some("rechnungen")));
+        assert_eq!(invoice["color"], "#123456", "adopted: name, keyword and color stay");
+        assert!(invoice["detector"].is_null(), "the base label's own detector is dropped");
+        assert_eq!(invoice["description"], uwumail_labels::Base::Invoice.text("de").description);
+        let names: Vec<&str> = labels.iter().filter_map(|l| l["name"].as_str()).collect();
+        assert!(names.contains(&"Versand") && names.contains(&"Werbung"), "{names:?}");
+
+        // The definition is fixed, the switch is not; base labels don't count toward the own ones.
+        let id = |base: &str| labels.iter().find(|l| l["base"] == base).unwrap()["id"].as_str().unwrap().to_string();
+        let refused = engine
+            .assist_update_label(DEVICE_SCOPE, &id("shipping"), json!({ "description": "Pakete" }))
+            .await
+            .unwrap_err();
+        assert_eq!(refused.assist.unwrap().properties, ["description"]);
+        engine
+            .assist_update_label(DEVICE_SCOPE, &id("advertising"), json!({ "auto": false, "name": "Reklame" }))
+            .await
+            .unwrap();
+        for n in 0..local::MAX_LABELS {
+            engine.assist_create_label(DEVICE_SCOPE, json!({ "name": format!("Eigenes {n}") }), None).await.unwrap();
+        }
+        let over = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Zu viel" }), None).await.unwrap_err();
+        assert_eq!(over.assist_kind(), Some("overQuota"));
+
+        // A deleted base label stays deleted, until it is made again.
+        engine.assist_delete_label(DEVICE_SCOPE, &id("shipping")).await.unwrap();
+        let after = engine.assist_labels(DEVICE_SCOPE, None).await.unwrap();
+        assert!(!after.as_array().unwrap().iter().any(|l| l["base"] == "shipping"));
+        let made = engine
+            .assist_create_label(DEVICE_SCOPE, json!({ "base": "shipping", "auto": false }), Some("en"))
+            .await
+            .unwrap();
+        assert_eq!((made["name"].as_str(), made["auto"].as_bool()), (Some("Shipping"), Some(false)));
+        let again = engine.assist_create_label(DEVICE_SCOPE, json!({ "base": "shipping" }), None).await.unwrap();
+        assert_eq!(again["id"], made["id"], "the one there is");
+        let refused = engine.assist_create_label(DEVICE_SCOPE, json!({ "base": "shipping", "name": "X" }), None).await;
+        assert!(refused.is_err());
+
+        // A newer set of base labels brings the current wording of a definition, in its language.
+        let mut stale =
+            engine.device().labels().unwrap().into_iter().find(|l| l.base.as_deref() == Some("work")).unwrap();
+        stale.description = "Ältere Worte".into();
+        engine.inner.store.update_assist_label(&stale).unwrap();
+        engine.inner.store.set_assist_setting("baseLabels", Some("0")).unwrap();
+        engine.assist_labels(DEVICE_SCOPE, Some("en")).await.unwrap();
+        let fresh = engine.device().labels().unwrap().into_iter().find(|l| l.id == stale.id).unwrap();
+        assert_eq!(fresh.description, uwumail_labels::Base::Work.text("de").description, "named in German");
+
+        // Overlaps: a second invoice label, by meaning.
+        let overlaps = engine.assist_check_overlap(DEVICE_SCOPE, "Handyrechnungen", "", None).await.unwrap();
+        let found = overlaps["overlaps"].as_array().unwrap();
+        assert!(found.iter().any(|o| o["base"] == "invoice"), "{found:?}");
+        let own = engine.assist_check_overlap(DEVICE_SCOPE, "Rechnungen", "", Some(&id("invoice"))).await.unwrap();
+        assert!(!own["overlaps"].as_array().unwrap().iter().any(|o| o["id"] == id("invoice").as_str()), "not itself");
+        assert!(engine.assist_check_overlap(DEVICE_SCOPE, &"x".repeat(101), "", None).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn the_model_is_asked_only_in_doubt_and_held_to_the_facts() {
+        let (_dir, engine, first) = engine_with_mail();
+        engine.inner.store.unlink_for_tests(&first);
+        let verdict =
+            |name: &str, fits: &str| json!({ "name": name, "reason": format!("{name}: {fits}"), "fits": fits });
+        let (base, seen) = fake_model(vec![
+            // A mass mail: "personal" is ruled out by the facts, the own label's yes counts.
+            json!({ "labels": [verdict("Personal", "yes"), verdict("Feiern", "yes"), verdict("Newsletter", "unsure")] }),
+            // Three yeses: not believed at all.
+            json!({ "labels": [verdict("Feiern", "yes"), verdict("Appointment", "yes"), verdict("Work & business", "yes")] }),
+        ])
+        .await;
+        engine
+            .device()
+            .create_provider(&json!({ "kind": "ollama", "name": "Ollama", "baseUrl": base, "model": "llama3" }))
+            .unwrap();
+        engine
+            .assist_create_label(DEVICE_SCOPE, json!({ "name": "Feiern", "description": "Feste und Partys" }), None)
+            .await
+            .unwrap();
+        engine.assist_update_settings(DEVICE_SCOPE, json!({ "autoLabels": true })).await.unwrap();
+        engine.assist_labels(DEVICE_SCOPE, Some("en")).await.unwrap();
+        // A correction by hand, shown to the model next time.
+        engine.set_keywords(std::slice::from_ref(&first), &[("feiern".to_string(), true)].into()).await.unwrap();
+
+        let party = add_mail(
+            &engine,
+            7,
+            "Park-Team <team@park.example>",
+            "Sommerfest im Park",
+            "Hallo Mini, am Samstag feiern wir im Park.",
+            &["List-Unsubscribe: <https://park.example/u>", "List-Id: <fest.park.example>"],
+            None,
+        );
+        engine.auto_label("acc", vec![party.clone()]).await;
+        assert_eq!(keywords(&engine, &party), ["feiern"]);
+        let log = engine.assist_label_log(DEVICE_SCOPE, Some(vec![party.clone()]), None).await.unwrap();
+        assert_eq!((log[0]["source"].as_str(), log[0]["providerName"].as_str()), (Some("ai"), Some("Ollama")));
+        // The mail hand-labeled before is alike: a yes that a hint supports.
+        assert_eq!(
+            (log[0]["params"]["confidence"].as_f64(), log[0]["params"]["supported"].as_bool()),
+            (Some(0.92), Some(true))
+        );
+
+        let request = seen.lock().unwrap()[0].clone();
+        let prompt = request["messages"].to_string();
+        assert!(prompt.contains("<facts>") && prompt.contains("belongs:"), "{prompt}");
+        assert!(prompt.contains("<corrections>") && prompt.contains("Sommerfest"), "{prompt}");
+        assert!(prompt.contains("Looks like a newsletter"), "the cheap ways' hint: {prompt}");
+
+        let other = add_mail(&engine, 8, "Leni <leni@example.com>", "Samstag", "Kommst du am Samstag?", &[], None);
+        engine.auto_label("acc", vec![other.clone()]).await;
+        assert!(keywords(&engine, &other).is_empty(), "a model saying yes to three labels is not believed");
+        assert_eq!(engine.device().requests_today(Feature::AutoLabels).unwrap(), 2);
     }
 
     #[test]
@@ -2614,8 +3116,12 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         for n in 0..15 {
             let mut tokens = hashes(&["subject:training", "mannschaft", "vorstand"]);
             tokens.push(n);
-            examples.push(LabelExample { labels: vec!["g1".into()], tokens });
-            examples.push(LabelExample { labels: vec![], tokens: hashes(&["angebot", "rabatt", &format!("w{n}")]) });
+            examples.push(LabelExample { message_id: format!("p{n}"), labels: vec!["g1".into()], tokens });
+            examples.push(LabelExample {
+                message_id: format!("n{n}"),
+                labels: vec![],
+                tokens: hashes(&["angebot", "rabatt", &format!("w{n}")]),
+            });
         }
         let mail = hashes(&["subject:training", "mannschaft", "vorstand", "neu"]);
         let found = models(&labels, &examples, &mail);
@@ -2839,8 +3345,8 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         assert_eq!(sent["foreignMails"][0]["subject"], "Sommerfest");
         assert!(sent.get("emailId").is_none() && sent["foreignMails"][0].get("headers").is_none());
 
-        let label = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Feiern" })).await.unwrap();
-        engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Reisen" })).await.unwrap();
+        let label = engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Feiern" }), None).await.unwrap();
+        engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Reisen" }), None).await.unwrap();
         let suggestion = engine.assist_suggest_labels(&id, Some("de"), None).await.unwrap();
         assert_eq!(suggestion["emailId"], id.as_str());
         assert_eq!(suggestion["verdicts"][0]["labelId"], label["id"]);
@@ -2882,7 +3388,13 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
             .unwrap()
             .unwrap();
         assert_eq!(local["providerName"], "Ollama");
-        assert_eq!(local["outputTokens"], 2 * estimate::TYPICAL_VERDICT_TOKENS + estimate::TYPICAL_NEW_LABELS_TOKENS);
+        // The two own labels and the eight base labels auto-labels made.
+        let labels = engine.device().labels().unwrap().len() as u64;
+        assert_eq!(labels, 10);
+        assert_eq!(
+            local["outputTokens"],
+            labels * estimate::TYPICAL_VERDICT_TOKENS + estimate::TYPICAL_NEW_LABELS_TOKENS
+        );
         assert_eq!(foreign(&calls), before);
     }
 
@@ -2896,7 +3408,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
                 &json!({ "kind": "ollama", "name": "Ollama", "baseUrl": "http://127.0.0.1:9", "model": "llama3" }),
             )
             .unwrap();
-        engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Feiern" })).await.unwrap();
+        engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Feiern" }), None).await.unwrap();
         engine.inner.store.set_assist_setting("serverAssist", Some("uwu")).unwrap();
         engine.assist_update_settings(DEVICE_SCOPE, json!({ "autoLabels": true })).await.unwrap();
 

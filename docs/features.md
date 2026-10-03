@@ -103,7 +103,10 @@ providers (a local Ollama or LM Studio in one click) for all others. Every AI
 button tells on hover what it will take in tokens and money. The spam check
 weighs the facts and phishing checks (lookalike domains, spoofed display names,
 misleading links) first and shows them with their weights; the model only
-chooses among the verdicts they allow. See [ai-assistant.md](ai-assistant.md).
+chooses among the verdicts they allow. Labels start with eight base labels
+(invoice, shipping, appointment, newsletter, account, personal, work,
+promotions), each switchable; a mail gets at most two, and the model is only
+asked when the rules, detectors and what was learned leave a label in doubt. See [ai-assistant.md](ai-assistant.md).
 
 ## Phones
 

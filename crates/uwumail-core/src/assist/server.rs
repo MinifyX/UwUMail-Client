@@ -149,6 +149,17 @@ pub async fn create_label(client: &Client, input: Value) -> Result<Value> {
     list(&found).as_array().and_then(|l| l.first().cloned()).ok_or_else(|| Error::not_found("The label is gone."))
 }
 
+/// Which labels one called `name` with `description` would overlap with (`AssistLabel/checkOverlap`,
+/// 0.22); `id` is the label being changed. A server without the check says none.
+pub async fn check_overlap(client: &Client, name: &str, description: &str, id: Option<&str>) -> Result<Value> {
+    let arguments = json!({ "name": name, "description": description, "id": id });
+    match call(client, "AssistLabel/checkOverlap", arguments).await {
+        Ok(answer) => Ok(json!({ "overlaps": answer.get("overlaps").cloned().unwrap_or_else(|| json!([])) })),
+        Err(error) if error.assist_kind() == Some("unknownMethod") => Ok(json!({ "overlaps": [] })),
+        Err(error) => Err(error),
+    }
+}
+
 pub async fn update_label(client: &Client, id: &str, patch: Value) -> Result<()> {
     set(client, "AssistLabel/set", json!({ "update": { id: patch } })).await.map(|_| ())
 }

@@ -592,13 +592,29 @@ async fn assist_usage(
 }
 
 #[tauri::command]
-async fn assist_labels(engine: State<'_, Engine>, scope: String) -> CommandResult<Json> {
-    engine.assist_labels(&scope).await
+async fn assist_labels(engine: State<'_, Engine>, scope: String, language: Option<String>) -> CommandResult<Json> {
+    engine.assist_labels(&scope, language.as_deref()).await
 }
 
 #[tauri::command]
-async fn assist_create_label(engine: State<'_, Engine>, scope: String, input: Json) -> CommandResult<Json> {
-    engine.assist_create_label(&scope, input).await
+async fn assist_create_label(
+    engine: State<'_, Engine>,
+    scope: String,
+    input: Json,
+    language: Option<String>,
+) -> CommandResult<Json> {
+    engine.assist_create_label(&scope, input, language.as_deref()).await
+}
+
+#[tauri::command]
+async fn assist_check_overlap(
+    engine: State<'_, Engine>,
+    scope: String,
+    name: String,
+    description: String,
+    label_id: Option<String>,
+) -> CommandResult<Json> {
+    engine.assist_check_overlap(&scope, &name, &description, label_id.as_deref()).await
 }
 
 #[tauri::command]
@@ -1204,6 +1220,7 @@ pub fn run() {
             assist_usage,
             assist_labels,
             assist_create_label,
+            assist_check_overlap,
             assist_update_label,
             assist_delete_label,
             assist_label_log,

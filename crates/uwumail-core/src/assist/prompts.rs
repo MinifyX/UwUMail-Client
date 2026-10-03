@@ -286,7 +286,27 @@ fn label_name_schema(names: &[String]) -> Value {
     if names.is_empty() { json!({ "type": "string" }) } else { json!({ "type": "string", "enum": names }) }
 }
 
+/// Auto-labels: a verdict per label asked about, reason before `fits`, which is `"yes"`, `"no"` or
+/// `"unsure"` (UwUMail Server 0.22).
 pub fn labels_schema(names: &[String]) -> Value {
+    let mut schema = verdicts_schema(names);
+    schema["properties"]["labels"]["items"]["properties"]["fits"] =
+        json!({ "type": "string", "enum": ["yes", "no", "unsure"] });
+    one_verdict_each(&mut schema["properties"]["labels"], names.len());
+    schema
+}
+
+/// A verdict for every label: a provider that holds the model to the schema then does not let it
+/// stop after the first one, as small models otherwise do.
+fn one_verdict_each(array: &mut Value, labels: usize) {
+    if labels > 0 {
+        array["minItems"] = json!(labels);
+        array["maxItems"] = json!(labels);
+    }
+}
+
+/// A verdict per label with `fits` true or false, as "Label again" asks.
+fn verdicts_schema(names: &[String]) -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
@@ -323,24 +343,105 @@ fn labels_list(labels: &[(String, String)]) -> String {
     list
 }
 
-/// Auto-labels: the model judges each label (a reason first, then `fits`), `labels` as (name,
-/// description). The server's words since it stopped setting labels the model argued against.
-pub fn labels(mail: &MailText, labels: &[(String, String)]) -> Prompt {
+/// A label as the model is asked about it: a base label with its definition and examples, or the
+/// person's own with their description.
+#[derive(Debug, Clone, Default)]
+pub struct PromptLabel {
+    pub name: String,
+    pub description: String,
+    pub examples: Vec<String>,
+    pub counter_examples: Vec<String>,
+}
+
+/// One of the person's corrections, shown to the model as an example: a mail like this did (or did
+/// not) get the label.
+#[derive(Debug, Clone)]
+pub struct PromptShot {
+    pub label: String,
+    pub positive: bool,
+    pub sender_domain: String,
+    pub subject: String,
+    pub snippet: String,
+}
+
+/// Corrections shown, at most.
+pub const MAX_PROMPT_SHOTS: usize = 12;
+
+/// Whether `mail` is what each of `labels` describes (docs/labels.md of UwUMail Server, "Asking
+/// the model"; the server's words): with the facts read from the mail (`facts`), hints of the cheap
+/// ways (`hints`, label name and what they found) and the person's corrections (`shots`). The model
+/// confirms what the facts show rather than guessing, and says "unsure" rather than yes when in
+/// doubt.
+pub fn labels(
+    mail: &MailText,
+    labels: &[PromptLabel],
+    facts: &str,
+    hints: &[(String, String)],
+    shots: &[PromptShot],
+) -> Prompt {
     let system = format!(
-        "You sort one incoming e-mail into the reader's labels. The labels and what belongs in them are listed \
-between <labels> and </labels>. Go through every label once, in the order of the list: give its name exactly as \
-written, then one short sentence whether the mail belongs in it and why, in the language of the label descriptions, \
-then \"fits\": true only when the mail clearly is what the label describes, otherwise false. Most mails fit no \
-label or only one; a mail that merely mentions a topic does not fit. {RULES} Answer only with JSON: \
-{{\"labels\": [{{\"name\": \"…\", \"reason\": \"…\", \"fits\": false}}]}}."
+        "You sort one incoming e-mail into the reader's labels. The labels, what belongs in them and what does \
+not are listed between <labels> and </labels>. Facts read reliably from the mail's headers and text are listed \
+between <facts> and </facts>: rely on them, they are correct. Go through every label once, in the order of the \
+list: give its name exactly as written, then one short sentence why the mail does or does not belong in it, in the \
+language of the label descriptions, then \"fits\": \"yes\" only when the mail clearly is what the label describes \
+and the facts agree, \"no\" when it is not, \"unsure\" when you cannot tell. Most mails fit no label or only one, \
+never more than two; a mail that merely mentions a topic does not fit. A mail sent in bulk, by a no-reply address \
+or by a company is not personal, however personally it greets the reader. {RULES} Answer only with JSON: \
+{{\"labels\": [{{\"name\": \"…\", \"reason\": \"…\", \"fits\": \"no\"}}]}}."
     );
-    let user = format!("<labels>\n{}</labels>\n\n<mail>\n{}\n</mail>", labels_list(labels), mail.for_prompt(false));
-    let names: Vec<String> = labels.iter().map(|(name, _)| name.clone()).collect();
+    let mut user = format!(
+        "<labels>\n{}</labels>\n\n<facts>\n{}\n</facts>\n",
+        prompt_label_list(labels),
+        escape_tags(facts.trim())
+    );
+    if !hints.is_empty() {
+        user.push_str("\n<hints>\n");
+        for (name, hint) in hints {
+            user.push_str(&format!("- {}: {}\n", escape_tags(name), escape_tags(hint)));
+        }
+        user.push_str("</hints>\n");
+    }
+    if !shots.is_empty() {
+        user.push_str("\n<corrections>\nThe reader corrected these labels by hand on similar mails:\n");
+        for shot in shots.iter().take(MAX_PROMPT_SHOTS) {
+            let verdict = if shot.positive { "belongs in" } else { "does not belong in" };
+            user.push_str(&format!(
+                "- a mail from {} with the subject \"{}\" ({}) {verdict} {}\n",
+                escape_tags(&shot.sender_domain),
+                escape_tags(&shot.subject),
+                escape_tags(&shot.snippet),
+                escape_tags(&shot.label)
+            ));
+        }
+        user.push_str("</corrections>\n");
+    }
+    user.push_str(&format!("\n<mail>\n{}\n</mail>", mail.for_prompt(false)));
+    let names: Vec<String> = labels.iter().map(|label| label.name.clone()).collect();
     Prompt { system, user, schema: Some(("labels", labels_schema(&names))), max_tokens: 2000 }
 }
 
+fn prompt_label_list(labels: &[PromptLabel]) -> String {
+    let mut list = String::new();
+    for label in labels {
+        let description = label.description.trim();
+        if description.is_empty() {
+            list.push_str(&format!("- {}\n", escape_tags(&label.name)));
+        } else {
+            list.push_str(&format!("- {}: {}\n", escape_tags(&label.name), escape_tags(description)));
+        }
+        if !label.examples.is_empty() {
+            list.push_str(&format!("  belongs: {}\n", escape_tags(&label.examples.join("; "))));
+        }
+        if !label.counter_examples.is_empty() {
+            list.push_str(&format!("  does not belong: {}\n", escape_tags(&label.counter_examples.join("; "))));
+        }
+    }
+    list
+}
+
 pub fn suggest_schema(names: &[String], suggest_new: bool) -> Value {
-    let mut schema = labels_schema(names);
+    let mut schema = verdicts_schema(names);
     if suggest_new {
         schema["required"] = json!(["labels", "newLabels"]);
         schema["properties"]["newLabels"] = json!({

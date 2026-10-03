@@ -79,13 +79,6 @@ pub fn parse_spam(text: &str) -> Option<SpamAnswer> {
     Some((verdict, confidence.clamp(0.0, 1.0), reasons))
 }
 
-/// A label the model chose, and why.
-#[derive(Debug, Clone)]
-pub struct LabelPick {
-    pub label: Label,
-    pub reason: String,
-}
-
 /// What the model said about one label: why, and whether it fits.
 #[derive(Debug, Clone)]
 pub struct Verdict {
@@ -105,7 +98,10 @@ pub fn parse_verdicts(answer: &Value, labels: &[Label]) -> Vec<Verdict> {
             Value::Object(object) => (
                 object.get("name").and_then(Value::as_str).unwrap_or_default(),
                 object.get("reason").and_then(Value::as_str).unwrap_or_default(),
-                object.get("fits").and_then(Value::as_bool).unwrap_or(true),
+                object
+                    .get("fits")
+                    .and_then(uwumail_labels::AiAnswer::parse)
+                    .is_none_or(|fits| fits == uwumail_labels::AiAnswer::Yes),
             ),
             _ => continue,
         };
@@ -121,13 +117,33 @@ pub fn parse_verdicts(answer: &Value, labels: &[Label]) -> Vec<Verdict> {
     found.into_iter().map(|(_, verdict)| verdict).collect()
 }
 
-/// Which of the person's labels the model chose, with its reasons: the ones it says fit.
-pub fn parse_labels(answer: &Value, labels: &[Label]) -> Vec<LabelPick> {
-    parse_verdicts(answer, labels)
-        .into_iter()
-        .filter(|verdict| verdict.fits)
-        .map(|verdict| LabelPick { label: verdict.label, reason: verdict.reason })
-        .collect()
+/// The model's verdict on each label it was asked about (`labels` as the deciding's id and the
+/// label's name), with its reasons: `"fits": "yes" | "no" | "unsure"` (or `true`/`false`). Names
+/// that are not labels are dropped; each label counts once, by its first entry. A bare name counts
+/// as yes, an entry without a verdict as unsure (UwUMail Server's `parse_labels`).
+pub fn parse_labels(answer: &Value, labels: &[(i64, &str)]) -> Vec<uwumail_labels::AiVerdict> {
+    use uwumail_labels::{AiAnswer, AiVerdict};
+    let mut out: Vec<AiVerdict> = Vec::new();
+    for entry in answer.get("labels").and_then(Value::as_array).into_iter().flatten().take(50) {
+        let (name, reason, verdict) = match entry {
+            Value::String(name) => (name.as_str(), "", AiAnswer::Yes),
+            Value::Object(object) => (
+                object.get("name").and_then(Value::as_str).unwrap_or_default(),
+                object.get("reason").and_then(Value::as_str).unwrap_or_default(),
+                object.get("fits").and_then(AiAnswer::parse).unwrap_or(AiAnswer::Unsure),
+            ),
+            _ => continue,
+        };
+        let name = name.trim().to_lowercase();
+        let Some((id, _)) = labels.iter().find(|(_, label)| label.trim().to_lowercase() == name) else {
+            continue;
+        };
+        if out.iter().any(|known| known.label_id == *id) {
+            continue;
+        }
+        out.push(AiVerdict { label_id: *id, verdict, reason: clean(&reason.replace('\n', " "), MAX_REASON_CHARS) });
+    }
+    out
 }
 
 /// A new label the model proposes for a mail no label fits.
@@ -541,9 +557,15 @@ mod tests {
             { "name": "$Junk", "reason": "system keyword" },
             "Reisen"
         ]});
-        let picks = parse_labels(&answer, &labels);
-        assert_eq!(picks.iter().map(|p| p.label.id.as_str()).collect::<Vec<_>>(), ["g1", "g2"]);
+        let names: Vec<(i64, &str)> = labels.iter().enumerate().map(|(i, l)| (i as i64, l.name.as_str())).collect();
+        let picks = parse_labels(&answer, &names);
+        // Without a verdict the first entry is unsure; a bare name is a yes.
+        assert_eq!(picks.iter().map(|p| p.label_id).collect::<Vec<_>>(), [0, 1]);
+        assert_eq!(picks[0].verdict, uwumail_labels::AiAnswer::Unsure);
+        assert_eq!(picks[1].verdict, uwumail_labels::AiAnswer::Yes);
         assert_eq!(picks[0].reason, "Eine Rechnung");
+        let unsure = json!({ "labels": [{ "name": "Reisen", "reason": "?", "fits": "unsure" }] });
+        assert_eq!(parse_labels(&unsure, &names)[0].verdict, uwumail_labels::AiAnswer::Unsure);
     }
 
     #[test]
@@ -560,7 +582,8 @@ mod tests {
             verdicts.iter().map(|v| (v.label.id.as_str(), v.fits)).collect::<Vec<_>>(),
             [("g1", true), ("g2", false)]
         );
-        assert_eq!(parse_labels(&answer, &labels).len(), 1);
+        let yes = json!({ "labels": [{ "name": "Privat", "reason": "Ja.", "fits": "yes" }] });
+        assert!(parse_verdicts(&yes, &labels)[0].fits);
     }
 
     #[test]

@@ -521,6 +521,20 @@ JMAP `Email/set` or IMAP `STORE +FLAGS`, the latter only where the folder's
 `PERMANENTFLAGS` has `\*`. Auto-labels (device scope, opt-in) look at new
 inbox mail after a sync: at most 20 mails at once and 200 per day, each with
 its reason in the label log, undoable there. Mail is never moved or deleted.
+The deciding is `crates/uwumail-labels`, a byte-identical copy of UwUMail
+Server's crate, so the device and the server label alike (its docs/labels.md):
+the eight base labels (de/en names, fixed definitions, `auto` switch, a label of
+the same name adopted, a deleted one restorable with `{"base": …}`), then per
+mail the label's rules, its detector or its base label's, learned senders, the
+classifier and similar mails (by words), and the model only for the labels
+these leave in doubt, with the facts read from the mail, hints and the person's
+corrections (`label_shots`); "unsure" counts as no, the facts can rule a yes
+out, a model saying yes to more than two labels is not believed, and a mail
+gets at most a main label (0.8) and a second one (0.88). A label taken off a
+sender's mail by hand stays off it (count −1). With the server that does this
+device's AI, `AssistLabel/suggest` answers for the labels in doubt and the same
+rules apply. `assist_check_overlap` warns of overlapping labels (the server's
+`AssistLabel/checkOverlap`, or the crate's check on the device).
 
 **Events.** `assist_extract_events {messageId, includeImages}` asks the
 mailbox's assistant for appointments. With `includeImages` a UwUMail server

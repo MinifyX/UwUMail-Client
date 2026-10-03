@@ -13,7 +13,9 @@ use crate::model::*;
 
 mod assist;
 mod shared;
-pub use assist::{CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, ProviderRecord, UsageRecord};
+pub use assist::{
+    CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, LabelShot, ProviderRecord, UsageRecord,
+};
 pub use shared::{AccountLink, shared_by_sign_in};
 
 const MIGRATIONS: &[&str] = &[
@@ -205,6 +207,7 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     assist::LABELS_MIGRATION,
     assist::FROM_TRUSTED_MIGRATION,
     shared::MIGRATION,
+    assist::BASE_LABELS_MIGRATION,
 ];
 
 /// What this device remembers about one calendar.
