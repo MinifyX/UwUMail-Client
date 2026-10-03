@@ -493,7 +493,8 @@ fn times(event: &Value) -> Times {
     let start = text(event, "start").and_then(parse_local).unwrap_or_default();
     let seconds = text(event, "duration").and_then(jscal::parse_duration).unwrap_or(0).max(0);
     let seconds = if all_day { (seconds / 86_400).max(1) * 86_400 } else { seconds };
-    let end = start.checked_add_signed(TimeDelta::seconds(seconds)).unwrap_or(start);
+    // A duration past what chrono holds (`P99999999999999D`) leaves the end at the start.
+    let end = TimeDelta::try_seconds(seconds).and_then(|delta| start.checked_add_signed(delta)).unwrap_or(start);
     // All-day events usually float; one with a zone keeps it.
     let own = text(event, "timeZone").and_then(jscal::parse_zone);
     let (start, end, zone) = match own.and_then(|zone| windows_zone(zone, start.date())) {
@@ -581,6 +582,17 @@ pub fn patch_body(current: &GraphEvent, changed: &Value, patch: &Map<String, Val
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A duration past what chrono holds must not panic (as the server's DATES-H1).
+    #[test]
+    fn an_endless_duration_leaves_the_end_at_the_start() {
+        for all_day in [false, true] {
+            let event =
+                json!({ "start": "2026-10-03T10:00:00", "duration": "P99999999999999D", "showWithoutTime": all_day });
+            let times = times(&event);
+            assert_eq!(times.start, times.end, "{all_day}");
+        }
+    }
 
     #[test]
     fn reads_calendars_and_colors() {
