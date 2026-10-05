@@ -267,7 +267,7 @@ pub struct JmapInstance {
     pub utc: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
 
-const INSTANCE_PROPERTIES: [&str; 18] = [
+const INSTANCE_PROPERTIES: [&str; 20] = [
     "id",
     "baseEventId",
     "calendarIds",
@@ -285,6 +285,9 @@ const INSTANCE_PROPERTIES: [&str; 18] = [
     "color",
     "utcStart",
     "utcEnd",
+    // Who takes part, for the event popover.
+    "participants",
+    "organizerCalendarAddress",
     // Events of the birthdays calendar: whose date (UwUMail-Server docs/birthdays.md).
     "uwuBirthday",
 ];

@@ -6,8 +6,9 @@ use chrono::{Datelike, Duration as TimeDelta, NaiveDate, NaiveDateTime, Offset, 
 use chrono_tz::Tz;
 use serde_json::{Map, Value, json};
 
+use super::invite::Partstat;
 use crate::error::{Error, Result};
-use crate::model::{CalendarOccurrence, EventInput, Frequency, Recurrence, Weekday};
+use crate::model::{CalendarOccurrence, EventInput, EventParticipant, Frequency, Recurrence, Weekday};
 
 pub const LOCAL_FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
 /// Longest title and location, in characters, and description, in bytes.
@@ -307,6 +308,47 @@ pub fn is_all_day(event: &Value) -> bool {
     event.get("showWithoutTime").and_then(Value::as_bool).unwrap_or(false)
 }
 
+/// The most participants an occurrence carries; a huge event only shows its first ones.
+pub const MAX_PARTICIPANTS: usize = 50;
+/// Characters of a participant's name the page gets at most.
+const MAX_PARTICIPANT_NAME: usize = 200;
+
+/// Who takes part in an event (JSCalendar `participants`), the organizer first, each with an
+/// address or a name; nobody without either.
+fn participants_of(event: &Value) -> Vec<EventParticipant> {
+    let Some(all) = event.get("participants").and_then(Value::as_object) else { return Vec::new() };
+    let organizer = text(event, "organizerCalendarAddress").and_then(super::invite::plain_address);
+    let mut found: Vec<EventParticipant> = all
+        .values()
+        .filter_map(|participant| {
+            let email = ["/calendarAddress", "/sendTo/imip", "/email"]
+                .into_iter()
+                .filter_map(|pointer| participant.pointer(pointer).and_then(Value::as_str))
+                .find_map(super::invite::plain_address)
+                .unwrap_or_default();
+            let named = text(participant, "name").map(str::trim).filter(|name| !name.is_empty());
+            let name = match named {
+                Some(name) => name.chars().filter(|c| !c.is_control()).take(MAX_PARTICIPANT_NAME).collect(),
+                None => email.clone(),
+            };
+            if name.is_empty() {
+                return None;
+            }
+            let status = match text(participant, "participationStatus") {
+                Some("accepted") => Partstat::Accepted,
+                Some("tentative") => Partstat::Tentative,
+                Some("declined") => Partstat::Declined,
+                _ => Partstat::NeedsAction,
+            };
+            let organizer = !email.is_empty() && organizer.as_deref() == Some(email.as_str());
+            Some(EventParticipant { name, email, status, organizer })
+        })
+        .collect();
+    found.sort_by_key(|participant| !participant.organizer);
+    found.truncate(MAX_PARTICIPANTS);
+    found
+}
+
 /// One occurrence as the page shows it: `instance` is the event with this occurrence's own
 /// values (overrides applied), `series` the event whose rule it follows.
 pub fn occurrence(
@@ -350,6 +392,7 @@ pub fn occurrence(
         recurrence_id: text(instance, "recurrenceId").map(String::from),
         read_only: ids.read_only,
         color: clean_color(text(instance, "color")),
+        participants: participants_of(instance),
         birthday: None,
     }
 }
@@ -813,6 +856,34 @@ mod tests {
             let _ = to_utc(local, berlin);
             let _ = in_zone(to_utc(local, berlin), parse_zone("Pacific/Kiritimati").unwrap());
         }
+    }
+
+    #[test]
+    fn lists_who_takes_part_the_organizer_first() {
+        let event = json!({
+            "organizerCalendarAddress": "mailto:Mini@example.org",
+            "participants": {
+                "nyu": { "name": "  ", "calendarAddress": "mailto:NYU@example.com", "participationStatus": "accepted" },
+                "mini": { "sendTo": { "imip": "mailto:mini@example.org" }, "participationStatus": "x-odd" },
+                "blank": { "name": " " },
+                "named": { "name": "Leni\u{7}", "participationStatus": "declined" },
+            },
+        });
+        let found = participants_of(&event);
+        let shown: Vec<_> = found.iter().map(|p| (p.name.as_str(), p.email.as_str(), p.status, p.organizer)).collect();
+        assert_eq!(
+            shown,
+            [
+                ("mini@example.org", "mini@example.org", Partstat::NeedsAction, true),
+                ("Leni", "", Partstat::Declined, false),
+                ("nyu@example.com", "nyu@example.com", Partstat::Accepted, false),
+            ]
+        );
+        assert!(participants_of(&json!({ "participants": null })).is_empty());
+
+        let many: Map<String, Value> =
+            (0..200).map(|i| (format!("p{i}"), json!({ "email": format!("p{i}@example.com") }))).collect();
+        assert_eq!(participants_of(&json!({ "participants": many })).len(), MAX_PARTICIPANTS);
     }
 
     #[test]

@@ -220,6 +220,7 @@ impl Inner {
                     recurrence_id: Some(start_text),
                     read_only: true,
                     color: None,
+                    participants: Vec::new(),
                     birthday: Some(birthday),
                 });
             }

@@ -459,8 +459,19 @@ export interface CalendarOccurrence {
   recurrenceId: string | null;
   readOnly: boolean; // no write right or not the origin
   color: string | null;
+  /** Who takes part, the organizer first (at most 50); empty or missing without participants. */
+  participants?: EventParticipant[];
   /** An event of a birthdays calendar: whose date it is, and how old or how many years. */
   birthday?: OccurrenceBirthday | null;
+}
+
+/** Someone who takes part in an event, with their answer. */
+export interface EventParticipant {
+  name: string;
+  /** Lower case; empty where the event names no address. */
+  email: string;
+  status: ParticipationStatus;
+  organizer: boolean;
 }
 
 /** What a birthdays calendar event is for (the server's `uwuBirthday`, or the app's own). */

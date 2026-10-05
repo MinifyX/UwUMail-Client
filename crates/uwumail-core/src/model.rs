@@ -679,9 +679,23 @@ pub struct CalendarOccurrence {
     pub recurrence_id: Option<String>,
     pub read_only: bool,
     pub color: Option<String>,
+    /// Who takes part, the organizer first; at most [`crate::calendar::jscal::MAX_PARTICIPANTS`].
+    #[serde(default)]
+    pub participants: Vec<EventParticipant>,
     /// An event of a birthdays calendar: whose date it is, and how old or how many years.
     #[serde(default)]
     pub birthday: Option<crate::birthdays::OccurrenceBirthday>,
+}
+
+/// Someone who takes part in an event, with their answer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventParticipant {
+    pub name: String,
+    /// Lower case; empty where the event names no address.
+    pub email: String,
+    pub status: crate::calendar::invite::Partstat,
+    pub organizer: bool,
 }
 
 /// An event as the editor fills it in.
