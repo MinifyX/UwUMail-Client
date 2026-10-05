@@ -190,6 +190,27 @@ impl Inner {
         Err(Error::sign_in_again("Sign in again to see calendar and contacts."))
     }
 
+    /// Like [`Self::cloud_call`] for bytes: sends `body` and reads at most `limit` bytes back;
+    /// `None` when the API has nothing there (404).
+    pub(super) async fn cloud_raw(
+        &self,
+        account: &AccountRecord,
+        call: &Call,
+        body: Option<(&[u8], &str)>,
+        limit: usize,
+    ) -> Result<Option<Vec<u8>>> {
+        let mut refused: Option<String> = None;
+        for _ in 0..2 {
+            let token = self.cloud_token(account, call.api.token(), refused.as_deref()).await?;
+            let endpoints = self.cloud.endpoints.lock().unwrap().clone();
+            match cloud::send_raw(&endpoints, &token.token, call, body, limit).await? {
+                cloud::RawAnswer::Done(bytes) => return Ok(bytes),
+                cloud::RawAnswer::Unauthorized => refused = Some(token.token),
+            }
+        }
+        Err(Error::sign_in_again("Sign in again to see calendar and contacts."))
+    }
+
     /// Every item of a Graph list, page after page.
     async fn graph_list(&self, account: &AccountRecord, call: Call) -> Result<Vec<Value>> {
         let mut call = call;
@@ -350,6 +371,7 @@ impl Inner {
                             may_delete: found.can_remove && !found.is_default,
                             is_birthdays: false,
                             is_local: false,
+                            sharing: Default::default(),
                         },
                         remote: found.id,
                     });
@@ -379,6 +401,7 @@ impl Inner {
                             may_delete: !found.primary,
                             is_birthdays: false,
                             is_local: false,
+                            sharing: Default::default(),
                         },
                         remote: found.id,
                     });

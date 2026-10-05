@@ -154,6 +154,7 @@ impl Inner {
             may_delete: false,
             is_birthdays: true,
             is_local: true,
+            sharing: Default::default(),
             id,
         })
     }

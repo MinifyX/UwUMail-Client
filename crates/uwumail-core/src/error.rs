@@ -24,6 +24,9 @@ pub enum ErrorCode {
     /// Google mailbox signed in before UwUMail asked for them), or it ran out. Signing in again
     /// fixes it; mail keeps working meanwhile.
     SignInAgain,
+    /// The server doesn't allow this for the person: a domain or a limit an administrator set
+    /// (masked addresses), or a public picture where public ones are switched off.
+    Forbidden,
 }
 
 /// Error type crossing the boundary to the UI. The message is shown to users,

@@ -1,6 +1,7 @@
 //! Mail rules, calendars and birthdays against a hostile JMAP server on this machine (plain HTTP on
 //! loopback, which the JMAP client allows for local servers). Runs everywhere.
 
+mod jmap_account;
 mod support;
 
 use chrono_tz::Tz;
