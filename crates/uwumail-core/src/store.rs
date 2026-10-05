@@ -12,10 +12,12 @@ use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
 
 mod assist;
+mod send_later;
 mod shared;
 pub use assist::{
     CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, LabelShot, ProviderRecord, UsageRecord,
 };
+pub use send_later::{LaterSend, TakenSend};
 pub use shared::{AccountLink, shared_by_sign_in};
 
 const MIGRATIONS: &[&str] = &[
@@ -208,6 +210,7 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     assist::FROM_TRUSTED_MIGRATION,
     shared::MIGRATION,
     assist::BASE_LABELS_MIGRATION,
+    send_later::MIGRATION,
 ];
 
 /// What this device remembers about one calendar.

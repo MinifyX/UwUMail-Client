@@ -140,6 +140,9 @@ pub struct Session {
     pub state: Option<String>,
     /// The server's AI assistant for this login's own account, if it has one.
     pub assist: Option<AssistSession>,
+    /// How far ahead the submission account holds mail ("send later"), in seconds; 0 when it
+    /// doesn't (`maxDelayedSend` of its submission capability, RFC 8621 §7).
+    pub max_delayed_send: u64,
 }
 
 /// What a session says about UwUMail's AI assistant.
@@ -195,15 +198,22 @@ impl Session {
                 .cloned()
                 .unwrap_or(Value::Null),
         });
+        let submission_account_id = capabilities
+            .contains_key(SUBMISSION)
+            .then(|| primary.and_then(|p| p.get(SUBMISSION)).and_then(Value::as_str).map(String::from))
+            .flatten();
+        let max_delayed_send = submission_account_id
+            .as_ref()
+            .and_then(|id| document.get("accounts")?.get(id)?.get("accountCapabilities")?.get(SUBMISSION))
+            .and_then(|capability| capability.get("maxDelayedSend"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         Ok(Self {
             api_url: absolute(base, text("apiUrl").ok_or_else(invalid)?),
             download_url: absolute(base, text("downloadUrl").ok_or_else(invalid)?),
             upload_url: absolute(base, text("uploadUrl").ok_or_else(invalid)?),
             event_source_url: text("eventSourceUrl").filter(|u| !u.is_empty()).map(|u| absolute(base, u)),
-            submission_account_id: capabilities
-                .contains_key(SUBMISSION)
-                .then(|| primary.and_then(|p| p.get(SUBMISSION)).and_then(Value::as_str).map(String::from))
-                .flatten(),
+            submission_account_id,
             account_id,
             max_objects_in_get: limit("maxObjectsInGet", 500),
             max_calls_in_request: limit("maxCallsInRequest", 16),
@@ -228,6 +238,7 @@ impl Session {
             signatures_account_id,
             state: text("state").map(String::from),
             assist,
+            max_delayed_send,
         })
     }
 
@@ -1189,6 +1200,7 @@ mod tests {
         assert_eq!(session.account_id, "c");
         assert_eq!(session.submission_account_id.as_deref(), Some("c"));
         assert_eq!(session.max_objects_in_get, 250);
+        assert_eq!(session.max_delayed_send, 0, "no send later without maxDelayedSend");
         let moved = session.rebased("https://mail.uwumail.test", "http://127.0.0.1:18080");
         assert_eq!(moved.api_url, "http://127.0.0.1:18080/jmap/");
         assert!(moved.event_source_url.unwrap().starts_with("http://127.0.0.1:18080/jmap/eventsource/"));
@@ -1196,6 +1208,12 @@ mod tests {
         let no_mail = json!({ "capabilities": { CORE: {} }, "apiUrl": "/", "downloadUrl": "/", "uploadUrl": "/" });
         assert_eq!(Session::parse(&no_mail, &base).unwrap_err().code, ErrorCode::NotSupported);
         assert_eq!(session.image_url, None, "an ordinary server fetches no pictures for us");
+
+        let mut later = document.clone();
+        later["accounts"] = json!({ "c": { "accountCapabilities": { SUBMISSION: { "maxDelayedSend": 2_592_000 } } } });
+        assert_eq!(Session::parse(&later, &base).unwrap().max_delayed_send, 2_592_000);
+        later["accounts"]["c"]["accountCapabilities"][SUBMISSION]["maxDelayedSend"] = json!("30");
+        assert_eq!(Session::parse(&later, &base).unwrap().max_delayed_send, 0, "only a number counts");
     }
 
     #[test]

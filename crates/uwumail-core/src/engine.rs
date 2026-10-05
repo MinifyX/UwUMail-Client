@@ -157,6 +157,8 @@ struct Inner {
     autodiscover_url: Mutex<String>,
     /// Whether accounts sync in the background; tests that must not reach any server switch it off.
     background_sync: std::sync::atomic::AtomicBool,
+    /// The outbox task (undo send and send later, see `send_later_ops`).
+    send_later: send_later_ops::OutboxState,
 }
 
 enum Credential {
@@ -198,6 +200,7 @@ mod folder_ops;
 mod ocr_ops;
 mod price_ops;
 mod push_ops;
+mod send_later_ops;
 mod shared_ops;
 
 impl Engine {
@@ -248,6 +251,7 @@ impl Engine {
                 shared_lock: AsyncMutex::new(()),
                 autodiscover_url: Mutex::new(crate::shared::AUTODISCOVER_URL.to_string()),
                 background_sync: std::sync::atomic::AtomicBool::new(true),
+                send_later: Default::default(),
             }),
         })
     }
@@ -287,9 +291,8 @@ impl Engine {
         for account in self.inner.store.accounts()? {
             self.inner.spawn_sync(&account.id);
         }
-        for (id, send_at) in self.inner.store.outbox()? {
-            self.schedule_send(id, send_at);
-        }
+        // Also what was due while UwUMail was closed: it goes now.
+        self.run_outbox();
         Ok(())
     }
 
@@ -1365,7 +1368,7 @@ impl Engine {
         let delay = i64::try_from(delay_seconds.min(MAX_SEND_DELAY)).unwrap_or(0) * 1000;
         let send_at = now_millis() + delay;
         self.inner.store.insert_outbox(&id, &account.id, &serde_json::to_string(&outgoing)?, send_at)?;
-        self.schedule_send(id.clone(), send_at);
+        self.run_outbox();
         Ok(QueuedSend { id, send_at: mime::iso8601(send_at / 1000) })
     }
 
@@ -1374,49 +1377,6 @@ impl Engine {
         match self.inner.store.take_outbox(send_id)? {
             Some((_, json)) => Ok(serde_json::from_str(&json)?),
             None => Err(Error::invalid("This mail is already on its way.")),
-        }
-    }
-
-    fn schedule_send(&self, send_id: String, send_at: i64) {
-        let engine = self.clone();
-        self.inner.runtime.spawn(async move {
-            let wait = u64::try_from(send_at - now_millis()).unwrap_or(0);
-            tokio::time::sleep(Duration::from_millis(wait)).await;
-            engine.deliver(&send_id).await;
-        });
-    }
-
-    async fn deliver(&self, send_id: &str) {
-        let (account_id, json) = match self.inner.store.take_outbox(send_id) {
-            Ok(Some(taken)) => taken,
-            // Undone in the meantime.
-            Ok(None) => return,
-            Err(error) => {
-                tracing::warn!("Couldn't read the outbox: {error}");
-                return;
-            }
-        };
-        let message: OutgoingMessage = match serde_json::from_str(&json) {
-            Ok(message) => message,
-            Err(error) => {
-                tracing::warn!("A queued message couldn't be read: {error}");
-                return;
-            }
-        };
-        match self.send(message.clone()).await {
-            Ok(()) => self.inner.emit(EngineEvent::SendDone { send_id: send_id.to_string(), account_id }),
-            Err(error) => {
-                // Nothing written gets lost: it waits in Drafts.
-                if let Err(draft_error) = self.save_draft(message.clone()).await {
-                    tracing::warn!("Couldn't keep the unsent message as a draft: {draft_error}");
-                }
-                self.inner.emit(EngineEvent::SendFailed {
-                    send_id: send_id.to_string(),
-                    account_id,
-                    reason: error.message,
-                    message: Box::new(message),
-                });
-            }
         }
     }
 
