@@ -100,6 +100,20 @@ code (against IV-1). The round-1 fixes hold for what they set out to fix.
 | PC-2 | Sender pictures | Removing an account doesn't clear its picture cache and login map in the engine until restart. |
 | SV-1 | UwUMail Server | Belongs to the server, not the client: its iTIP code (`crates/uwumail-store/src/itip.rs`) still has the IV-1 lone-CR gap. SMTP smuggling is closed there (SMTP-9 normalizes line ends), but a REQUEST from outside is stored without a click and served raw over CalDAV, and a REPLY answered from a CalDAV client can carry extra iCalendar lines. To be fixed in the server by porting the IV-1 parsing fix. |
 
+## Round 3
+
+A re-check of the round-2 fixes (SL-11, NT-1, RD-4, IV-I-7) found nothing critical, high or medium in
+the client; the fixes hold and add no way to send a mail twice or lose it.
+
+- **SV-2 (low, UwUMail Server):** on "send now" the server queues the mail before it writes the
+  submission record. A failed record write, or a crash between the two, leaves no record, so the
+  client's lookup (SL-11) finds nothing and puts a mail that does go out into Drafts. To be fixed in the
+  server (record first, or a best-effort record after a successful queue).
+- Info only: a submission made by another client before a new time can be mistaken for the new one
+  after a lost answer (SL-I-8); submissions without a readable `undoStatus` are skipped (SL-I-9); the
+  lookup's limit has no sort order (SL-I-10); only the notification body is escaped on Linux, as the
+  freedesktop spec has the title as plain text (NT-I-2).
+
 ## Checked and fine
 
 - **Mail frame**: the srcdoc's CSP is the first element in `<head>` with `default-src 'none'` and no
