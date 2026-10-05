@@ -36,21 +36,42 @@ describe("Microsoft Safe Links", () => {
   const wrapped =
     "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwanders.example%2Fclip%3Fv%3D2&data=05%7C02&reserved=0";
 
-  it("read as the address they wrap, while the link stays as written", () => {
+  it("show and link the address they wrap, marked for the link question", () => {
     const html = readableBody(
-      message({ bodyHtml: `<p><a href="${wrapped}">${wrapped}</a> und <a href="${wrapped}">Lenis Clip</a></p>` }),
+      message({
+        bodyHtml: `<p><a href="${wrapped}">${wrapped}</a> und <a href="${wrapped}">Lenis Clip</a> und <a href="https://wanders.example/" data-uwu-safelink="evil.example">ok</a></p>`,
+      }),
     );
     const doc = new DOMParser().parseFromString(html, "text/html");
     const links = [...doc.querySelectorAll("a")];
-    expect(links.map((link) => link.textContent)).toEqual(["https://wanders.example/clip?v=2", "Lenis Clip"]);
-    expect(links.every((link) => link.getAttribute("href") === wrapped)).toBe(true);
+    expect(links.map((link) => link.textContent)).toEqual(["https://wanders.example/clip?v=2", "Lenis Clip", "ok"]);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "https://wanders.example/clip?v=2",
+      "https://wanders.example/clip?v=2",
+      "https://wanders.example/",
+    ]);
+    // A mail can't set the marker itself.
+    expect(links.map((link) => link.getAttribute("data-uwu-safelink"))).toEqual([
+      "eur01.safelinks.protection.outlook.com",
+      "eur01.safelinks.protection.outlook.com",
+      null,
+    ]);
+  });
+
+  it("keep the text unwrapped where only the text is a Safe Link", () => {
+    const html = readableBody(message({ bodyHtml: `<a href="https://other.example/">${wrapped}</a>` }));
+    const link = new DOMParser().parseFromString(html, "text/html").querySelector("a")!;
+    expect(link.textContent).toBe("https://wanders.example/clip?v=2");
+    expect(link.getAttribute("href")).toBe("https://other.example/");
+    expect(link.hasAttribute("data-uwu-safelink")).toBe(false);
   });
 
   it("in plain-text mail too", () => {
     const html = readableBody(message({ bodyText: `Hier: ${wrapped}\nBis bald` }));
     const link = new DOMParser().parseFromString(html, "text/html").querySelector("a")!;
     expect(link.textContent).toBe("https://wanders.example/clip?v=2");
-    expect(link.getAttribute("href")).toBe(wrapped);
+    expect(link.getAttribute("href")).toBe("https://wanders.example/clip?v=2");
+    expect(link.getAttribute("data-uwu-safelink")).toBe("eur01.safelinks.protection.outlook.com");
     const plain = readableBody(message({ bodyText: "Siehe https://wanders.example/a?b=1&c=2" }));
     expect(plain).toContain(
       '<a href="https://wanders.example/a?b=1&amp;c=2">https://wanders.example/a?b=1&amp;c=2</a>',

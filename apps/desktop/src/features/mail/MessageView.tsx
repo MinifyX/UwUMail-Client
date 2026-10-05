@@ -45,7 +45,7 @@ import { nativeMobile } from "@/backend/mobile";
 import { backend } from "@/backend/backend";
 import { blockSender } from "./selection";
 import { UnsubscribeButton } from "./Unsubscribe";
-import { buildPrintDocument, MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
+import { buildPrintDocument, MAIL_FRAME_SANDBOX, MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
 import { useMailDates } from "../dates/useMailDates";
 
 interface AppearanceToggleProps {
@@ -525,8 +525,9 @@ function printMessage(
     date: translate("reader.date"),
   };
   const frame = document.createElement("iframe");
-  // allow-modals lets the print dialog open; without allow-scripts nothing in the mail runs.
-  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+  // allow-modals lets the print dialog open. allow-scripts only so WebKit calls the app's
+  // afterprint listener (see MAIL_FRAME_SANDBOX); the mail runs nothing under the document's policy.
+  frame.setAttribute("sandbox", `${MAIL_FRAME_SANDBOX} allow-modals`);
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none";
   frame.srcdoc = buildPrintDocument(

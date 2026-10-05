@@ -1,0 +1,4 @@
+{
+  "de": "- Behoben: Links in Mails tun auf macOS, iOS und Linux wieder etwas. Ein Klick fragt wie gewohnt nach, statt nichts zu tun; auch Tastenkürzel und erkannte Termine in der Mail funktionieren dort wieder",
+  "en": "- Fixed: links in mails work again on macOS, iOS and Linux. A click asks first as usual instead of doing nothing; shortcuts and found dates inside the mail work there again too"
+}

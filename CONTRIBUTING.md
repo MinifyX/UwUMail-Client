@@ -37,6 +37,14 @@ pnpm typecheck && pnpm lint && pnpm test
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
+Changed how mails are shown (the reader's frame, its links, keys or dates)? jsdom can't show what
+WebKit does there, so also click through a mail of the browser demo in real WebKit and Chromium
+(needs Docker):
+
+```bash
+pnpm --filter @uwumail/desktop build && scripts/webkit-links.sh
+```
+
 Security issues: please don't open a public issue, see [SECURITY.md](SECURITY.md).
 
 ## Licensing
