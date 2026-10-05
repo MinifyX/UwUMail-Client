@@ -29,3 +29,13 @@ describe("locales", () => {
     expect(keys(enPlayful).filter((key) => !neutral.has(key))).toEqual([]);
   });
 });
+
+describe("the system's language", () => {
+  it("is the first of the preferred languages the app speaks", async () => {
+    const { systemLanguage } = await import("./index");
+    expect(systemLanguage(["fr-FR", "de-CH", "en"])).toBe("de");
+    expect(systemLanguage(["en-GB", "de"])).toBe("en");
+    expect(systemLanguage(["ja", "zh_Hans"])).toBe("en");
+    expect(systemLanguage([])).toBe("en");
+  });
+});

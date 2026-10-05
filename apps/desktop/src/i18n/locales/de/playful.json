@@ -127,6 +127,7 @@
     "unifiedPushGone": "Deine Push-App ist weg (・_・;) Ich bleibe wieder selbst verbunden.",
     "senderAdded": "{{email}} ist startklar (｀・ω・´)ゞ",
     "signatureSaved": "Signatur sitzt ✧",
+    "signatureTooBig": "Uff, so viel passt nicht in eine Signatur (・_・;) Nimm ein kleineres Bild.",
     "signaturePlaceholder": "Liebe Grüße ✿",
     "linkConfirm": "Vor dem Öffnen von Links fragen",
     "linkConfirmDesc": "Ich zeig dir vorher, wohin ein Link aus einer Mail führt. Getarnte Links frag ich immer.",

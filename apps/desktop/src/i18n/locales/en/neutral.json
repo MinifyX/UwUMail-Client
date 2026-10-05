@@ -263,8 +263,8 @@
       "name": "Pro",
       "desc": "Folders always visible, three columns, keyboard shortcuts."
     },
-    "resizeNav": "Resize the sidebar",
-    "resizeList": "Resize the mail list"
+    "resizeNav": "Width of the sidebar",
+    "resizeList": "Width of the mail list"
   },
   "tone": {
     "playful": {
@@ -359,7 +359,7 @@
     "remoteAsk": "Ask every time",
     "remoteAlways": "Always load",
     "trustedSenders": "Always load images from",
-    "trustedSendersDesc": "A company like @shop.com covers all of its addresses, including news@ or noreply@.",
+    "trustedSendersDesc": "A company like @shop.example covers all of its addresses, including news@ or noreply@.",
     "trustedSendersEmpty": "Nobody yet. You add senders right in the image notice of a message.",
     "trustedSendersInactive": "Only applies with “Ask every time”. Right now UwUMail loads all images.",
     "untrustSender": "Remove {{sender}}",
@@ -531,7 +531,7 @@
     "signatureOverride": "Own signature for this address",
     "signatureBackToDomain": "Use the domain signature",
     "signatureDeviceFirst": "In this app these addresses have signatures of their own. Here they go before the server's signature. Delete them if the server's should apply.",
-    "signatureTooBig": "This signature is too big. Try a smaller picture.",
+    "signatureTooBig": "The signature is getting too big. Use a smaller picture or fewer pictures.",
     "profile": "Profile picture",
     "masked": "Masked addresses",
     "serverAccount": "Mailbox"
