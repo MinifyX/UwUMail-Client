@@ -7,12 +7,20 @@ import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
 import { DemoContacts } from "./demo-contacts";
+import { DemoMasked } from "./demo-masked";
+import { blobToDataUrl, companyLogoFrom } from "./pictureBlobs";
 import { DemoSignatures } from "./demo-signatures";
 import type { DomainSignatureChange } from "@/lib/domainSignatures";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMessage } from "./demo-data";
 import { DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
+  MaskedAddressInput,
+  MaskedAddressPatch,
+  ProfilePicture,
+  ProfilePicturePatch,
+  ServerAccountFeatures,
+  ShareLevel,
   LabelCount,
   LabelRef,
   BlockedSender,
@@ -594,6 +602,16 @@ export class DemoBackend implements Backend {
     this.calendar.setDefaultCalendar(id);
   }
 
+  async calendarPeople(accountId: string) {
+    await wait(80);
+    return this.calendar.people(accountId);
+  }
+
+  async shareCalendar(calendarId: string, personId: string, level: ShareLevel | null) {
+    await wait(150);
+    this.calendar.shareCalendar(calendarId, personId, level);
+  }
+
   /** Demo events are floating, so the viewer's zone changes nothing. */
   async calendarEvents(from: string, to: string, _timeZone?: string) {
     await wait(150);
@@ -740,6 +758,78 @@ export class DemoBackend implements Backend {
   async deleteContact(id: string) {
     await wait(120);
     this.addressBook.deleteContact(id);
+  }
+
+  /** The demo's contacts all carry their pictures inside. */
+  async contactPhoto(): Promise<string | null> {
+    return null;
+  }
+
+  async companyLogo(email: string): Promise<Blob | null> {
+    await wait(150);
+    return companyLogoFrom(demoSenderPicture(email));
+  }
+
+  /** The private mailbox is the one on a UwUMail server (JMAP). */
+  private readonly serverAccount = "acc-private";
+  private masked = new DemoMasked(lang(), () => {});
+  /** The demo's own profile picture, kept in memory; it starts without one. */
+  private profile: ProfilePicture = { url: null, visibility: "server", sendFace: false, updated: null };
+
+  private serverOnly(accountId: string) {
+    if (accountId !== this.serverAccount || !this.accounts.some((account) => account.id === accountId)) {
+      throw new BackendError("not_supported", "This needs a mailbox on a UwUMail server.");
+    }
+  }
+
+  async serverAccountFeatures(): Promise<ServerAccountFeatures[]> {
+    await wait(60);
+    if (!this.accounts.some((account) => account.id === this.serverAccount)) return [];
+    return [
+      {
+        accountId: this.serverAccount,
+        masked: this.masked.options(),
+        profile: { maxSize: 10 * 1024 * 1024, mayBePublic: true },
+      },
+    ];
+  }
+
+  async maskedAddresses(accountId: string) {
+    await wait(120);
+    this.serverOnly(accountId);
+    return this.masked.addresses();
+  }
+
+  async createMaskedAddress(accountId: string, input: MaskedAddressInput) {
+    await wait(200);
+    this.serverOnly(accountId);
+    return this.masked.create(input);
+  }
+
+  async updateMaskedAddress(accountId: string, id: string, patch: MaskedAddressPatch) {
+    await wait(120);
+    this.serverOnly(accountId);
+    this.masked.update(id, patch);
+  }
+
+  async profilePicture(accountId: string): Promise<ProfilePicture> {
+    await wait(100);
+    this.serverOnly(accountId);
+    return { ...this.profile };
+  }
+
+  async setProfilePicture(accountId: string, picture: Blob | null): Promise<ProfilePicture> {
+    await wait(300);
+    this.serverOnly(accountId);
+    const url = picture ? await blobToDataUrl(picture) : null;
+    this.profile = { ...this.profile, url, updated: new Date().toISOString() };
+    return { ...this.profile };
+  }
+
+  async updateProfilePicture(accountId: string, patch: ProfilePicturePatch): Promise<void> {
+    await wait(120);
+    this.serverOnly(accountId);
+    this.profile = { ...this.profile, ...patch };
   }
 
   async createFolder(input: { accountId?: string; name: string; parentId: string | null }) {

@@ -507,7 +507,10 @@
     "signatureOverride": "Eigene Signatur für diese Adresse",
     "signatureBackToDomain": "Domain-Signatur verwenden",
     "signatureDeviceFirst": "In dieser App haben diese Adressen eigene Signaturen. Sie gehen hier vor der Signatur vom Server. Lösch sie, wenn die vom Server gelten soll.",
-    "signatureTooBig": "Die Signatur ist zu groß. Nimm ein kleineres Bild."
+    "signatureTooBig": "Die Signatur ist zu groß. Nimm ein kleineres Bild.",
+    "profile": "Profilbild",
+    "masked": "Maskierte Adressen",
+    "serverAccount": "Postfach"
   },
   "theme": {
     "system": "System",
@@ -1234,7 +1237,11 @@
     "reminderWeekBefore": "1 Woche vorher",
     "reminderOther_one": "{{count}} Tag vorher um {{time}}",
     "reminderOther_other": "{{count}} Tage vorher um {{time}}",
-    "remindersHint": "Sie klingeln auf allen Geräten mit dem Geburtstagskalender."
+    "remindersHint": "Sie klingeln auf allen Geräten mit dem Geburtstagskalender.",
+    "picture": {
+      "logo": "Firmenlogo",
+      "noLogo": "Für {{domain}} gibt es kein Logo."
+    }
   },
   "accountContacts": {
     "title": "Kontakte",
@@ -1915,5 +1922,154 @@
   "font": {
     "system": "Systemschrift",
     "sample": "Hallo :3 – Termin um 10:30 <3"
+  },
+  "masked": {
+    "title": "Maskierte Adressen",
+    "description": "Eine maskierte Adresse ist eine zufällige Adresse für eine einzelne Website. Mails an sie kommen hier an, aber die Seite erfährt deine echte Adresse nie. Bekommt eine davon Spam, weißt du, wer sie weitergegeben hat, und schaltest sie ab. Auch Passwortmanager können sie für dich anlegen.",
+    "closedTitle": "Maskierte Adressen sind für dich nicht freigeschaltet",
+    "closedBody": "Deine Administration hat neue maskierte Adressen für dein Konto nicht freigeschaltet. Die, die du schon hast, funktionieren weiter und lassen sich hier verwalten.",
+    "new": "Neue maskierte Adresse",
+    "create": "Adresse anlegen",
+    "created": "Deine neue Adresse ist bereit:",
+    "done": "Fertig",
+    "copy": "{{email}} kopieren",
+    "copied": "Adresse kopiert",
+    "copyFailed": "Die Adresse konnte nicht kopiert werden. Markiere sie und kopiere sie von Hand.",
+    "field": {
+      "description": "Beschreibung",
+      "site": "Website",
+      "url": "Link (optional)",
+      "prefix": "Präfix (optional)",
+      "domain": "Domain"
+    },
+    "placeholder": {
+      "description": "z. B. Onlineshop"
+    },
+    "hint": {
+      "url": "Wo du sie nutzt, zum Beispiel deine Kontoseite oder ein Eintrag im Passwortmanager.",
+      "prefix": "Steht vor dem zufälligen Teil, etwa shop.maple.otter482@…"
+    },
+    "domainAutomatic": "Automatisch",
+    "onDomain": "Neue Adressen enden auf @{{domain}}.",
+    "problem": {
+      "tooLong": "Höchstens {{max}} Zeichen.",
+      "control": "Zeilenumbrüche und Steuerzeichen gehen hier nicht.",
+      "spaces": "Ein Link darf keine Leerzeichen enthalten.",
+      "prefix": "Nur Kleinbuchstaben a–z, Ziffern und _, höchstens {{max}} Zeichen."
+    },
+    "loading": "Maskierte Adressen werden geladen …",
+    "loadFailed": "Die maskierten Adressen konnten nicht geladen werden. {{reason}}",
+    "empty": "Noch keine maskierten Adressen. Leg eine für die nächste Seite an, bei der du dich anmeldest.",
+    "emptyFilter": {
+      "active": "Keine aktiven maskierten Adressen.",
+      "disabled": "Keine ist ausgeschaltet.",
+      "deleted": "Keine ist gelöscht."
+    },
+    "noMatch": "Keine maskierte Adresse passt zu deiner Suche.",
+    "search": "Maskierte Adressen durchsuchen",
+    "filter": {
+      "label": "Anzeigen",
+      "active": "Aktiv",
+      "disabled": "Aus",
+      "deleted": "Gelöscht"
+    },
+    "onOff": "{{email}} ein- oder ausschalten",
+    "edit": "{{email}} bearbeiten",
+    "delete": "{{email}} löschen",
+    "restore": "Wiederherstellen",
+    "openUrl": "Link von {{email}} öffnen",
+    "createdAt": "Angelegt am {{date}}",
+    "lastMessage": "letzte Mail am {{date}}",
+    "noMessage": "noch keine Mail",
+    "pending": "Wartet auf ihre erste Mail. Kommt innerhalb von 24 Stunden keine, wird sie gelöscht.",
+    "saved": "Änderungen gespeichert",
+    "deleted": "{{email}} gelöscht. Mails an sie werden jetzt abgewiesen.",
+    "restored": "{{email}} funktioniert wieder",
+    "error": {
+      "forbidden": "Diese Adresse kann nicht angelegt werden: Die Domain ist für dich nicht erlaubt, oder du hast die Höchstzahl maskierter Adressen erreicht.",
+      "invalid": "Der Server hat diese Angaben nicht angenommen. Prüf die Felder und versuch es noch einmal.",
+      "notFound": "Diese maskierte Adresse gibt es nicht mehr. Die Liste wurde neu geladen.",
+      "connection": "Der Server ist nicht erreichbar. Versuch es gleich noch einmal.",
+      "signedOut": "Deine Sitzung ist abgelaufen. Melde dich neu an, um weiterzumachen.",
+      "generic": "Etwas ist schiefgegangen. Versuch es gleich noch einmal."
+    }
+  },
+  "picture": {
+    "loading": "Bild wird geladen …",
+    "crop": {
+      "title": "Bild zuschneiden",
+      "area": "Bild im Kreis",
+      "hint": "Ziehen verschiebt, Scrollen oder zwei Finger zoomen. Tastatur: Pfeiltasten verschieben, + und − zoomen.",
+      "zoom": "Zoom",
+      "zoomIn": "Vergrößern",
+      "zoomOut": "Verkleinern",
+      "use": "Bild übernehmen"
+    },
+    "error": {
+      "notImage": "Das ist kein Bild.",
+      "tooLarge": "Das Bild ist zu groß. Bis {{size}} geht.",
+      "unreadable": "Das Bild ließ sich nicht lesen."
+    },
+    "choose": "Bild auswählen",
+    "change": "Bild ändern",
+    "camera": "Foto aufnehmen",
+    "remove": "Entfernen",
+    "hint": "Oder zieh ein Bild auf den Kreis oder füge eins ein."
+  },
+  "profile": {
+    "picture": "Dein Bild",
+    "pictureDesc": "Es steht neben deinem Namen, wo Leute es sehen dürfen. Wähl ein Bild und rück es im Kreis zurecht.",
+    "visibility": "Wer es sieht",
+    "off": {
+      "title": "Niemand",
+      "body": "Deine Mails zeigen deine Initialen."
+    },
+    "server": {
+      "title": "Leute auf diesem Server",
+      "body": "Alle mit einem Postfach hier sehen es neben deinen Mails."
+    },
+    "public": {
+      "title": "Alle",
+      "body": "Auch andere Mailserver und Apps können es zeigen, über Libravatar. Wer deine Adresse kennt, kann es abrufen."
+    },
+    "publicForbidden": "Öffentliche Bilder hat deine Admin-Person ausgeschaltet.",
+    "face": "Mein Bild in Mails mitschicken",
+    "faceDesc": "Legt jeder Mail, die du schickst, eine kleine Kopie bei (der Face-Header), die manche Mailprogramme zeigen. Nur solange dein Bild öffentlich ist.",
+    "saved": "Bild gespeichert",
+    "removed": "Bild entfernt",
+    "failed": "Das hat nicht geklappt. {{reason}}",
+    "loading": "Dein Bild wird geladen …",
+    "loadFailed": "Dein Bild ließ sich nicht laden."
+  },
+  "sharing": {
+    "notAllowed": "Die Person, der dieser Ordner gehört, hat das nicht erlaubt.",
+    "sharedBy": "Geteilt von {{name}}",
+    "sharedWithCount_one": "Mit {{count}} Person geteilt",
+    "sharedWithCount_other": "Mit {{count}} Personen geteilt",
+    "title": "„{{name}}“ teilen",
+    "current": "Wer Zugriff hat",
+    "nobody": "Noch mit niemandem geteilt.",
+    "levelFor": "Zugriff für {{name}}",
+    "remove": "Nicht mehr mit {{name}} teilen",
+    "removed": "Nicht mehr mit {{name}} geteilt",
+    "add": "Mit jemandem teilen",
+    "share": "Teilen",
+    "shared": "Mit {{name}} geteilt",
+    "search": "Name oder Adresse von jemandem auf diesem Server",
+    "loadingPeople": "Personen werden geladen …",
+    "peopleFailed": "Die Personen auf diesem Server konnten nicht geladen werden.",
+    "noPeople": "Sonst passt niemand.",
+    "level": {
+      "read": "Lesen",
+      "write": "Lesen und schreiben",
+      "all": "Alles"
+    },
+    "shareCalendar": "Teilen …",
+    "leaveCalendar": "Aus meinen Kalendern entfernen",
+    "leaveCalendarTitle": "„{{name}}“ aus deinen Kalendern entfernen?",
+    "leaveCalendarBody": "Der Kalender gehört weiter {{name}}. Du siehst ihn nur nicht mehr, bis er wieder mit dir geteilt wird.",
+    "levelsDesc": {
+      "calendar": "Lesen: den Kalender und seine Termine sehen. Lesen und schreiben: außerdem Termine anlegen, ändern und löschen. Alles: außerdem ihn umbenennen, seine Farbe ändern und weiter teilen."
+    }
   }
 }

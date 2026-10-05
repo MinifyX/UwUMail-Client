@@ -165,6 +165,9 @@ export function EventPopover() {
         {calendar && (
           <Detail icon={CalendarDays}>
             {calendar.name}
+            {calendar.sharedBy && (
+              <span className="text-muted"> · {t("sharing.sharedBy", { name: calendar.sharedBy.name })}</span>
+            )}
             {birthday ? (
               <span className="text-muted"> · {t("calendar.birthdays.fromContacts")}</span>
             ) : (
