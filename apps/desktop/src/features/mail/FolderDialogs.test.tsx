@@ -38,6 +38,8 @@ const folders = [
   folder("inbox", "Inbox", { role: "inbox" }),
   folder("trash", "Trash", { role: "trash", total: 3 }),
   folder("receipts", "Receipts", { total: 2 }),
+  folder("projects", "Projects"),
+  folder("alpha", "Alpha", { parentId: "projects", path: "Projects/Alpha" }),
 ];
 
 const createFolder = vi.fn(async () => "new");
@@ -165,15 +167,26 @@ describe("folder management", () => {
     expect(await screen.findByText(/3 messages will be (deleted|gone) for good/)).toBeTruthy();
     answer(screen.getByRole("button", { name: "Delete for good" }), emptyFolder);
     await waitFor(() => expect(emptyFolder).toHaveBeenCalledWith("trash"));
-    await waitFor(() => expect(useToasts.getState().toasts.at(-1)?.message).toMatch(/3 messages/));
+    await waitFor(() => expect(useToasts.getState().toasts.at(-1)?.message).toMatch(/3 (messages|mails)/));
   });
 
   it("asks before deleting a folder and says its mail goes to the trash", async () => {
     setup();
     fireEvent.click(await screen.findByRole("button", { name: "More for Receipts" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete folder" }));
-    expect(await screen.findByText(/2 messages (go )?to the trash/)).toBeTruthy();
+    expect(await screen.findByText(/2 messages (go |move )?to the trash/)).toBeTruthy();
     answer(screen.getByRole("button", { name: "Delete folder" }), deleteFolder);
     await waitFor(() => expect(deleteFolder).toHaveBeenCalledWith("receipts"));
+  });
+
+  it("says a folder with folders inside can't go yet, without asking the mailbox", async () => {
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "More for Projects" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete folder" }));
+    expect(await screen.findByText("“Projects” still holds folders")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete folder" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(useFolderEdit.getState().request).toBeNull();
+    expect(deleteFolder).not.toHaveBeenCalled();
   });
 });

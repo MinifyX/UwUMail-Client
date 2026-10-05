@@ -87,7 +87,7 @@ function folderMenuItems(folder: Folder, t: (key: string) => string): MenuItem[]
   if (!folder.role) {
     items.push(
       { label: t("folders.rename"), onSelect: () => edit.open({ kind: "rename", folder }) },
-      { label: t("folders.delete"), onSelect: () => edit.open({ kind: "delete", folder }) },
+      { label: t("folders.delete"), danger: true, onSelect: () => edit.open({ kind: "delete", folder }) },
     );
   }
   if (canEmpty(folder)) {
