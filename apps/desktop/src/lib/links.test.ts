@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { claimedHost, isOpenableLink, misleadingLink, targetHost } from "./links";
+import { checkLink, claimedHost, isOpenableLink, misleadingLink, targetHost } from "./links";
 
 describe("links", () => {
   it("opens only web and mail links", () => {
@@ -68,5 +68,25 @@ describe("links", () => {
     });
     // Every recipient is the claimed site: nothing to warn about.
     expect(misleadingLink("mailto:sales@bank.example?cc=help@bank.example", "bank.example")).toBeNull();
+  });
+
+  it("drops the punctuation after an address in the text", () => {
+    expect(claimedHost("bank.example?!")).toBe("bank.example");
+    expect(claimedHost("bank.example.);")).toBe("bank.example");
+    expect(claimedHost("...")).toBeNull();
+  });
+
+  // Regression (security-audit WEBMAIL-1): link text ending in a long run of punctuation froze the
+  // tab for seconds each time the pointer crossed the link, as `/[.,;:!?)]+$/` retried from every
+  // position of the run.
+  it("stays fast on link text with a long run of punctuation", () => {
+    const started = performance.now();
+    expect(claimedHost(`a${".".repeat(200_000)}x`)).toBeNull();
+    expect(claimedHost(`bank.example${":)".repeat(100_000)}`)).toBe("bank.example");
+    expect(checkLink("https://phish.example/", `bank.example${"!".repeat(200_000)}`)?.misleading).toEqual({
+      shown: "bank.example",
+      actual: "phish.example",
+    });
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 });

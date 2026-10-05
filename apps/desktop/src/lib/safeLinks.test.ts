@@ -53,7 +53,17 @@ describe("unwrapSafeLink", () => {
     expect(unwrapSafeLink("mailto:someone@example.org")).toBeNull();
   });
 
-  it("never unwraps to anything but a web address", () => {
+  it("unwraps wrapped mail links, plain and encoded", () => {
+    const host = "eur01.safelinks.protection.outlook.com";
+    expect(unwrapSafeLink(wrap(host, "mailto:leni@example.com?subject=Hi"))?.url).toBe(
+      "mailto:leni@example.com?subject=Hi",
+    );
+    expect(unwrapSafeLink(wrap(host, encodeURIComponent("mailto:leni@example.com")))?.url).toBe(
+      "mailto:leni@example.com",
+    );
+  });
+
+  it("never unwraps to anything but a web or mail address", () => {
     for (const target of ["javascript:alert(1)", "file:///C:/Windows/System32/calc.exe", "data:text/html,hi"]) {
       expect(unwrapSafeLink(wrap("eur01.safelinks.protection.outlook.com", target))).toBeNull();
     }

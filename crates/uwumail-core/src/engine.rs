@@ -2350,7 +2350,8 @@ fn unsubscribe_mail(mailto: &str) -> Option<UnsubscribeMail> {
     }
     let address = percent_encoding::percent_decode_str(target.path()).decode_utf8().ok()?.trim().to_string();
     // One recipient, and nothing in it that could turn into a second one or into a header of its own.
-    if address.contains(|c: char| c == ',' || c.is_whitespace() || c.is_control() || "<>;\"".contains(c))
+    if address
+        .contains(|c: char| c == ',' || c.is_whitespace() || c.is_control() || is_format_char(c) || "<>;\"".contains(c))
         || address.parse::<lettre::Address>().is_err()
     {
         return None;
@@ -2369,6 +2370,36 @@ fn unsubscribe_mail(mailto: &str) -> Option<UnsubscribeMail> {
         .filter(|subject| !subject.is_empty())
         .unwrap_or_else(|| "unsubscribe".to_string());
     Some(UnsubscribeMail { address, subject })
+}
+
+/// Unicode format characters (category Cf): they show nothing, and in an address the dialog names
+/// before the mail goes, direction or zero-width characters would make it read as another one
+/// (webmail security-audit W-30).
+fn is_format_char(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{0600}'..='\u{0605}'
+            | '\u{061C}'
+            | '\u{06DD}'
+            | '\u{070F}'
+            | '\u{0890}'..='\u{0891}'
+            | '\u{08E2}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206F}'
+            | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
+            | '\u{110BD}'
+            | '\u{110CD}'
+            | '\u{13430}'..='\u{1343F}'
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0001}'
+            | '\u{E0020}'..='\u{E007F}'
+    )
 }
 
 /// A winmail.dat as a stored attachment: mail stored before winmail.dat was read.
@@ -2428,6 +2459,10 @@ mod tests {
             "mailto:leave@[192.0.2.1]",
             "mailto:leave@list.example.",
             "mailto:not-an-address",
+            // Invisible characters that would make the named address read as another one (W-30).
+            "mailto:leave%E2%80%AE@list.example",
+            "mailto:le%E2%80%8Bave@list.example",
+            "mailto:leave@list%C2%AD.example",
             "mailto:",
             "https://list.example/leave",
             "javascript:alert(1)",

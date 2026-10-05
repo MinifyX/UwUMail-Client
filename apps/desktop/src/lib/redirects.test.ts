@@ -118,6 +118,28 @@ describe("detectRedirect", () => {
     expect(detectRedirect("https://urldefense.proofpoint.com/v2/url?u=garbage-2")?.hidden?.service).toBe("service");
   });
 
+  it("reads the Proofpoint v3 part list after the first `__;` that ends in `!`", () => {
+    expect(target("https://urldefense.com/v3/__https://mood.example/a__;b*c__;Kw!!AbC!xyz$")).toBe(
+      "https://mood.example/a__;b+c",
+    );
+    expect(target("https://urldefense.com/v3/__https://mood.example/a*b__;Kw==!!AbC!xyz$")).toBe(
+      "https://mood.example/a+b",
+    );
+    expect(detectRedirect("https://urldefense.com/v3/____;!!AbC!xyz$")?.hidden?.service).toBe("service");
+  });
+
+  // Regression (security-audit WEBMAIL-1): a Proofpoint v3 link built from repeated `/v3/__` or
+  // `__;`, or with a long run of `=`, froze the tab for seconds each time the pointer crossed it.
+  it("stays fast on Proofpoint v3 links built to make it backtrack", () => {
+    const hidden = { via: [], target: null, hidden: { service: "service", host: "urldefense.com" } };
+    const started = performance.now();
+    expect(detectRedirect(`https://urldefense.com/v3/__x__;${"=".repeat(200_000)}A!`)).toEqual(hidden);
+    expect(detectRedirect(`https://urldefense.com/v3/__x__;A${"=".repeat(200_000)}!`)).toEqual(hidden);
+    expect(detectRedirect(`https://urldefense.com${"/v3/__".repeat(30_000)}`)).toEqual(hidden);
+    expect(detectRedirect(`https://urldefense.com/v3/__x${"__;A".repeat(50_000)}`)).toEqual(hidden);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("keeps bidi and invisible characters out of the host and encodes them in the path", () => {
     const rlo = String.fromCodePoint(0x202e);
     const sneaky = `https://go.tracker.example/c?url=${encodeURIComponent(`https://end.example/${rlo}gpj.exe`)}`;

@@ -1,8 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
 import type { Message } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
+import { armedActivation } from "@/components/ui/armed";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Toggle } from "@/components/ui/Field";
@@ -31,6 +32,20 @@ export function UnsubscribeButton({ message }: { message: Message }) {
   );
 }
 
+/**
+ * The button that unsubscribes. It is focused when it appears, so the gesture that brought it — a
+ * held Enter, the second click of a double click — must not also press it (webmail security-audit
+ * W-29, like W-18).
+ */
+function AnswerButton({ busy, onAnswer, children }: { busy: boolean; onAnswer: () => void; children: ReactNode }) {
+  const [shownAt] = useState(() => performance.now());
+  return (
+    <Button variant="primary" busy={busy} autoFocus {...armedActivation(shownAt, onAnswer)}>
+      {children}
+    </Button>
+  );
+}
+
 function UnsubscribeQuestion({ message, onDone }: { message: Message; onDone: () => void }) {
   const { t } = useT();
   const client = useQueryClient();
@@ -40,8 +55,9 @@ function UnsubscribeQuestion({ message, onDone }: { message: Message; onDone: ()
   // The engine tries a One-Click request first and sends a mail when that is missing or fails, so
   // whenever a usable mailto address is there the dialog names it: the mail goes out under the
   // reader's name to an address the newsletter picked.
-  const byMail = message.unsubscribe?.mailto ? unsubscribeMail(message.unsubscribe.mailto) : null;
-  const oneClick = message.unsubscribe?.oneClick ?? false;
+  const options = message.unsubscribe;
+  const byMail = options?.mailto ? unsubscribeMail(options.mailto) : null;
+  const oneClick = options?.oneClick ?? false;
   const pageOnly = !oneClick && !byMail;
 
   const unsubscribe = async () => {
@@ -79,19 +95,24 @@ function UnsubscribeQuestion({ message, onDone }: { message: Message; onDone: ()
     <div className="flex flex-col items-center gap-3 px-6 pt-2 pb-6 text-center">
       <NyuScene name="pick" className="w-40" />
       <h2 className="text-[18px] font-extrabold text-balance">{t("unsubscribe.title", { name })}</h2>
-      <p className="text-[13px] text-muted">{pageOnly ? t("unsubscribe.bodyPage") : t("unsubscribe.body")}</p>
+      <p className="text-[13px] text-muted">
+        {oneClick ? t("unsubscribe.bodyOneClick") : pageOnly ? t("unsubscribe.bodyPage") : t("unsubscribe.body")}
+      </p>
       {byMail && (
+        // The address comes out of the newsletter's own header, and the mail goes out under the
+        // reader's name. Whoever is about to send it gets to see where it lands.
         <p className="text-[13px] text-muted">
           {t(oneClick ? "unsubscribe.mailToFallback" : "unsubscribe.mailTo", { address: byMail.address })}
         </p>
       )}
+      {oneClick && !byMail && options?.url && <p className="text-[13px] text-muted">{t("unsubscribe.orPage")}</p>}
       <div className="w-full rounded-2xl bg-canvas px-4 py-1 text-left">
         <Toggle checked={archive} onChange={setArchive} label={t("unsubscribe.archive")} />
       </div>
       <div className="flex flex-wrap justify-center gap-2 pt-1">
-        <Button variant="primary" busy={busy} autoFocus onClick={() => void unsubscribe()}>
+        <AnswerButton busy={busy} onAnswer={() => void unsubscribe()}>
           {t("reader.unsubscribe")}
-        </Button>
+        </AnswerButton>
         <Button variant="ghost" onClick={onDone}>
           {t("common.cancel")}
         </Button>

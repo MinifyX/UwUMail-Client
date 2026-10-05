@@ -14,6 +14,7 @@ import {
   type MailContext,
 } from "@/lib/dates";
 import { useSettings } from "@/state/settings";
+import { carriesInvitation } from "../calendar/Invitation";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { readableBody } from "../mail/MessageBody";
 import { whenLabel } from "./format";
@@ -72,8 +73,8 @@ export function useMailEvents(message: Message, { open, allowRemote, inJunk }: M
   const detect = useSettings((s) => s.detectEvents);
   const refineAlways = useSettings((s) => s.assistRefineEvents);
   const { data: calendars = false } = useCalendarsAvailable();
-  // Unlike the webmail, the app has no invitation card of its own: a mail with an .ics is offered too.
-  const on = open && detect && calendars && !inJunk && !message.flags.draft;
+  // A mail with an iCalendar part has the invitation card, which names the event itself.
+  const on = open && detect && calendars && !inJunk && !message.flags.draft && !carriesInvitation(message);
 
   const context = useMemo<MailContext>(
     () => ({

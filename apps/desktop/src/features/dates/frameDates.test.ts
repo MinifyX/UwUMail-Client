@@ -111,4 +111,12 @@ describe("watchDates", () => {
     mark.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
     expect(report).toHaveBeenCalledTimes(2);
   });
+
+  it("opens a date once for a held key (webmail W-40)", () => {
+    const { report, mark } = setup();
+    const held = new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true });
+    mark.dispatchEvent(held);
+    expect(held.defaultPrevented).toBe(true);
+    expect(report).not.toHaveBeenCalled();
+  });
 });

@@ -51,6 +51,24 @@ describe("attachmentKind", () => {
     expect(isAppPackage("apk.pdf")).toBe(false);
   });
 
+  it("ignores any run of trailing dots and spaces, as Windows does", () => {
+    expect(isDangerous("tool.exe. ")).toBe(true);
+    expect(isDangerous("tool.exe . . ")).toBe(true);
+    expect(isDangerous("\u202etool.exe..")).toBe(true);
+    expect(isDangerous("rechnung.pdf...")).toBe(false);
+    expect(isDangerous(". . .")).toBe(false);
+  });
+
+  // Regression (webmail security-audit WEBMAIL-1): a long run of dots and spaces in an attachment
+  // name froze the view for seconds on every render, as `/[.\s]+$/u` retried from every position.
+  it("stays fast on a long run of dots and spaces", () => {
+    const started = performance.now();
+    expect(isDangerous(`a${". ".repeat(100_000)}x`)).toBe(false);
+    expect(isDangerous(`tool.exe${". ".repeat(100_000)}`)).toBe(true);
+    expect(isAppPackage(`spiel.apk${".".repeat(200_000)}\u202e`)).toBe(true);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("knows what an iPhone would install", () => {
     expect(isDangerous("wlan.mobileconfig")).toBe(true);
     expect(isIosInstallable("wlan.MOBILECONFIG")).toBe(true);

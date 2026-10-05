@@ -112,11 +112,22 @@ export function attachmentKind(filename: string, mimeType: string): AttachmentKi
   return mime.startsWith("text/") ? "text" : "other";
 }
 
+/**
+ * The name without the dots and spaces (any kind, as the engine trims) at its end. A loop from the
+ * back rather than `/[.\s]+$/u`, which retries from every position of a long run and froze the
+ * view on a crafted attachment name (webmail security-audit WEBMAIL-1).
+ */
+function withoutTrailingDotsAndSpaces(name: string): string {
+  let end = name.length;
+  while (end > 0 && (name[end - 1] === "." || /\s/u.test(name[end - 1]!))) end -= 1;
+  return name.slice(0, end);
+}
+
 /** The extension that decides what a file does, ignoring direction tricks and trailing dots and spaces. */
 function effectiveExtension(filename: string): string {
   // Windows ignores trailing dots and spaces, so "tool.exe. " still runs as tool.exe. The engine
   // trims every kind of space before writing the file, so a no-break space counts as well.
-  return extensionOf(filename.replace(BIDI_CONTROLS, "").replace(/[.\s]+$/u, ""));
+  return extensionOf(withoutTrailingDotsAndSpaces(filename.replace(BIDI_CONTROLS, "")));
 }
 
 export function isDangerous(filename: string): boolean {

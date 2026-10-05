@@ -373,4 +373,22 @@ describe("buildPrintDocument", () => {
     expect(doc).not.toContain("<style>table.head");
     expect(doc).toContain("contain:content");
   });
+
+  it("drops every kind of style block from the printed body, content and all", () => {
+    const doc = buildPrintDocument(
+      message({
+        bodyHtml:
+          '<STYLE media="print">h1{visibility:hidden}</STYLE><svg><style>table{opacity:0}</style></svg><p style="color:#333">Text</p>',
+      }),
+      false,
+      new Map(),
+      labels,
+      "14. September 2026",
+    );
+    expect(doc).not.toContain("visibility:hidden");
+    expect(doc).not.toContain("opacity:0");
+    expect(doc).toContain('<p style="color:#333">Text</p>');
+    // The page's own style block is still there.
+    expect(doc.match(/<style>/g)).toHaveLength(1);
+  });
 });

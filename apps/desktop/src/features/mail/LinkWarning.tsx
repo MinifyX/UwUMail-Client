@@ -123,11 +123,14 @@ export function LinkFacts({ check }: { check: LinkCheck }) {
         </Note>
       )}
       {check.safeLink && (
-        <p className="flex w-full items-start gap-2 rounded-xl bg-canvas px-3 py-2 text-left text-[12.5px] text-muted">
+        <p
+          className="flex w-full items-start gap-2 rounded-xl bg-canvas px-3 py-2 text-left text-[12.5px] text-muted"
+          title={visibleText(check.safeLink)}
+        >
           <ShieldOff className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span className="min-w-0">
-            <span className="block font-semibold">{t("link.safeLinkRemoved")}</span>
-            {t("link.safeLinkBody", { host: visibleText(check.safeLink) })}
+            <span className="block font-semibold">{t("link.safeLink")}</span>
+            {t("link.safeLinkBody")}
           </span>
         </p>
       )}

@@ -35,6 +35,15 @@ describe("unsubscribeMail", () => {
     expect(unsubscribeMail("mailto:")).toBeNull();
   });
 
+  it("refuses an address that would read as another one (W-30)", () => {
+    // A right-to-left override turns what follows around; a zero-width space or joiner hides.
+    expect(unsubscribeMail("mailto:leave%E2%80%AEelpmaxe.knab@list.example")).toBeNull();
+    expect(unsubscribeMail("mailto:le%E2%80%8Bave@list.example")).toBeNull();
+    expect(unsubscribeMail("mailto:leave@list%E2%80%8D.example")).toBeNull();
+    expect(unsubscribeMail("mailto:leave%C2%AD@list.example")).toBeNull();
+    expect(unsubscribeMail("mailto:leave%00@list.example")).toBeNull();
+  });
+
   it("refuses a scheme that is not mailto", () => {
     expect(unsubscribeMail("https://list.example/leave")).toBeNull();
     expect(unsubscribeMail("javascript:alert(1)")).toBeNull();
