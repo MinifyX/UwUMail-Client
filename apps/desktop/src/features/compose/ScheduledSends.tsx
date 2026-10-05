@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Clock, PenLine, Send, Server, Smartphone, Undo2, WifiOff } from "lucide-react";
+import { CalendarClock, Clock, PenLine, Send, Server, Smartphone, TriangleAlert, Undo2, WifiOff } from "lucide-react";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { ScheduledSend, SendLaterInfo } from "@/backend/types";
@@ -153,6 +153,16 @@ export function ScheduledList({ sends, busy, onEdit, onStop, onSendNow, onChange
                   <span>{t(local ? "scheduled.onDevice" : "scheduled.onServer")}</span>
                   {several && account && <span className="truncate">· {account.email}</span>}
                 </p>
+                {entry.held && (
+                  <p className="mt-1 flex items-start gap-1.5 text-[12px] text-danger">
+                    <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
+                    <span>
+                      {t(entry.held === "unsure" ? "scheduled.heldUnsure" : "scheduled.heldFailed", {
+                        reason: entry.heldReason ?? "",
+                      })}
+                    </span>
+                  </p>
+                )}
                 {entry.retrying && (
                   <p className="mt-1 flex items-center gap-1.5 text-[12px] text-danger">
                     <WifiOff className="size-3.5 shrink-0" aria-hidden />

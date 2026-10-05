@@ -10,6 +10,13 @@
 //! puts it into Drafts again; editing opens it in the composer, which saves it as a draft at once.
 //! A local one that can't be sent when its time comes is tried again a few times while its
 //! server can't be reached, then kept as a draft like any mail that couldn't go.
+//!
+//! Nothing gets lost and nothing goes twice (security review 0.10 SL-2…SL-5): an entry stays in
+//! the outbox, claimed, while it is sent, and leaves only once it went out or Drafts took it.
+//! When Drafts can't take it, or sending broke off when the mail may have gone out already, it
+//! stays held: listed with the scheduled mail, never sent on its own, until the person sends it
+//! again, edits or stops it. Entries still claimed when UwUMail starts were being sent when it
+//! stopped; they are held the same way instead of sent again.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -18,10 +25,16 @@ use tokio::sync::Notify;
 use super::*;
 use crate::jmap_scheduled;
 use crate::send_later::{
-    self, ScheduledKind, ScheduledReceipt, ScheduledRef, ScheduledSend, SendLaterInfo, check_time, format_time,
+    self, Held, ScheduledKind, ScheduledReceipt, ScheduledRef, ScheduledSend, SendLaterInfo, check_time, format_time,
     parse_time,
 };
-use crate::store::TakenSend;
+use crate::store::{HELD_FAILED, HELD_UNSURE, TakenSend};
+
+/// Why an entry still claimed at start is held: UwUMail stopped while sending it.
+const INTERRUPTED: &str =
+    "UwUMail stopped while this mail was being sent, so it may have gone out. Check Sent before you send it again.";
+/// Why an entry is held while stopping it writes Drafts (shows only if that never finished).
+const STOP_INTERRUPTED: &str = "Stopping this mail didn't finish. It won't go out unless you send it.";
 
 /// The outbox task: whether it runs, and how to wake it when something new is due earlier.
 #[derive(Default)]
@@ -40,6 +53,14 @@ impl Engine {
         }
         let engine = self.clone();
         self.inner.runtime.spawn(async move {
+            match engine.inner.store.release_claimed_outbox(INTERRUPTED) {
+                Ok(0) => {}
+                Ok(count) => {
+                    tracing::warn!("{count} mail(s) were being sent when UwUMail stopped; they wait for the person");
+                    engine.inner.emit(EngineEvent::ScheduledChanged {});
+                }
+                Err(error) => tracing::warn!("Couldn't read the outbox: {error}"),
+            }
             loop {
                 for taken in engine.take_due(now_millis()) {
                     let engine = engine.clone();
@@ -72,38 +93,73 @@ impl Engine {
             Ok(message) => message,
             Err(error) => {
                 tracing::warn!("A queued message couldn't be read: {error}");
+                self.hold(&id, HELD_FAILED, "This mail couldn't be read to send it.");
                 return;
             }
         };
         let result = self.send(message.clone()).await;
-        if later {
-            self.inner.emit(EngineEvent::ScheduledChanged {});
-        }
         match result {
-            Ok(()) => self.inner.emit(EngineEvent::SendDone { send_id: id, account_id }),
+            Ok(()) => {
+                if let Err(error) = self.inner.store.finish_outbox(&id) {
+                    tracing::warn!("Couldn't clear a sent mail from the outbox: {error}");
+                }
+                if later {
+                    self.inner.emit(EngineEvent::ScheduledChanged {});
+                }
+                self.inner.emit(EngineEvent::SendDone { send_id: id, account_id });
+            }
             Err(error) => {
-                // Not reachable right now (e.g. just woken up): later mail tries again for a while.
+                // Not reachable right now (e.g. just woken up): later mail tries again for a
+                // while. Only failures where the server certainly didn't take it (SL-2).
                 if later
                     && error.code == ErrorCode::ConnectionFailed
                     && let Some(at) = send_later::retry_at(attempts, now_millis())
-                    && self.inner.store.insert_later_outbox(&id, &account_id, &message_json, at, attempts + 1).is_ok()
+                    && self.inner.store.retry_outbox(&id, at, attempts + 1).unwrap_or(false)
                 {
                     tracing::info!("A scheduled mail couldn't go yet, trying again: {error}");
                     self.inner.emit(EngineEvent::ScheduledChanged {});
                     self.run_outbox();
                     return;
                 }
-                // Nothing written gets lost: it waits in Drafts.
-                if let Err(draft_error) = self.save_draft(message.clone()).await {
-                    tracing::warn!("Couldn't keep the unsent message as a draft: {draft_error}");
+                let held = if error.code == ErrorCode::MaybeSent {
+                    // It may have gone out: a copy in Drafts would invite sending it twice.
+                    self.hold(&id, HELD_UNSURE, &error.message);
+                    true
+                } else {
+                    // Nothing written gets lost: it waits in Drafts, or here when Drafts can't
+                    // be reached either (e.g. still offline after the last try, SL-4).
+                    match self.save_draft(message.clone()).await {
+                        Ok(_) => {
+                            if let Err(store_error) = self.inner.store.finish_outbox(&id) {
+                                tracing::warn!("Couldn't clear a mail kept in Drafts from the outbox: {store_error}");
+                            }
+                            false
+                        }
+                        Err(draft_error) => {
+                            tracing::warn!("Couldn't keep the unsent message as a draft: {draft_error}");
+                            self.hold(&id, HELD_FAILED, &error.message);
+                            true
+                        }
+                    }
+                };
+                if later || held {
+                    self.inner.emit(EngineEvent::ScheduledChanged {});
                 }
                 self.inner.emit(EngineEvent::SendFailed {
                     send_id: id,
                     account_id,
                     reason: error.message,
                     message: Box::new(message),
+                    held,
                 });
             }
+        }
+    }
+
+    /// Keeps a claimed entry for the person instead of sending it on its own.
+    fn hold(&self, id: &str, held: &str, reason: &str) {
+        if let Err(error) = self.inner.store.hold_outbox(id, held, reason) {
+            tracing::warn!("Couldn't keep an unsent mail in the outbox: {error}");
         }
     }
 
@@ -215,7 +271,12 @@ impl Engine {
                     send_at: format_time(entry.send_at),
                     subject: message.subject,
                     to: if message.to.is_empty() { message.cc } else { message.to },
-                    retrying: entry.attempts > 0,
+                    retrying: entry.attempts > 0 && entry.held.is_none(),
+                    held: entry
+                        .held
+                        .as_deref()
+                        .map(|held| if held == HELD_UNSURE { Held::Unsure } else { Held::Failed }),
+                    held_reason: entry.held_reason,
                 },
             ));
         }
@@ -312,14 +373,23 @@ impl Engine {
                     .find(|entry| entry.id == reference.id && entry.account_id == reference.account_id)
                     .ok_or_else(gone)?;
                 let message: OutgoingMessage = serde_json::from_str(&entry.message_json)?;
-                // Held back while Drafts is written, so it can't go meanwhile; and it stays
-                // scheduled as it was when Drafts can't be reached.
-                let far = now_millis() + i64::try_from(send_later::LOCAL_MAX_DELAY_SECS).unwrap_or(0) * 1000;
-                if !self.inner.store.reschedule_later_outbox(&entry.id, &entry.account_id, far)? {
+                // Held back while Drafts is written, so it can't go meanwhile, also not after a
+                // crash in between (SL-5); and it stays as it was when Drafts can't be reached.
+                if !self.inner.store.set_later_held(
+                    &entry.id,
+                    &entry.account_id,
+                    Some(HELD_FAILED),
+                    Some(STOP_INTERRUPTED),
+                )? {
                     return Err(gone());
                 }
                 if let Err(error) = self.save_draft(message).await {
-                    self.inner.store.reschedule_later_outbox(&entry.id, &entry.account_id, entry.send_at)?;
+                    self.inner.store.set_later_held(
+                        &entry.id,
+                        &entry.account_id,
+                        entry.held.as_deref(),
+                        entry.held_reason.as_deref(),
+                    )?;
                     self.run_outbox();
                     return Err(error);
                 }
@@ -424,6 +494,8 @@ mod tests {
         })
         .unwrap();
         engine.inner.background_sync.store(false, Ordering::Relaxed);
+        // The tests take what is due themselves; no outbox task races them.
+        engine.inner.send_later.running.store(true, Ordering::SeqCst);
         engine
             .inner
             .store
@@ -551,5 +623,62 @@ mod tests {
         assert_eq!(message.cc[0].email, "lu@uwumail.example");
         assert!(message.html.contains("Hallo Kim"));
         assert_eq!(message.draft_key, None, "the composer saves a draft of its own");
+    }
+
+    #[tokio::test]
+    async fn a_mail_that_cant_go_and_cant_reach_drafts_stays_held_instead_of_lost() {
+        let (_dir, engine) = engine();
+        // A mailbox whose servers refuse connections, as when still offline after the last try.
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let closed = ServerSettings { host: "127.0.0.1".into(), port, security: Security::None };
+        engine
+            .inner
+            .store
+            .insert_account(&AccountRecord {
+                id: "offline".into(),
+                name: "Offline".into(),
+                email: "mini@uwumail.example".into(),
+                display_name: "Mini".into(),
+                color: AccountColor::Pink,
+                auth: AuthKind::Password,
+                username: "mini@uwumail.example".into(),
+                imap: closed.clone(),
+                smtp: closed,
+                protocol: Protocol::Imap,
+                jmap_url: None,
+            })
+            .unwrap();
+        engine.inner.secrets.set("offline", &crate::secrets::Secret::Password { password: "pw".into() }).unwrap();
+        let mut events = engine.subscribe();
+        let json =
+            serde_json::to_string(&OutgoingMessage { account_id: "offline".into(), ..message("Termin") }).unwrap();
+        // Its sixth retry: no more tries left.
+        engine.inner.store.insert_later_outbox("s1", "offline", &json, now_millis() - 1, 6).unwrap();
+        let taken = engine.take_due(now_millis());
+        assert_eq!(taken.len(), 1);
+        engine.deliver(taken.into_iter().next().unwrap()).await;
+
+        let list = engine.scheduled_sends().await.unwrap();
+        assert_eq!(list.len(), 1, "still here (SL-4)");
+        assert_eq!(list[0].subject, "Termin");
+        assert_eq!(list[0].held, Some(Held::Failed));
+        assert!(!list[0].retrying);
+        assert!(engine.take_due(now_millis() + 86_400_000).is_empty(), "never sent on its own again");
+        let failed = loop {
+            match events.recv().await.unwrap() {
+                EngineEvent::SendFailed { held, .. } => break held,
+                _ => continue,
+            }
+        };
+        assert!(failed, "the failure says where the mail is");
+
+        // Stopping it can't reach Drafts either: it stays held as it was (SL-5).
+        let reference = ScheduledRef { id: "s1".into(), account_id: "offline".into(), kind: ScheduledKind::Local };
+        assert!(engine.stop_scheduled(&reference).await.is_err());
+        assert_eq!(engine.scheduled_sends().await.unwrap()[0].held, Some(Held::Failed));
+        assert!(engine.take_due(now_millis() + 86_400_000).is_empty());
+        // The person sends it again.
+        engine.send_scheduled_now(&reference).await.unwrap();
+        assert_eq!(engine.take_due(now_millis() + 1).len(), 1);
     }
 }

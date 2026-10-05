@@ -210,6 +210,7 @@
     "undo": "Rückgängig",
     "sendUndone": "Senden abgebrochen. Du kannst weiterschreiben.",
     "undoTooLate": "Zu spät, die Mail ist schon unterwegs.",
+    "sendFailedHeld": "Die Mail konnte nicht gesendet werden: {{reason}} Sie wartet unter Geplant.",
     "sendFailedKept": "Die Mail konnte nicht gesendet werden: {{reason}} Sie liegt in den Entwürfen.",
     "open": "Öffnen",
     "moved": "Nach „{{folder}}“ verschoben",
@@ -2009,6 +2010,8 @@
     "sentNow": "Die Mail geht jetzt raus.",
     "onServer": "Auf dem Server",
     "onDevice": "Auf diesem Gerät",
+    "heldFailed": "Nicht gesendet: {{reason}} Sie wartet hier, bis du sie erneut sendest, die Zeit änderst, sie bearbeitest oder stoppst.",
+    "heldUnsure": "Ist vielleicht schon raus: {{reason}} Sie wird nur erneut gesendet, wenn du das auswählst.",
     "retrying": "Server nicht erreichbar, nächster Versuch: {{time}}",
     "failed": "Das hat nicht geklappt: {{reason}}"
   },

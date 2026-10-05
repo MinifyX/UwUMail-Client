@@ -193,6 +193,8 @@ pub fn scheduled_from(account_id: &str, submissions: &[Value], emails: &[Value],
                     subject: email.and_then(|email| text(email, "subject")).unwrap_or_default().to_string(),
                     to,
                     retrying: false,
+                    held: None,
+                    held_reason: None,
                 },
             ))
         })

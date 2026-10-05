@@ -210,6 +210,7 @@
     "undo": "Undo",
     "sendUndone": "Sending stopped. You can keep writing.",
     "undoTooLate": "Too late, the mail is already on its way.",
+    "sendFailedHeld": "The mail couldn't be sent: {{reason}} It's waiting under Scheduled.",
     "sendFailedKept": "The mail couldn't be sent: {{reason}} It's waiting in Drafts.",
     "open": "Open",
     "moved": "Moved to “{{folder}}”",
@@ -2009,6 +2010,8 @@
     "sentNow": "The mail is going out now.",
     "onServer": "On the server",
     "onDevice": "On this device",
+    "heldFailed": "Not sent: {{reason}} It waits here until you send it again, change its time, edit it or stop it.",
+    "heldUnsure": "May have gone out: {{reason}} It won't be sent again unless you choose to.",
     "retrying": "Server not reachable, trying again: {{time}}",
     "failed": "That didn't work: {{reason}}"
   },

@@ -451,10 +451,15 @@ export function useBackendEvents() {
           void client.invalidateQueries({ queryKey: queryKeys.threads });
           break;
         case "send:failed":
-          toast(t("toast.sendFailedKept", { reason: event.reason }), "error", undefined, {
-            duration: 15_000,
-            action: { label: t("toast.open"), run: () => composeAgain(event.message) },
-          });
+          toast(
+            t(event.held ? "toast.sendFailedHeld" : "toast.sendFailedKept", { reason: event.reason }),
+            "error",
+            undefined,
+            {
+              duration: 15_000,
+              action: { label: t("toast.open"), run: () => composeAgain(event.message) },
+            },
+          );
           void client.invalidateQueries({ queryKey: queryKeys.threads });
           break;
         case "mail:received":
