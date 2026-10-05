@@ -656,11 +656,11 @@ fn summary(ctx: &Context) -> MailScheduling {
     let (mut status, mut cancelled, mut revision, place, mut participant_known) =
         (Partstat::NeedsAction, invite.cancelled, Revision::New, InvitePlace::Device, true);
     let organizer_of = |value: Option<&str>| value.and_then(invite::plain_address);
-    // Anyone can name someone else's event UID: what the calendar has must have the same organizer.
+    // Anyone can name someone else's event UID: what the calendar has must have the same
+    // organizer. A copy without one (a personal event, say from an exported .ics) is never the
+    // same invitation, so a mail can't overwrite or delete it (security review 0.10 IV-2).
     let mut same_organizer = |stored: Option<String>| {
-        if let (Some(stored), Some(mail)) = (stored, invite.organizer_email())
-            && stored != mail
-        {
+        if stored.is_none() || stored.as_deref() != invite.organizer_email() {
             verified = false;
         }
     };
@@ -709,6 +709,17 @@ fn summary(ctx: &Context) -> MailScheduling {
         }
         Some(Found::Dav { copy, .. }) | Some(Found::Device { copy }) => {
             same_organizer(itip::organizer(copy));
+            // And the person plays the part the mail is about in it: invited for an invitation
+            // or a cancellation, the organizer for an answer (IV-2).
+            let role = itip::role(copy, &ctx.own);
+            let fits = if invite.method == Method::Reply {
+                matches!(role, itip::Role::Organizer(_))
+            } else {
+                matches!(role, itip::Role::Attendee(_))
+            };
+            if !fits {
+                verified = false;
+            }
             status = invite::answer_in(copy, invite, &ctx.me);
             revision = invite::revision(Some(itip::sequence(copy)), invite.sequence);
             if matches!(ctx.found, Some(Found::Dav { .. })) { InvitePlace::Calendar } else { InvitePlace::Device }

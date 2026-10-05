@@ -419,3 +419,33 @@ async fn google_answers_through_the_calendar_api() {
     assert_eq!(attendees[1]["responseStatus"], "declined");
     assert_eq!(attendees[0]["responseStatus"], "accepted", "the others stay as they are");
 }
+
+#[tokio::test]
+async fn a_known_uid_never_overwrites_or_removes_an_unrelated_own_event() {
+    let (port, sent) = fake_smtp().await;
+    let (setup, _) = setup(AuthKind::Password, port, Secret::Password { password: "pw".into() }).await;
+    let engine = &setup.engine;
+    without_calendar(engine).await;
+    // Events of the person's own with the invitation's UID (e.g. from an exported .ics): one
+    // without organizer, one where they aren't invited (IV-2).
+    let personal = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Example//Test//EN\r\nBEGIN:VEVENT\r\n\
+UID:kaffee-1@example.org\r\nDTSTAMP:20260917T080000Z\r\nDTSTART:20261020T070000Z\r\nSUMMARY:Zahnarzt\r\n\
+END:VEVENT\r\nEND:VCALENDAR\r\n";
+    let not_invited = ics("REQUEST", 0, "").replace(&format!("mailto:{OWN}"), "mailto:leni@example.net");
+    for stored in [personal.to_string(), not_invited.replace("METHOD:REQUEST\r\n", "")] {
+        engine.inner.store.set_local_invite("m", "kaffee-1@example.org", &stored, 1).unwrap();
+        let request = setup.receive(&mail("Emma Vogt <emma@example.org>", &ics("REQUEST", 1, "")));
+        let shown = engine.mail_invitation(&request).await.unwrap().unwrap();
+        assert!(!shown.verified && !shown.can_answer, "shown as not verified");
+        assert!(engine.respond_to_invitation(&request, Partstat::Accepted, None, None).await.is_err());
+        let cancel = setup.receive(&mail("emma@example.org", &ics("CANCEL", 3, "STATUS:CANCELLED\r\n")));
+        assert!(!engine.mail_invitation(&cancel).await.unwrap().unwrap().can_remove);
+        assert!(engine.remove_cancelled_event(&cancel).await.is_err());
+        assert_eq!(
+            engine.inner.store.local_invite("m", "kaffee-1@example.org").unwrap().as_deref(),
+            Some(stored.as_str()),
+            "the own event stays as it was"
+        );
+        assert!(sent.lock().unwrap().is_empty());
+    }
+}
