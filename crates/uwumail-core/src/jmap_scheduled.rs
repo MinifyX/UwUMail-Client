@@ -2,11 +2,12 @@
 //! and its `EmailSubmission` waits on the server until `sendAt` (RFC 8621 §7, at most the
 //! session's `maxDelayedSend` ahead). While it waits its `undoStatus` is `pending`; setting it
 //! to `canceled` stops it. A submission takes no other change, so a new time is a cancel and a
-//! new submission of the same mail in one request.
+//! new submission of the same mail: the new one only once the server confirmed the cancel, so the
+//! mail can never go twice (security review 0.10 SL-1).
 
 use serde_json::{Value, json};
 
-use crate::error::{Error, Result};
+use crate::error::{Error, ErrorCode, Result};
 use crate::jmap::{self, Client};
 use crate::jmap_sync::ensure_mailbox;
 use crate::model::{Address, FolderRole};
@@ -68,8 +69,9 @@ pub async fn submit(
         .ok_or_else(|| Error::invalid("This mailbox has no sending identity on the server."))?
         .to_string();
     let rcpt_to: Vec<Value> = recipients.iter().map(|email| json!({ "email": email, "parameters": null })).collect();
+    // A lost answer may still have scheduled it: then it shows in the list rather than twice.
     let responses = client
-        .call(vec![
+        .call_submission(vec![
             (
                 "Email/import",
                 json!({
@@ -199,7 +201,8 @@ pub fn scheduled_from(account_id: &str, submissions: &[Value], emails: &[Value],
     scheduled.into_iter().map(|(_, entry)| entry).collect()
 }
 
-/// What `EmailSubmission/set` said about cancelling `id`: fine, or too late.
+/// What `EmailSubmission/set` said about cancelling `id`: confirmed, too late, or not confirmed.
+/// Only an `updated` entry for `id` confirms it (security review 0.10 SL-6).
 fn cancelled(answer: &Value, id: &str) -> Result<()> {
     if let Some(problem) = answer.get("notUpdated").and_then(|n| n.get(id)) {
         return match text(problem, "type") {
@@ -212,7 +215,59 @@ fn cancelled(answer: &Value, id: &str) -> Result<()> {
     if let Some(error) = jmap::set_errors(answer) {
         return Err(error.into());
     }
+    if !answer.get("updated").and_then(Value::as_object).is_some_and(|updated| updated.contains_key(id)) {
+        return Err(Error::internal("The server didn't confirm that the mail was stopped."));
+    }
     Ok(())
+}
+
+/// Cancels the submission `id` and makes sure it is: when the answer is missing or unclear, the
+/// submission is read again and only counts as stopped once the server says `canceled`.
+async fn stop(client: &Client, submission_account: &str, id: &str) -> Result<()> {
+    let answer = client
+        .call(vec![(
+            "EmailSubmission/set",
+            json!({ "accountId": submission_account, "update": { id: { "undoStatus": "canceled" } } }),
+        )])
+        .await
+        .and_then(|responses| cancelled(responses.get(0, "EmailSubmission/set")?, id));
+    match answer {
+        Ok(()) => Ok(()),
+        Err(error) if error.code == ErrorCode::NotFound => Err(error),
+        Err(error) => {
+            let again = client
+                .call(vec![(
+                    "EmailSubmission/get",
+                    json!({ "accountId": submission_account, "ids": [id], "properties": ["id", "undoStatus"] }),
+                )])
+                .await
+                .and_then(|responses| Ok(list(responses.get(0, "EmailSubmission/get")?)));
+            let Ok(found) = again else { return Err(error) };
+            match found.first().and_then(|submission| text(submission, "undoStatus")) {
+                Some("canceled") => Ok(()),
+                Some("pending") => Err(error),
+                _ => Err(too_late()),
+            }
+        }
+    }
+}
+
+/// The submission still waiting to send the mail `email_id`, if there is one.
+async fn pending_for(client: &Client, submission_account: &str, email_id: &str) -> Result<Option<String>> {
+    let responses = client
+        .call(vec![(
+            "EmailSubmission/query",
+            json!({ "accountId": submission_account,
+                    "filter": { "emailIds": [email_id], "undoStatus": "pending" }, "limit": 1 }),
+        )])
+        .await?;
+    let answer = responses.get(0, "EmailSubmission/query")?;
+    Ok(answer
+        .get("ids")
+        .and_then(Value::as_array)
+        .and_then(|ids| ids.first())
+        .and_then(Value::as_str)
+        .map(String::from))
 }
 
 /// The submission's mail and how it was addressed, while it still waits.
@@ -239,13 +294,7 @@ pub async fn cancel(client: &Client, id: &str) -> Result<String> {
     let submission_account = submission_account(client)?;
     let submission = waiting(client, &submission_account, id).await?;
     let email_id = text(&submission, "emailId").ok_or_else(too_late)?.to_string();
-    let responses = client
-        .call(vec![(
-            "EmailSubmission/set",
-            json!({ "accountId": submission_account, "update": { id: { "undoStatus": "canceled" } } }),
-        )])
-        .await?;
-    cancelled(responses.get(0, "EmailSubmission/set")?, id)?;
+    stop(client, &submission_account, id).await?;
     Ok(email_id)
 }
 
@@ -271,54 +320,68 @@ pub async fn to_drafts(client: &Client, store: &Store, account_id: &str, email_i
     Ok(())
 }
 
-/// Sends a held mail at another time (`send_at`, a JMAP `UTCDate`): its submission is cancelled
-/// and the same mail submitted again in one request. When the new submission fails the mail is
-/// put into Drafts, so it is never left in Sent unsent.
+/// Sends a held mail at another time (`send_at`, a JMAP `UTCDate`): its submission is cancelled,
+/// and only once the server confirmed that, the same mail is submitted again in a request of its
+/// own. Sending both in one request would let the new one go through even when the old one was
+/// already on its way (security review 0.10 SL-1). When the new submission fails the mail is put
+/// into Drafts, so it is never left in Sent unsent.
 pub async fn resubmit(client: &Client, store: &Store, account_id: &str, id: &str, send_at: &str) -> Result<String> {
     let submission_account = submission_account(client)?;
     let submission = waiting(client, &submission_account, id).await?;
     let email_id = text(&submission, "emailId").ok_or_else(too_late)?.to_string();
     let identity_id = text(&submission, "identityId").ok_or_else(too_late)?;
     let envelope = submission.get("envelope").cloned().unwrap_or(Value::Null);
-    let responses = client
-        .call(vec![
-            (
-                "EmailSubmission/set",
-                json!({ "accountId": submission_account, "update": { id: { "undoStatus": "canceled" } } }),
-            ),
-            (
-                "EmailSubmission/set",
-                json!({
-                    "accountId": submission_account,
-                    "create": { "again": {
-                        "identityId": identity_id,
-                        "emailId": email_id,
-                        "envelope": envelope,
-                        "sendAt": send_at,
-                    } },
-                }),
-            ),
-        ])
-        .await?;
-    cancelled(responses.get(0, "EmailSubmission/set")?, id)?;
-    let created = responses.get(1, "EmailSubmission/set").map_err(Error::from).and_then(|answer| {
-        if let Some(error) = jmap::set_errors(answer) {
-            return Err(Error::from(error));
-        }
-        answer
-            .pointer("/created/again/id")
-            .and_then(Value::as_str)
-            .map(String::from)
-            .ok_or_else(|| Error::internal("The server didn't take the mail."))
-    });
-    match created {
-        Ok(new_id) => Ok(new_id),
-        Err(error) => {
-            let kept = to_drafts(client, store, account_id, &email_id).await.is_ok();
-            let note = if kept { " It is in Drafts now." } else { "" };
-            Err(Error::new(error.code, format!("{}{note}", error.message)))
+    stop(client, &submission_account, id).await?;
+
+    let created = client
+        .call_submission(vec![(
+            "EmailSubmission/set",
+            json!({
+                "accountId": submission_account,
+                "create": { "again": {
+                    "identityId": identity_id,
+                    "emailId": email_id,
+                    "envelope": envelope,
+                    "sendAt": send_at,
+                } },
+            }),
+        )])
+        .await
+        .and_then(|responses| {
+            let answer = responses.get(0, "EmailSubmission/set")?;
+            if let Some(error) = jmap::set_errors(answer) {
+                return Err(Error::from(error));
+            }
+            answer
+                .pointer("/created/again/id")
+                .and_then(Value::as_str)
+                .map(String::from)
+                .ok_or_else(|| Error::internal("The server didn't take the mail."))
+        });
+    let error = match created {
+        Ok(new_id) => return Ok(new_id),
+        Err(error) => error,
+    };
+    // The answer got lost: whether the new submission exists decides where the mail is.
+    if error.code == ErrorCode::MaybeSent {
+        match pending_for(client, &submission_account, &email_id).await {
+            Ok(Some(new_id)) => return Ok(new_id),
+            Ok(None) => {}
+            Err(_) => {
+                return Err(Error::internal(
+                    "The new time couldn't be confirmed. Look at the scheduled mail and Sent before trying again.",
+                ));
+            }
         }
     }
+    let kept = to_drafts(client, store, account_id, &email_id).await.is_ok();
+    let note = if kept { " It is in Drafts now." } else { " It is stopped and waits in Sent." };
+    let (code, message) = if error.code == ErrorCode::MaybeSent {
+        (ErrorCode::Internal, "The new time didn't take.")
+    } else {
+        (error.code, error.message.as_str())
+    };
+    Err(Error::new(code, format!("{message}{note}")))
 }
 
 /// The whole held mail (to open it in the composer) and every address it goes to.
@@ -337,7 +400,6 @@ pub async fn download(client: &Client, email_id: &str) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::ErrorCode;
 
     const NOW: i64 = 1_790_000_000_000;
 
@@ -370,6 +432,10 @@ mod tests {
     #[test]
     fn stopping_tells_too_late_from_other_trouble() {
         assert!(cancelled(&json!({ "updated": { "S1": null } }), "S1").is_ok());
+        // Silence is no confirmation (SL-6).
+        assert!(cancelled(&json!({}), "S1").is_err());
+        assert!(cancelled(&json!({ "updated": { "S2": null } }), "S1").is_err());
+        assert!(cancelled(&json!({ "updated": null }), "S1").is_err());
         let late = cancelled(&json!({ "notUpdated": { "S1": { "type": "cannotUnsend" } } }), "S1").unwrap_err();
         assert_eq!(late.code, ErrorCode::NotFound);
         let other = cancelled(&json!({ "notUpdated": { "S1": { "type": "forbidden", "description": "nope" } } }), "S1");
