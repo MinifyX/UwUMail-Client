@@ -12,6 +12,7 @@ use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
 
 mod assist;
+mod invites;
 mod shared;
 pub use assist::{
     CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, LabelShot, ProviderRecord, UsageRecord,
@@ -208,6 +209,7 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     assist::FROM_TRUSTED_MIGRATION,
     shared::MIGRATION,
     assist::BASE_LABELS_MIGRATION,
+    invites::MIGRATION,
 ];
 
 /// What this device remembers about one calendar.

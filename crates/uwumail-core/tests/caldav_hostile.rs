@@ -189,3 +189,24 @@ RRULE:FREQ=MINUTELY\r\nSUMMARY:Tick\r\nDESCRIPTION:{}\r\nEND:VEVENT\r\nEND:VCALE
     let bytes: usize = found.iter().map(|instance| instance.event.to_string().len()).sum();
     assert!(bytes <= ical::MAX_SHOWN_BYTES && found.len() < 100, "{} occurrences, {bytes} bytes", found.len());
 }
+
+/// Invitations are looked up by UID: the UID goes into the query escaped, so one with XML in it
+/// can't change what is asked; what comes back is parsed like any other listing.
+#[tokio::test]
+async fn looks_up_invitations_by_uid_with_the_uid_escaped() {
+    let listing = r#"<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+<d:response><d:href>/dav/cal/a.ics</d:href><d:propstat><d:prop><d:getetag>"7"</d:getetag><c:calendar-data>BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:a&lt;b
+END:VEVENT
+END:VCALENDAR</c:calendar-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+</d:multistatus>"#;
+    let server = https_stub(move |_: &Request| Response::multistatus(listing)).await;
+    let objects =
+        dav::objects_with_uid(&client(), &server.url(MAIL_HOST, "/dav/cal/"), "a<b\"></c:text-match>").await.unwrap();
+    assert_eq!(objects.len(), 1);
+    assert_eq!(objects[0].etag.as_deref(), Some("\"7\""));
+    let asked = String::from_utf8(server.seen()[0].body.clone()).unwrap();
+    assert!(asked.contains("a&lt;b&quot;&gt;&lt;/c:text-match&gt;"), "{asked}");
+    assert_eq!(asked.matches("</c:text-match>").count(), 1, "{asked}");
+}

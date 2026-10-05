@@ -299,6 +299,50 @@ pub async fn destroy_event(client: &Client, id: &str) -> Result<()> {
     event_set(client, "destroy", json!([id]), "The event wasn't deleted.").await.map(|_| ())
 }
 
+/// Properties read of an event an invitation names.
+const INVITATION_PROPERTIES: [&str; 9] =
+    ["id", "baseEventId", "isOrigin", "uid", "participants", "organizerCalendarAddress", "status", "sequence", "title"];
+
+/// The stored events with this UID (the series first), as far as an invitation needs them.
+pub async fn events_with_uid(client: &Client, uid: &str) -> Result<Vec<Value>> {
+    let account = account(client)?;
+    let responses = client
+        .call(vec![
+            ("CalendarEvent/query", json!({ "accountId": account, "filter": { "uid": uid }, "limit": 10 })),
+            (
+                "CalendarEvent/get",
+                json!({
+                    "accountId": account,
+                    "#ids": { "resultOf": "0", "name": "CalendarEvent/query", "path": "/ids" },
+                    "properties": INVITATION_PROPERTIES,
+                }),
+            ),
+        ])
+        .await?;
+    let mut found = list(responses.get(1, "CalendarEvent/get")?);
+    // Only that UID: a server whose filter matches parts of it doesn't hand over other events.
+    found.retain(|event| event.get("uid").and_then(Value::as_str).is_none_or(|found| found == uid));
+    found.sort_by_key(|event| event.get("baseEventId").and_then(Value::as_str).is_some());
+    Ok(found)
+}
+
+/// Sets a participant's answer. With `send`, the server tells the organizer (iTIP), as the
+/// webmail answers on a UwUMail server.
+pub async fn set_participation(client: &Client, id: &str, participant: &str, status: &str, send: bool) -> Result<()> {
+    let key = format!("participants/{}/participationStatus", super::jscal::pointer_segment(participant));
+    let responses = client
+        .call(vec![(
+            "CalendarEvent/set",
+            json!({ "accountId": account(client)?, "update": { id: { key: status } }, "sendSchedulingMessages": send }),
+        )])
+        .await?;
+    let answer = responses.get(0, "CalendarEvent/set")?.clone();
+    if jmap::set_errors(&answer).is_some() {
+        return Err(refused(&answer, "The answer wasn't taken."));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

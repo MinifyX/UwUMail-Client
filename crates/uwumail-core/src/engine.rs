@@ -195,6 +195,7 @@ mod calendar_ops;
 mod cloud_ops;
 mod contacts_ops;
 mod folder_ops;
+mod invite_ops;
 mod ocr_ops;
 mod price_ops;
 mod push_ops;
