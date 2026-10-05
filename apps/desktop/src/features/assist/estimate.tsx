@@ -83,14 +83,10 @@ export function estimateText(estimate: AssistEstimate, t: TFunction, locale: str
   if (cost) {
     const about = formatCost(cost, locale, t, true);
     const max = cost.max;
-    parts.push(
-      max && max.amount > cost.amount
-        ? t("assist.estimate.withMax", {
-            cost: about,
-            max: formatCost({ amount: max.amount, currency: cost.currency }, locale, t),
-          })
-        : about,
-    );
+    const most =
+      max && max.amount > cost.amount ? formatCost({ amount: max.amount, currency: cost.currency }, locale, t) : null;
+    // A worst case that reads the same as the estimate says nothing more.
+    parts.push(most && !about.endsWith(most) ? t("assist.estimate.withMax", { cost: about, max: most }) : about);
   }
   if (estimate.tokensLeftToday !== null) {
     parts.push(t("assist.estimate.tokensLeft", { formatted: number.format(estimate.tokensLeftToday) }));

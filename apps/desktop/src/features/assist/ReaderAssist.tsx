@@ -84,10 +84,13 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
   const showSpamCheck = useAssistReader((s) => s.showSpamCheck);
   const showLabelCheck = useAssistReader((s) => s.showLabelCheck);
   if (message.flags.draft) return [];
+  // Under their own heading in the mail's "more" menu.
+  const group = t("assist.menuGroup");
   return [
     ...(can.summarize
       ? [
           {
+            group,
             label: (
               <ItemLabel
                 icon={FileText}
@@ -99,9 +102,21 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
           },
         ]
       : []),
+    ...(can.events
+      ? [
+          {
+            group,
+            label: (
+              <ItemLabel icon={CalendarSearch} text={t("dates.findAppointment")} estimate={eventsEstimate(message)} />
+            ),
+            onSelect: () => findEvents(message),
+          },
+        ]
+      : []),
     ...(can.spamCheck && !fromMe
       ? [
           {
+            group,
             label: (
               <ItemLabel
                 icon={ShieldQuestion}
@@ -116,6 +131,7 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
     ...(can.labels
       ? [
           {
+            group,
             label: (
               <ItemLabel
                 icon={Tags}
@@ -124,16 +140,6 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
               />
             ),
             onSelect: () => showLabelCheck(message.id),
-          },
-        ]
-      : []),
-    ...(can.events
-      ? [
-          {
-            label: (
-              <ItemLabel icon={CalendarSearch} text={t("dates.findAppointment")} estimate={eventsEstimate(message)} />
-            ),
-            onSelect: () => findEvents(message),
           },
         ]
       : []),
@@ -157,9 +163,11 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
   const showSummary = useAssistReader((s) => s.showSummary);
   const showSpamCheck = useAssistReader((s) => s.showSpamCheck);
   const showLabelCheck = useAssistReader((s) => s.showLabelCheck);
-  const received = messages.filter((message) => !message.flags.draft && !mine.has(message.from.email.toLowerCase()));
+  const sent = messages.filter((message) => !message.flags.draft);
+  const received = sent.filter((message) => !mine.has(message.from.email.toLowerCase()));
   const newest = received[received.length - 1];
-  const last = messages.filter((message) => !message.flags.draft).at(-1);
+  // Appointments and labels go by the newest mail that came, or else the newest one at all.
+  const forEvents = newest ?? sent[sent.length - 1];
   const items: MenuItem[] = [
     ...(can.summarize
       ? messages.length > 1
@@ -202,6 +210,16 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
             },
           ]
       : []),
+    ...(can.events && forEvents
+      ? [
+          {
+            label: (
+              <ItemLabel icon={CalendarSearch} text={t("dates.findAppointment")} estimate={eventsEstimate(forEvents)} />
+            ),
+            onSelect: () => findEvents(forEvents),
+          },
+        ]
+      : []),
     ...(can.spamCheck && newest
       ? [
           {
@@ -216,27 +234,17 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
           },
         ]
       : []),
-    ...(can.labels && newest
+    ...(can.labels && forEvents
       ? [
           {
             label: (
               <ItemLabel
                 icon={Tags}
                 text={t(messages.length > 1 ? "assist.labelAgain.menuLatest" : "assist.labelAgain.menu")}
-                estimate={labelsEstimate(newest, language)}
+                estimate={labelsEstimate(forEvents, language)}
               />
             ),
-            onSelect: () => showLabelCheck(newest.id),
-          },
-        ]
-      : []),
-    ...(can.events && last
-      ? [
-          {
-            label: (
-              <ItemLabel icon={CalendarSearch} text={t("dates.findAppointment")} estimate={eventsEstimate(last)} />
-            ),
-            onSelect: () => findEvents(last),
+            onSelect: () => showLabelCheck(forEvents.id),
           },
         ]
       : []),
