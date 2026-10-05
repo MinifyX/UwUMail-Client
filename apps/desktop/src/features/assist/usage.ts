@@ -15,7 +15,10 @@ export interface DayTotal {
 export interface FeatureTotal {
   feature: string;
   requests: number;
+  /** All tokens, thinking included. */
   tokens: number;
+  /** Thinking of reasoning models alone. */
+  reasoningTokens: number;
   cost: AssistCost | null;
 }
 
@@ -40,10 +43,17 @@ export function dailyTotals(usage: AssistUsage, days: number, today = new Date()
 export function featureTotals(usage: AssistUsage): FeatureTotal[] {
   const sums = new Map<string, FeatureTotal>();
   for (const entry of usage.days) {
-    const sum = sums.get(entry.feature) ?? { feature: entry.feature, requests: 0, tokens: 0, cost: null };
+    const sum = sums.get(entry.feature) ?? {
+      feature: entry.feature,
+      requests: 0,
+      tokens: 0,
+      reasoningTokens: 0,
+      cost: null,
+    };
     sum.cost = sumCosts([sum.cost, entry.cost]);
     sum.requests += entry.requests;
     sum.tokens += entry.inputTokens + entry.outputTokens + entry.reasoningTokens;
+    sum.reasoningTokens += entry.reasoningTokens;
     sums.set(entry.feature, sum);
   }
   return [...sums.values()].sort((a, b) => b.requests - a.requests || a.feature.localeCompare(b.feature));

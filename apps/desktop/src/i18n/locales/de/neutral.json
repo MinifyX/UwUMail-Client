@@ -1653,7 +1653,8 @@
       "limitReached": "Das Tageslimit ist erreicht. Es gilt wieder ab Mitternacht (UTC).",
       "lastDays_one": "Letzter Tag",
       "lastDays_other": "Letzte {{count}} Tage",
-      "nothing": "In dieser Zeit nichts verbraucht."
+      "nothing": "In dieser Zeit nichts verbraucht.",
+      "thinking": "davon {{formatted}} Nachdenken"
     },
     "estimate": {
       "tokens_one": "≈ {{formatted}} Token",

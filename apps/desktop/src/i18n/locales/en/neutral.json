@@ -1653,7 +1653,8 @@
       "limitReached": "Today's limit is reached. It resets at midnight (UTC).",
       "lastDays_one": "Last day",
       "lastDays_other": "Last {{count}} days",
-      "nothing": "Nothing used in this time."
+      "nothing": "Nothing used in this time.",
+      "thinking": "{{formatted}} thinking"
     },
     "estimate": {
       "tokens_one": "≈ {{formatted}} token",

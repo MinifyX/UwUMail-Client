@@ -1075,7 +1075,13 @@ export class DemoAssist {
       cost: this.estimateCost(effective.providerId, effective.model, input, output, currency),
       reasoningTokens: 0,
       imageCount: 0,
-      calls: [{ purpose: "main", inputTokens: input, outputTokens: output, reasoningTokens: 0, images: 0, weight: 1 }],
+      calls: [
+        { purpose: "main", inputTokens: input, outputTokens: output, reasoningTokens: 0, images: 0, weight: 1 },
+        // A server asks once more, now and then, when a JSON answer comes back unusable.
+        ...(!this.device && method !== "Assist/summarize" && method !== "Assist/compose"
+          ? [{ purpose: "retry", inputTokens: input, outputTokens: output, reasoningTokens: 0, images: 0, weight: 0.1 }]
+          : []),
+      ],
       calibrated: false,
     };
   }
