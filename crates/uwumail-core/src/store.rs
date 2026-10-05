@@ -208,6 +208,7 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     assist::FROM_TRUSTED_MIGRATION,
     shared::MIGRATION,
     assist::BASE_LABELS_MIGRATION,
+    assist::PREVIOUS_DESCRIPTION_MIGRATION,
 ];
 
 /// What this device remembers about one calendar.
