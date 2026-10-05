@@ -8,6 +8,8 @@ use crate::error::{Error, Result};
 
 /// Longest folder name, in characters. Servers differ; this fits every one we know.
 pub const MAX_NAME: usize = 200;
+/// Longest folder name in UTF-8 bytes, which is what servers count (the app checks the same).
+pub const MAX_NAME_BYTES: usize = 255;
 
 /// Checks and trims a folder name. `delimiter` is the server's hierarchy
 /// delimiter; `imap` also refuses the LIST wildcards `*` and `%`.
@@ -19,7 +21,11 @@ pub fn clean_name(name: &str, delimiter: Option<&str>, imap: bool) -> Result<Str
     if name.chars().count() > MAX_NAME {
         return Err(Error::invalid(format!("Folder names can have at most {MAX_NAME} characters.")));
     }
-    if name.chars().any(char::is_control) {
+    if name.len() > MAX_NAME_BYTES {
+        return Err(Error::invalid("That folder name is too long."));
+    }
+    // The line and paragraph separators break lines like a line break, without being control characters.
+    if name.chars().any(|c| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')) {
         return Err(Error::invalid("Folder names can't contain line breaks or control characters."));
     }
     if let Some(delimiter) = delimiter.filter(|d| !d.is_empty())
@@ -128,6 +134,11 @@ mod tests {
         assert!(clean_name("..", None, false).is_err());
         assert!(clean_name(&"x".repeat(MAX_NAME), None, false).is_ok());
         assert!(clean_name(&"ü".repeat(MAX_NAME + 1), None, false).is_err());
+        // Bytes count too: 128 × "ü" is 256 bytes in UTF-8.
+        assert!(clean_name(&"ü".repeat(127), None, false).is_ok());
+        assert!(clean_name(&"ü".repeat(128), None, false).is_err());
+        assert!(clean_name("line\u{2028}separator", None, false).is_err());
+        assert!(clean_name("para\u{2029}separator", Some("/"), true).is_err());
     }
 
     #[test]

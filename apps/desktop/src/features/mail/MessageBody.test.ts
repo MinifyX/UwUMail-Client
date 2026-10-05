@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/backend/types";
+import { teamsMeetingLink } from "@/lib/outlook";
 import {
   buildDocument,
   buildPrintDocument,
@@ -64,6 +65,12 @@ describe("Microsoft Safe Links", () => {
     expect(link.textContent).toBe("https://wanders.example/clip?v=2");
     expect(link.getAttribute("href")).toBe("https://other.example/");
     expect(link.hasAttribute("data-uwu-safelink")).toBe(false);
+  });
+
+  it("leave a Teams join link the reader can find", () => {
+    const join = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7b%7d";
+    const safe = `https://eur01.safelinks.protection.outlook.com/?url=${encodeURIComponent(join)}&amp;data=05`;
+    expect(teamsMeetingLink(readableBody(message({ bodyHtml: `<a href="${safe}">Join</a>` })))).toBe(join);
   });
 
   it("in plain-text mail too", () => {

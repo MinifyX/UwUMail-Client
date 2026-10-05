@@ -33,10 +33,16 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
 - **Simple or Pro.** A calm two-column layout, or a dense three-column one with
   keyboard shortcuts (`g i`, `v`, `x`, `z`, `!` and more), switchable any time.
 - **Conversations**, a folder tree, multi-select, drag and drop, spam and not
-  spam, blocked senders, and undo for moves.
+  spam, blocked senders, and undo for moves. A folder name that won't work
+  (a "/" or the server's separator, control characters, too long, taken) is
+  explained while you type.
 - **Safe HTML.** Mail is cleaned before it is shown, remote content is blocked
   until you allow it (per sender or domain), and links whose text shows another
-  site than their target get a warning.
+  site than their target get a warning. Microsoft Safe Links show and open the
+  address they wrap, and the link question says the wrapper was removed.
+- **Outlook and Teams.** A Teams meeting link in a mail gets a "Join" button
+  (asked about like every link), and a winmail.dat that couldn't be unpacked
+  says so instead of looking like a file to open.
 - **Pictures without the wait.** Once they may load, the text shows at once and
   every picture waits in its final size with a shimmer; a bar counts them in,
   and dead hosts and tracking pixels hold nothing up. Pictures can go through

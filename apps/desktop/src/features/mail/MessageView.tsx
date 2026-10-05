@@ -13,6 +13,7 @@ import {
   Sun,
   UserPlus,
   UserRound,
+  Video,
 } from "lucide-react";
 import { Fragment, useId, useMemo, useState } from "react";
 import type { Account, Message } from "@/backend/types";
@@ -30,6 +31,8 @@ import { useCompanyDomain, useFolders } from "@/lib/queries";
 import { useUi } from "@/state/ui";
 import { useResolvedTheme } from "@/lib/theme";
 import { domainEntry, isDomainEntry, matchingEntries } from "@/lib/trustedSenders";
+import { teamsMeetingLink } from "@/lib/outlook";
+import { requestOpenLink } from "@/state/links";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
@@ -45,7 +48,14 @@ import { nativeMobile } from "@/backend/mobile";
 import { backend } from "@/backend/backend";
 import { blockSender } from "./selection";
 import { UnsubscribeButton } from "./Unsubscribe";
-import { buildPrintDocument, MAIL_FRAME_SANDBOX, MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
+import {
+  buildPrintDocument,
+  MAIL_FRAME_SANDBOX,
+  MessageBody,
+  readableBody,
+  resolveAppearance,
+  type Appearance,
+} from "./MessageBody";
 import { useMailDates } from "../dates/useMailDates";
 
 interface AppearanceToggleProps {
@@ -179,6 +189,25 @@ interface MessageViewProps {
 }
 
 const loadMailImage = (url: string) => backend().fetchMailImage(url);
+
+/** A Teams meeting link in the mail: one button to join, asked about like every link from a mail. */
+function TeamsMeetingBar({ message }: { message: Message }) {
+  const { t } = useT();
+  const link = useMemo(() => teamsMeetingLink(readableBody(message)), [message]);
+  if (!link) return null;
+  return (
+    <section
+      aria-label={t("reader.teamsMeeting")}
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-hairline bg-canvas px-4 py-2.5 text-[13px]"
+    >
+      <Video className="size-4 shrink-0 text-pink" aria-hidden />
+      <p className="min-w-0 flex-1 font-semibold">{t("reader.teamsMeeting")}</p>
+      <Button size="sm" icon={Video} onClick={() => requestOpenLink(link, link)}>
+        {t("reader.teamsJoin")}
+      </Button>
+    </section>
+  );
+}
 
 export function MessageView({ message, accounts, collapsed, onExpand }: MessageViewProps) {
   const { t, i18n } = useT();
@@ -319,6 +348,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
         )}
 
         {dates.bar}
+        {!message.flags.draft && <TeamsMeetingBar message={message} />}
 
         <div className="selectable">
           <MessageBody

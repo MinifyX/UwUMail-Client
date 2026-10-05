@@ -1,4 +1,4 @@
 {
-  "de": "- Behoben: Links in Mails tun auf macOS, iOS und Linux wieder etwas. Ein Klick fragt wie gewohnt nach, statt nichts zu tun; auch Tastenkürzel und erkannte Termine in der Mail funktionieren dort wieder",
-  "en": "- Fixed: links in mails work again on macOS, iOS and Linux. A click asks first as usual instead of doing nothing; shortcuts and found dates inside the mail work there again too"
+  "de": "- Behoben: Links in Mails tun auf macOS, iOS und Linux wieder etwas. Ein Klick fragt wie gewohnt nach, statt nichts zu tun; auch Tastenkürzel und erkannte Termine in der Mail funktionieren dort wieder\n- Teams-Besprechungen in Mails bekommen einen „Teilnehmen“-Knopf, und eine winmail.dat, die sich nicht auspacken lässt, sagt das jetzt\n- Microsoft-Safe-Links zeigen und öffnen gleich die eigentliche Adresse\n- Neue Ordner und Umbenennen sagen schon beim Tippen, was an einem Namen nicht geht",
+  "en": "- Fixed: links in mails work again on macOS, iOS and Linux. A click asks first as usual instead of doing nothing; shortcuts and found dates inside the mail work there again too\n- Teams meetings in mails get a Join button, and a winmail.dat that can't be unpacked now says so\n- Microsoft Safe Links show and open the real address right away\n- Creating and renaming folders explains while you type what won't work in a name"
 }

@@ -151,7 +151,12 @@
   "attachment": {
     "loading": "Unpacking the attachment…",
     "dangerTitle": "Careful! This file could start programs (・_・;)",
-    "noPreview": "I can't peek into this one (・・ )?"
+    "noPreview": "I can't peek into this one (・・ )?",
+    "dangerous": {
+      "titleOpen": "Nyu is squinting at this file",
+      "titleSave": "Nyu is squinting at this file",
+      "body": "This kind of file can run programs on your computer. Only take it if you expected it and trust who sent it."
+    }
   },
   "update": {
     "readyTitle": "Nyu brought something new ✧"
