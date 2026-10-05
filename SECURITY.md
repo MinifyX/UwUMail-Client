@@ -42,3 +42,4 @@ The audits were done with Claude, not by an independent security firm.
 - [September 2026 — changes since 17 September](docs/security-audit.md#addendum--changes-since-17-september-2026)
 - [23 September 2026 — account setup, app shells, release pipeline, privacy proxy](docs/security-audit-2026-09-23.md)
 - [30 September 2026 — labels, the server's AI for other mailboxes, whole repository](docs/security-audit-2026-09-30.md)
+- [5 October 2026 — 0.10.0-beta.1: mail frame, send later, invitations, account features](docs/security-audit-2026-10-05.md)
