@@ -292,7 +292,8 @@ pub fn read(text: &str) -> Option<Invite> {
 
 /// A lower-case mail address, if `value` is one (`From` of a mail).
 pub fn plain_address(value: &str) -> Option<String> {
-    let address = value.trim().trim_start_matches("mailto:").trim().to_lowercase();
+    // Lower case first, so a `MAILTO:` scheme is stripped too (security review 0.10 IV-I-7).
+    let address = value.trim().to_lowercase().trim_start_matches("mailto:").trim().to_string();
     (address.contains('@') && !address.contains(|c: char| c.is_whitespace() || c.is_control() || c == '<' || c == '>'))
         .then_some(address)
 }
@@ -916,5 +917,7 @@ ATTENDEE:http://example.com/not-mail\r\nDURATION:P99999999999999999999D\r\nDTSTA
         assert_eq!(Partstat::from_ical("delegated"), Partstat::NeedsAction);
         assert_eq!(plain_address("Mini@Example.COM"), Some("mini@example.com".into()));
         assert_eq!(plain_address("a b@example.com"), None);
+        assert_eq!(plain_address("MAILTO:Mini@Example.COM"), Some("mini@example.com".into()));
+        assert_eq!(plain_address(" Mailto: mini@example.com "), Some("mini@example.com".into()));
     }
 }

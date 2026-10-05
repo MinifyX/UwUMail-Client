@@ -104,6 +104,10 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
             .collect();
         // Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
         if let Some((title, body)) = notify::mail_notification(&crate::notify_prefs::get(), &mails) {
+            // Linux notification servers may read the body as markup (security review 0.10 NT-1).
+            // The title (summary) is plain text by the freedesktop spec; escaping it would show `&amp;`.
+            #[cfg(target_os = "linux")]
+            let body = notify::markup_escape(&body);
             let _ = app.notification().builder().title(title).body(body).show();
         }
     }

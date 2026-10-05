@@ -109,9 +109,39 @@ pub fn mail_notification(prefs: &NotifyPrefs, mails: &[NotifiedMail<'_>]) -> Opt
     }
 }
 
+/// Escapes `&`, `<`, `>`, `"` and `'` for notification servers that read the text as markup.
+/// Freedesktop servers with `body-markup` / `body-hyperlinks` (GNOME, KDE, dunst, mako, …) would
+/// otherwise turn a stranger's subject into formatting or a clickable link that skips the app's
+/// link check (security review 0.10 NT-1). Use it on Linux only: Windows and macOS show text
+/// literally and would show `&amp;`.
+pub fn markup_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn markup_is_escaped_for_notification_servers() {
+        assert_eq!(
+            markup_escape("Tom & Jerry <a href=\"https://phish.invalid\">Rechnung</a> it's"),
+            "Tom &amp; Jerry &lt;a href=&quot;https://phish.invalid&quot;&gt;Rechnung&lt;/a&gt; it&#39;s"
+        );
+        assert_eq!(markup_escape("&amp;"), "&amp;amp;", "already escaped text stays literal");
+        assert_eq!(markup_escape("Grüße 👩\u{200D}💻"), "Grüße 👩\u{200D}💻");
+    }
 
     #[test]
     fn keeps_names_plain_and_short() {
