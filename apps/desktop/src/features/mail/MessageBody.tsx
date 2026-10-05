@@ -60,6 +60,25 @@ function dropOwnMarkers(node: Element) {
   }
 }
 
+/** Link attributes that would point into the mail's own parts or the app's own files. */
+const LINK_ATTRIBUTES = ["href", "xlink:href", "action", "formaction", "data"];
+const OWN_FILES = /^(cid|blob):/i;
+
+/**
+ * Links may not lead to the mail's embedded parts (`cid:`) or the app's own files (`blob:`): those
+ * have the app's origin, and the mail frame may run scripts (security review 0.10 RD-1). Pictures
+ * keep their `cid:` sources (see lib/inlineImages).
+ */
+function dropOwnFileLinks(node: Element) {
+  for (const name of LINK_ATTRIBUTES) {
+    const value = node.getAttribute(name);
+    // Browsers skip leading whitespace and controls and ignore tabs and newlines in a scheme.
+    if (value === null) continue;
+    const scheme = [...value].filter((char) => char.charCodeAt(0) > 0x20).join("");
+    if (OWN_FILES.test(scheme)) node.removeAttribute(name);
+  }
+}
+
 /**
  * The engine already sanitizes HTML. We sanitize again here because the demo
  * backend and future addons can also produce message bodies. `alsoForbid` drops more elements with
@@ -70,6 +89,7 @@ function sanitize(html: string, alsoForbid: string[] = []) {
   purify.addHook("afterSanitizeAttributes", (node) => {
     // The mail's own markers go first, so only the reader sets the Safe Link one.
     dropOwnMarkers(node);
+    dropOwnFileLinks(node);
     // Microsoft Safe Links show and open their original address (lib/safeLinks).
     if (node.tagName === "A" || node.tagName === "AREA") unwrapSafeLinkElement(node);
     unwrapLinkText(node);

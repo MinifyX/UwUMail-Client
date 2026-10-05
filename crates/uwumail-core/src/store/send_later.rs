@@ -15,6 +15,21 @@ ALTER TABLE outbox ADD COLUMN later INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;
 "#;
 
+/// Security review 0.10 (SL-3, SL-4, SL-5): an entry stays in the outbox until its mail is sent
+/// or safely somewhere else. `claimed_at` marks one being sent right now; `held` one that waits
+/// for the person and never goes on its own (`failed`: it couldn't be sent and Drafts couldn't
+/// take it; `unsure`: it may have gone out), `held_reason` says why.
+pub(super) const HOLD_MIGRATION: &str = r#"
+ALTER TABLE outbox ADD COLUMN claimed_at INTEGER;
+ALTER TABLE outbox ADD COLUMN held TEXT;
+ALTER TABLE outbox ADD COLUMN held_reason TEXT;
+"#;
+
+/// `held`: it couldn't be sent, and Drafts couldn't take it either.
+pub const HELD_FAILED: &str = "failed";
+/// `held`: sending broke off when it may already have gone out.
+pub const HELD_UNSURE: &str = "unsure";
+
 /// An outbox entry taken out to be sent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TakenSend {
@@ -33,6 +48,9 @@ pub struct LaterSend {
     pub message_json: String,
     pub send_at: i64,
     pub attempts: u32,
+    /// [`HELD_FAILED`] or [`HELD_UNSURE`] when it waits for the person.
+    pub held: Option<String>,
+    pub held_reason: Option<String>,
 }
 
 impl Store {
@@ -52,12 +70,15 @@ impl Store {
         Ok(())
     }
 
-    /// Takes out every entry due at `now`, each only once and only while it is still due: an
-    /// entry moved to a later time in the meantime stays.
+    /// Claims every entry due at `now` to be sent, each only once and only while it is still due:
+    /// an entry moved to a later time in the meantime stays. A claimed entry stays in the outbox
+    /// until [`finish_outbox`](Self::finish_outbox), [`retry_outbox`](Self::retry_outbox) or
+    /// [`hold_outbox`](Self::hold_outbox), so a quit or crash while sending never loses it.
     pub fn take_due_outbox(&self, now: i64) -> Result<Vec<TakenSend>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "DELETE FROM outbox WHERE send_at <= ?1 RETURNING id, account_id, message_json, later, attempts, send_at",
+            "UPDATE outbox SET claimed_at = ?1 WHERE claimed_at IS NULL AND held IS NULL AND send_at <= ?1
+             RETURNING id, account_id, message_json, later, attempts, send_at",
         )?;
         let mut rows: Vec<(TakenSend, i64)> = stmt
             .query_map([now], |row| {
@@ -77,16 +98,54 @@ impl Store {
         Ok(rows.into_iter().map(|(taken, _)| taken).collect())
     }
 
-    /// When the next entry is due, if any.
-    pub fn next_outbox_at(&self) -> Result<Option<i64>> {
-        Ok(self.conn().query_row("SELECT MIN(send_at) FROM outbox", [], |row| row.get(0))?)
+    /// A claimed entry went out (or is safe in Drafts): it leaves the outbox.
+    pub fn finish_outbox(&self, id: &str) -> Result<()> {
+        self.conn().execute("DELETE FROM outbox WHERE id = ?1", [id])?;
+        Ok(())
     }
 
-    /// The mail scheduled on purpose, soonest first.
+    /// A claimed entry couldn't reach its server: it waits again until `send_at`.
+    pub fn retry_outbox(&self, id: &str, send_at: i64, attempts: u32) -> Result<bool> {
+        Ok(self.conn().execute(
+            "UPDATE outbox SET claimed_at = NULL, send_at = ?2, attempts = ?3 WHERE id = ?1 AND claimed_at IS NOT NULL",
+            params![id, send_at, attempts],
+        )? > 0)
+    }
+
+    /// A claimed entry waits for the person ([`HELD_FAILED`] or [`HELD_UNSURE`]) and never goes
+    /// on its own; it is listed with the scheduled mail, also when it was an "undo send" one.
+    pub fn hold_outbox(&self, id: &str, held: &str, reason: &str) -> Result<bool> {
+        Ok(self.conn().execute(
+            "UPDATE outbox SET claimed_at = NULL, held = ?2, held_reason = ?3, later = 1 WHERE id = ?1",
+            params![id, held, reason],
+        )? > 0)
+    }
+
+    /// Entries still claimed when UwUMail starts were being sent when it stopped: they may have
+    /// gone out, so they are held ([`HELD_UNSURE`]) instead of sent again. How many there were.
+    pub fn release_claimed_outbox(&self, reason: &str) -> Result<usize> {
+        Ok(self.conn().execute(
+            "UPDATE outbox SET claimed_at = NULL, held = ?1, held_reason = ?2, later = 1 WHERE claimed_at IS NOT NULL",
+            params![HELD_UNSURE, reason],
+        )?)
+    }
+
+    /// When the next entry is due, if any (held and claimed ones aren't).
+    pub fn next_outbox_at(&self) -> Result<Option<i64>> {
+        Ok(self.conn().query_row(
+            "SELECT MIN(send_at) FROM outbox WHERE claimed_at IS NULL AND held IS NULL",
+            [],
+            |row| row.get(0),
+        )?)
+    }
+
+    /// The mail scheduled on purpose or held for the person, soonest first; not what is being
+    /// sent right now.
     pub fn later_outbox(&self) -> Result<Vec<LaterSend>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, account_id, message_json, send_at, attempts FROM outbox WHERE later = 1 ORDER BY send_at",
+            "SELECT id, account_id, message_json, send_at, attempts, held, held_reason FROM outbox
+             WHERE later = 1 AND claimed_at IS NULL ORDER BY send_at",
         )?;
         let rows = stmt
             .query_map([], |row| {
@@ -96,6 +155,8 @@ impl Store {
                     message_json: row.get(2)?,
                     send_at: row.get(3)?,
                     attempts: row.get(4)?,
+                    held: row.get(5)?,
+                    held_reason: row.get(6)?,
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -107,20 +168,34 @@ impl Store {
         Ok(usize::try_from(count).unwrap_or(usize::MAX))
     }
 
-    /// Gives a scheduled entry of this account a new time. False when it is gone (sent or taken).
+    /// Gives a scheduled entry of this account a new time; a held one goes again (the person
+    /// asked for it). False when it is gone or being sent.
     pub fn reschedule_later_outbox(&self, id: &str, account_id: &str, send_at: i64) -> Result<bool> {
         Ok(self.conn().execute(
-            "UPDATE outbox SET send_at = ?3, attempts = 0 WHERE id = ?1 AND account_id = ?2 AND later = 1",
+            "UPDATE outbox SET send_at = ?3, attempts = 0, held = NULL, held_reason = NULL
+             WHERE id = ?1 AND account_id = ?2 AND later = 1 AND claimed_at IS NULL",
             params![id, account_id, send_at],
         )? > 0)
     }
 
-    /// Takes a scheduled entry of this account out, once, e.g. to stop or edit it.
+    /// Holds a scheduled entry of this account back (or lets it go again with `None`), e.g. while
+    /// stopping it writes Drafts. False when it is gone or being sent.
+    pub fn set_later_held(&self, id: &str, account_id: &str, held: Option<&str>, reason: Option<&str>) -> Result<bool> {
+        Ok(self.conn().execute(
+            "UPDATE outbox SET held = ?3, held_reason = ?4
+             WHERE id = ?1 AND account_id = ?2 AND later = 1 AND claimed_at IS NULL",
+            params![id, account_id, held, reason],
+        )? > 0)
+    }
+
+    /// Takes a scheduled entry of this account out, once, e.g. to stop or edit it; never one
+    /// being sent.
     pub fn take_later_outbox(&self, id: &str, account_id: &str) -> Result<Option<String>> {
         Ok(self
             .conn()
             .query_row(
-                "DELETE FROM outbox WHERE id = ?1 AND account_id = ?2 AND later = 1 RETURNING message_json",
+                "DELETE FROM outbox WHERE id = ?1 AND account_id = ?2 AND later = 1 AND claimed_at IS NULL
+                 RETURNING message_json",
                 params![id, account_id],
                 |row| row.get(0),
             )
@@ -252,5 +327,90 @@ mod tests {
         store.delete_account("acc").unwrap();
         let left: Vec<String> = store.later_outbox().unwrap().into_iter().map(|l| l.account_id).collect();
         assert_eq!(left, ["other"]);
+    }
+
+    #[test]
+    fn an_entry_stays_while_it_is_sent_and_leaves_only_when_done() {
+        let store = store();
+        store.insert_later_outbox("s1", "acc", "{}", NOW, 0).unwrap();
+        store.insert_outbox("undo", "acc", "{}", NOW).unwrap();
+        let taken = store.take_due_outbox(NOW).unwrap();
+        assert_eq!(ids(&taken), ["s1", "undo"]);
+        // Claimed: not taken twice, not listed, not due, and nobody else can take or move it.
+        assert!(store.take_due_outbox(NOW + MINUTE).unwrap().is_empty());
+        assert!(store.later_outbox().unwrap().is_empty());
+        assert_eq!(store.next_outbox_at().unwrap(), None);
+        assert_eq!(store.take_later_outbox("s1", "acc").unwrap(), None);
+        assert!(!store.reschedule_later_outbox("s1", "acc", NOW + 90 * MINUTE).unwrap());
+        assert_eq!(store.take_outbox("undo").unwrap(), None, "undo can't take one being sent");
+        assert_eq!(store.outbox().unwrap().len(), 2, "both still there while being sent");
+
+        // Couldn't reach its server: due again later. Went out: gone.
+        assert!(store.retry_outbox("s1", NOW + 2 * MINUTE, 1).unwrap());
+        assert_eq!(store.later_outbox().unwrap()[0].attempts, 1);
+        store.finish_outbox("undo").unwrap();
+        assert_eq!(ids(&store.take_due_outbox(NOW + 2 * MINUTE).unwrap()), ["s1"]);
+        store.finish_outbox("s1").unwrap();
+        assert!(store.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_mail_being_sent_when_uwumail_stopped_is_held_not_sent_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("uwumail.db");
+        {
+            let store = Store::open(&path).unwrap();
+            store
+                .insert_account(&AccountRecord {
+                    id: "acc".into(),
+                    name: "Test".into(),
+                    email: "acc@uwumail.example".into(),
+                    display_name: "Mini".into(),
+                    color: AccountColor::Pink,
+                    auth: AuthKind::Password,
+                    username: "acc@uwumail.example".into(),
+                    imap: ServerSettings { host: "imap.example".into(), port: 993, security: Security::Tls },
+                    smtp: ServerSettings { host: "smtp.example".into(), port: 465, security: Security::Tls },
+                    protocol: Protocol::Imap,
+                    jmap_url: None,
+                })
+                .unwrap();
+            store.insert_later_outbox("s1", "acc", r#"{"subject":"Hi"}"#, NOW, 0).unwrap();
+            store.insert_outbox("undo", "acc", "{}", NOW).unwrap();
+            assert_eq!(store.take_due_outbox(NOW).unwrap().len(), 2);
+            // UwUMail quits (tray, shutdown, crash) while both are on their way.
+        }
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.release_claimed_outbox("stopped").unwrap(), 2);
+        let held = store.later_outbox().unwrap();
+        assert_eq!(held.len(), 2, "both kept, also the undo-send one, and listed");
+        assert!(held.iter().all(|entry| entry.held.as_deref() == Some(HELD_UNSURE)));
+        assert_eq!(held[0].held_reason.as_deref(), Some("stopped"));
+        assert!(store.take_due_outbox(NOW + 60 * MINUTE).unwrap().is_empty(), "never sent again on its own");
+        assert_eq!(store.next_outbox_at().unwrap(), None);
+        // The person decides: send it again.
+        assert!(store.reschedule_later_outbox("s1", "acc", NOW + MINUTE).unwrap());
+        assert_eq!(store.later_outbox().unwrap().iter().find(|e| e.id == "s1").unwrap().held, None);
+        assert_eq!(ids(&store.take_due_outbox(NOW + MINUTE).unwrap()), ["s1"]);
+    }
+
+    #[test]
+    fn a_held_entry_waits_for_the_person() {
+        let store = store();
+        store.insert_outbox("undo", "acc", "{}", NOW).unwrap();
+        store.take_due_outbox(NOW).unwrap();
+        // Drafts couldn't take it either: it stays, as scheduled mail.
+        assert!(store.hold_outbox("undo", HELD_FAILED, "offline").unwrap());
+        let listed = store.later_outbox().unwrap();
+        assert_eq!(listed[0].held.as_deref(), Some(HELD_FAILED));
+        assert!(store.take_due_outbox(NOW + 60 * MINUTE).unwrap().is_empty());
+
+        // Held while stopping writes Drafts; let go again when that fails.
+        store.insert_later_outbox("s1", "acc", "{}", NOW + MINUTE, 0).unwrap();
+        assert!(store.set_later_held("s1", "acc", Some(HELD_FAILED), Some("stopping")).unwrap());
+        assert!(store.take_due_outbox(NOW + 60 * MINUTE).unwrap().is_empty(), "not sent while held");
+        assert!(store.set_later_held("s1", "acc", None, None).unwrap());
+        assert_eq!(ids(&store.take_due_outbox(NOW + 60 * MINUTE).unwrap()), ["s1"]);
+        assert!(!store.set_later_held("s1", "acc", None, None).unwrap(), "not while being sent");
     }
 }

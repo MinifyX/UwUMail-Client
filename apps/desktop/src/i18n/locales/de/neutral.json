@@ -228,7 +228,8 @@
     "messageSaved": "Mail gespeichert",
     "deletedForever_one": "{{count}} Mail endgültig gelöscht",
     "deletedForever_other": "{{count}} Mails endgültig gelöscht",
-    "scheduled": "Wird gesendet: {{time}}"
+    "scheduled": "Wird gesendet: {{time}}",
+    "sendFailedHeld": "Die Mail konnte nicht gesendet werden: {{reason}} Sie wartet unter Geplant."
   },
   "status": {
     "syncing": "Suche nach neuen Mails",
@@ -655,7 +656,8 @@
       "titleOpen": "Diese Datei öffnen?",
       "titleSave": "Diese Datei speichern?",
       "body": "Dateien dieser Art können Programme auf deinem Rechner starten. Öffne oder speichere sie nur, wenn du sie erwartet hast und der Absenderin oder dem Absender vertraust."
-    }
+    },
+    "pdfNoPreview": "Dieses PDF kann hier nicht angezeigt werden. Öffne es mit deinem PDF-Programm oder speichere es."
   },
   "update": {
     "readyTitle": "Neue Version bereit",
@@ -697,7 +699,8 @@
     "safeLink": "Microsoft-Safe-Link entfernt",
     "safeLinkBody": "Microsoft hatte diesen Link in eine Prüfadresse verpackt. Du siehst und öffnest stattdessen die echte Adresse.",
     "unsupported": "Diese Art Link öffnet UwUMail nicht.",
-    "sheetTitle": "Link"
+    "sheetTitle": "Link",
+    "safeLinkRemoved": "Microsoft-Safe-Link entfernt"
   },
   "dates": {
     "barLabel": "Termine in dieser Mail",
@@ -2033,7 +2036,9 @@
     "onServer": "Auf dem Server",
     "onDevice": "Auf diesem Gerät",
     "retrying": "Server nicht erreichbar, nächster Versuch: {{time}}",
-    "failed": "Das hat nicht geklappt: {{reason}}"
+    "failed": "Das hat nicht geklappt: {{reason}}",
+    "heldFailed": "Nicht gesendet: {{reason}} Sie wartet hier, bis du sie erneut sendest, die Zeit änderst, sie bearbeitest oder stoppst.",
+    "heldUnsure": "Ist vielleicht schon raus: {{reason}} Sie wird nur erneut gesendet, wenn du das auswählst."
   },
   "masked": {
     "title": "Maskierte Adressen",

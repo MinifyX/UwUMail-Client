@@ -1031,9 +1031,11 @@ pub enum EngineEvent {
     /// A queued message went out.
     #[serde(rename = "send:done", rename_all = "camelCase")]
     SendDone { send_id: String, account_id: String },
-    /// A queued message couldn't be sent; it was kept as a draft where possible.
+    /// A queued message couldn't be sent; it was kept as a draft where possible. `held` when it
+    /// waits in the outbox instead (with the scheduled mail), because Drafts couldn't take it or
+    /// it may have gone out already.
     #[serde(rename = "send:failed", rename_all = "camelCase")]
-    SendFailed { send_id: String, account_id: String, reason: String, message: Box<OutgoingMessage> },
+    SendFailed { send_id: String, account_id: String, reason: String, message: Box<OutgoingMessage>, held: bool },
     /// The shared settings of a UwUMail account may have changed; `state` when the server said which.
     #[serde(rename = "settings:changed", rename_all = "camelCase")]
     SettingsChanged {

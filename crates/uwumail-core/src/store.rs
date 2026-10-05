@@ -18,7 +18,7 @@ mod shared;
 pub use assist::{
     CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, LabelShot, ProviderRecord, UsageRecord,
 };
-pub use send_later::{LaterSend, TakenSend};
+pub use send_later::{HELD_FAILED, HELD_UNSURE, LaterSend, TakenSend};
 pub use shared::{AccountLink, shared_by_sign_in};
 
 const MIGRATIONS: &[&str] = &[
@@ -214,6 +214,7 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     assist::PREVIOUS_DESCRIPTION_MIGRATION,
     send_later::MIGRATION,
     invites::MIGRATION,
+    send_later::HOLD_MIGRATION,
 ];
 
 /// What this device remembers about one calendar.
@@ -1861,9 +1862,11 @@ impl Store {
     pub fn take_outbox(&self, id: &str) -> Result<Option<(String, String)>> {
         Ok(self
             .conn()
-            .query_row("DELETE FROM outbox WHERE id = ?1 RETURNING account_id, message_json", [id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
+            .query_row(
+                "DELETE FROM outbox WHERE id = ?1 AND claimed_at IS NULL RETURNING account_id, message_json",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
             .optional()?)
     }
 

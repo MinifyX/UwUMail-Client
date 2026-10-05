@@ -228,7 +228,8 @@
     "messageSaved": "Mail saved",
     "deletedForever_one": "{{count}} message deleted forever",
     "deletedForever_other": "{{count}} messages deleted forever",
-    "scheduled": "Sends {{time}}"
+    "scheduled": "Sends {{time}}",
+    "sendFailedHeld": "The mail couldn't be sent: {{reason}} It's waiting under Scheduled."
   },
   "status": {
     "syncing": "Checking for mail",
@@ -655,7 +656,8 @@
       "titleOpen": "Open this file?",
       "titleSave": "Save this file?",
       "body": "This kind of file can run programs on your computer. Only open or save it if you expected it and trust the sender."
-    }
+    },
+    "pdfNoPreview": "This PDF can't be shown here. Open it with your PDF app or save it."
   },
   "update": {
     "readyTitle": "A new version is ready",
@@ -697,7 +699,8 @@
     "safeLink": "Microsoft Safe Link removed",
     "safeLinkBody": "Microsoft had wrapped this link in a scanner address. You see and open the real address instead.",
     "unsupported": "UwUMail doesn't open this kind of link.",
-    "sheetTitle": "Link"
+    "sheetTitle": "Link",
+    "safeLinkRemoved": "Microsoft Safe Link removed"
   },
   "dates": {
     "barLabel": "Appointments in this mail",
@@ -2033,7 +2036,9 @@
     "onServer": "On the server",
     "onDevice": "On this device",
     "retrying": "Server not reachable, trying again: {{time}}",
-    "failed": "That didn't work: {{reason}}"
+    "failed": "That didn't work: {{reason}}",
+    "heldFailed": "Not sent: {{reason}} It waits here until you send it again, change its time, edit it or stop it.",
+    "heldUnsure": "May have gone out: {{reason}} It won't be sent again unless you choose to."
   },
   "masked": {
     "title": "Masked addresses",

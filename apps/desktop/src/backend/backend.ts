@@ -110,7 +110,9 @@ export type BackendErrorCode =
   /** The server refused: the mailbox may not do this (e.g. public profile pictures switched off). */
   | "forbidden"
   /** Changed elsewhere since it was read (`ifInState` didn't match): read it again first. */
-  | "state_mismatch";
+  | "state_mismatch"
+  /** Sending broke off after the server may have taken the mail; it may have gone out. */
+  | "maybe_sent";
 
 export class BackendError extends Error {
   readonly code: BackendErrorCode;

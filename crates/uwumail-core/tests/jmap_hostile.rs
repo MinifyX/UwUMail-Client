@@ -2,6 +2,7 @@
 //! loopback, which the JMAP client allows for local servers). Runs everywhere.
 
 mod jmap_account;
+mod jmap_scheduled;
 mod support;
 
 use chrono_tz::Tz;

@@ -70,6 +70,23 @@ pub struct ScheduledSend {
     /// Its time passed, but its server couldn't be reached yet; UwUMail tries again at `send_at`.
     #[serde(default)]
     pub retrying: bool,
+    /// It waits for the person and doesn't go on its own: it couldn't be sent, or it may have
+    /// gone out already. A new time or "send now" sends it again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<Held>,
+    /// Why it is held, in the words of the failure.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_reason: Option<String>,
+}
+
+/// Why a mail in this device's outbox waits for the person (security review 0.10 SL-3/SL-4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Held {
+    /// It couldn't be sent, and Drafts couldn't take it either; this copy is the only one.
+    Failed,
+    /// Sending broke off when it may already have gone out (also: UwUMail stopped meanwhile).
+    Unsure,
 }
 
 /// Which scheduled mail an action is about.

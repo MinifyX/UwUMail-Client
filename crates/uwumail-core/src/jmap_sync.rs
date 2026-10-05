@@ -943,7 +943,7 @@ pub async fn send(
 
     let rcpt_to: Vec<Value> = recipients.iter().map(|email| json!({ "email": email, "parameters": null })).collect();
     let responses = client
-        .call(vec![
+        .call_submission(vec![
             (
                 "Email/import",
                 json!({

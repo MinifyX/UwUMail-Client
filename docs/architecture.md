@@ -414,11 +414,12 @@ phone the open draft always comes back as its bar.
 
 With undo send on (Settings → Writing, 10 seconds by default) the composer
 hands the message to `Engine::queue_send`, which checks it can be built,
-stores it in the `outbox` table and sends it when its time comes. `cancel_send`
-and the sender both take the row with one `DELETE … RETURNING`, so a mail is
-either taken back or sent, never both. Queued mail survives closing UwUMail and
-goes out on the next start. The result arrives as `send:done` or
-`send:failed`; a failed mail is kept as a draft.
+stores it in the `outbox` table and sends it when its time comes. The sender
+claims the row (`claimed_at`) and `cancel_send` only takes unclaimed rows, so a
+mail is either taken back or sent, never both. Queued mail survives closing
+UwUMail and goes out on the next start. The result arrives as `send:done` or
+`send:failed`; a failed mail is kept as a draft, or held in the outbox when
+Drafts can't take it (see below).
 
 ### Send later
 
@@ -428,23 +429,37 @@ mailbox whose server is a UwUMail server (`urn:uwumail:jmap:settings`) with a
 imports the mail into Sent and creates an `EmailSubmission` with `sendAt`, as
 the webmail does (`jmap_scheduled`). The server takes no change to a
 submission but `undoStatus: canceled`, so a new time or "send now" cancels and
-submits the same mail again in one request; when that new submission fails the
-mail is put into Drafts. Stopping moves it to Drafts as a draft; editing reads
+submits the same mail again: the cancel goes alone and must be confirmed (an
+`updated` entry, or `canceled` when read again) before the new submission is
+made in a request of its own, so a mail already on its way never goes twice;
+a lost answer to the new submission is resolved by looking for the pending
+submission of that mail. When the new submission fails the mail is put into
+Drafts. Stopping moves it to Drafts as a draft; editing reads
 it back for the composer (Bcc from the envelope) and destroys the server copy,
 since the composer saves its own draft. The list leaves out submissions due
 within a minute: those are somebody's undo window, not mail sent later.
 
 Every other mailbox gets `local`: the mail goes into the `outbox` table with
 `later = 1` (`store/send_later.rs`). One outbox task (`send_later_ops`) serves
-the undo window and send later alike: it takes out what is due by the wall
-clock with one `DELETE … RETURNING`, sends it, and naps until the next entry
-but at most 30 seconds, so a time passed while the computer slept is noticed
-soon after waking and one missed while UwUMail was closed goes on the next
-start. A later mail whose server can't be reached is put back with a new time
-(1, 2, 5, 10, 15, 30 minutes) before it is kept as a draft and `send:failed`
-fires. Changing the time, sending now, stopping (saved as a draft first, then
-taken out) and editing only touch rows that are still there, so nothing goes
-twice. The engine runs while UwUMail does: in the tray on desktop, in the
+the undo window and send later alike: it claims what is due by the wall clock
+with one `UPDATE … SET claimed_at … RETURNING`, sends it, and naps until the
+next entry but at most 30 seconds, so a time passed while the computer slept is
+noticed soon after waking and one missed while UwUMail was closed goes on the
+next start. A row leaves the outbox only once its mail went out or Drafts took
+it. A later mail whose server certainly didn't take it (connect, TLS, login,
+greeting, MAIL/RCPT/DATA, a 4xx answer) is put back with a new time (1, 2, 5,
+10, 15, 30 minutes) before it is kept as a draft and `send:failed` fires. A
+send that broke off after the message was handed over (SMTP) or whose
+submission answer got lost (JMAP, `Client::call_submission`) is
+`ErrorCode::MaybeSent` and never retried. Rows the person has to look at are
+`held` and never go on their own: `failed` (Drafts couldn't take it either,
+e.g. still offline) and `unsure` (may have gone out; also rows still claimed
+when UwUMail starts, which were being sent when it stopped). They show in the
+scheduled list with the reason; a new time or "send now" sends them again,
+edit and stop work as usual (`send:failed` carries `held: true`). Changing the
+time, sending now, stopping (held while Drafts is written, then taken out) and
+editing only touch rows that are still there and not being sent, so nothing
+goes twice. The engine runs while UwUMail does: in the tray on desktop, in the
 foreground service on Android; iOS suspends it, so there it goes when opened.
 
 Drafts: scheduling removes the mail's server draft like sending does, so there

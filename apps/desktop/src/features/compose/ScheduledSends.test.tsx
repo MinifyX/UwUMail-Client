@@ -122,6 +122,17 @@ describe("scheduled mail", () => {
     expect(await within(dialog).findByText(/studio@uwumail\.example/)).toBeTruthy();
   });
 
+  it("shows a mail that couldn't go or may have gone out as waiting for you (SL-3/SL-4)", async () => {
+    sends = [
+      { ...sends[0]!, held: "failed", heldReason: "Sending failed: offline" },
+      { ...sends[0]!, id: "s-unsure", subject: "Rechnung", held: "unsure", heldReason: "The connection broke off." },
+    ];
+    setup();
+    const dialog = await openList();
+    expect(within(dialog).getByText(/Not sent: Sending failed: offline It waits here/)).toBeTruthy();
+    expect(within(dialog).getByText(/May have gone out: The connection broke off\./)).toBeTruthy();
+  });
+
   it("sends one now and stops another into Drafts", async () => {
     setup();
     const dialog = await openList();

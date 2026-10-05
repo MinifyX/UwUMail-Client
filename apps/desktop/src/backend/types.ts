@@ -293,6 +293,14 @@ export interface ScheduledSend {
   to: Address[];
   /** Its time passed but its server couldn't be reached; it is tried again at `sendAt`. */
   retrying?: boolean;
+  /**
+   * It waits for the person and doesn't go on its own: it couldn't be sent and Drafts couldn't
+   * take it (`failed`), or sending broke off when it may have gone out (`unsure`). A new time or
+   * "send now" sends it again.
+   */
+  held?: "failed" | "unsure";
+  /** Why it is held. */
+  heldReason?: string;
 }
 
 /** Which scheduled mail an action is about. */
@@ -776,7 +784,15 @@ export type BackendEvent =
   /** Mailboxes were added, removed or nested (shared mailboxes found or sorted under their account). */
   | { type: "accounts:changed" }
   | { type: "send:done"; sendId: string; accountId: string }
-  | { type: "send:failed"; sendId: string; accountId: string; reason: string; message: OutgoingMessage }
+  | {
+      type: "send:failed";
+      sendId: string;
+      accountId: string;
+      reason: string;
+      message: OutgoingMessage;
+      /** It waits with the scheduled mail instead of in Drafts. */
+      held?: boolean;
+    }
   /** Mail sent later was scheduled, changed, stopped or sent. */
   | { type: "scheduled:changed" }
   | { type: "compose:mailto" }

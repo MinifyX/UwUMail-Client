@@ -221,37 +221,59 @@ export function looksLikePdf(bytes: Uint8Array) {
   return head.includes("%PDF-");
 }
 
+/** True when the file starts with the PDF header, so the attachment file server types it application/pdf. */
+export function startsLikePdf(bytes: Uint8Array) {
+  return new TextDecoder("latin1").decode(bytes.subarray(0, 5)) === "%PDF-";
+}
+
 /**
  * The file may come labelled application/octet-stream (senders label PDFs that way), and the
  * attachment file server guesses types from content and falls back to HTML, so a "PDF" could
- * really be a web page. The frame therefore never gets the file itself: only when its bytes are
- * a PDF does it get a copy of them typed application/pdf.
+ * really be a web page. The frame therefore only gets a file whose bytes are a PDF.
+ *
+ * In the app the frame shows the attachment file server's own address: it is another origin than
+ * the app, and it types a file that starts with `%PDF-` as application/pdf. The app's pages may
+ * frame no `blob:` addresses (those have the app's origin, security review 0.10 RD-1/RD-3), so a
+ * PDF with junk before its header isn't shown here. Only where the file already is a `blob:`
+ * address (the browser demo) does the frame get a copy typed application/pdf.
  */
 function PdfPreview({ file }: { file: AttachmentContent }) {
   const { t } = useT();
-  const [state, setState] = useState<{ url: string; pdf: string | null }>();
+  const [state, setState] = useState<{ url: string; pdf: string | null; odd: boolean }>();
   useEffect(() => {
     let cancelled = false;
+    let copy: string | null = null;
     let pdf: string | null = null;
+    let odd = false;
     fetch(file.url)
       .then((response) => response.arrayBuffer())
       .then((buffer) => {
         const bytes = new Uint8Array(buffer);
         if (cancelled || !looksLikePdf(bytes)) return;
-        pdf = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+        if (file.url.startsWith("blob:")) {
+          copy = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+          pdf = copy;
+        } else if (startsLikePdf(bytes)) pdf = file.url;
+        else odd = true;
       })
       .catch(() => {})
       .then(() => {
-        if (!cancelled) setState({ url: file.url, pdf });
+        if (!cancelled) setState({ url: file.url, pdf, odd });
       });
     return () => {
       cancelled = true;
-      if (pdf) URL.revokeObjectURL(pdf);
+      if (copy) URL.revokeObjectURL(copy);
     };
   }, [file.url]);
 
   if (state?.url !== file.url) return <p className="p-6 text-[13px] text-muted">{t("attachment.loading")}</p>;
-  if (!state.pdf) return <p className="p-6 text-center text-[13px] text-muted">{t("attachment.notPdf")}</p>;
+  if (!state.pdf) {
+    return (
+      <p className="p-6 text-center text-[13px] text-muted">
+        {t(state.odd ? "attachment.pdfNoPreview" : "attachment.notPdf")}
+      </p>
+    );
+  }
   return (
     <div className="flex h-full flex-col">
       <iframe src={state.pdf} title={file.filename} className="min-h-0 w-full flex-1 border-0 bg-white" />

@@ -331,6 +331,24 @@ describe("embedded images", () => {
     );
     expect(doc).toContain('src="blob:logo"');
   });
+
+  it("never turn a link into one of the app's own addresses (RD-1)", () => {
+    const doc = buildDocument(
+      message({
+        bodyHtml:
+          '<a href="cid:x@shop">open</a><a href=" CID:x@shop">2</a><a href="blob:tauri://localhost/1">3</a>' +
+          '<area href="cid:x@shop"><svg><a xlink:href="cid:x@shop"><text>4</text></a></svg><img src="cid:x@shop">',
+      }),
+      false,
+      "light",
+      new Map([["x@shop", "blob:x"]]),
+    );
+    expect(doc).not.toMatch(/href="\s*(cid|blob):/i);
+    expect(doc).toContain('<img src="blob:x">');
+    for (const element of Array.from(new DOMParser().parseFromString(doc, "text/html").querySelectorAll("a, area"))) {
+      expect(element.getAttribute("href") ?? "").not.toMatch(/blob:|cid:/i);
+    }
+  });
 });
 
 describe("buildPrintDocument", () => {
