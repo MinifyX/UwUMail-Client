@@ -129,8 +129,6 @@
     @apply bg-canvas font-sans text-ink antialiased;
     font-size: 14px;
     letter-spacing: var(--tracking-ui);
-    /* Blink drops contextual alternates (Nyu, the heart) as soon as letter-spacing isn't 0. */
-    font-feature-settings: "calt" 1;
     overflow: hidden;
     user-select: none;
   }
@@ -140,19 +138,6 @@
   [contenteditable="true"],
   .selectable {
     user-select: text;
-  }
-
-  /* UwU Sans turns ":3" into Nyu and "<3" into a heart. Not where people type or read code. */
-  input,
-  textarea,
-  select,
-  [contenteditable],
-  code,
-  pre,
-  kbd,
-  samp {
-    font-variant-ligatures: no-contextual;
-    font-feature-settings: "calt" 0;
   }
 
   :focus-visible {

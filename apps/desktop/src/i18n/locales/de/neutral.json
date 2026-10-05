@@ -1993,7 +1993,7 @@
   },
   "font": {
     "system": "Systemschrift",
-    "sample": "Hallo :3 – Termin um 10:30 <3"
+    "sample": "Hallo – Termin um 10:30"
   },
   "scheduled": {
     "title": "Geplante Mails",

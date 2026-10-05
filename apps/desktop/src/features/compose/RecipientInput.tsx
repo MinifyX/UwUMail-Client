@@ -60,7 +60,7 @@ export function RecipientInput({ label, value, onChange, autoFocus }: RecipientI
   const open = focused && text.trim().length > 0 && suggestions.length > 0;
 
   return (
-    <div className="relative flex min-h-11 items-start gap-2 border-b border-hairline px-4 py-1.5 [font-feature-settings:'calt'_0] [font-variant-ligatures:no-contextual]">
+    <div className="relative flex min-h-11 items-start gap-2 border-b border-hairline px-4 py-1.5">
       <label htmlFor={id} className="w-12 shrink-0 pt-2 text-[13px] font-semibold text-muted">
         {label}
       </label>
@@ -69,8 +69,9 @@ export function RecipientInput({ label, value, onChange, autoFocus }: RecipientI
           <span
             key={address.email}
             title={address.email}
-            className="inline-flex h-7 items-center gap-1.5 rounded-full bg-pink-tint pr-1 pl-2.5 text-[13px] font-medium text-pink-ink"
+            className="inline-flex h-7 items-center gap-1.5 rounded-full bg-pink-tint pr-1 pl-1 text-[13px] font-medium text-pink-ink"
           >
+            <Avatar address={address} size="xs" />
             {displayName(address)}
             <button
               type="button"

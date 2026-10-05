@@ -154,7 +154,6 @@ describe("buildDocument", () => {
       });
       expect(doc).toContain("td{font-family:var(--uwu-serif, 'Times New Roman'), var(--uwu-font)}");
       expect(doc).toContain("pre{font-family:Consolas,monospace}");
-      expect(doc).toContain("pre,code,kbd,samp,tt{font-variant-ligatures:no-contextual}");
     });
 
     it("sets plain text in the chosen font", () => {
