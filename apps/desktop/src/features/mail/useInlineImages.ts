@@ -2,11 +2,12 @@ import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { backend } from "@/backend/backend";
 import type { Message } from "@/backend/types";
-import { normalizeContentId, referencedContentIds } from "@/lib/inlineImages";
+import { normalizeContentId, rasterImageType, referencedContentIds } from "@/lib/inlineImages";
 
 /**
  * The embedded images a mail's HTML points at, as blob URLs by Content-ID. Blob URLs are already
- * allowed in the mail frame, so local files never need a wider Content-Security-Policy.
+ * allowed in the mail frame, so local files never need a wider Content-Security-Policy. Parts that
+ * aren't pictures get no URL and stay a tile.
  * `shown` are the attachments that appear in the body now and don't need a tile.
  */
 export function useInlineImages(message: Message) {
@@ -19,8 +20,11 @@ export function useInlineImages(message: Message) {
       queryKey: ["inlineImage", attachment.id],
       queryFn: async () => {
         const file = await backend().getAttachment(attachment.id);
-        const blob = await (await fetch(file.url)).blob();
-        return URL.createObjectURL(blob);
+        // The type comes from the bytes, never from the file server (which guesses and may say
+        // text/html): only real pictures become blob URLs (security review 0.10 RD-1).
+        const bytes = new Uint8Array(await (await fetch(file.url)).arrayBuffer());
+        const type = rasterImageType(bytes);
+        return type ? URL.createObjectURL(new Blob([bytes], { type })) : "";
       },
       staleTime: Infinity,
       gcTime: Infinity,

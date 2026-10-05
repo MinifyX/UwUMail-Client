@@ -8,9 +8,11 @@ import { AttachmentPreview, looksLikePdf } from "./previews";
 const PDF = "%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n";
 const HTML = "<!doctype html><script>alert(document.cookie)</script>";
 
-function file(filename: string): AttachmentContent {
-  return { url: "blob:own/download", filename, mimeType: "application/pdf", size: 64, dangerous: false };
+function file(filename: string, url = "blob:own/download"): AttachmentContent {
+  return { url, filename, mimeType: "application/pdf", size: 64, dangerous: false };
 }
+
+const ASSET = "http://asset.localhost/attachments/a1/Rechnung.pdf";
 
 /** The attachment comes back as octet-stream, as senders often label PDFs. */
 function serve(text: string) {
@@ -51,6 +53,24 @@ describe("PDF preview", () => {
     render(<AttachmentPreview file={file("invoice.pdf")} kind="pdf" />);
     expect(await screen.findByText(/This file says it's a PDF but isn't one/)).toBeTruthy();
     expect(screen.queryByTitle("invoice.pdf")).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("in the app frames the attachment file server's own address, never a blob copy (RD-1/RD-3)", async () => {
+    serve(PDF);
+    const create = vi.spyOn(URL, "createObjectURL");
+    render(<AttachmentPreview file={file("Rechnung.pdf", ASSET)} kind="pdf" />);
+    const frame = await screen.findByTitle("Rechnung.pdf");
+    expect(frame.getAttribute("src")).toBe(ASSET);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("in the app doesn't frame a PDF whose header comes after other bytes", async () => {
+    serve(`junk\n${PDF}`);
+    const create = vi.spyOn(URL, "createObjectURL");
+    render(<AttachmentPreview file={file("odd.pdf", ASSET)} kind="pdf" />);
+    expect(await screen.findByText(/This PDF can't be shown here/)).toBeTruthy();
+    expect(screen.queryByTitle("odd.pdf")).toBeNull();
     expect(create).not.toHaveBeenCalled();
   });
 });

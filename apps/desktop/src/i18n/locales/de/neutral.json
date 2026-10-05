@@ -643,6 +643,7 @@
     "organizer": "Organisiert von",
     "email": "E-Mail",
     "phone": "Telefon",
+    "pdfNoPreview": "Dieses PDF kann hier nicht angezeigt werden. Öffne es mit deinem PDF-Programm oder speichere es.",
     "notPdf": "Diese Datei gibt sich als PDF aus, ist aber keins, deshalb wird sie hier nicht angezeigt. Speichere sie oder öffne sie mit einer App, wenn du ihr vertraust.",
     "dangerOpen": "Trotzdem öffnen",
     "dangerCancel": "Nicht öffnen",
