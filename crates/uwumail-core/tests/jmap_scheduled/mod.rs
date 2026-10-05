@@ -38,6 +38,10 @@ enum Server {
     SilentCancel,
     /// The new submission is made, but its answer gets lost on the way back.
     LostAnswer,
+    /// Like `LostAnswer`, but the new submission was sent at once ("send now"): it is `final`.
+    LostAnswerSent,
+    /// The answer gets lost and the server made no new submission.
+    LostAnswerNothing,
 }
 
 fn answer(server: Server, request: &Request, canceled: &Mutex<bool>) -> Response {
@@ -47,7 +51,8 @@ fn answer(server: Server, request: &Request, canceled: &Mutex<bool>) -> Response
     let body: Value = serde_json::from_slice(&request.body).unwrap_or_default();
     let calls = body["methodCalls"].as_array().cloned().unwrap_or_default();
     let creates = calls.iter().any(|call| call[1].get("create").is_some());
-    if creates && matches!(server, Server::LostAnswer) {
+    let lost = matches!(server, Server::LostAnswer | Server::LostAnswerSent | Server::LostAnswerNothing);
+    if creates && lost {
         return Response::new(502, "gateway timeout");
     }
     let responses: Vec<Value> = calls
@@ -56,19 +61,30 @@ fn answer(server: Server, request: &Request, canceled: &Mutex<bool>) -> Response
             let (name, arguments, id) = (call[0].as_str().unwrap_or_default(), &call[1], &call[2]);
             let status = if *canceled.lock().unwrap() { "canceled" } else { "pending" };
             let result = match name {
+                // The lookup after a lost answer: every submission of the mail.
+                "EmailSubmission/get" if arguments.get("#ids").is_some() => match server {
+                    Server::LostAnswerSent => json!({ "list": [
+                        { "id": "S1", "undoStatus": "canceled" }, { "id": "S2", "undoStatus": "final" }] }),
+                    Server::LostAnswerNothing => json!({ "list": [{ "id": "S1", "undoStatus": "canceled" }] }),
+                    _ => json!({ "list": [
+                        { "id": "S1", "undoStatus": "canceled" }, { "id": "S2", "undoStatus": "pending" }] }),
+                },
                 "EmailSubmission/get" => json!({ "list": [{ "id": "S1", "identityId": "i1", "emailId": "M1",
                     "envelope": { "mailFrom": { "email": "mini@a.test" }, "rcptTo": [{ "email": "kim@b.test" }] },
                     "undoStatus": status }] }),
                 "EmailSubmission/set" if arguments.get("update").is_some() => match server {
                     Server::AlreadySent => json!({ "notUpdated": { "S1": { "type": "cannotUnsend" } } }),
                     Server::SilentCancel => json!({}),
-                    Server::Fine | Server::LostAnswer => {
+                    Server::Fine | Server::LostAnswer | Server::LostAnswerSent | Server::LostAnswerNothing => {
                         *canceled.lock().unwrap() = true;
                         json!({ "updated": { "S1": null } })
                     }
                 },
                 "EmailSubmission/set" => json!({ "created": { "again": { "id": "S2" } } }),
-                "EmailSubmission/query" => json!({ "ids": ["S2"] }),
+                "EmailSubmission/query" => match server {
+                    Server::LostAnswerNothing => json!({ "ids": ["S1"] }),
+                    _ => json!({ "ids": ["S1", "S2"] }),
+                },
                 _ => json!({}),
             };
             json!([name, result, id])
@@ -127,4 +143,26 @@ async fn a_lost_answer_to_the_new_submission_finds_the_one_the_server_made() {
     assert_eq!(id, "S2", "the server's own submission, not a third one");
     let creates = requests(&stub).iter().filter(|body| body.contains("\"create\"")).count();
     assert_eq!(creates, 1, "never submitted twice");
+}
+
+#[tokio::test]
+async fn a_lost_answer_to_send_now_finds_the_mail_already_sent_and_keeps_it_out_of_drafts() {
+    let (stub, client) = server(Server::LostAnswerSent).await;
+    let store = Store::open_in_memory().unwrap();
+    let id = jmap_scheduled::resubmit(&client, &store, "acc", "S1", "2030-01-01T08:00:00Z").await.unwrap();
+    assert_eq!(id, "S2", "the final submission counts as taken (SL-11)");
+    let sent = requests(&stub);
+    assert_eq!(sent.iter().filter(|body| body.contains("\"create\"")).count(), 1, "never submitted twice");
+    assert!(sent.iter().all(|body| !body.contains("$draft")), "never moved to Drafts");
+    let lookup = sent.iter().find(|body| body.contains("EmailSubmission/query")).unwrap();
+    assert!(!lookup.contains("undoStatus\":\"pending"), "the lookup isn't limited to waiting submissions");
+}
+
+#[tokio::test]
+async fn a_lost_answer_without_any_new_submission_reports_that_it_didnt_take() {
+    let (_stub, client) = server(Server::LostAnswerNothing).await;
+    let store = Store::open_in_memory().unwrap();
+    let error = jmap_scheduled::resubmit(&client, &store, "acc", "S1", "2030-01-01T08:00:00Z").await.unwrap_err();
+    // The cancelled old submission alone doesn't count as the new one.
+    assert!(error.message.contains("didn't take"), "{}", error.message);
 }

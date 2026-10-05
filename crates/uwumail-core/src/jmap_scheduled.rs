@@ -254,21 +254,37 @@ async fn stop(client: &Client, submission_account: &str, id: &str) -> Result<()>
     }
 }
 
-/// The submission still waiting to send the mail `email_id`, if there is one.
-async fn pending_for(client: &Client, submission_account: &str, email_id: &str) -> Result<Option<String>> {
+/// Another submission of the mail `email_id` than the cancelled `old` one, waiting (`pending`) or
+/// already sent (`final`), if there is one. "Send now" makes a submission that is `final` almost
+/// at once, so the lookup must not be limited to waiting ones (security review 0.10 SL-11).
+async fn other_submission_for(
+    client: &Client,
+    submission_account: &str,
+    email_id: &str,
+    old: &str,
+) -> Result<Option<String>> {
     let responses = client
-        .call(vec![(
-            "EmailSubmission/query",
-            json!({ "accountId": submission_account,
-                    "filter": { "emailIds": [email_id], "undoStatus": "pending" }, "limit": 1 }),
-        )])
+        .call(vec![
+            (
+                "EmailSubmission/query",
+                json!({ "accountId": submission_account, "filter": { "emailIds": [email_id] }, "limit": 50 }),
+            ),
+            (
+                "EmailSubmission/get",
+                json!({
+                    "accountId": submission_account,
+                    "#ids": { "resultOf": "0", "name": "EmailSubmission/query", "path": "/ids" },
+                    "properties": ["id", "undoStatus"],
+                }),
+            ),
+        ])
         .await?;
-    let answer = responses.get(0, "EmailSubmission/query")?;
-    Ok(answer
-        .get("ids")
-        .and_then(Value::as_array)
-        .and_then(|ids| ids.first())
-        .and_then(Value::as_str)
+    let found = list(responses.get(1, "EmailSubmission/get")?);
+    Ok(found
+        .iter()
+        .filter(|submission| text(submission, "id").is_some_and(|id| id != old))
+        .find(|submission| matches!(text(submission, "undoStatus"), Some("pending" | "final")))
+        .and_then(|submission| text(submission, "id"))
         .map(String::from))
 }
 
@@ -364,9 +380,10 @@ pub async fn resubmit(client: &Client, store: &Store, account_id: &str, id: &str
         Ok(new_id) => return Ok(new_id),
         Err(error) => error,
     };
-    // The answer got lost: whether the new submission exists decides where the mail is.
+    // The answer got lost: whether the new submission exists decides where the mail is. It counts
+    // when it waits or already went out; only "no other submission" means it didn't take.
     if error.code == ErrorCode::MaybeSent {
-        match pending_for(client, &submission_account, &email_id).await {
+        match other_submission_for(client, &submission_account, &email_id, id).await {
             Ok(Some(new_id)) => return Ok(new_id),
             Ok(None) => {}
             Err(_) => {
