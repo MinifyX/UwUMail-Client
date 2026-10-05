@@ -45,10 +45,28 @@ export const useAccountSync = create<AccountSyncState>(() => ({
   signaturesTaken: 0,
 }));
 
-function loadMeta(): SyncMeta | null {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** What this device kept, when it has the shape the queue expects; anything else starts over. */
+export function loadMeta(): SyncMeta | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as SyncMeta) : null;
+    if (!raw) return null;
+    const meta: unknown = JSON.parse(raw);
+    if (
+      !isRecord(meta) ||
+      typeof meta.account !== "string" ||
+      (meta.state !== null && typeof meta.state !== "string") ||
+      !isRecord(meta.pending) ||
+      !Array.isArray(meta.refused) ||
+      !meta.refused.every((key) => typeof key === "string") ||
+      typeof meta.synced !== "boolean" ||
+      (meta.lastSync !== null && typeof meta.lastSync !== "number")
+    ) {
+      return null;
+    }
+    return meta as unknown as SyncMeta;
   } catch {
     return null;
   }

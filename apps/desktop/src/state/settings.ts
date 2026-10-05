@@ -207,8 +207,25 @@ export const useSettings = create<Settings & SettingsActions>()(
       name: "uwumail.settings",
       version: 1,
       // A value this version doesn't know (left by a newer one) falls back to the default.
+      // Only the settings this version knows, each of the type it has here: a stored key can't
+      // shadow an action (`update`) or bring a value the app can't read (as in the webmail).
       merge: (persisted, current) => {
-        const state = { ...current, ...(persisted as Partial<Settings>) };
+        const state = { ...current };
+        const stored = persisted && typeof persisted === "object" ? (persisted as Record<string, unknown>) : {};
+        const target = state as unknown as Record<string, unknown>;
+        for (const [key, fallback] of Object.entries(DEFAULT_SETTINGS)) {
+          if (!Object.hasOwn(stored, key)) continue;
+          const value = stored[key];
+          const fits =
+            fallback === null
+              ? true
+              : Array.isArray(fallback)
+                ? Array.isArray(value)
+                : typeof fallback === "object"
+                  ? typeof value === "object" && value !== null && !Array.isArray(value)
+                  : typeof value === typeof fallback;
+          if (fits) target[key] = value;
+        }
         if (!(NYU_ANIMATIONS as readonly unknown[]).includes(state.nyuAnimations)) {
           state.nyuAnimations = DEFAULT_SETTINGS.nyuAnimations;
         }
