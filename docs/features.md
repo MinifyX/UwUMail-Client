@@ -79,10 +79,13 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   `{domain}` filled in per address. On a UwUMail server (0.22 and later) it
   lives on the server, shared with the webmail and the portal, single
   addresses can differ, and the composer says when the server adds your
-  organisation's mandatory footer. For other mailboxes the domain signature
+  organisation's mandatory footer. Saving names the state it was made on
+  (`ifInState`), so two devices can't overwrite each other unseen; on a
+  conflict the signatures reload (0.10). For other mailboxes the domain signature
   stays on the device. Signatures of single addresses work as before:
   formatted, with pictures, several per address, with defaults for new mail
-  and replies, and they go first on this device.
+  and replies, and they go first on this device. Pictures shrink until the
+  whole signature fits (256 KB).
 - **Addresses** suggested from the address books and the mail history.
 - **Masked addresses** (UwUMail servers only, 0.10): Settings → Masked
   addresses makes a random address for one website, with an optional prefix
