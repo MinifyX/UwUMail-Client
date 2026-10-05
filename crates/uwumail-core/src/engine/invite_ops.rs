@@ -816,6 +816,7 @@ impl Inner {
             may_delete: false,
             is_birthdays: false,
             is_local: true,
+            sharing: Default::default(),
             id,
         })
     }

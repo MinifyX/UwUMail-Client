@@ -12,8 +12,8 @@ use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
 
 mod assist;
-mod send_later;
 mod invites;
+mod send_later;
 mod shared;
 pub use assist::{
     CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, LabelShot, ProviderRecord, UsageRecord,
