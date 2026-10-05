@@ -83,6 +83,16 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   their own. Anniversaries, birthdays without a year, and birthday events from
   other calendars moved into the contacts; reminders per contact on UwUMail
   servers.
+- **Invitations in mail** like the webmail: the card in the reader shows when,
+  where, the organizer, who is invited and what they answered, updates and
+  cancellations, and your answer so far. *Accept*, *Maybe* and *Decline* (with
+  a comment where the answer can carry one) work in every mailbox: UwUMail
+  servers tell the organizer themselves, Microsoft and Google answer through
+  their calendar, other mailboxes keep the event in their CalDAV calendar or
+  the device's "Invitations" calendar and mail an iTIP answer (RFC 5546) to
+  the organizer. Cancellations offer removing the event or date. Nothing is
+  sent without a click; invitations or cancellations that don't come from the
+  organizer get a warning and no buttons.
 
 ## Appointments in mail
 

@@ -185,6 +185,32 @@ birthday on 29 February falls on 28 February in other years. Every place that
 shows a birthday shows the age: the calendar views with a cake, the event
 popover with a button to the contact, the contact list and the contact page.
 
+### Invitations
+
+Invitations in mail follow the webmail (`features/calendar/Invitation.tsx`) and
+the server's iTIP code, which `calendar/itip.rs` copies as it is.
+`calendar/invite.rs` reads the first `text/calendar` part (at most 1 MiB, 50
+attendees shown), decides whether the sender may say this (the organizer for
+requests and cancellations, an attendee for replies; security audit WEBMAIL-2)
+and writes iTIP REPLY mails. `engine/invite_ops.rs` finds the event by UID and
+answers where it lives:
+
+- **UwUMail server:** `CalendarEvent/set` of the participant's status with
+  `sendSchedulingMessages`; the server mails the organizer.
+- **Microsoft / Google:** the event found by `iCalUId` / `iCalUID`; Graph
+  `accept` / `tentativelyAccept` / `decline`, Google a patch of the attendee's
+  `responseStatus` with `sendUpdates=all`.
+- **Everything else:** the event (with `SCHEDULE-AGENT=CLIENT` on the
+  organizer) goes into the CalDAV calendar that has it or the default one, or
+  into the read-only "Invitations" calendar on this device (`local_invites`,
+  at most 2,000 events), then a `METHOD:REPLY` mail goes out over SMTP or JMAP
+  submission.
+
+SEQUENCE decides whether a mail is new, the same, an update or
+outdated; outdated mails can't be answered. Mails for one date of a series are
+merged into the stored series. Cancellations remove the event or add an EXDATE,
+only after a click. Reply mails are shown, not applied to stored copies.
+
 ### `apps/desktop/src-tauri` — the shell
 
 Thin layer that owns the app lifecycle: windows, tray, notifications, updater,

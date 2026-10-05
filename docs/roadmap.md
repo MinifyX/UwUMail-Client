@@ -86,7 +86,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [ ] Templates + snippets
 - [ ] PGP encryption
 - [x] AI helper (off by default): the UwUMail server's assistant, or own providers on this device (0.6)
-- [ ] Calendar (CalDAV, invitations)
+- [x] Calendar (CalDAV, invitations): invitations in mail answered in every mailbox (0.10)
 
 ## Later
 
