@@ -58,6 +58,57 @@ pub fn notification_sender(name: Option<&str>, email: &str) -> String {
     if name.is_empty() { notification_text(email, MAX_NAME) } else { name }
 }
 
+/// How new-mail notifications read on the desktop and on iOS (Android keeps its own copy in
+/// Kotlin, which also runs while no window is open). Set by the page from its settings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotifyPrefs {
+    /// Sender and subject, or only that new mail came (the webmail's "Show sender and subject").
+    pub show_content: bool,
+    /// The title without content, in the page's language: "New mail".
+    pub new_mail: String,
+    /// The text without content: "Open UwUMail to read it."
+    pub hidden: String,
+}
+
+impl Default for NotifyPrefs {
+    fn default() -> Self {
+        Self { show_content: true, new_mail: "New mail".into(), hidden: "Open UwUMail to read it.".into() }
+    }
+}
+
+impl NotifyPrefs {
+    /// Takes the page's texts as plain, short lines; an empty one keeps the default.
+    pub fn new(show_content: bool, new_mail: &str, hidden: &str) -> Self {
+        let fallback = Self::default();
+        let line = |text: &str, fallback: String| {
+            let plain = notification_text(text, MAX_LINE);
+            if plain.is_empty() { fallback } else { plain }
+        };
+        Self { show_content, new_mail: line(new_mail, fallback.new_mail), hidden: line(hidden, fallback.hidden) }
+    }
+}
+
+/// One new mail as a notification needs it.
+pub struct NotifiedMail<'a> {
+    pub name: Option<&'a str>,
+    pub email: &'a str,
+    pub subject: &'a str,
+    pub snippet: &'a str,
+}
+
+/// Title and text of the notification for new mail; `None` for none.
+pub fn mail_notification(prefs: &NotifyPrefs, mails: &[NotifiedMail<'_>]) -> Option<(String, String)> {
+    match mails {
+        [] => None,
+        _ if !prefs.show_content => Some((prefs.new_mail.clone(), prefs.hidden.clone())),
+        [one] => Some((
+            notification_sender(one.name, one.email),
+            notification_text(if one.subject.trim().is_empty() { one.snippet } else { one.subject }, MAX_LINE),
+        )),
+        many => Some(("UwUMail".to_string(), format!("{} ✉︎", many.len()))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,5 +133,23 @@ mod tests {
         assert_eq!(notification_sender(Some("Leni"), "leni@example.org"), "Leni");
         assert_eq!(notification_sender(Some(" \u{202E} "), "leni@example.org"), "leni@example.org");
         assert_eq!(notification_sender(None, "leni@example.org"), "leni@example.org");
+    }
+
+    #[test]
+    fn hides_sender_and_subject_when_asked() {
+        let mail = NotifiedMail { name: Some("Leni"), email: "leni@example.org", subject: "Hi", snippet: "" };
+        let shown = NotifyPrefs::default();
+        assert_eq!(mail_notification(&shown, &[]), None);
+        assert_eq!(mail_notification(&shown, std::slice::from_ref(&mail)), Some(("Leni".into(), "Hi".into())));
+        let hidden = NotifyPrefs::new(false, "Neue Mail", "Öffne UwUMail,\num sie zu lesen.");
+        assert_eq!(
+            mail_notification(&hidden, &[mail]),
+            Some(("Neue Mail".into(), "Öffne UwUMail, um sie zu lesen.".into()))
+        );
+        // Empty texts from the page keep the defaults.
+        assert_eq!(
+            NotifyPrefs::new(false, " ", "\u{202E}"),
+            NotifyPrefs { show_content: false, ..NotifyPrefs::default() }
+        );
     }
 }

@@ -527,6 +527,16 @@ export interface Backend {
 
   /** Whether closing the window keeps UwUMail running in the tray. */
   setRunInBackground(enabled: boolean): Promise<void>;
+  /**
+   * How new-mail notifications read: sender and subject, or only that new mail came (`newMail`
+   * and `hidden` are those texts in the page's language). The app lock hides them too.
+   */
+  setNotificationPrefs(prefs: {
+    showContent: boolean;
+    appLock: boolean;
+    newMail: string;
+    hidden: string;
+  }): Promise<void>;
   /** The mailto: link UwUMail was opened with, handed out once. */
   takeMailto(): Promise<MailtoDraft | null>;
 

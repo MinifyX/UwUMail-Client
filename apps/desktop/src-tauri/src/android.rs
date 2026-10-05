@@ -132,6 +132,13 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
     uwumail_android::launch::take().and_then(|action| serde_json::to_value(action).ok())
 }
 
+/// Kotlin builds the notifications, also while no window is open, so it keeps the choice; its
+/// texts come from the app's own resources.
+pub fn set_notification_prefs(show_content: bool, _new_mail: &str, _hidden: &str) -> Result<(), Error> {
+    call("setPrefs", json!({ "showContent": show_content }))?;
+    Ok(())
+}
+
 pub fn set_mobile_prefs(language: String, tone: String, app_lock: bool) -> Result<(), Error> {
     call("setPrefs", json!({ "language": language, "tone": tone, "appLock": app_lock }))?;
     Ok(())

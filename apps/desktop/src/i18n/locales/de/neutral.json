@@ -2230,5 +2230,13 @@
       "declined": "abgesagt"
     },
     "localCalendar": "Einladungen"
+  },
+  "push": {
+    "showContent": "Absender und Betreff zeigen",
+    "showContentDesc": "Ist das aus, sagt eine Benachrichtigung nur, dass neue Post da ist. Mit der App-Sperre sagt sie nie mehr.",
+    "notification": {
+      "newMail": "Neue Mail",
+      "hidden": "Öffne UwUMail, um sie zu lesen."
+    }
   }
 }

@@ -330,5 +330,10 @@
       "declined": "Abgesagt. Ich hab’s nett ausgerichtet (˘ᵕ˘)"
     },
     "removed": "Weg aus deinem Kalender ✧"
+  },
+  "push": {
+    "notification": {
+      "newMail": "Post für dich! ✉"
+    }
   }
 }

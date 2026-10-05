@@ -440,6 +440,14 @@ function Reading() {
           )}
         </div>
       )}
+      <div className="border-b border-hairline py-4">
+        <Toggle
+          checked={settings.notifyShowContent}
+          onChange={(notifyShowContent) => settings.update({ notifyShowContent })}
+          label={t("push.showContent")}
+          description={t("push.showContentDesc")}
+        />
+      </div>
     </>
   );
 }

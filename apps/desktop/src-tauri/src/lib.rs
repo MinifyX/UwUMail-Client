@@ -2,6 +2,8 @@ mod account;
 #[cfg(desktop)]
 mod background;
 #[cfg(not(target_os = "android"))]
+mod notify_prefs;
+#[cfg(not(target_os = "android"))]
 mod ocr;
 #[cfg(desktop)]
 mod updates;
@@ -1111,6 +1113,13 @@ fn set_mobile_prefs(language: String, tone: String, app_lock: bool) -> CommandRe
     platform::set_mobile_prefs(language, tone, app_lock)
 }
 
+/// How new-mail notifications read: sender and subject, or only that new mail came (with the
+/// texts for that in the page's language). The app lock hides them too.
+#[tauri::command]
+fn set_notification_prefs(show_content: bool, app_lock: bool, new_mail: String, hidden: String) -> CommandResult<()> {
+    platform::set_notification_prefs(show_content && !app_lock, &new_mail, &hidden)
+}
+
 /// Android: colors behind the status and navigation bars.
 #[tauri::command]
 fn set_system_bars(dark: bool, background: String) -> CommandResult<()> {
@@ -1350,6 +1359,7 @@ pub fn run() {
             take_mailto,
             take_launch_action,
             set_mobile_prefs,
+            set_notification_prefs,
             set_system_bars,
             mobile_action,
             push_status,

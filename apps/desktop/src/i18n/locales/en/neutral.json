@@ -2230,5 +2230,13 @@
       "declined": "declined"
     },
     "localCalendar": "Invitations"
+  },
+  "push": {
+    "showContent": "Show sender and subject",
+    "showContentDesc": "When this is off, a notification about new mail only says that new mail came. With the app lock on, it never says more.",
+    "notification": {
+      "newMail": "New mail",
+      "hidden": "Open UwUMail to read it."
+    }
   }
 }

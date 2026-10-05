@@ -330,5 +330,10 @@
       "declined": "Declined. I told the organizer, nicely (˘ᵕ˘)"
     },
     "removed": "Gone from your calendar ✧"
+  },
+  "push": {
+    "notification": {
+      "newMail": "New mail for you! ✉"
+    }
   }
 }

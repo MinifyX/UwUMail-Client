@@ -85,18 +85,19 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
         return;
     }
     if let Ok(messages) = engine.messages(message_ids) {
-        let (title, body) = match messages.as_slice() {
-            // Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
-            [one] => (
-                notify::notification_sender(one.from.name.as_deref(), &one.from.email),
-                notify::notification_text(
-                    if one.subject.is_empty() { &one.snippet } else { &one.subject },
-                    notify::MAX_LINE,
-                ),
-            ),
-            many => ("UwUMail".to_string(), format!("{} ✉︎", many.len())),
-        };
-        let _ = app.notification().builder().title(title).body(body).show();
+        let mails: Vec<notify::NotifiedMail<'_>> = messages
+            .iter()
+            .map(|message| notify::NotifiedMail {
+                name: message.from.name.as_deref(),
+                email: &message.from.email,
+                subject: &message.subject,
+                snippet: &message.snippet,
+            })
+            .collect();
+        // Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
+        if let Some((title, body)) = notify::mail_notification(&crate::notify_prefs::get(), &mails) {
+            let _ = app.notification().builder().title(title).body(body).show();
+        }
     }
 }
 
@@ -200,6 +201,11 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
 
 /// Notifications only go out while UwUMail itself runs, so iOS needs no copy
 /// of the language, the tone or the app lock.
+pub fn set_notification_prefs(show_content: bool, new_mail: &str, hidden: &str) -> Result<(), Error> {
+    crate::notify_prefs::set(notify::NotifyPrefs::new(show_content, new_mail, hidden));
+    Ok(())
+}
+
 pub fn set_mobile_prefs(_language: String, _tone: String, _app_lock: bool) -> Result<(), Error> {
     Ok(())
 }

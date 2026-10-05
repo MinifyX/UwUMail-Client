@@ -176,6 +176,11 @@ some of the chosen conversations, and creates a missing one in place. See [ai-as
 
 - **Updates** by itself on Windows, macOS and Linux (.deb/.rpm), signed, with
   Stable and Beta channels; the installer needs no administrator.
+- **Notifications without content** (0.10): Settings → "Show sender and
+  subject", as in the webmail. Off, a new-mail notification only says that new
+  mail came, on the desktop, Android and iOS; with the app lock on it never
+  says more. Sender names and subjects are shown plain, on one line and short.
+  Kept on this device, not synced (like the webmail's).
 - **Tray and default mail app** on the desktop: keep running in the notification
   area, start with the system, open `mailto:` links.
 - **Playful or plain.** UwUMail talks with a wink by default (Settings → Tone →

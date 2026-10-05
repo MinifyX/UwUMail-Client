@@ -78,6 +78,8 @@ export interface Settings {
   privacyProxy: string;
   /** Closing the window keeps UwUMail running in the tray. */
   runInBackground: boolean;
+  /** New-mail notifications name sender and subject; off, they only say that new mail came. */
+  notifyShowContent: boolean;
   updateChannel: UpdateChannel;
   /** UwUMail looks for new versions by itself. */
   updateChecks: boolean;
@@ -151,6 +153,7 @@ export const DEFAULT_SETTINGS: Settings = {
   senderPictures: true,
   privacyProxy: "",
   runInBackground: true,
+  notifyShowContent: true,
   // Someone who installed a beta wants the next beta too.
   updateChannel: pkg.version.includes("-") ? "beta" : "stable",
   updateChecks: true,
