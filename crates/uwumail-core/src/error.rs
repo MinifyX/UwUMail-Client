@@ -27,6 +27,9 @@ pub enum ErrorCode {
     /// The server doesn't allow this for the person: a domain or a limit an administrator set
     /// (masked addresses), or a public picture where public ones are switched off.
     Forbidden,
+    /// Changed elsewhere since it was read (JMAP `stateMismatch` on an `ifInState`): read it
+    /// again, then change it.
+    StateMismatch,
 }
 
 /// Error type crossing the boundary to the UI. The message is shown to users,

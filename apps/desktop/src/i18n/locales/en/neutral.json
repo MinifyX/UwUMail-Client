@@ -474,6 +474,7 @@
     "signatureDefaultNew": "New mail",
     "signatureDefaultReplies": "Replies",
     "signatureSaved": "Signature saved",
+    "signatureChangedElsewhere": "The signatures were changed elsewhere in the meantime. They have been reloaded; please check them and save again.",
     "signatureUntitled": "Signature",
     "blockedSenders": "Blocked senders",
     "blockedSendersDesc": "New mail from these senders goes to the spam folder. For accounts on a UwUMail server, the server sorts it, even while the app is closed. Block someone from “More” in a mail.",

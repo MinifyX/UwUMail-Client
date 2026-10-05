@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Info, Pencil, Plus, Trash } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { backend } from "@/backend/backend";
+import { BackendError, backend } from "@/backend/backend";
 import type { AccountDomainSignatures, Identity, Signature } from "@/backend/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
@@ -269,12 +269,21 @@ function ServerDomain({
   const client = useQueryClient();
   const save = async (change: DomainSignatureChange) => {
     try {
-      const saved = await backend().saveDomainSignatures(server.accountId, change);
+      // Made on the overview shown; refused when another device changed it since (WF-3).
+      const saved = await backend().saveDomainSignatures(server.accountId, {
+        ...change,
+        ifInState: server.overview.state,
+      });
       client.setQueryData<AccountDomainSignatures[]>(queryKeys.domainSignatures, (old) =>
         (old ?? []).map((entry) => (entry.accountId === saved.accountId ? saved : entry)),
       );
       toast(t("settings.signatureSaved"), "success");
     } catch (reason) {
+      if (reason instanceof BackendError && reason.code === "state_mismatch") {
+        await client.invalidateQueries({ queryKey: queryKeys.domainSignatures });
+        toast(t("settings.signatureChangedElsewhere"), "error");
+        return;
+      }
       failed(reason);
     }
   };

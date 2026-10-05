@@ -474,6 +474,7 @@
     "signatureDefaultNew": "Neue Mails",
     "signatureDefaultReplies": "Antworten",
     "signatureSaved": "Signatur gespeichert",
+    "signatureChangedElsewhere": "Die Signaturen wurden inzwischen woanders geändert. Sie sind neu geladen, bitte prüfe sie und speichere noch einmal.",
     "signatureUntitled": "Signatur",
     "blockedSenders": "Blockierte Absender",
     "blockedSendersDesc": "Neue Mails von diesen Absendern landen im Spam-Ordner. Bei Konten auf einem UwUMail-Server sortiert der Server selbst, auch wenn die App geschlossen ist. Blockieren kannst du über „Mehr“ in einer Mail.",
