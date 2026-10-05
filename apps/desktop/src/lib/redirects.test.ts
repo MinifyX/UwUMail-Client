@@ -138,3 +138,27 @@ describe("embeddedUrl", () => {
     expect(embeddedUrl("aHR0cDovL2VuZC5leGFtcGxl")?.href).toBe("http://end.example/");
   });
 });
+
+describe("Proofpoint v3 links", () => {
+  it("reads the part list after the first `__;` that ends in `!`", () => {
+    expect(target("https://urldefense.com/v3/__https://mood.example/a__;b*c__;Kw!!AbC!xyz$")).toBe(
+      "https://mood.example/a__;b+c",
+    );
+    expect(target("https://urldefense.com/v3/__https://mood.example/a*b__;Kw==!!AbC!xyz$")).toBe(
+      "https://mood.example/a+b",
+    );
+    expect(detectRedirect("https://urldefense.com/v3/____;!!AbC!xyz$")?.hidden?.service).toBe("service");
+  });
+
+  // Regression (webmail security audit WEBMAIL-1): a v3 link built from repeated `/v3/__` or `__;`,
+  // or with a long run of `=`, froze the page each time the pointer crossed it.
+  it("stays fast on links built to make it backtrack", () => {
+    const hidden = { via: [], target: null, hidden: { service: "service", host: "urldefense.com" } };
+    const started = performance.now();
+    expect(detectRedirect(`https://urldefense.com/v3/__x__;${"=".repeat(200_000)}A!`)).toEqual(hidden);
+    expect(detectRedirect(`https://urldefense.com/v3/__x__;A${"=".repeat(200_000)}!`)).toEqual(hidden);
+    expect(detectRedirect(`https://urldefense.com${"/v3/__".repeat(30_000)}`)).toEqual(hidden);
+    expect(detectRedirect(`https://urldefense.com/v3/__x${"__;A".repeat(50_000)}`)).toEqual(hidden);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
