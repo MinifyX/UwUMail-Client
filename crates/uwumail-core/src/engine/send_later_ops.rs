@@ -184,11 +184,16 @@ impl Engine {
             ScheduledReceipt { id, kind: ScheduledKind::Local, send_at: format_time(at) }
         };
 
-        // One copy only: the draft goes, as when sending. Stopping brings it back.
-        if let Some(key) = &outgoing.draft_key
-            && let Err(error) = self.delete_draft(&account.id, key).await
-        {
-            tracing::info!("The draft of a scheduled mail stays for now: {error}");
+        // One copy only: the draft goes, as when sending; stopping brings it back. In the
+        // background, so a slow or unreachable server doesn't hold up the composer.
+        if let Some(key) = outgoing.draft_key.clone() {
+            let engine = self.clone();
+            let account_id = account.id.clone();
+            self.inner.runtime.spawn(async move {
+                if let Err(error) = engine.delete_draft(&account_id, &key).await {
+                    tracing::info!("The draft of a scheduled mail stays for now: {error}");
+                }
+            });
         }
         self.inner.store.remember_contacts(&recipients)?;
         self.inner.emit(EngineEvent::ScheduledChanged {});
