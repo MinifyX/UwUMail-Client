@@ -12,6 +12,8 @@ import type {
   Message,
   MovedMessage,
   ThreadSummary,
+  ContactRecord,
+  SenderPicture,
 } from "@/backend/types";
 import { translate, useT } from "@/i18n";
 import { inWorkspace, sharedFollowAccounts } from "@/lib/workspaces";
@@ -176,19 +178,82 @@ export function useAttachment(attachmentId: string | null) {
   });
 }
 
-/** One lookup per domain per session; the engine caches the files for 30 days. */
-export function useSenderPicture(email: string) {
-  const enabled = useSettings((s) => s.senderPictures);
-  const domain = email.includes("@") ? email.slice(email.lastIndexOf("@") + 1).toLowerCase() : "";
+/**
+ * The query key of an address's picture: one per address, whatever its case, and one per kind of
+ * lookup (everything, or only what is known without asking another server).
+ */
+export function senderPictureKey(email: string, local: boolean) {
+  return ["senderPicture", email.trim().toLowerCase(), local ? "local" : "all"] as const;
+}
+
+/** How often pictures changed this session; after a change the engine asks again past its memory. */
+let pictureRound = 0;
+
+/** Every avatar asks again, e.g. after a contact's photo changed. */
+export function refreshSenderPictures(client: QueryClient) {
+  pictureRound += 1;
+  return client.invalidateQueries({ queryKey: ["senderPicture"] });
+}
+
+/** Photos inside a contact card that an avatar may show: pictures as data, not too big. */
+const CONTACT_PHOTO = /^data:image\/(png|jpeg|gif|webp|avif|bmp|svg\+xml)[;,]/i;
+const MAX_CONTACT_PHOTO = 3 * 1024 * 1024;
+
+/** The contacts' own photos by lowercase address, worked out once per loaded list. */
+const contactPhotos = new WeakMap<readonly ContactRecord[], Map<string, string>>();
+
+/**
+ * The own photo of the contact with this address, from the contacts already loaded. Linked
+ * (https:) photos are left out: the server or the contact view fetches those, never an avatar.
+ */
+export function contactPhotoFor(contacts: readonly ContactRecord[] | undefined, address: string): string | null {
+  if (!contacts) return null;
+  let photos = contactPhotos.get(contacts);
+  if (!photos) {
+    photos = new Map();
+    for (const contact of contacts) {
+      const photo = contact.photo;
+      if (contact.isGroup || !photo || photo.length > MAX_CONTACT_PHOTO || !CONTACT_PHOTO.test(photo)) continue;
+      for (const entry of contact.emails) {
+        const key = entry.address.trim().toLowerCase();
+        if (key && !photos.has(key)) photos.set(key, photo);
+      }
+    }
+    contactPhotos.set(contacts, photos);
+  }
+  return photos.get(address.trim().toLowerCase()) ?? null;
+}
+
+/**
+ * The picture for an address, asked once per address per session however many avatars show it:
+ * the photo of a contact already loaded (no address book is loaded just for this), else what the
+ * engine finds (with a UwUMail server a person's own picture first, then a company's logo). With
+ * pictures for company senders off, only people's pictures that need no other server.
+ */
+export function useSenderPicture(email: string): SenderPicture | null {
+  const everywhere = useSettings((s) => s.senderPictures);
+  const address = email.trim().toLowerCase();
+  const at = address.lastIndexOf("@");
+  const valid = at > 0 && at < address.length - 1 && address.length <= 320;
+  // The contacts as far as they are loaded, like useLoadedContacts: never loaded for an avatar.
+  const { data: contacts } = useQuery({
+    queryKey: queryKeys.contacts,
+    queryFn: () => backend().contacts(),
+    enabled: false,
+  });
+  const own = valid ? contactPhotoFor(contacts, address) : null;
   const { data } = useQuery({
-    queryKey: ["senderPicture", domain],
-    queryFn: () => backend().getSenderPicture(email),
-    enabled: enabled && domain !== "",
+    queryKey: senderPictureKey(address, !everywhere),
+    queryFn: () => backend().getSenderPicture(address, { local: !everywhere, fresh: pictureRound > 0 }),
+    enabled: valid && own === null,
     staleTime: Infinity,
     gcTime: 60 * 60 * 1000,
     retry: false,
   });
-  return enabled ? (data ?? null) : null;
+  if (own) return { url: own, kind: "photo" };
+  if (!data) return null;
+  // Logos and website icons only while pictures for company senders are on.
+  return everywhere || data.kind === "photo" ? data : null;
 }
 
 /** Main domain of a company address; null for people at mail providers. */
@@ -482,6 +547,8 @@ export function useBackendEvents() {
           void client.invalidateQueries({ queryKey: queryKeys.contactsAccounts });
           void client.invalidateQueries({ queryKey: ["contactsAvailable"] });
           void client.invalidateQueries({ queryKey: ["contactPhoto"] });
+          // A contact's photo comes first among the pictures for their addresses.
+          void refreshSenderPictures(client);
           // Birthdays calendars are made from the contacts.
           void client.invalidateQueries({ queryKey: queryKeys.calendars });
           void client.invalidateQueries({ queryKey: queryKeys.calendarEvents });

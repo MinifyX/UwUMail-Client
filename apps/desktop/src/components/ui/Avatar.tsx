@@ -56,8 +56,9 @@ export function Avatar({ address, size = "md", className }: AvatarProps) {
   const ready = shown !== null && loaded === shown.url;
   // Filled in by onLoad before `ready` flips. Null when the pixels couldn't be read.
   const look = ready ? cachedLook(shown.url) : undefined;
-  // Logos that cover the whole circle stay edge to edge; everything else sits on a plain backdrop.
-  const fill = shown?.kind === "logo" && !look?.seeThrough;
+  // People's pictures and logos that cover the whole circle stay edge to edge; everything else
+  // sits on a plain backdrop.
+  const fill = shown?.kind === "photo" || (shown?.kind === "logo" && !look?.seeThrough);
 
   return (
     <span
