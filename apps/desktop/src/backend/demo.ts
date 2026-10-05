@@ -10,6 +10,7 @@ import { DemoCalendar } from "./demo-calendar";
 import { DemoContacts } from "./demo-contacts";
 import { DemoMasked } from "./demo-masked";
 import { blobToDataUrl, companyLogoFrom } from "./pictureBlobs";
+import { DemoInvites } from "./demo-invites";
 import { DemoSignatures } from "./demo-signatures";
 import type { DomainSignatureChange } from "@/lib/domainSignatures";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMessage } from "./demo-data";
@@ -63,6 +64,7 @@ import type {
   MailtoDraft,
   MovedMessage,
   Message,
+  ParticipationStatus,
   NewAccount,
   OutgoingMessage,
   Protocol,
@@ -648,6 +650,29 @@ export class DemoBackend implements Backend {
   async deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
     await wait(120);
     this.calendar.deleteEvent(occurrenceId, scope);
+  }
+
+  private invites = new DemoInvites();
+
+  private invitationMail(messageId: string): Message {
+    const message = this.messages.find((m) => m.id === messageId);
+    if (!message) throw new BackendError("not_found", "Message not found");
+    return message;
+  }
+
+  async mailInvitation(messageId: string) {
+    await wait(120);
+    return this.invites.scheduling(this.invitationMail(messageId), lang() === "de");
+  }
+
+  async respondToInvitation(messageId: string, status: Exclude<ParticipationStatus, "needs-action">, comment?: string) {
+    await wait(300);
+    this.invites.respond(this.invitationMail(messageId), status, comment);
+  }
+
+  async removeCancelledEvent(messageId: string) {
+    await wait(200);
+    this.invites.remove(this.invitationMail(messageId));
   }
 
   async birthdayFeatures(): Promise<BirthdayFeatures[]> {

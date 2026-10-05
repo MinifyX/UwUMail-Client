@@ -13,6 +13,7 @@ use crate::model::*;
 
 mod assist;
 mod send_later;
+mod invites;
 mod shared;
 pub use assist::{
     CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, LabelShot, ProviderRecord, UsageRecord,
@@ -212,6 +213,7 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     assist::BASE_LABELS_MIGRATION,
     assist::PREVIOUS_DESCRIPTION_MIGRATION,
     send_later::MIGRATION,
+    invites::MIGRATION,
 ];
 
 /// What this device remembers about one calendar.

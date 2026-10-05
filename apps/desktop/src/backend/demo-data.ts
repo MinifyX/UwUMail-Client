@@ -437,6 +437,39 @@ export const SAMPLE_THREADS: SampleThread[] = [
   },
 ];
 
+// Calendar mail (see features/calendar/Invitation): an answer to Mini's own event, and a
+// cancellation that only looks like it comes from the organizer.
+SAMPLE_THREADS.push(
+  {
+    account: "private",
+    subject: p("Zugesagt: Spieleabend", "Accepted: Game night"),
+    messages: [
+      {
+        from: noah,
+        minutesAgo: 25,
+        body: p("Bin dabei! 🎮", "Count me in! 🎮"),
+        attachments: [{ filename: "game-night-reply.ics", mimeType: "text/calendar", size: 480, inline: false }],
+      },
+    ],
+  },
+  {
+    account: "studio",
+    subject: p("Abgesagt: Logo-Besprechung", "Cancelled: Logo review"),
+    messages: [
+      {
+        // Emma's name, but not her address: the invitation card doesn't believe it.
+        from: { name: "Emma Vogt", email: "emma.vogt@brightlabs-events.example" },
+        minutesAgo: 15,
+        body: p(
+          "Hallo Mini,\n\ndie Logo-Besprechung fällt leider aus.\n\nEmma",
+          "Hi Mini,\n\nthe logo review is off, sorry.\n\nEmma",
+        ),
+        attachments: [{ filename: "logo-review-cancel.ics", mimeType: "text/calendar", size: 402, inline: false }],
+      },
+    ],
+  },
+);
+
 // Appointments in mail (see features/dates): a sale, an invitation among friends, a poster.
 SAMPLE_THREADS.push(
   {

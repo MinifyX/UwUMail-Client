@@ -65,6 +65,8 @@ import type {
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
+  MailScheduling,
+  ParticipationStatus,
   Contact,
   ContactInput,
   ContactsAccount,
@@ -391,7 +393,11 @@ export class TauriBackend implements Backend {
    */
   async calendarsAvailable() {
     const accounts = await call<CalendarAccount[]>("calendar_accounts", { look: false });
-    return accounts.some((account) => account.source !== null || !account.checked || account.needsSignIn === true);
+    return (
+      accounts.some((account) => account.source !== null || !account.checked || account.needsSignIn === true) ||
+      // Invitations answered in a mailbox without a calendar are kept on this device.
+      (await call<boolean>("has_local_invitations"))
+    );
   }
 
   calendars() {
@@ -446,6 +452,28 @@ export class TauriBackend implements Backend {
 
   deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
     return call<void>("delete_event", { occurrenceId, scope });
+  }
+
+  mailInvitation(messageId: string) {
+    return call<MailScheduling | null>("mail_invitation", { messageId });
+  }
+
+  respondToInvitation(
+    messageId: string,
+    status: Exclude<ParticipationStatus, "needs-action">,
+    comment?: string,
+    language?: string,
+  ) {
+    return call<void>("respond_to_invitation", {
+      messageId,
+      status,
+      comment: comment ?? null,
+      language: language ?? null,
+    });
+  }
+
+  removeCancelledEvent(messageId: string) {
+    return call<void>("remove_cancelled_event", { messageId });
   }
 
   birthdayFeatures() {

@@ -321,5 +321,13 @@
   "profile": {
     "saved": "Siehst gut aus ✿",
     "removed": "Bild ist weg, deine Initialen sind zurück (・ω・)"
+  },
+  "invitation": {
+    "answered": {
+      "accepted": "Zugesagt! Ich hab’s der einladenden Person gesagt ✧",
+      "tentative": "Vielleicht also! Ich hab’s weitergesagt (・ω・)",
+      "declined": "Abgesagt. Ich hab’s nett ausgerichtet (˘ᵕ˘)"
+    },
+    "removed": "Weg aus deinem Kalender ✧"
   }
 }

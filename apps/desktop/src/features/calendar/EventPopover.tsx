@@ -103,6 +103,17 @@ export function EventPopover() {
             />
           </>
         )}
+        {occurrence.readOnly && calendar?.isLocal && !calendar.isBirthdays && (
+          // An invitation kept on this device: answered from its mail, but it can go as a whole.
+          <IconButton
+            icon={Trash}
+            label={t("calendar.delete")}
+            onClick={() => {
+              close();
+              void actions.remove({ ...occurrence, recurrence: null });
+            }}
+          />
+        )}
         <IconButton icon={X} label={t("common.close")} onClick={close} />
       </div>
       <div className="flex flex-col gap-3 px-5 pb-5">

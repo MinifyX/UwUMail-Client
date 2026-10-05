@@ -42,6 +42,8 @@ import type {
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
+  MailScheduling,
+  ParticipationStatus,
   Contact,
   ContactInput,
   ContactRecord,
@@ -249,6 +251,23 @@ export interface Backend {
    */
   updateEvent(eventId: string, input: EventInput, occurrenceStart?: string): Promise<void>;
   deleteEvent(occurrenceId: string, scope: EventDeleteScope): Promise<void>;
+  /**
+   * The invitation, cancellation or answer a mail's iCalendar part carries, with its event as the
+   * mailbox's calendar has it; null for mail without one, or one the mailbox isn't part of.
+   */
+  mailInvitation(messageId: string): Promise<MailScheduling | null>;
+  /**
+   * Answers a mail's invitation, only ever on a click: the provider tells the organizer, or the app
+   * mails them an iTIP REPLY (in `language`, with the comment where `canComment`).
+   */
+  respondToInvitation(
+    messageId: string,
+    status: Exclude<ParticipationStatus, "needs-action">,
+    comment?: string,
+    language?: string,
+  ): Promise<void>;
+  /** Takes the event (or the dates) the organizer cancelled out of the calendar; only on a click. */
+  removeCancelledEvent(messageId: string): Promise<void>;
   /**
    * Per account: whether its server keeps birthdays (calendar and reminders), and whether birthday
    * events of its calendars can be moved into its contacts. Never searches for DAV servers.

@@ -185,6 +185,39 @@ async fn import_birthdays(
     engine.import_birthdays(&account_id, entries).await
 }
 
+/// What the reader shows of a mail's invitation, cancellation or answer; null without one.
+#[tauri::command]
+async fn mail_invitation(
+    engine: State<'_, Engine>,
+    message_id: String,
+) -> CommandResult<Option<uwumail_core::calendar::invite::MailScheduling>> {
+    engine.mail_invitation(&message_id).await
+}
+
+/// Answers a mail's invitation (only on a click in the reader); the comment goes along where it can.
+#[tauri::command]
+async fn respond_to_invitation(
+    engine: State<'_, Engine>,
+    message_id: String,
+    status: uwumail_core::calendar::invite::Partstat,
+    comment: Option<String>,
+    language: Option<String>,
+) -> CommandResult<()> {
+    engine.respond_to_invitation(&message_id, status, comment.as_deref(), language.as_deref()).await
+}
+
+/// Whether this device keeps invitations (its calendar "Invitations"), for showing the calendar at all.
+#[tauri::command]
+fn has_local_invitations(engine: State<'_, Engine>) -> CommandResult<bool> {
+    engine.has_local_invitations()
+}
+
+/// Takes the event its organizer cancelled out of the calendar (on a click in the reader).
+#[tauri::command]
+async fn remove_cancelled_event(engine: State<'_, Engine>, message_id: String) -> CommandResult<()> {
+    engine.remove_cancelled_event(&message_id).await
+}
+
 #[tauri::command]
 async fn create_event(engine: State<'_, Engine>, input: EventInput) -> CommandResult<String> {
     engine.create_event(input).await
@@ -1196,6 +1229,10 @@ pub fn run() {
             create_event,
             update_event,
             delete_event,
+            mail_invitation,
+            respond_to_invitation,
+            remove_cancelled_event,
+            has_local_invitations,
             contacts_accounts,
             set_carddav_url,
             list_address_books,
