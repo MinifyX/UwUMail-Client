@@ -76,6 +76,7 @@ import type {
   ScheduledSend,
   SendLaterInfo,
   SenderPicture,
+  SenderPictureLookup,
   ServerAccountFeatures,
   ShareLevel,
   Signature,
@@ -354,8 +355,11 @@ export interface Backend {
   markSpam(messageIds: string[], spam: boolean): Promise<MovedMessage[]>;
   /** The app's own blocked senders, then what each account keeps on its UwUMail server. New mail from them goes to junk. */
   blockedSenders(): Promise<BlockedSender[]>;
-  /** One click or a mail where possible; otherwise the page to open. */
-  unsubscribe(messageId: string): Promise<UnsubscribeOutcome>;
+  /**
+   * One click or a mail where possible; otherwise the page to open. A refused one click comes back
+   * as `oneClickFailed`; `{ oneClick: false }` then takes the other way.
+   */
+  unsubscribe(messageId: string, options?: { oneClick?: boolean }): Promise<UnsubscribeOutcome>;
   /** Inbox mail from an address, e.g. a newsletter's earlier issues. */
   inboxMessagesFrom(email: string): Promise<string[]>;
   /** Blocks on the account's UwUMail server where there is one, otherwise in this app. */
@@ -398,8 +402,11 @@ export interface Backend {
   /** The whole mail as an .eml file, where the user picks. False when cancelled. */
   saveMessage(messageId: string): Promise<boolean>;
 
-  /** Brand logo or website icon for a company address; null for people and mail providers. */
-  getSenderPicture(email: string): Promise<SenderPicture | null>;
+  /**
+   * The picture for an address, looked up per address: with a UwUMail server a person's photo
+   * first, then a company's brand logo or website icon. Null when there is none.
+   */
+  getSenderPicture(email: string, lookup?: SenderPictureLookup): Promise<SenderPicture | null>;
   clearSenderPictures(): Promise<void>;
   /** A remote image of a mail, for dark mode to recolor; null where the page has to do without. */
   fetchMailImage(url: string): Promise<Blob | null>;

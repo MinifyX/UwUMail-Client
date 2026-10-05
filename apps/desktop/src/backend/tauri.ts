@@ -100,6 +100,7 @@ import type {
   ScheduledSend,
   SendLaterInfo,
   SenderPicture,
+  SenderPictureLookup,
   Signature,
   ThreadDetail,
   ThreadPage,
@@ -556,7 +557,7 @@ export class TauriBackend implements Backend {
   }
 
   async companyLogo(email: string) {
-    return companyLogoFrom(await this.getSenderPicture(email));
+    return companyLogoFrom(await this.getSenderPicture(email, { logo: true }));
   }
 
   serverAccountFeatures() {
@@ -640,8 +641,8 @@ export class TauriBackend implements Backend {
     return call<MovedMessage[]>("mark_spam", { messageIds, spam });
   }
 
-  unsubscribe(messageId: string) {
-    return call<UnsubscribeOutcome>("unsubscribe", { messageId });
+  unsubscribe(messageId: string, options?: { oneClick?: boolean }) {
+    return call<UnsubscribeOutcome>("unsubscribe", { messageId, oneClick: options?.oneClick ?? true });
   }
 
   inboxMessagesFrom(email: string) {
@@ -739,9 +740,14 @@ export class TauriBackend implements Backend {
     return call<boolean>("save_attachment", { attachmentId });
   }
 
-  async getSenderPicture(email: string): Promise<SenderPicture | null> {
-    const picture = await call<{ path: string; kind: SenderPicture["kind"] } | null>("get_sender_picture", { email });
-    return picture && { url: convertFileSrc(picture.path), kind: picture.kind };
+  async getSenderPicture(email: string, lookup: SenderPictureLookup = {}): Promise<SenderPicture | null> {
+    const picture = await call<{ path: string | null; dataUrl: string | null; kind: SenderPicture["kind"] } | null>(
+      "get_sender_picture",
+      { email, lookup },
+    );
+    // SVGs and the server's pictures come as data, never as a file of the app's own origin (W-35).
+    const url = picture?.dataUrl ?? (picture?.path ? convertFileSrc(picture.path) : null);
+    return picture && url ? { url, kind: picture.kind } : null;
   }
 
   clearSenderPictures() {

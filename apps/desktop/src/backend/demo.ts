@@ -4,6 +4,7 @@ import { DEVICE_ASSIST_SCOPE } from "./types";
 import { isDangerous } from "@/lib/attachments";
 import { confirmDangerousFile } from "@/state/dangerousFile";
 import { hasLabel, matchesLabels } from "@/lib/labelFilter";
+import { unsubscribeFallback, unsubscribeMail } from "@/lib/unsubscribe";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
@@ -14,7 +15,7 @@ import { DemoInvites } from "./demo-invites";
 import { DemoSignatures } from "./demo-signatures";
 import type { DomainSignatureChange } from "@/lib/domainSignatures";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMessage } from "./demo-data";
-import { DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
+import { DEMO_PROFILE_PICTURES, DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
   MaskedAddressInput,
@@ -75,6 +76,7 @@ import type {
   ScheduledSend,
   SendLaterInfo,
   SenderPicture,
+  SenderPictureLookup,
   Signature,
   ThreadDetail,
   ThreadPage,
@@ -131,16 +133,23 @@ export class DemoBackend implements Backend {
 
   private accounts: Account[] = structuredClone(DEMO_ACCOUNTS);
   private folders: Folder[] = DEMO_ACCOUNTS.flatMap((a) => buildFolders(a.id, lang(), !a.parentId));
-  // Newsletters and offers carry a List-Unsubscribe like the real ones.
+  // Newsletters and offers carry a List-Unsubscribe like the real ones; the bakery's server
+  // doesn't take the one click, so its mail address is the way back.
   private messages: Message[] = buildMessages(lang()).map((message) =>
     /newsletter|aktion|offer|deal/i.test(message.subject)
       ? {
           ...message,
-          unsubscribe: {
-            oneClick: true,
-            url: "https://pixelparts.example/unsubscribe",
-            mailto: "mailto:leave@pixelparts.example?subject=unsubscribe",
-          },
+          unsubscribe: message.from.email.endsWith("@kaffeekuchen.example")
+            ? {
+                oneClick: true,
+                url: "https://kaffeekuchen.example/abmelden",
+                mailto: "mailto:abmelden@kaffeekuchen.example",
+              }
+            : {
+                oneClick: true,
+                url: "https://pixelparts.example/unsubscribe",
+                mailto: "mailto:leave@pixelparts.example?subject=unsubscribe",
+              },
         }
       : message,
   );
@@ -1058,10 +1067,24 @@ export class DemoBackend implements Backend {
     return this.moveToRole(messageIds, spam ? "junk" : "inbox");
   }
 
-  async unsubscribe(messageId: string): Promise<UnsubscribeOutcome> {
+  async unsubscribe(messageId: string, options: { oneClick?: boolean } = {}): Promise<UnsubscribeOutcome> {
     await wait(700);
     const message = this.messages.find((m) => m.id === messageId);
-    if (!message?.unsubscribe) throw new BackendError("invalid_input", "This mail has no way to unsubscribe.");
+    const ways = message?.unsubscribe;
+    if (!message || !ways) throw new BackendError("invalid_input", "This mail has no way to unsubscribe.");
+    // Like the engine: the one click where offered, and a refusal said as such, nothing else done.
+    if (options.oneClick !== false && ways.oneClick && ways.url?.startsWith("https://")) {
+      if (message.from.email.endsWith("@kaffeekuchen.example")) {
+        return {
+          kind: "oneClickFailed",
+          reason: "kaffeekuchen.example answered 503.",
+          fallback: unsubscribeFallback(ways),
+        };
+      }
+    } else if (!(ways.mailto && unsubscribeMail(ways.mailto))) {
+      if (ways.url) return { kind: "openPage", url: ways.url };
+      throw new BackendError("invalid_input", "This mail has no way to unsubscribe that works.");
+    }
     for (const other of this.messages) {
       if (other.from.email === message.from.email) delete other.unsubscribe;
     }
@@ -1288,7 +1311,7 @@ export class DemoBackend implements Backend {
     });
     this.drafts.set(draftKey, { messageId: id, draft: { ...draft, draftKey } });
     this.emit({ type: "mail:changed", accountId: account.id });
-    return { draftKey, savedAt: new Date().toISOString() };
+    return { draftKey, savedAt: new Date().toISOString(), messageId: id };
   }
 
   async deleteDraft(accountId: string, draftKey: string) {
@@ -1428,9 +1451,21 @@ export class DemoBackend implements Backend {
     return true;
   }
 
-  async getSenderPicture(email: string): Promise<SenderPicture | null> {
+  /** Like a UwUMail server's lookup: a contact's photo, a person's own picture there, then logos. */
+  async getSenderPicture(email: string, lookup: SenderPictureLookup = {}): Promise<SenderPicture | null> {
     await wait(150);
-    return demoSenderPicture(email);
+    const address = email.trim().toLowerCase();
+    if (!lookup.logo) {
+      for (const contact of this.addressBook.contacts()) {
+        if (!contact.photo?.startsWith("data:image/")) continue;
+        if (contact.emails.some((entry) => entry.address.trim().toLowerCase() === address)) {
+          return { url: contact.photo, kind: "photo" };
+        }
+      }
+      const profile = DEMO_PROFILE_PICTURES[address];
+      if (profile) return { url: profile, kind: "photo" };
+    }
+    return demoSenderPicture(address, lookup.local);
   }
 
   async clearSenderPictures() {

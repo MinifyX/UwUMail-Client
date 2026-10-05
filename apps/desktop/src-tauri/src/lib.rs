@@ -20,7 +20,7 @@ use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::birthdays::scan::{BirthdayFeatures, BirthdayImportEntry, BirthdayImportResult, BirthdayScan};
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
-use uwumail_core::pictures::SenderPicture;
+use uwumail_core::pictures::{PictureLookup, SenderPicture};
 use uwumail_core::send_later::{ScheduledReceipt, ScheduledRef, ScheduledSend, SendLaterInfo};
 use uwumail_core::{Engine, Error};
 
@@ -492,8 +492,14 @@ async fn mark_spam(
 }
 
 #[tauri::command]
-async fn unsubscribe(engine: State<'_, Engine>, message_id: String) -> CommandResult<UnsubscribeOutcome> {
-    engine.unsubscribe(&message_id).await
+async fn unsubscribe(
+    engine: State<'_, Engine>,
+    message_id: String,
+    one_click: Option<bool>,
+) -> CommandResult<UnsubscribeOutcome> {
+    // Without the flag, the one click is tried where the mail offers it; `false` is the second
+    // answer after a refused one click, and asks for the mail or the page instead.
+    engine.unsubscribe(&message_id, one_click.unwrap_or(true)).await
 }
 
 #[tauri::command]
@@ -940,8 +946,13 @@ async fn save_message(app: AppHandle, engine: State<'_, Engine>, message_id: Str
 }
 
 #[tauri::command]
-async fn get_sender_picture(engine: State<'_, Engine>, email: String) -> CommandResult<Option<SenderPicture>> {
-    engine.sender_picture(&email).await
+async fn get_sender_picture(
+    engine: State<'_, Engine>,
+    email: String,
+    lookup: Option<PictureLookup>,
+) -> CommandResult<Option<SenderPicture>> {
+    // The engine checks the address; anything that isn't one gets no picture.
+    engine.sender_picture(&email, lookup.unwrap_or_default()).await
 }
 
 /// A remote image of a mail as raw bytes, so the reader can recolor it for dark mode.

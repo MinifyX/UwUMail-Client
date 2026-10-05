@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { unsubscribeMail } from "./unsubscribe";
+import { unsubscribeFallback, unsubscribeMail } from "./unsubscribe";
 
 describe("unsubscribeMail", () => {
   it("takes the address and a subject list managers can match on", () => {
@@ -48,5 +48,17 @@ describe("unsubscribeMail", () => {
     expect(unsubscribeMail("https://list.example/leave")).toBeNull();
     expect(unsubscribeMail("javascript:alert(1)")).toBeNull();
     expect(unsubscribeMail("not a url at all")).toBeNull();
+  });
+});
+
+describe("unsubscribeFallback", () => {
+  it("offers the mail first, then the page, and nothing for an address that would never be used", () => {
+    const page = "https://list.example/u";
+    expect(unsubscribeFallback({ oneClick: true, url: page, mailto: "mailto:leave@list.example" })).toBe("mail");
+    expect(unsubscribeFallback({ oneClick: true, url: page, mailto: "mailto:le%E2%80%8Bave@list.example" })).toBe(
+      "page",
+    );
+    expect(unsubscribeFallback({ oneClick: true, mailto: "mailto:a@b,c@list.example" })).toBeNull();
+    expect(unsubscribeFallback({ oneClick: true })).toBeNull();
   });
 });

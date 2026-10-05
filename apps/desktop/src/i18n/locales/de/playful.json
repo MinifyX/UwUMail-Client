@@ -214,7 +214,9 @@
   "unsubscribe": {
     "title": "Tschüss {{name}}?",
     "mailTo": "Dafür schickt Nyu eine Mail von dir an {{address}}.",
-    "mailToFallback": "Klappt das nicht direkt, schickt Nyu eine Mail von dir an {{address}}."
+    "mailToFallback": "Klappt das nicht direkt, schickt Nyu eine Mail von dir an {{address}}.",
+    "failedTitle": "Hm, das hat nicht geklappt (・_・;)",
+    "tryMail": "Nyu kann dich stattdessen per Mail abmelden. Dafür schickt Nyu eine Mail von dir an {{address}}."
   },
   "deleteForever": {
     "title_one": "Diese Mail für immer löschen? (｡•́︿•̀｡)",

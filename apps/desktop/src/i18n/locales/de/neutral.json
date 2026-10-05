@@ -384,8 +384,8 @@
     "darkImagesDesc": "Helle Bilder in dunklen Mails werden mit umgefärbt: Weißer Hintergrund wird dunkel, dunkle Schrift hell. Fotos bleiben, wie sie sind.",
     "forgetAppearances": "Gemerkte Absender zurücksetzen ({{count}})",
     "appearancesForgotten": "Gemerkte Absender zurückgesetzt",
-    "senderPictures": "Bilder für Firmenabsender",
-    "senderPicturesDesc": "Zeigt das Markenlogo oder Website-Icon von Firmen. UwUMail fragt dafür höchstens einmal im Monat bei der Website der Firma an, nie pro Mail. Hast du ein Konto auf einem UwUMail-Server, fragt der Server statt dieses Geräts. Leute bei Mailanbietern wie Gmail behalten ihre Initialen.",
+    "senderPictures": "Absenderbilder",
+    "senderPicturesDesc": "Zeigt Bilder von Leuten und Logos von Firmen statt Initialen. Hast du ein Konto auf einem UwUMail-Server, fragt der Server statt dieses Geräts; sonst fragt UwUMail höchstens einmal im Monat bei der Website einer Firma an, nie pro Mail. Ausgeschaltet siehst du trotzdem die Fotos deiner Kontakte und die Bilder der Leute auf deinem UwUMail-Server.",
     "clearSenderPictures": "Gespeicherte Bilder löschen",
     "senderPicturesCleared": "Gespeicherte Bilder gelöscht",
     "detectEvents": "Termine in Mails erkennen",
@@ -790,7 +790,15 @@
     "bodyPage": "Der Absender hat dafür eine eigene Seite. UwUMail öffnet sie für dich, dort bestätigst du die Abmeldung.",
     "bodyOneClick": "UwUMail bittet den Server des Absenders in einem Schritt, dich aus der Liste zu nehmen. Danach sollten keine Mails mehr von dort kommen.",
     "orPage": "Klappt das so nicht, öffnet sich die Seite des Absenders.",
-    "archive": "Bisherige Mails von dort archivieren"
+    "archive": "Bisherige Mails von dort archivieren",
+    "failedTitle": "Das hat nicht geklappt",
+    "failed": "Der Server des Absenders hat es nicht angenommen: {{reason}}",
+    "failedNoReason": "Der Server des Absenders hat es nicht angenommen.",
+    "tryMail": "Du kannst dich stattdessen per Mail abmelden. Dafür geht eine Mail von dir an {{address}}.",
+    "tryPage": "Du kannst dich stattdessen auf der Seite des Absenders abmelden.",
+    "noOtherWay": "Diese Mail bietet keinen anderen Weg. Versuch es später noch mal.",
+    "sendMail": "Mail senden",
+    "openPage": "Seite öffnen"
   },
   "deleteForever": {
     "title_one": "Diese Mail endgültig löschen?",

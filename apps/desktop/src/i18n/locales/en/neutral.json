@@ -384,8 +384,8 @@
     "darkImagesDesc": "Light images in dark mails are recolored as well: white backgrounds turn dark, dark lettering turns light. Photos stay as they are.",
     "forgetAppearances": "Reset remembered senders ({{count}})",
     "appearancesForgotten": "Remembered senders reset",
-    "senderPictures": "Pictures for company senders",
-    "senderPicturesDesc": "Shows the brand logo or website icon of companies. UwUMail asks each company's website once a month, never per mail. With an account on a UwUMail server, the server asks instead of this device. People at mail providers like Gmail keep their initials.",
+    "senderPictures": "Sender pictures",
+    "senderPicturesDesc": "Shows people’s pictures and companies’ logos instead of initials. With an account on a UwUMail server, the server asks instead of this device; otherwise UwUMail asks a company’s website at most once a month, never per mail. Switched off, you still see your contacts’ photos and the pictures of people on your UwUMail server.",
     "clearSenderPictures": "Delete saved pictures",
     "senderPicturesCleared": "Saved pictures deleted",
     "detectEvents": "Find appointments in mail",
@@ -790,7 +790,15 @@
     "bodyPage": "The sender has its own page for this. UwUMail opens it for you, and you confirm there.",
     "bodyOneClick": "UwUMail asks the sender's server to take you off the list, in one step. After that, no more mail should come from there.",
     "orPage": "If it can't be done that way, the sender's own page opens.",
-    "archive": "Archive earlier mail from there"
+    "archive": "Archive earlier mail from there",
+    "failedTitle": "That didn't work",
+    "failed": "The sender's server didn't take it: {{reason}}",
+    "failedNoReason": "The sender's server didn't take it.",
+    "tryMail": "You can unsubscribe by mail instead. That sends a mail from you to {{address}}.",
+    "tryPage": "You can unsubscribe on the sender's own page instead.",
+    "noOtherWay": "This mail offers no other way. Try again later.",
+    "sendMail": "Send the mail",
+    "openPage": "Open the page"
   },
   "deleteForever": {
     "title_one": "Delete this message forever?",

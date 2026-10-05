@@ -10,7 +10,9 @@ import { ARMING_MS } from "./LinkWarning";
 import { UnsubscribeButton } from "./Unsubscribe";
 
 const fake = {
-  unsubscribe: vi.fn(async (_id: string): Promise<UnsubscribeOutcome> => ({ kind: "done" })),
+  unsubscribe: vi.fn(async (_id: string, _options?: { oneClick?: boolean }): Promise<UnsubscribeOutcome> => ({
+    kind: "done",
+  })),
   inboxMessagesFrom: vi.fn(async () => []),
   archive: vi.fn(async () => []),
 };
@@ -86,7 +88,7 @@ describe("unsubscribing", () => {
     expect(screen.queryByText("If it can't be done that way, the sender's own page opens.")).toBeNull();
     later();
     fireEvent.click(screen.getAllByRole("button", { name: "Unsubscribe" }).at(-1)!);
-    await waitFor(() => expect(fake.unsubscribe).toHaveBeenCalledWith("m1"));
+    await waitFor(() => expect(fake.unsubscribe).toHaveBeenCalledWith("m1", {}));
     await waitFor(() => expect(toasts()).toContain("Unsubscribed from Pixel Parts"));
   });
 
@@ -109,5 +111,78 @@ describe("unsubscribing", () => {
     later();
     fireEvent.click(ask);
     await waitFor(() => expect(fake.unsubscribe).toHaveBeenCalledTimes(1));
+  });
+
+  it("says when the sender's side refused, and sends the mail only when asked", async () => {
+    fake.unsubscribe.mockResolvedValueOnce({
+      kind: "oneClickFailed",
+      reason: "pixelparts.example answered 503.",
+      fallback: "mail",
+    });
+    renderButton(
+      newsletter({ oneClick: true, url: "https://pixelparts.example/u", mailto: "mailto:leave@pixelparts.example" }),
+    );
+    const ask = (await screen.findAllByRole("button", { name: "Unsubscribe" })).at(-1)!;
+    later();
+    fireEvent.click(ask);
+    expect(
+      await screen.findByText("The sender's server didn't take it: pixelparts.example answered 503."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("You can unsubscribe by mail instead. That sends a mail from you to leave@pixelparts.example."),
+    ).toBeTruthy();
+    expect(fake.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(toasts()).toEqual([]);
+
+    later();
+    fireEvent.click(screen.getByRole("button", { name: "Send the mail" }));
+    await waitFor(() => expect(fake.unsubscribe).toHaveBeenLastCalledWith("m1", { oneClick: false }));
+    await waitFor(() => expect(toasts()).toContain("Unsubscribed from Pixel Parts"));
+  });
+
+  it("offers the sender's page when that is the other way, through the link question", async () => {
+    fake.unsubscribe
+      .mockResolvedValueOnce({ kind: "oneClickFailed", reason: "", fallback: "page" })
+      .mockResolvedValueOnce({ kind: "openPage", url: "https://pixelparts.example/u" });
+    renderButton(newsletter({ oneClick: true, url: "https://pixelparts.example/u" }));
+    const ask = (await screen.findAllByRole("button", { name: "Unsubscribe" })).at(-1)!;
+    later();
+    fireEvent.click(ask);
+    expect(await screen.findByText("The sender's server didn't take it.")).toBeTruthy();
+    expect(screen.getByText("You can unsubscribe on the sender's own page instead.")).toBeTruthy();
+    later();
+    fireEvent.click(screen.getByRole("button", { name: "Open the page" }));
+    await waitFor(() => expect(fake.unsubscribe).toHaveBeenLastCalledWith("m1", { oneClick: false }));
+  });
+
+  it("offers nothing more when the mail has no other way", async () => {
+    fake.unsubscribe.mockResolvedValueOnce({ kind: "oneClickFailed", reason: "", fallback: null });
+    renderButton(newsletter({ oneClick: true, url: "https://pixelparts.example/u" }));
+    const ask = (await screen.findAllByRole("button", { name: "Unsubscribe" })).at(-1)!;
+    later();
+    fireEvent.click(ask);
+    expect(await screen.findByText("This mail offers no other way. Try again later.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open the page" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send the mail" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+  });
+
+  it("doesn't send the mail with the gesture that follows a quick refusal (W-29)", async () => {
+    fake.unsubscribe.mockResolvedValueOnce({ kind: "oneClickFailed", reason: "", fallback: "mail" });
+    renderButton(
+      newsletter({ oneClick: true, url: "https://pixelparts.example/u", mailto: "mailto:leave@pixelparts.example" }),
+    );
+    const ask = (await screen.findAllByRole("button", { name: "Unsubscribe" })).at(-1)!;
+    later();
+    fireEvent.click(ask);
+    const sendMail = await screen.findByRole("button", { name: "Send the mail" });
+    // The refusal came back at once; the same gesture must not send the mail too.
+    fireEvent.click(sendMail);
+    expect(fireEvent.keyDown(sendMail, { key: "Enter", repeat: true })).toBe(false);
+    expect(fake.unsubscribe).toHaveBeenCalledTimes(1);
+
+    later();
+    fireEvent.click(sendMail);
+    await waitFor(() => expect(fake.unsubscribe).toHaveBeenLastCalledWith("m1", { oneClick: false }));
   });
 });

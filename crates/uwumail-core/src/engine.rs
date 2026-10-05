@@ -17,7 +17,7 @@ use crate::jmap::Client as JmapClient;
 use crate::jmap::StateChange;
 use crate::mail_images::MailImages;
 use crate::model::*;
-use crate::pictures::{SenderPicture, SenderPictures};
+use crate::pictures::{PictureLookup, PictureServer, SenderPicture, SenderPictures};
 use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
@@ -924,9 +924,11 @@ impl Engine {
         self.inner.move_to(message_ids, MoveTarget::Role(role)).await
     }
 
-    /// Unsubscribes from the list a mail came from: with one click where the sender allows it,
-    /// otherwise by mail, otherwise the sender's page is for the app to open.
-    pub async fn unsubscribe(&self, message_id: &str) -> Result<UnsubscribeOutcome> {
+    /// Unsubscribes from the list a mail came from: with one click where the sender allows it (and
+    /// `one_click` is set), otherwise by mail, otherwise the sender's page is for the app to open.
+    /// A one click that was sent and refused is reported as such, with nothing else done: the mail
+    /// or the page only follow when asked for again with `one_click` false.
+    pub async fn unsubscribe(&self, message_id: &str, one_click: bool) -> Result<UnsubscribeOutcome> {
         let message = self
             .inner
             .store
@@ -936,7 +938,8 @@ impl Engine {
         let options =
             message.unsubscribe.clone().ok_or_else(|| Error::invalid("This mail has no way to unsubscribe."))?;
 
-        if options.one_click
+        if one_click
+            && options.one_click
             && let Some(url) = options.url.as_deref().and_then(|url| url::Url::parse(url).ok())
             && crate::pictures::is_public_web_url(&url)
         {
@@ -948,19 +951,13 @@ impl Engine {
                     .redirect(reqwest::redirect::Policy::none())
                     .timeout(Duration::from_secs(20))
             });
-            let answer = ONE_CLICK
-                .get()
-                .await?
-                .post(url)
-                .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-                .body("List-Unsubscribe=One-Click")
-                .send()
-                .await;
-            match answer {
-                Ok(response) if response.status().is_success() => return Ok(UnsubscribeOutcome::Done),
-                Ok(response) => tracing::warn!("One-click unsubscribe answered {}", response.status()),
-                Err(error) => tracing::warn!("One-click unsubscribe failed: {error}"),
-            }
+            return Ok(match one_click_post(&ONE_CLICK.get().await?, url).await {
+                Ok(()) => UnsubscribeOutcome::Done,
+                Err(reason) => {
+                    tracing::warn!("One-click unsubscribe failed: {reason}");
+                    UnsubscribeOutcome::OneClickFailed { reason, fallback: unsubscribe_fallback(&options) }
+                }
+            });
         }
 
         if let Some(target) = options.mailto.as_deref().and_then(unsubscribe_mail) {
@@ -1241,10 +1238,12 @@ impl Engine {
         })?;
         let raw = message.formatted();
 
-        if account.protocol == Protocol::Jmap {
+        // IMAP covers Microsoft and Google accounts too: they sign in with OAuth but save over IMAP.
+        let message_id = if account.protocol == Protocol::Jmap {
             let client = self.inner.jmap_client(&account.id).await?;
-            jmap_sync::save_draft(&client, &self.inner.store, &account.id, raw, &key).await?;
+            let saved = jmap_sync::save_draft(&client, &self.inner.store, &account.id, raw, &key).await?;
             self.inner.wake(&account.id);
+            saved
         } else {
             let folder = self.inner.ensure_folder(&account.id, FolderRole::Drafts).await?;
             with_session!(self.inner, &account.id, |session| imap::append(
@@ -1258,7 +1257,7 @@ impl Engine {
                 &folder.path,
                 &key
             ))?;
-            if let Some((&newest, older)) = uids.split_last() {
+            let message_id = if let Some((&newest, older)) = uids.split_last() {
                 with_session!(self.inner, &account.id, |session| imap::delete_permanently(
                     session,
                     &folder.path,
@@ -1267,7 +1266,7 @@ impl Engine {
                 self.inner.store.delete_uids(&folder.id, older)?;
                 let flags = MessageFlags { seen: true, draft: true, ..MessageFlags::default() };
                 let size = raw.len() as u64;
-                self.inner.store.insert_message(
+                let inserted = self.inner.store.insert_message(
                     &account.id,
                     &folder.id,
                     newest,
@@ -1276,10 +1275,19 @@ impl Engine {
                     Some(mime::now()),
                     &mime::parse(&raw),
                 )?;
-            }
+                // Already there when a sync was quicker.
+                match inserted {
+                    Some(id) => Some(id),
+                    None => self.inner.store.id_by_uid(&folder.id, newest)?,
+                }
+            } else {
+                // The server didn't find it by its Message-ID: nothing to open it by.
+                None
+            };
             self.inner.emit(EngineEvent::MailChanged { account_id: account.id.clone() });
-        }
-        Ok(SavedDraft { draft_key: key, saved_at: mime::iso8601(mime::now()) })
+            message_id
+        };
+        Ok(SavedDraft { draft_key: key, saved_at: mime::iso8601(mime::now()), message_id })
     }
 
     /// Removes every saved version of a draft.
@@ -1548,12 +1556,16 @@ impl Engine {
         self.inner.attachments.dir().to_path_buf()
     }
 
-    /// The brand logo or website icon for a company address, fetched once per domain. With a UwUMail
-    /// server among the accounts, that server looks it up, whichever account the mail came to: the
-    /// picture is the company's either way, and the company never sees this device.
-    pub async fn sender_picture(&self, email: &str) -> Result<Option<SenderPicture>> {
-        let server = self.inner.picture_server().await;
-        self.inner.pictures.get(email, server).await
+    /// The picture for an address. With a UwUMail server among the accounts, that server looks it
+    /// up per address, whichever account the mail came to: a contact's photo or the person's own
+    /// picture first, then a company's logo, and the sender never sees this device. Otherwise the
+    /// brand logo or website icon of a company address, fetched once per domain from here.
+    pub async fn sender_picture(&self, email: &str, lookup: PictureLookup) -> Result<Option<SenderPicture>> {
+        if crate::pictures::picture_address(email).is_none() {
+            return Ok(None);
+        }
+        let server = self.inner.picture_server().await.map(|server| server as Arc<dyn PictureServer>);
+        self.inner.pictures.get(email, server, lookup).await
     }
 
     /// A remote picture of a mail, with its type. A UwUMail server fetches it for its own accounts;
@@ -2327,6 +2339,50 @@ async fn run_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<(
     }
 }
 
+/// The longest host a one-click failure names.
+const ONE_CLICK_HOST_LIMIT: usize = 100;
+
+/// Sends the RFC 8058 one-click request. A refusal comes back as a short reason that is safe to
+/// show: the host and what it answered, never the error's own text (which can carry the whole
+/// link, tokens and all) nor anything the server wrote.
+async fn one_click_post(client: &reqwest::Client, url: url::Url) -> std::result::Result<(), String> {
+    let host: String = url
+        .host_str()
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| c.is_ascii_graphic())
+        .take(ONE_CLICK_HOST_LIMIT)
+        .collect();
+    let host = if host.is_empty() { "The sender's server".to_string() } else { host };
+    let answer = client
+        .post(url)
+        .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body("List-Unsubscribe=One-Click")
+        .send()
+        .await;
+    match answer {
+        Ok(response) if response.status().is_success() => Ok(()),
+        Ok(response) if response.status().is_redirection() => {
+            Err(format!("{host} sent a redirect instead of taking it."))
+        }
+        Ok(response) => Err(format!("{host} answered {}.", response.status().as_u16())),
+        Err(error) if error.is_timeout() => Err(format!("{host} didn't answer in time.")),
+        Err(_) => Err(format!("{host} couldn't be reached.")),
+    }
+}
+
+/// The way that is left besides the one click: a mail where the header has a usable address,
+/// else the sender's page.
+fn unsubscribe_fallback(options: &Unsubscribe) -> Option<UnsubscribeFallback> {
+    if options.mailto.as_deref().and_then(unsubscribe_mail).is_some() {
+        Some(UnsubscribeFallback::Mail)
+    } else if options.url.is_some() {
+        Some(UnsubscribeFallback::Page)
+    } else {
+        None
+    }
+}
+
 /// What unsubscribing by mail sends.
 #[derive(Debug, PartialEq, Eq)]
 struct UnsubscribeMail {
@@ -2470,6 +2526,129 @@ mod tests {
         ] {
             assert_eq!(unsubscribe_mail(mailto), None, "{mailto}");
         }
+    }
+
+    /// A sender's server for one request: answers with `status` (or never, for `None`) and hands
+    /// back what it was sent.
+    async fn one_click_server(status: Option<&'static str>) -> (url::Url, tokio::sync::oneshot::Receiver<String>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = url::Url::parse(&format!("http://{}/u?token=secret123", listener.local_addr().unwrap())).unwrap();
+        let (sent, received) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 1024];
+            loop {
+                let text = String::from_utf8_lossy(&request).to_string();
+                if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                    let length = head
+                        .lines()
+                        .find_map(|line| line.to_ascii_lowercase().strip_prefix("content-length:").map(str::to_string))
+                        .and_then(|value| value.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if body.len() >= length {
+                        break;
+                    }
+                }
+                let n = socket.read(&mut buffer).await.unwrap();
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..n]);
+            }
+            let _ = sent.send(String::from_utf8_lossy(&request).to_string());
+            match status {
+                Some(status) => {
+                    let answer = format!(
+                        "HTTP/1.1 {status}\r\nlocation: http://127.0.0.1:1/\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                    );
+                    socket.write_all(answer.as_bytes()).await.unwrap();
+                }
+                // Holds the line open and says nothing until the client gives up.
+                None => {
+                    let _ = socket.read(&mut buffer).await;
+                }
+            }
+        });
+        (url, received)
+    }
+
+    fn one_click_client(timeout: Duration) -> reqwest::Client {
+        reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(timeout).build().unwrap()
+    }
+
+    #[tokio::test]
+    async fn one_click_posts_the_rfc_8058_body_and_takes_a_2xx() {
+        let (url, received) = one_click_server(Some("200 OK")).await;
+        assert_eq!(one_click_post(&one_click_client(Duration::from_secs(10)), url).await, Ok(()));
+        let request = received.await.unwrap();
+        assert!(request.starts_with("POST /u?token=secret123 "), "{request}");
+        assert!(request.to_ascii_lowercase().contains("content-type: application/x-www-form-urlencoded"));
+        assert!(request.ends_with("\r\n\r\nList-Unsubscribe=One-Click"), "{request}");
+    }
+
+    #[tokio::test]
+    async fn a_refused_one_click_says_who_and_what_but_never_the_link() {
+        for (status, said) in [("503 Service Unavailable", "answered 503."), ("404 Not Found", "answered 404.")] {
+            let (url, _) = one_click_server(Some(status)).await;
+            let reason = one_click_post(&one_click_client(Duration::from_secs(10)), url).await.unwrap_err();
+            assert_eq!(reason, format!("127.0.0.1 {said}"));
+        }
+        // A redirect is not followed, so the request can't be sent on into the local network.
+        let (url, _) = one_click_server(Some("302 Found")).await;
+        let reason = one_click_post(&one_click_client(Duration::from_secs(10)), url).await.unwrap_err();
+        assert_eq!(reason, "127.0.0.1 sent a redirect instead of taking it.");
+        assert!(!reason.contains("secret123"));
+    }
+
+    #[tokio::test]
+    async fn a_one_click_nobody_answers_says_so() {
+        let (url, _) = one_click_server(None).await;
+        let reason = one_click_post(&one_click_client(Duration::from_millis(300)), url).await.unwrap_err();
+        assert_eq!(reason, "127.0.0.1 didn't answer in time.");
+
+        // Nobody listening at all.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = url::Url::parse(&format!("http://{}/u?token=secret123", listener.local_addr().unwrap())).unwrap();
+        drop(listener);
+        let reason = one_click_post(&one_click_client(Duration::from_secs(10)), url).await.unwrap_err();
+        assert_eq!(reason, "127.0.0.1 couldn't be reached.");
+    }
+
+    #[test]
+    fn a_refused_one_click_offers_the_mail_then_the_page() {
+        let options = |url: Option<&str>, mailto: Option<&str>| Unsubscribe {
+            one_click: true,
+            url: url.map(str::to_string),
+            mailto: mailto.map(str::to_string),
+        };
+        let page = Some("https://list.example/u");
+        assert_eq!(
+            unsubscribe_fallback(&options(page, Some("mailto:leave@list.example"))),
+            Some(UnsubscribeFallback::Mail)
+        );
+        // An address the mail would never go to is no way at all.
+        assert_eq!(
+            unsubscribe_fallback(&options(page, Some("mailto:le%E2%80%8Bave@list.example"))),
+            Some(UnsubscribeFallback::Page)
+        );
+        assert_eq!(unsubscribe_fallback(&options(None, Some("mailto:a@b,c@list.example"))), None);
+        assert_eq!(unsubscribe_fallback(&options(None, None)), None);
+    }
+
+    #[test]
+    fn a_refused_one_click_reads_as_such() {
+        let outcome = UnsubscribeOutcome::OneClickFailed {
+            reason: "list.example answered 503.".into(),
+            fallback: Some(UnsubscribeFallback::Mail),
+        };
+        assert_eq!(
+            serde_json::to_value(&outcome).unwrap(),
+            serde_json::json!({ "kind": "oneClickFailed", "reason": "list.example answered 503.", "fallback": "mail" })
+        );
+        let outcome = UnsubscribeOutcome::OneClickFailed { reason: String::new(), fallback: None };
+        assert_eq!(serde_json::to_value(&outcome).unwrap()["fallback"], serde_json::Value::Null);
     }
 
     #[test]

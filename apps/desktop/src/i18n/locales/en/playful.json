@@ -214,7 +214,9 @@
   "unsubscribe": {
     "title": "Bye bye {{name}}?",
     "mailTo": "Nyu sends a mail from you to {{address}} for that.",
-    "mailToFallback": "If that doesn't work directly, Nyu sends a mail from you to {{address}}."
+    "mailToFallback": "If that doesn't work directly, Nyu sends a mail from you to {{address}}.",
+    "failedTitle": "Hmm, that didn't work (・_・;)",
+    "tryMail": "Nyu can unsubscribe you by mail instead and sends a mail from you to {{address}} for that."
   },
   "deleteForever": {
     "title_one": "Say goodbye to this one forever? (｡•́︿•̀｡)",

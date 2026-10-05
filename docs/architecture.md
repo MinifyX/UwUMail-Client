@@ -483,7 +483,10 @@ sends the one-click POST (`List-Unsubscribe-Post`) itself, but only to HTTPS
 URLs with a public domain and without following redirects, so a header can't
 send requests into the local network. Otherwise it mails the list address from
 the identity the newsletter went to, and as a last resort hands the page URL to
-the app to open.
+the app to open. A one click that was sent and refused comes back as
+`OneClickFailed` with a short reason (host and status, never the link or the
+server's text) and the way left (`mail` or `page`); nothing else happens until
+the dialog asks again with `one_click: false`, like the webmail.
 
 ### Senders and signatures
 
@@ -644,7 +647,7 @@ the host too, limited to the hosts in the manifest.
 | --- | --- |
 | Mail cache, contacts, addon storage | `<app data>/uwumail.db` |
 | Opened attachments (trimmed at 1 GB) | `<app data>/attachments/<message id>/` |
-| Sender pictures (30 days per domain) | `<app data>/pictures/<domain>.<logo\|icon>.<ext>` |
+| Sender pictures without a UwUMail server (30 days per domain) | `<app data>/pictures/<domain>.<logo\|icon>.<ext>` |
 | Installed addons | `<app data>/addons/<addon id>/` |
 | Passwords, OAuth refresh tokens | OS keychain, service `UwUMail` |
 | AI providers, settings, labels, label log, usage (device scope) | `<app data>/uwumail.db` (`assist_*` tables) |
@@ -675,6 +678,23 @@ With an account on a UwUMail server among the mailboxes, that server looks the
 picture up instead (`/jmap/picture`), whichever mailbox the mail came to, and
 the company never sees this device. Otherwise the lookup goes through the
 privacy proxy when one is set; the BIMI record is asked of DNS directly.
+
+Pictures are asked for per address (lowercased), like the webmail does. The
+avatar first takes the own photo (a `data:` picture) of a contact that is
+already loaded; no address book is loaded just for an avatar. Then the engine:
+with a UwUMail server it asks the server per address, which answers with a
+contact's photo or the person's own picture before a company's logo
+(`X-Picture-Kind: photo|logo|icon`); its answers stay in memory for six hours
+(2,000 addresses, 32 MB at most; five minutes when the server didn't answer,
+with a cached company logo standing in meanwhile). With the setting off the
+engine asks with `local=1` (nothing that needs another server, and from here
+only the cache), and the avatar shows people's pictures only. Changed contacts
+make every avatar ask again past the engine's memory. Pictures over 2 MB or
+whose header claims more than 4096 × 4096 pixels are refused before anything
+decodes them. SVGs (BIMI logos always are) reach the page only as `data:`
+URLs, never as an asset URL of the app's own origin (audit W-35); cached raster
+pictures load through the asset protocol. The contact editor's logo button asks
+with `source=logo`.
 
 That includes IMAP accounts on a UwUMail server. The server says what it is when
 an IMAP connection opens (`UwUMail IMAP ready`), and only then does the engine

@@ -1,3 +1,4 @@
+import type { Unsubscribe, UnsubscribeFallback } from "@/backend/types";
 import { isEmail } from "./format";
 
 /** What unsubscribing by mail would send. */
@@ -39,4 +40,10 @@ export function unsubscribeMail(mailto: string): UnsubscribeMail | null {
   if (/[\p{Cf}\p{Cc}\p{Zl}\p{Zp}]/u.test(address)) return null;
   const subject = (target.searchParams.get("subject") ?? "unsubscribe").replace(/\s+/g, " ").trim().slice(0, 200);
   return { address, subject: subject || "unsubscribe" };
+}
+
+/** The way left besides the one click, as the engine picks it (`unsubscribe_fallback`). */
+export function unsubscribeFallback(options: Unsubscribe): UnsubscribeFallback {
+  if (options.mailto && unsubscribeMail(options.mailto)) return "mail";
+  return options.url ? "page" : null;
 }
