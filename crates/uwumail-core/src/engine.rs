@@ -190,6 +190,7 @@ macro_rules! with_session {
 }
 
 mod account_ops;
+pub use account_ops::ServerAccountFeatures;
 mod assist_ops;
 mod birthday_ops;
 mod calendar_ops;
