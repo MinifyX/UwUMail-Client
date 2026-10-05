@@ -508,6 +508,70 @@ export interface CalendarAccount {
   needsSignIn?: boolean;
 }
 
+/** An answer to an invitation (iTIP `PARTSTAT`), as the webmail names them. */
+export type ParticipationStatus = "needs-action" | "accepted" | "tentative" | "declined";
+
+/** What a scheduling mail says it is (its iCalendar METHOD). */
+export type SchedulingMethod = "request" | "cancel" | "reply" | "other";
+
+/** Someone an invitation names, with their answer. */
+export interface SchedulingPerson {
+  email: string;
+  name: string | null;
+  status: ParticipationStatus;
+}
+
+/**
+ * Where an invitation's event is kept and who tells the organizer the answer: the UwUMail server,
+ * Microsoft or Google themselves; for `calendar` (the mailbox's CalDAV calendar) and `device` (the
+ * calendar "Invitations" on this device) the app, by mail (client only).
+ */
+export type InvitePlace = "server" | "microsoft" | "google" | "calendar" | "device";
+
+/** The invitation, cancellation or answer a mail carries, with its event as the calendar has it (client only). */
+export interface MailScheduling {
+  /** "invitation" also for updates and cancellations; "reply" for an answer to the mailbox's own event. */
+  kind: "invitation" | "reply";
+  method: SchedulingMethod;
+  title: string;
+  /** UTC ("…Z"), a date for all-day events, or a wall time without zone. */
+  start: string | null;
+  end: string | null;
+  allDay: boolean;
+  location: string;
+  /** Who invited: their name, else their address. */
+  organizer: string | null;
+  organizerEmail: string | null;
+  /** The organizer first; at most 50. */
+  attendees: SchedulingPerson[];
+  moreAttendees: number;
+  repeats: boolean;
+  /** The one date of a series the mail is about, if it is about one. */
+  occurrence: string | null;
+  /**
+   * The mail comes from who may say this: the organizer (for answers someone invited). An
+   * unverified one is shown as such, and nothing is offered on its account (WEBMAIL-2).
+   */
+  verified: boolean;
+  /** The mail's From address. */
+  sender: string;
+  /** The receiving server's Authentication-Results vouch for that address. */
+  senderConfirmed: boolean;
+  /** Invitations: the mailbox's answer as the calendar has it. Answers: the attendee's. */
+  status: ParticipationStatus;
+  attendee: string | null;
+  attendeeEmail: string | null;
+  cancelled: boolean;
+  /** How the mail stands to the calendar's copy: "outdated" when the calendar has a newer one. */
+  revision: "new" | "same" | "update" | "outdated";
+  inCalendar: boolean;
+  place: InvitePlace;
+  canAnswer: boolean;
+  canComment: boolean;
+  /** The cancelled event (or date) can be taken out of the calendar. */
+  canRemove: boolean;
+}
+
 /** An address book of one account (JMAP Contacts, or a CardDAV address book). */
 export interface AddressBookInfo {
   id: string;

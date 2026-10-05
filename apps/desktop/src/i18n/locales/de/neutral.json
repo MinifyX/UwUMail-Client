@@ -1915,5 +1915,75 @@
   "font": {
     "system": "Systemschrift",
     "sample": "Hallo :3 – Termin um 10:30 <3"
+  },
+  "invitation": {
+    "title": "Einladung",
+    "from": "Einladung von {{name}}",
+    "answer": "Deine Antwort",
+    "accepted": "Zusagen",
+    "tentative": "Vielleicht",
+    "declined": "Absagen",
+    "status": {
+      "needs-action": "Du hast noch nicht geantwortet.",
+      "accepted": "Du hast zugesagt.",
+      "tentative": "Du hast mit Vielleicht geantwortet.",
+      "declined": "Du hast abgesagt."
+    },
+    "answered": {
+      "needs-action": "Antwort zurückgenommen",
+      "accepted": "Zugesagt. Die einladende Person erfährt es.",
+      "tentative": "Mit Vielleicht geantwortet. Die einladende Person erfährt es.",
+      "declined": "Abgesagt. Die einladende Person erfährt es."
+    },
+    "failed": "Die Antwort konnte nicht gesendet werden. {{reason}}",
+    "cancelled": "Dieser Termin wurde abgesagt.",
+    "reply": {
+      "title": "Antwort auf deine Einladung",
+      "status": {
+        "needs-action": "{{name}} hat noch nicht geantwortet.",
+        "accepted": "{{name}} hat zugesagt.",
+        "tentative": "{{name}} hat mit Vielleicht geantwortet.",
+        "declined": "{{name}} hat abgesagt."
+      }
+    },
+    "unverified": {
+      "invitation": "Diese Einladung kommt nicht von der Person, die den Termin angelegt hat, deshalb kannst du sie hier nicht beantworten. Wenn du den Termin kennst, antworte im Kalender.",
+      "cancel": "Diese Mail sagt, der Termin fällt aus, aber nichts bestätigt, dass sie von der Person kommt, die ihn angelegt hat. Dein Kalender behält den Termin, wie er ist.",
+      "reply": "Diese Antwort kommt von niemandem, der zum Termin eingeladen ist, deshalb zählt sie nicht.",
+      "sender": "Gesendet von {{sender}}.",
+      "senderAndOrganizer": "Gesendet von {{sender}}; angelegt hat den Termin {{organizer}}."
+    },
+    "when": "Wann",
+    "where": "Wo",
+    "organizer": "Einladende Person",
+    "attendees": "Eingeladen",
+    "attendeesMore": "und {{count}} weitere",
+    "repeats": "Wiederholt sich",
+    "occurrence": "Diese Mail betrifft nur einen Termin der Reihe: {{date}}",
+    "update": "Die einladende Person hat den Termin geändert. Deine Antwort gilt für die neue Fassung.",
+    "outdated": "Dein Kalender hat schon eine neuere Fassung dieses Termins, deshalb kannst du diese Mail nicht mehr beantworten.",
+    "cancelledDate": "Dieser Termin der Reihe wurde abgesagt.",
+    "remove": "Aus dem Kalender entfernen",
+    "removeDate": "Termin aus dem Kalender entfernen",
+    "removed": "Aus deinem Kalender entfernt.",
+    "removeFailed": "Der Termin konnte nicht entfernt werden. {{reason}}",
+    "commentAdd": "Kommentar hinzufügen",
+    "commentLabel": "Kommentar an die einladende Person",
+    "commentPlaceholder": "Geht mit deiner Antwort mit",
+    "senderUnconfirmed": "Der empfangende Mailserver hat die Absenderadresse nicht bestätigt. Antworte nur, wenn du diese Einladung erwartet hast.",
+    "place": {
+      "server": "Dein UwUMail-Server sagt der einladenden Person Bescheid.",
+      "microsoft": "Microsoft sagt der einladenden Person Bescheid.",
+      "google": "Google sagt der einladenden Person Bescheid.",
+      "calendar": "UwUMail trägt den Termin in deinen Kalender ein und schickt der einladenden Person deine Antwort per Mail.",
+      "device": "UwUMail behält den Termin im Kalender „Einladungen“ auf diesem Gerät und schickt der einladenden Person deine Antwort per Mail."
+    },
+    "attendeeStatus": {
+      "needs-action": "noch keine Antwort",
+      "accepted": "zugesagt",
+      "tentative": "vielleicht",
+      "declined": "abgesagt"
+    },
+    "localCalendar": "Einladungen"
   }
 }

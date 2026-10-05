@@ -455,6 +455,71 @@ pub fn without_cancelled(copy: &Component, invite: &Invite) -> Option<Component>
     Some(out)
 }
 
+/// Where an invitation's event is kept and how the organizer learns the answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InvitePlace {
+    /// The UwUMail server's calendar; the server tells the organizer.
+    Server,
+    /// Microsoft's calendar; Microsoft tells the organizer.
+    Microsoft,
+    /// Google's calendar; Google tells the organizer.
+    Google,
+    /// The mailbox's CalDAV (or JMAP) calendar; the app mails the organizer.
+    Calendar,
+    /// The calendar "Invitations" on this device; the app mails the organizer.
+    Device,
+}
+
+/// What the reader shows of a mail's invitation, cancellation or answer.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MailScheduling {
+    /// `invitation` (also updates and cancellations) or `reply` (an answer to the mailbox's own event).
+    pub kind: &'static str,
+    pub method: Method,
+    pub title: String,
+    /// `2026-09-20T07:00:00Z`, a date for all-day events, or a wall time without zone.
+    pub start: Option<String>,
+    pub end: Option<String>,
+    pub all_day: bool,
+    pub location: String,
+    /// Who invited: their name, else their address.
+    pub organizer: Option<String>,
+    pub organizer_email: Option<String>,
+    /// The first [`MAX_ATTENDEES`], the organizer first.
+    pub attendees: Vec<Person>,
+    /// How many more there are.
+    pub more_attendees: usize,
+    pub repeats: bool,
+    /// The single date the mail is about, when it is about one date of a series.
+    pub occurrence: Option<String>,
+    /// The mail comes from who may say this (the organizer; for answers, someone invited).
+    pub verified: bool,
+    /// The mail's From address.
+    pub sender: String,
+    /// The receiving server's Authentication-Results vouch for that address.
+    pub sender_confirmed: bool,
+    /// For invitations the mailbox's answer as the calendar has it; for answers the attendee's.
+    pub status: Partstat,
+    /// For answers: who answered (name, else address).
+    pub attendee: Option<String>,
+    pub attendee_email: Option<String>,
+    /// The event (or the date) is cancelled.
+    pub cancelled: bool,
+    /// How the mail stands to what the calendar has.
+    pub revision: Revision,
+    /// The event is in a calendar already.
+    pub in_calendar: bool,
+    pub place: InvitePlace,
+    /// Accept, maybe and decline are offered.
+    pub can_answer: bool,
+    /// A comment can go along with the answer.
+    pub can_comment: bool,
+    /// A cancelled event (or date) can be taken out of the calendar.
+    pub can_remove: bool,
+}
+
 /// The language of the text part of an answer mail.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]

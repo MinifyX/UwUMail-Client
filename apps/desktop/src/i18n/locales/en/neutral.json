@@ -1915,5 +1915,75 @@
   "font": {
     "system": "System font",
     "sample": "Hi :3 – meeting at 10:30 <3"
+  },
+  "invitation": {
+    "title": "Invitation",
+    "from": "Invitation from {{name}}",
+    "answer": "Your answer",
+    "accepted": "Accept",
+    "tentative": "Maybe",
+    "declined": "Decline",
+    "status": {
+      "needs-action": "You haven't answered yet.",
+      "accepted": "You accepted.",
+      "tentative": "You answered maybe.",
+      "declined": "You declined."
+    },
+    "answered": {
+      "needs-action": "Answer taken back",
+      "accepted": "Accepted. The organizer is told.",
+      "tentative": "Answered maybe. The organizer is told.",
+      "declined": "Declined. The organizer is told."
+    },
+    "failed": "The answer couldn't be sent. {{reason}}",
+    "cancelled": "The organizer cancelled this event.",
+    "reply": {
+      "title": "Answer to your invitation",
+      "status": {
+        "needs-action": "{{name}} hasn't answered yet.",
+        "accepted": "{{name}} accepted.",
+        "tentative": "{{name}} answered maybe.",
+        "declined": "{{name}} declined."
+      }
+    },
+    "unverified": {
+      "invitation": "This invitation doesn't come from the event's organizer, so it can't be answered from here. If you know the event, answer it in your calendar.",
+      "cancel": "This mail says the event is cancelled, but nothing confirms it comes from the event's organizer. Your calendar keeps the event as it is.",
+      "reply": "This answer doesn't come from anyone invited to the event, so it doesn't count.",
+      "sender": "Sent by {{sender}}.",
+      "senderAndOrganizer": "Sent by {{sender}}; the organizer is {{organizer}}."
+    },
+    "when": "When",
+    "where": "Where",
+    "organizer": "Organizer",
+    "attendees": "Invited",
+    "attendeesMore": "and {{count}} more",
+    "repeats": "Repeats",
+    "occurrence": "This mail is about one date only: {{date}}",
+    "update": "The organizer changed this event. Your answer goes with the new version.",
+    "outdated": "Your calendar already has a newer version of this event, so this mail can't be answered any more.",
+    "cancelledDate": "The organizer cancelled this date.",
+    "remove": "Remove from calendar",
+    "removeDate": "Remove the date from calendar",
+    "removed": "Removed from your calendar.",
+    "removeFailed": "The event couldn't be removed. {{reason}}",
+    "commentAdd": "Add a comment",
+    "commentLabel": "Comment for the organizer",
+    "commentPlaceholder": "Goes along with your answer",
+    "senderUnconfirmed": "The receiving mail server didn't confirm the sender's address. Only answer if you expected this invitation.",
+    "place": {
+      "server": "Your UwUMail server tells the organizer.",
+      "microsoft": "Microsoft tells the organizer.",
+      "google": "Google tells the organizer.",
+      "calendar": "UwUMail puts the event into your calendar and tells the organizer by mail.",
+      "device": "UwUMail keeps the event in the calendar “Invitations” on this device and tells the organizer by mail."
+    },
+    "attendeeStatus": {
+      "needs-action": "no answer yet",
+      "accepted": "accepted",
+      "tentative": "maybe",
+      "declined": "declined"
+    },
+    "localCalendar": "Invitations"
   }
 }

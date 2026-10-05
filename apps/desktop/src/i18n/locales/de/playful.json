@@ -298,5 +298,13 @@
     "overlap": {
       "title": "Hm, das kommt mir bekannt vor (・・?)"
     }
+  },
+  "invitation": {
+    "answered": {
+      "accepted": "Zugesagt! Ich hab’s der einladenden Person gesagt ✧",
+      "tentative": "Vielleicht also! Ich hab’s weitergesagt (・ω・)",
+      "declined": "Abgesagt. Ich hab’s nett ausgerichtet (˘ᵕ˘)"
+    },
+    "removed": "Weg aus deinem Kalender ✧"
   }
 }

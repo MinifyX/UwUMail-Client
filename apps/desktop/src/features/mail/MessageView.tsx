@@ -34,6 +34,7 @@ import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
 import { MessageLabels } from "../assist/LabelChips";
+import { MailInvitationCard } from "../calendar/Invitation";
 import { MessageAssistCards, useMessageAssistItems } from "../assist/ReaderAssist";
 import { AssistForAccount } from "../assist/useAssist";
 import { contactWithEmail, draftFromSender } from "../contacts/format";
@@ -335,6 +336,8 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           />
         </div>
         {dates.popover}
+
+        {!message.flags.draft && <MailInvitationCard message={message} />}
 
         <AttachmentTiles
           attachments={message.attachments.filter((attachment) => !inlineImages.shown.has(attachment.id))}

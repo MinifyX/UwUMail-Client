@@ -298,5 +298,13 @@
     "overlap": {
       "title": "Hmm, that looks familiar (・・?)"
     }
+  },
+  "invitation": {
+    "answered": {
+      "accepted": "Accepted! I told the organizer ✧",
+      "tentative": "Maybe it is! I told the organizer (・ω・)",
+      "declined": "Declined. I told the organizer, nicely (˘ᵕ˘)"
+    },
+    "removed": "Gone from your calendar ✧"
   }
 }
