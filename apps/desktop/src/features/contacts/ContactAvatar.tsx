@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { UsersRound } from "lucide-react";
+import { useState } from "react";
 import type { ContactRecord } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { useContactPhoto } from "./useContactPhoto";
@@ -15,9 +16,17 @@ const SIZES = {
  */
 export function ContactAvatar({ contact, size = "list" }: { contact: ContactRecord; size?: keyof typeof SIZES }) {
   const photo = useContactPhoto(contact, size === "lg");
-  if (photo) {
+  // A picture that can't be shown (a broken one) falls back to the avatar instead of a broken image.
+  const [failed, setFailed] = useState<string | null>(null);
+  if (photo && photo !== failed) {
     return (
-      <img src={photo} alt="" draggable={false} className={clsx("shrink-0 rounded-full object-cover", SIZES[size])} />
+      <img
+        src={photo}
+        alt=""
+        draggable={false}
+        onError={() => setFailed(photo)}
+        className={clsx("shrink-0 rounded-full object-cover", SIZES[size])}
+      />
     );
   }
   if (contact.isGroup) {

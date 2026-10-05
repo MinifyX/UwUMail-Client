@@ -7,6 +7,9 @@ import { Avatar } from "@/components/ui/Avatar";
 import { useT } from "@/i18n";
 import { displayName, parseAddress } from "@/lib/format";
 
+/** Milliseconds of quiet typing before suggestions are asked for. */
+const SUGGEST_DELAY = 180;
+
 interface RecipientInputProps {
   label: string;
   value: Address[];
@@ -25,16 +28,23 @@ export function RecipientInput({ label, value, onChange, autoFocus }: RecipientI
   useEffect(() => {
     if (!focused || text.trim().length === 0) return;
     let cancelled = false;
-    void backend()
-      .searchContacts(text)
-      .then((result) => {
-        if (cancelled) return;
-        const taken = new Set(value.map((a) => a.email.toLowerCase()));
-        setSuggestions(result.filter((c) => !taken.has(c.email.toLowerCase())));
-        setActive(0);
-      });
+    // Asked once typing pauses, not for every letter: the search may look through the mail history.
+    const timer = window.setTimeout(() => {
+      void backend()
+        .searchContacts(text)
+        .then((result) => {
+          if (cancelled) return;
+          const taken = new Set(value.map((a) => a.email.toLowerCase()));
+          setSuggestions(result.filter((c) => !taken.has(c.email.toLowerCase())));
+          setActive(0);
+        })
+        .catch(() => {
+          if (!cancelled) setSuggestions([]);
+        });
+    }, SUGGEST_DELAY);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [text, focused, value]);
 
