@@ -63,6 +63,43 @@ sender plus a known UID, or unusual data.
 The iTIP code is a copy of UwUMail Server's (`crates/uwumail-store/src/itip.rs`); the IV-1 parsing fix
 belongs there too.
 
+## Round 2
+
+A second pass over the round-1 fix commits, the sweep commits merged after them and UwUMail Server's iTIP
+code (against IV-1). The round-1 fixes hold for what they set out to fix.
+
+| Severity | Found | Fixed | Known limitation |
+|---|---|---|---|
+| Critical | 0 | 0 | 0 |
+| High | 0 | 0 | 0 |
+| Medium | 2 | 2 | 0 |
+| Low | 11 | 1 (RD-4) | 10 (see below; SV-1 belongs to the server) |
+| Info | 11 | 1 (IV-I-7) | 10 (not listed one by one) |
+
+### Fixed (round 2)
+
+| ID | Severity | Area | Issue | Fix |
+|---|---|---|---|---|
+| SL-11 | Medium | Send later (server) | After a lost answer to the new submission, SL-1 looked only for a *pending* submission of the mail. "Send now" makes one that is `final` almost at once, so the mail was moved to Drafts as "didn't take" although the server had sent it, inviting a second send. | The lookup queries every submission of the mail (`emailIds` only) and reads their `undoStatus`. Any submission other than the cancelled old one, `pending` or `final`, means the new time took. Only "no other submission" puts the mail into Drafts; a failed lookup still leaves it where it is and asks to look at Sent. |
+| NT-1 | Medium | Notifications (Linux) | Freedesktop notification servers with `body-markup`/`body-hyperlinks` read the body as markup, so a stranger's subject could show as formatting or as a clickable link outside the app's link check. | On Linux the body is escaped (`&`, `<`, `>`, `"`, `'`, `notify::markup_escape`) right before it goes to the notification. The title (summary) is plain text by the spec and stays as is; Windows and macOS show text literally and get no escaping. |
+| RD-4 | Low | Mail frame | `frame-src` still allowed `'self'` although no frame loads an app address any more. | `frame-src` is `asset: http://asset.localhost` only. Mail and print frames (`srcdoc`) and the PDF preview (`asset:`) still load; an app-origin frame is refused (checked in WebKit and Chromium under the app's CSP). |
+| IV-I-7 | Info | Invitations | `plain_address` stripped only a lowercase `mailto:`, so genuine invitations with `MAILTO:` showed as unverified. | The scheme is stripped case-insensitively. |
+
+### Known limitations (round 2)
+
+| ID | Area | Limitation |
+|---|---|---|
+| SL-12 | Sending | A local database error after the server accepted a mail (or stored a draft) is reported as the send's error; send later then puts a Drafts copy in place although the mail went out. Needs a failing local database (disk full, locked). |
+| SL-13 | Send later | The page doesn't show "may have gone out" as its own state: the toast and composer use the generic "couldn't send" text with an "Open" action, and "send now" on such an entry runs without asking. The core still holds the mail and never sends it on its own. |
+| SL-14 | Send later (device) | If writing Drafts fails while stopping a local mail that is due by then, the row's previous state comes back and the next outbox pass can send it; a reschedule during a stop doesn't see the stop, and the row-take result after Drafts isn't checked. Narrow window. |
+| IV-7 | Invitations | IV-2's role check covers CalDAV and device copies only. For JMAP, Microsoft and Google a copy counts as the same invitation when the organizer matches, and an ORGANIZER that is one of the person's own addresses isn't treated as unverified. Needs a forged own From (no DMARC enforcement, IV-3 class) plus a known UID. |
+| ST-1 | Settings | Stored settings are type-checked at the top level only; elements of arrays and records are taken as stored. Local data only; no path found that turns a security-relevant setting off. |
+| UN-1 | Unsubscribe | The page and the engine decode a `mailto:` List-Unsubscribe differently (strict vs. lenient `%`), so for a malformed header the page can offer "Send mail" for a target it didn't show. The engine still applies the W-30 address checks. |
+| DR-1 | Drafts | A local-copy timer scheduled before the server confirmed a draft can write the full draft back after it was reduced to its id, so the text stays on the device. Privacy, not integrity. |
+| PC-1 | Sender pictures | Sender pictures are kept as `data:` URLs (up to ~2.8 MB each) in a page-level map without eviction; many distinct senders can exhaust the web view's memory on mobile. |
+| PC-2 | Sender pictures | Removing an account doesn't clear its picture cache and login map in the engine until restart. |
+| SV-1 | UwUMail Server | Belongs to the server, not the client: its iTIP code (`crates/uwumail-store/src/itip.rs`) still has the IV-1 lone-CR gap. SMTP smuggling is closed there (SMTP-9 normalizes line ends), but a REQUEST from outside is stored without a click and served raw over CalDAV, and a REPLY answered from a CalDAV client can carry extra iCalendar lines. To be fixed in the server by porting the IV-1 parsing fix. |
+
 ## Checked and fine
 
 - **Mail frame**: the srcdoc's CSP is the first element in `<head>` with `default-src 'none'` and no
