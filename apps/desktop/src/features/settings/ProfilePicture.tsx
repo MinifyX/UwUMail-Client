@@ -7,7 +7,7 @@ import { Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { initials } from "@/lib/format";
 import { PROFILE_PICTURE, renderPictureBlob, type Crop, type Picture } from "@/lib/pictures";
-import { queryKeys, useAccounts } from "@/lib/queries";
+import { queryKeys, refreshSenderPictures, useAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { CROP_VIEW } from "../pictures/PictureCropDialog";
 import { PictureField } from "../pictures/PictureField";
@@ -41,7 +41,11 @@ export function ProfilePictureSettings({ accountId, options }: { accountId: stri
   const [saving, setSaving] = useState(false);
   const me = accounts.find((account) => account.id === accountId);
 
-  const refresh = () => client.invalidateQueries({ queryKey: queryKeys.profilePicture(accountId) });
+  // Your own picture shows as a sender picture too, so avatars ask again right away.
+  const refresh = () => {
+    void refreshSenderPictures(client);
+    return client.invalidateQueries({ queryKey: queryKeys.profilePicture(accountId) });
+  };
 
   const store = async (picture: Blob | null) => {
     setBusy(true);

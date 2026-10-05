@@ -138,17 +138,6 @@ export function isAppPackage(filename: string): boolean {
   return APP_PACKAGES.has(effectiveExtension(filename));
 }
 
-/**
- * The name without the dots and spaces (of every kind) at its end. A loop from the back rather
- * than `/[.\s]+$/`, which retries from every position of a long run and froze the page on a crafted
- * attachment name (webmail security audit WEBMAIL-1).
- */
-function withoutTrailingDotsAndSpaces(name: string): string {
-  let end = name.length;
-  while (end > 0 && (name[end - 1] === "." || /\s/u.test(name[end - 1]!))) end -= 1;
-  return name.slice(0, end);
-}
-
 export function isIosInstallable(filename: string): boolean {
   return IOS_INSTALLABLE.has(effectiveExtension(filename));
 }
