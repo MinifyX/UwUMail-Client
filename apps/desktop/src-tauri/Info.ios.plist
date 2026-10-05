@@ -7,6 +7,11 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>UwUMail checks it is you before it shows your mail.</string>
 
+	<!-- "Take photo" for a contact or profile picture: the web view's file picker opens the
+	     camera, and iOS asks for this the first time. Without it the app would crash there. -->
+	<key>NSCameraUsageDescription</key>
+	<string>UwUMail uses the camera only when you take a photo for a contact or your profile picture.</string>
+
 	<!-- Saved attachments land in UwUMail's own folder in the Files app. -->
 	<key>UIFileSharingEnabled</key>
 	<true/>
