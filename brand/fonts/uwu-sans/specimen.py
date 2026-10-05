@@ -19,15 +19,15 @@ TTF = HERE / ".cache" / "UwUSans[wght].ttf"
 
 LINES = [
     (96, 400, " ♥ ← ↑ ↓ →  Hxg"),
-    (40, 400, "Hallo :3   <3 Nyu   10:30   um 9:30   a<3b   3<3"),
+    (40, 400, "Hallo :3 bleibt :3   <3 bleibt <3   Nyu \ue000   Herz ♥   10:30"),
     (40, 400, "Übergrößenträger ẞ ÄÖÜ äöü „Zitat“ «guillemets» 12,50 €"),
 ]
 for w in (200, 300, 400, 500, 600, 700, 800):
     LINES.append((34, w, f"{w} Hamburgefonstiv :3 <3  ♥ → 0123456789"))
 LINES += [
-    (20, 400, "Klein: Danke dir <3 bis morgen :3 · Termin 10:30 → Raum 3 · x<3 · 1<35 · 3:33"),
-    (14, 400, "14px: Hallo :3 wie geht's? <3 Nyu → Posteingang (12) · Termin 10:30"),
-    (14, 700, "14px bold: Hallo :3 wie geht's? <3 Nyu → Posteingang (12)"),
+    (20, 400, "Klein: Danke dir ♥ bis morgen \ue000 · Termin 10:30 → Raum 3 · x<3 · 1<35 · 3:33"),
+    (14, 400, "14px: Hallo \ue000 wie geht's? ♥ Nyu → Posteingang (12) · Termin 10:30"),
+    (14, 700, "14px bold: Hallo \ue000 wie geht's? ♥ Nyu → Posteingang (12)"),
 ]
 
 

@@ -35,8 +35,8 @@ pink, violet, sky, mint, amber, coral.
 
 - **UwU Sans** (variable, bundled, no network) for everything: Atkinson
   Hyperlegible Next with Nyu (U+E000), a heart and arrows added, see
-  `brand/fonts/uwu-sans` (1.100, the same file as the webmail's). `:3` and `<3`
-  stay as typed: the font has no ligatures that change what people wrote.
+  `brand/fonts/uwu-sans`. No ligatures: `:3` and `<3` stay as typed, Nyu and
+  the heart only show where U+E000 or U+2665 is written.
 - Settings → Appearance → Font: UwU Sans (default), Rubik, DM Sans or the
   system font, on this device only. It applies through `--font-ui` and to
   mails (as a `data:` font inside the mail frame, see `lib/fonts.ts`).
