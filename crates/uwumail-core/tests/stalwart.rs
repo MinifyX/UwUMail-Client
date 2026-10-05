@@ -375,7 +375,10 @@ async fn jmap_drafts_are_saved_replaced_and_removed_on_send() {
     };
 
     let first = engine.save_draft(draft(vec![], "<p>Hi</p>", None)).await.unwrap();
-    engine.save_draft(draft(vec![leni.clone()], "<p>Hi Leni!</p>", Some(first.draft_key.clone()))).await.unwrap();
+    let second =
+        engine.save_draft(draft(vec![leni.clone()], "<p>Hi Leni!</p>", Some(first.draft_key.clone()))).await.unwrap();
+    let reopened = engine.open_draft(second.message_id.as_deref().expect("an id for the draft")).await.unwrap();
+    assert_eq!(reopened.to[0].email, LENI.0);
     let http = reqwest::Client::new();
     let server = Client::connect(&http, &session_url, MINI.0, MINI.1).await.unwrap();
     let on_server = server_keywords(&server, &subject).await;

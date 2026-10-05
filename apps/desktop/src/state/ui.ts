@@ -36,6 +36,11 @@ export interface SavedDraft {
   fromEmail?: string;
   /** False while the newest text only exists on this device. */
   savedToServer?: boolean;
+  /**
+   * Set on the copy kept on this device once the draft is in the Drafts folder: then only this id
+   * is kept (no addresses, subject or text), and the draft is opened from the account again.
+   */
+  messageId?: string;
 }
 
 /** Mail waiting for the label picker (L). */
