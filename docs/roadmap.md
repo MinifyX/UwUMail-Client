@@ -82,7 +82,8 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 
 ## After v0.1 — official addons
 
-- [ ] Send later + Snooze
+- [x] Send later: the UwUMail server holds it, other mailboxes wait in this device's outbox (0.10)
+- [ ] Snooze
 - [ ] Templates + snippets
 - [ ] PGP encryption
 - [x] AI helper (off by default): the UwUMail server's assistant, or own providers on this device (0.6)

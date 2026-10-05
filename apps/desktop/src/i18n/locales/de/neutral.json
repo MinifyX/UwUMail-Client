@@ -17,7 +17,8 @@
       "mail": "Mail",
       "calendar": "Kalender",
       "contacts": "Kontakte"
-    }
+    },
+    "scheduled": "Geplant"
   },
   "filter": {
     "all": "Alle",
@@ -169,7 +170,26 @@
     "editSignatures": "Signaturen bearbeiten …",
     "companyFooter": "Beim Senden hängt der Server die Fußzeile deiner Organisation an.",
     "signatureForDomain": "Signatur für {{domain}}",
-    "signatureForAllDomains": "Signatur für alle Domains"
+    "signatureForAllDomains": "Signatur für alle Domains",
+    "later": {
+      "open": "Später senden",
+      "title": "Später senden",
+      "laterToday": "Heute Abend",
+      "tomorrowMorning": "Morgen früh",
+      "tomorrowAfternoon": "Morgen Nachmittag",
+      "mondayMorning": "Montag früh",
+      "pick": "Datum und Uhrzeit wählen",
+      "schedule": "Planen",
+      "problem": {
+        "invalid": "Wähle ein Datum und eine Uhrzeit.",
+        "tooSoon": "Wähle eine Zeit, die mindestens ein paar Minuten entfernt ist.",
+        "tooFar": "Dein Server hält Mails höchstens {{days}} Tage zurück.",
+        "tooFarLocal": "UwUMail hält Mails höchstens {{days}} Tage zurück."
+      },
+      "server": "Dein UwUMail-Server sendet die Mail zur gewählten Zeit, auch wenn UwUMail dann zu ist.",
+      "local": "Dieses Postfach kann Mails nicht auf dem Server zurückhalten. Die Mail wartet auf diesem Gerät und geht raus, wenn UwUMail zu der Zeit läuft, auch im Hintergrund. Ist UwUMail dann zu, geht sie beim nächsten Start raus.",
+      "localIos": "Dieses Postfach kann Mails nicht auf dem Server zurückhalten. Die Mail wartet auf diesem iPhone und geht raus, sobald du UwUMail zu oder nach dieser Zeit öffnest."
+    }
   },
   "toast": {
     "sent": "Mail gesendet",
@@ -204,7 +224,8 @@
     "unsubscribeFailed": "Das Abmelden hat nicht geklappt. {{reason}}",
     "messageSaved": "Mail gespeichert",
     "deletedForever_one": "{{count}} Mail endgültig gelöscht",
-    "deletedForever_other": "{{count}} Mails endgültig gelöscht"
+    "deletedForever_other": "{{count}} Mails endgültig gelöscht",
+    "scheduled": "Wird gesendet: {{time}}"
   },
   "status": {
     "syncing": "Suche nach neuen Mails",
@@ -1935,5 +1956,22 @@
   "font": {
     "system": "Systemschrift",
     "sample": "Hallo :3 – Termin um 10:30 <3"
+  },
+  "scheduled": {
+    "title": "Geplante Mails",
+    "desc": "Mails von Postfächern auf einem UwUMail-Server sendet dein Server zur gewählten Zeit, auch wenn UwUMail zu ist. Alle anderen warten auf diesem Gerät und gehen raus, wenn UwUMail zu der Zeit läuft, sonst beim nächsten Start.",
+    "empty": "Nichts wartet aufs Senden.",
+    "to": "An {{names}}",
+    "edit": "Bearbeiten",
+    "stop": "Nicht senden",
+    "stopped": "Nicht gesendet. Die Mail liegt wieder in den Entwürfen.",
+    "reschedule": "Andere Zeit",
+    "rescheduled": "Neue Zeit: {{time}}",
+    "sendNow": "Jetzt senden",
+    "sentNow": "Die Mail geht jetzt raus.",
+    "onServer": "Auf dem Server",
+    "onDevice": "Auf diesem Gerät",
+    "retrying": "Server nicht erreichbar, nächster Versuch: {{time}}",
+    "failed": "Das hat nicht geklappt: {{reason}}"
   }
 }

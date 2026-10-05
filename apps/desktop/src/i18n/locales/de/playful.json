@@ -78,7 +78,8 @@
     "messageSaved": "Mail sicher abgelegt (˘ω˘)",
     "deletedForever_one": "Für immer weg (｡•́︿•̀｡)",
     "deletedForever_other": "{{count}} Mails für immer weg (｡•́︿•̀｡)",
-    "draftGone": "Hier ist kein Entwurf mehr, Nyu hat überall nachgeschaut (・_・;)"
+    "draftGone": "Hier ist kein Entwurf mehr, Nyu hat überall nachgeschaut (・_・;)",
+    "scheduled": "Nyu bringt sie {{time}} vorbei ✉︎"
   },
   "status": {
     "syncing": "Hole frische Mails…",
@@ -298,5 +299,8 @@
     "overlap": {
       "title": "Hm, das kommt mir bekannt vor (・・?)"
     }
+  },
+  "scheduled": {
+    "empty": "Nyu hat gerade nichts zu verteilen (・ω・)"
   }
 }

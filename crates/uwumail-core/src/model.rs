@@ -991,6 +991,9 @@ pub enum EngineEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         account_id: Option<String>,
     },
+    /// Mail sent later was scheduled, changed, stopped or sent (see `send_later`).
+    #[serde(rename = "scheduled:changed")]
+    ScheduledChanged {},
 }
 
 impl EngineEvent {
@@ -1007,6 +1010,7 @@ impl EngineEvent {
             Self::PushChanged { .. } => "push:changed",
             Self::AccountsChanged {} => "accounts:changed",
             Self::AssistChanged { .. } => "assist:changed",
+            Self::ScheduledChanged {} => "scheduled:changed",
         }
     }
 }

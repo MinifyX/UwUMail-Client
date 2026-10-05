@@ -38,6 +38,7 @@ import { useWorkspaceName } from "../workspaces/workspaces";
 import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
 import { useSelectionActions } from "./selection";
 import { droppedThreads, isThreadDrag } from "./threadDrag";
+import { ScheduledNavItem } from "../compose/ScheduledSends";
 import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
 
 const UNIFIED_ROLES = ["inbox", "unread", "flagged", "drafts", "sent"] as const;
@@ -423,6 +424,7 @@ export function MailboxNav({
               />
             );
           })}
+          <ScheduledNavItem />
         </section>
 
         <LabelNav />

@@ -58,6 +58,11 @@ import type {
   OutgoingMessage,
   Protocol,
   QueuedSend,
+  ScheduledKind,
+  ScheduledReceipt,
+  ScheduledRef,
+  ScheduledSend,
+  SendLaterInfo,
   SenderPicture,
   Signature,
   ThreadDetail,
@@ -99,6 +104,14 @@ function uniqueAddresses(addresses: Address[]): Address[] {
     seen.add(key);
     return true;
   });
+}
+
+/** A mail sent later in the demo. */
+interface DemoLater {
+  kind: ScheduledKind;
+  message: OutgoingMessage;
+  sendAt: string;
+  timer: ReturnType<typeof setTimeout> | undefined;
 }
 
 /** In-memory engine with sample data. Used by `pnpm dev` in a normal browser. */
@@ -150,6 +163,8 @@ export class DemoBackend implements Backend {
     },
   ];
   private queued = new Map<string, { timer: ReturnType<typeof setTimeout>; message: OutgoingMessage }>();
+  /** Mail sent later: the JMAP mailbox's "server" holds it, the others this "device". */
+  private later = new Map<string, DemoLater>();
 
   constructor() {
     setTimeout(() => {
@@ -1004,6 +1019,120 @@ export class DemoBackend implements Backend {
     clearTimeout(entry.timer);
     this.queued.delete(sendId);
     return entry.message;
+  }
+
+  async sendLaterInfo(accountId: string): Promise<SendLaterInfo> {
+    const account = this.accounts.find((a) => a.id === accountId);
+    if (!account) throw new BackendError("not_found", "Account not found");
+    // The JMAP mailbox stands for one on a UwUMail server, which holds mail for 30 days.
+    return account.protocol === "jmap"
+      ? { kind: "server", maxDelaySeconds: 30 * 86_400 }
+      : { kind: "local", maxDelaySeconds: 365 * 86_400 };
+  }
+
+  async sendLater(message: OutgoingMessage, sendAt: string): Promise<ScheduledReceipt> {
+    if (message.to.length + message.cc.length + message.bcc.length === 0) {
+      throw new BackendError("invalid_input", "No recipients");
+    }
+    const { kind, maxDelaySeconds } = await this.sendLaterInfo(message.accountId);
+    const at = this.laterTime(sendAt, maxDelaySeconds);
+    await wait(200);
+    const id = `later-${this.nextId++}`;
+    this.later.set(id, { kind, message, sendAt: at, timer: undefined });
+    this.armLater(id);
+    if (message.draftKey) this.removeDraftMessage(message.draftKey);
+    this.emit({ type: "mail:changed", accountId: message.accountId });
+    this.emit({ type: "scheduled:changed" });
+    return { id, kind, sendAt: at };
+  }
+
+  async scheduledSends(): Promise<ScheduledSend[]> {
+    await wait(120);
+    return [...this.later.entries()]
+      .map(([id, entry]) => ({
+        id,
+        accountId: entry.message.accountId,
+        kind: entry.kind,
+        sendAt: entry.sendAt,
+        subject: entry.message.subject,
+        to: entry.message.to.length > 0 ? entry.message.to : entry.message.cc,
+      }))
+      .sort((a, b) => a.sendAt.localeCompare(b.sendAt));
+  }
+
+  async rescheduleSend(scheduled: ScheduledRef, sendAt: string) {
+    const entry = this.laterEntry(scheduled);
+    const { maxDelaySeconds } = await this.sendLaterInfo(entry.message.accountId);
+    entry.sendAt = this.laterTime(sendAt, maxDelaySeconds);
+    this.armLater(scheduled.id);
+    this.emit({ type: "scheduled:changed" });
+  }
+
+  async sendScheduledNow(scheduled: ScheduledRef) {
+    const entry = this.laterEntry(scheduled);
+    entry.sendAt = new Date().toISOString();
+    this.armLater(scheduled.id);
+  }
+
+  async stopScheduled(scheduled: ScheduledRef) {
+    const message = this.takeLater(scheduled);
+    await this.saveDraft(message);
+  }
+
+  async editScheduled(scheduled: ScheduledRef) {
+    return this.takeLater(scheduled);
+  }
+
+  private laterTime(sendAt: string, maxDelaySeconds: number): string {
+    const at = Date.parse(sendAt);
+    if (Number.isNaN(at)) throw new BackendError("invalid_input", "Pick a date and a time.");
+    const ahead = at - Date.now();
+    if (ahead < 60_000) throw new BackendError("invalid_input", "Pick a time at least a few minutes from now.");
+    if (ahead > maxDelaySeconds * 1000) throw new BackendError("invalid_input", "That is too far ahead.");
+    return new Date(at).toISOString();
+  }
+
+  private laterEntry(scheduled: ScheduledRef): DemoLater {
+    const entry = this.later.get(scheduled.id);
+    if (!entry || entry.message.accountId !== scheduled.accountId) {
+      throw new BackendError("not_found", "This mail is already on its way.");
+    }
+    return entry;
+  }
+
+  private takeLater(scheduled: ScheduledRef): OutgoingMessage {
+    const entry = this.laterEntry(scheduled);
+    clearTimeout(entry.timer);
+    this.later.delete(scheduled.id);
+    this.emit({ type: "scheduled:changed" });
+    return entry.message;
+  }
+
+  /** Waits for the mail's time; a day at most at once, as timers can't wait much longer. */
+  private armLater(id: string) {
+    const entry = this.later.get(id);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    const left = Date.parse(entry.sendAt) - Date.now();
+    entry.timer = setTimeout(
+      () => {
+        if (Date.parse(entry.sendAt) > Date.now()) return this.armLater(id);
+        this.later.delete(id);
+        this.emit({ type: "scheduled:changed" });
+        void this.send(entry.message).then(
+          () => this.emit({ type: "send:done", sendId: id, accountId: entry.message.accountId }),
+          (reason: unknown) =>
+            this.emit({
+              type: "send:failed",
+              sendId: id,
+              accountId: entry.message.accountId,
+              reason: reason instanceof Error ? reason.message : String(reason),
+              message: entry.message,
+            }),
+        );
+      },
+      Math.max(0, Math.min(left, 86_400_000)),
+    );
   }
 
   async saveDraft(draft: OutgoingMessage): Promise<DraftSaveResult> {
