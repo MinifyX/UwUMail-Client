@@ -62,6 +62,10 @@ import type {
   OutgoingMessage,
   Protocol,
   QueuedSend,
+  ScheduledReceipt,
+  ScheduledRef,
+  ScheduledSend,
+  SendLaterInfo,
   SenderPicture,
   Signature,
   ThreadDetail,
@@ -306,6 +310,18 @@ export interface Backend {
   queueSend(message: OutgoingMessage, delaySeconds: number): Promise<QueuedSend>;
   /** Takes a queued mail back and returns it for the composer. */
   cancelSend(sendId: string): Promise<OutgoingMessage>;
+  /** Where this mailbox's mail sent later waits (its UwUMail server or this device) and how far ahead it may go. */
+  sendLaterInfo(accountId: string): Promise<SendLaterInfo>;
+  /** Sends at `sendAt` (ISO 8601): held by the UwUMail server, or in this device's outbox for every other mailbox. */
+  sendLater(message: OutgoingMessage, sendAt: string): Promise<ScheduledReceipt>;
+  /** Mail waiting for its time, soonest first. */
+  scheduledSends(): Promise<ScheduledSend[]>;
+  rescheduleSend(scheduled: ScheduledRef, sendAt: string): Promise<void>;
+  sendScheduledNow(scheduled: ScheduledRef): Promise<void>;
+  /** Stops it without opening it: it is a draft in Drafts again. */
+  stopScheduled(scheduled: ScheduledRef): Promise<void>;
+  /** Stops it and returns it for the composer, which saves it as a draft. */
+  editScheduled(scheduled: ScheduledRef): Promise<OutgoingMessage>;
   /** Saves into the account's Drafts folder, replacing the draft's earlier version. */
   saveDraft(draft: OutgoingMessage): Promise<DraftSaveResult>;
   deleteDraft(accountId: string, draftKey: string): Promise<void>;

@@ -20,6 +20,7 @@ use uwumail_core::birthdays::scan::{BirthdayFeatures, BirthdayImportEntry, Birth
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
 use uwumail_core::pictures::SenderPicture;
+use uwumail_core::send_later::{ScheduledReceipt, ScheduledRef, ScheduledSend, SendLaterInfo};
 use uwumail_core::{Engine, Error};
 
 type CommandResult<T> = Result<T, Error>;
@@ -498,6 +499,45 @@ fn queue_send(engine: State<'_, Engine>, message: OutgoingMessage, delay_seconds
 #[tauri::command]
 fn cancel_send(engine: State<'_, Engine>, send_id: String) -> CommandResult<OutgoingMessage> {
     engine.cancel_send(&send_id)
+}
+
+#[tauri::command]
+async fn send_later_info(engine: State<'_, Engine>, account_id: String) -> CommandResult<SendLaterInfo> {
+    engine.send_later_info(&account_id).await
+}
+
+#[tauri::command]
+async fn send_later(
+    engine: State<'_, Engine>,
+    message: OutgoingMessage,
+    send_at: String,
+) -> CommandResult<ScheduledReceipt> {
+    engine.send_later(message, &send_at).await
+}
+
+#[tauri::command]
+async fn scheduled_sends(engine: State<'_, Engine>) -> CommandResult<Vec<ScheduledSend>> {
+    engine.scheduled_sends().await
+}
+
+#[tauri::command]
+async fn reschedule_send(engine: State<'_, Engine>, scheduled: ScheduledRef, send_at: String) -> CommandResult<()> {
+    engine.reschedule_send(&scheduled, &send_at).await
+}
+
+#[tauri::command]
+async fn send_scheduled_now(engine: State<'_, Engine>, scheduled: ScheduledRef) -> CommandResult<()> {
+    engine.send_scheduled_now(&scheduled).await
+}
+
+#[tauri::command]
+async fn stop_scheduled(engine: State<'_, Engine>, scheduled: ScheduledRef) -> CommandResult<()> {
+    engine.stop_scheduled(&scheduled).await
+}
+
+#[tauri::command]
+async fn edit_scheduled(engine: State<'_, Engine>, scheduled: ScheduledRef) -> CommandResult<OutgoingMessage> {
+    engine.edit_scheduled(&scheduled).await
 }
 
 #[tauri::command]
@@ -1202,6 +1242,13 @@ pub fn run() {
             send_message,
             queue_send,
             cancel_send,
+            send_later_info,
+            send_later,
+            scheduled_sends,
+            reschedule_send,
+            send_scheduled_now,
+            stop_scheduled,
+            edit_scheduled,
             save_draft,
             delete_draft,
             open_draft,

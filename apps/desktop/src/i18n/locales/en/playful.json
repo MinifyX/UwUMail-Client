@@ -78,7 +78,8 @@
     "messageSaved": "Mail tucked away safely (˘ω˘)",
     "deletedForever_one": "Gone forever (｡•́︿•̀｡)",
     "deletedForever_other": "{{count}} messages gone forever (｡•́︿•̀｡)",
-    "draftGone": "No draft left here, Nyu looked everywhere (・_・;)"
+    "draftGone": "No draft left here, Nyu looked everywhere (・_・;)",
+    "scheduled": "Nyu will deliver it {{time}} ✉︎"
   },
   "status": {
     "syncing": "Fetching fresh mail…",
@@ -298,5 +299,8 @@
     "overlap": {
       "title": "Hmm, that looks familiar (・・?)"
     }
+  },
+  "scheduled": {
+    "empty": "Nyu has nothing to deliver right now (・ω・)"
   }
 }

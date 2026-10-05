@@ -84,6 +84,10 @@ import type {
   OutgoingMessage,
   Protocol,
   QueuedSend,
+  ScheduledReceipt,
+  ScheduledRef,
+  ScheduledSend,
+  SendLaterInfo,
   SenderPicture,
   Signature,
   ThreadDetail,
@@ -145,6 +149,11 @@ function accountSignaturesFrom(raw: { accountId: string; overview: unknown }): A
 }
 /** The app's language, for the names of base labels this device makes. */
 const uiLanguage = (): "de" | "en" => (i18n.language?.toLowerCase().startsWith("de") ? "de" : "en");
+
+/** Only what names a scheduled mail goes to the engine, not the whole list entry. */
+function scheduledRef({ id, accountId, kind }: ScheduledRef): ScheduledRef {
+  return { id, accountId, kind };
+}
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -214,6 +223,7 @@ const EVENT_NAMES = [
   "accounts:changed",
   "send:done",
   "send:failed",
+  "scheduled:changed",
   "compose:mailto",
   "settings:changed",
   "calendar:changed",
@@ -577,6 +587,34 @@ export class TauriBackend implements Backend {
 
   cancelSend(sendId: string) {
     return call<OutgoingMessage>("cancel_send", { sendId });
+  }
+
+  sendLaterInfo(accountId: string) {
+    return call<SendLaterInfo>("send_later_info", { accountId });
+  }
+
+  sendLater(message: OutgoingMessage, sendAt: string) {
+    return call<ScheduledReceipt>("send_later", { message, sendAt });
+  }
+
+  scheduledSends() {
+    return call<ScheduledSend[]>("scheduled_sends");
+  }
+
+  rescheduleSend(scheduled: ScheduledRef, sendAt: string) {
+    return call<void>("reschedule_send", { scheduled: scheduledRef(scheduled), sendAt });
+  }
+
+  sendScheduledNow(scheduled: ScheduledRef) {
+    return call<void>("send_scheduled_now", { scheduled: scheduledRef(scheduled) });
+  }
+
+  stopScheduled(scheduled: ScheduledRef) {
+    return call<void>("stop_scheduled", { scheduled: scheduledRef(scheduled) });
+  }
+
+  editScheduled(scheduled: ScheduledRef) {
+    return call<OutgoingMessage>("edit_scheduled", { scheduled: scheduledRef(scheduled) });
   }
 
   saveDraft(draft: OutgoingMessage) {

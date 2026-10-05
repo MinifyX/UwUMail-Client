@@ -17,7 +17,8 @@
       "mail": "Mail",
       "calendar": "Calendar",
       "contacts": "Contacts"
-    }
+    },
+    "scheduled": "Scheduled"
   },
   "filter": {
     "all": "All",
@@ -169,7 +170,26 @@
     "editSignatures": "Edit signatures …",
     "companyFooter": "The server adds your organisation's footer when sending.",
     "signatureForDomain": "Signature for {{domain}}",
-    "signatureForAllDomains": "Signature for all domains"
+    "signatureForAllDomains": "Signature for all domains",
+    "later": {
+      "open": "Send later",
+      "title": "Send later",
+      "laterToday": "This evening",
+      "tomorrowMorning": "Tomorrow morning",
+      "tomorrowAfternoon": "Tomorrow afternoon",
+      "mondayMorning": "Monday morning",
+      "pick": "Pick a date and time",
+      "schedule": "Schedule",
+      "problem": {
+        "invalid": "Pick a date and a time.",
+        "tooSoon": "Pick a time at least a few minutes from now.",
+        "tooFar": "Your server holds mail for at most {{days}} days.",
+        "tooFarLocal": "UwUMail holds mail for at most {{days}} days."
+      },
+      "server": "Your UwUMail server sends it at the time you chose, also while UwUMail is closed.",
+      "local": "This mailbox can't hold mail on its server. The mail waits on this device and goes out if UwUMail is running at that time, also in the background. If UwUMail is closed then, it goes out the next time it starts.",
+      "localIos": "This mailbox can't hold mail on its server. The mail waits on this iPhone and goes out as soon as you open UwUMail at or after that time."
+    }
   },
   "toast": {
     "sent": "Message sent",
@@ -204,7 +224,8 @@
     "unsubscribeFailed": "Unsubscribing didn't work. {{reason}}",
     "messageSaved": "Mail saved",
     "deletedForever_one": "{{count}} message deleted forever",
-    "deletedForever_other": "{{count}} messages deleted forever"
+    "deletedForever_other": "{{count}} messages deleted forever",
+    "scheduled": "Sends {{time}}"
   },
   "status": {
     "syncing": "Checking for mail",
@@ -1915,5 +1936,22 @@
   "font": {
     "system": "System font",
     "sample": "Hi :3 – meeting at 10:30 <3"
+  },
+  "scheduled": {
+    "title": "Scheduled mail",
+    "desc": "Your UwUMail server sends mail from its mailboxes at the time you chose, also while UwUMail is closed. Everything else waits on this device and goes out if UwUMail is running at that time, otherwise the next time it starts.",
+    "empty": "Nothing is waiting to be sent.",
+    "to": "To {{names}}",
+    "edit": "Edit",
+    "stop": "Don't send",
+    "stopped": "Not sent. The mail is back in Drafts.",
+    "reschedule": "Change time",
+    "rescheduled": "New time: {{time}}",
+    "sendNow": "Send now",
+    "sentNow": "The mail is going out now.",
+    "onServer": "On the server",
+    "onDevice": "On this device",
+    "retrying": "Server not reachable, trying again: {{time}}",
+    "failed": "That didn't work: {{reason}}"
   }
 }

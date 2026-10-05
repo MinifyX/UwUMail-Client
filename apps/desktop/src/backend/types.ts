@@ -265,6 +265,39 @@ export interface QueuedSend {
   sendAt: string;
 }
 
+/** Where a mailbox's mail sent later waits: held by its UwUMail server, or in this device's outbox. */
+export type ScheduledKind = "server" | "local";
+
+/** What "send later" can do for a mailbox. */
+export interface SendLaterInfo {
+  kind: ScheduledKind;
+  /** How far ahead a time may be, in seconds. */
+  maxDelaySeconds: number;
+}
+
+/** A mail waiting for its time, on the UwUMail server or in this device's outbox. */
+export interface ScheduledSend {
+  id: string;
+  accountId: string;
+  kind: ScheduledKind;
+  /** When it goes (ISO 8601). */
+  sendAt: string;
+  subject: string;
+  to: Address[];
+  /** Its time passed but its server couldn't be reached; it is tried again at `sendAt`. */
+  retrying?: boolean;
+}
+
+/** Which scheduled mail an action is about. */
+export type ScheduledRef = Pick<ScheduledSend, "id" | "accountId" | "kind">;
+
+/** What scheduling handed back. */
+export interface ScheduledReceipt {
+  id: string;
+  kind: ScheduledKind;
+  sendAt: string;
+}
+
 export interface DraftSaveResult {
   draftKey: string;
   savedAt: string;
@@ -620,6 +653,8 @@ export type BackendEvent =
   | { type: "accounts:changed" }
   | { type: "send:done"; sendId: string; accountId: string }
   | { type: "send:failed"; sendId: string; accountId: string; reason: string; message: OutgoingMessage }
+  /** Mail sent later was scheduled, changed, stopped or sent. */
+  | { type: "scheduled:changed" }
   | { type: "compose:mailto" }
   /** The shared settings of a UwUMail account may have changed; `state` when the server said which. */
   | { type: "settings:changed"; accountId: string; state?: string }
