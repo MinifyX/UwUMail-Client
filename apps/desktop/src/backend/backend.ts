@@ -107,7 +107,9 @@ export type BackendErrorCode =
   /** The sign-in lacks a permission it needs now (calendars, contacts): signing in again asks for it. */
   | "sign_in_again"
   /** The server refused: the mailbox may not do this (e.g. public profile pictures switched off). */
-  | "forbidden";
+  | "forbidden"
+  /** Sending broke off after the server may have taken the mail; it may have gone out. */
+  | "maybe_sent";
 
 export class BackendError extends Error {
   readonly code: BackendErrorCode;

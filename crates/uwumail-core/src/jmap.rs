@@ -488,8 +488,22 @@ impl Client {
         self.call_within(calls, CALL_TIMEOUT).await
     }
 
+    /// Like [`call`](Self::call), for a request that sends mail (`EmailSubmission/set`): when the
+    /// request may have reached the server but its answer didn't come back (a broken connection,
+    /// a timeout, a gateway error, an unreadable answer), the error is [`Error::maybe_sent`], so
+    /// nobody sends the mail a second time on their own (security review 0.10 SL-2).
+    pub async fn call_submission(&self, calls: Vec<(&str, Value)>) -> Result<Responses> {
+        self.call_inner(calls, CALL_TIMEOUT, true).await
+    }
+
     /// Like [`call`](Self::call), for methods the server may take longer for, e.g. reading pictures.
     pub async fn call_within(&self, calls: Vec<(&str, Value)>, limit: Duration) -> Result<Responses> {
+        self.call_inner(calls, limit, false).await
+    }
+
+    async fn call_inner(&self, calls: Vec<(&str, Value)>, limit: Duration, submission: bool) -> Result<Responses> {
+        // After the request went out, a submission's failure leaves it open whether the mail went.
+        let unsure = |error: Error| if submission { Error::maybe_sent(error.message) } else { error };
         let method_calls: Vec<Value> = calls
             .into_iter()
             .enumerate()
@@ -541,25 +555,29 @@ impl Client {
             .timeout(limit)
             .json(&body)
             .send()
-            .await?;
+            .await
+            // A connection that never came about carried nothing.
+            .map_err(|error| if error.is_connect() { Error::from(error) } else { unsure(Error::from(error)) })?;
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return Err(Error::auth("The mail server didn't accept the login anymore."));
         }
         if !status.is_success() {
             let detail = read_start(response, MAX_ERROR_TEXT).await;
-            return Err(Error::connection(format!("The mail server answered {status}. {}", short(&detail))));
+            let error = Error::connection(format!("The mail server answered {status}. {}", short(&detail)));
+            // A refused request (4xx) ran nothing; a server or gateway error may have run it.
+            return Err(if status.is_client_error() { error } else { unsure(error) });
         }
-        let body = read_limited(response, MAX_ANSWER).await?;
+        let body = read_limited(response, MAX_ANSWER).await.map_err(unsure)?;
         let document: Value =
-            serde_json::from_slice(&body).map_err(|e| Error::connection(format!("Bad JMAP answer: {e}")))?;
+            serde_json::from_slice(&body).map_err(|e| unsure(Error::connection(format!("Bad JMAP answer: {e}"))))?;
         if let Some(state) = document.get("sessionState").and_then(Value::as_str) {
             *self.latest_session_state.lock().unwrap() = Some(state.to_string());
         }
         let answers = document
             .get("methodResponses")
             .and_then(Value::as_array)
-            .ok_or_else(|| Error::connection("The mail server's answer had no method responses."))?;
+            .ok_or_else(|| unsure(Error::connection("The mail server's answer had no method responses.")))?;
         Ok(Responses(
             answers
                 .iter()
