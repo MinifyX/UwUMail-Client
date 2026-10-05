@@ -606,6 +606,12 @@ pub fn reply_mail(
     if let Some(comment) = comment {
         body = format!("{comment}\n\n---\n{body}");
     }
+    // Only line breaks: no lone CR (or other control) from the invitation reaches the mail (IV-1).
+    let body: String = body
+        .replace("\r\n", "\n")
+        .chars()
+        .map(|c| if c.is_control() && c != '\n' && c != '\t' { ' ' } else { c })
+        .collect();
     let ics = reply.to_ics();
     let calendar_type = |kind: &str| {
         ContentType::parse(&format!("{kind}; method=REPLY; charset=utf-8"))
@@ -762,6 +768,33 @@ BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VEVENT\r\n
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn no_lone_cr_from_a_hostile_invitation_reaches_the_answer_mail() {
+        // CRs inside values, parameters and the zone, as a stranger may write them (IV-1).
+        let hostile = INVITE
+            .replace("SUMMARY:Kaffee\\, Kuchen", "SUMMARY:Kaffee\r.\rMAIL FROM:<x@example.net>\r")
+            .replace("LOCATION:Café Nyu", "LOCATION:Caf\r.\r\u{0}\u{1b}é")
+            .replace("TZID=W. Europe Standard Time:20260920T090000", "TZID=Zone\rX:20260920T090000")
+            .replace("ATTENDEE;CN=Mini;", "ATTENDEE;CN=\"Mi\rni\";X-EVIL=\"a\r.\r\";");
+        let invite = read(&hostile).unwrap();
+        let reply = reply(&invite, "mini@example.com", Partstat::Accepted, Some("ok\r.\r"), 1_790_000_000);
+        let from = Address { name: Some("Mini".into()), email: "mini@example.com".into() };
+        let to = Address { name: None, email: "emma@example.org".into() };
+        for language in [Language::De, Language::En] {
+            let raw =
+                reply_mail(&from, &to, &reply, Partstat::Accepted, Some("ok\r.\rhi"), language).unwrap().formatted();
+            for (at, byte) in raw.iter().enumerate() {
+                if *byte == b'\r' {
+                    assert_eq!(raw.get(at + 1), Some(&b'\n'), "a lone CR at {at}: {}", String::from_utf8_lossy(&raw));
+                }
+                assert!(*byte >= 0x20 || matches!(byte, b'\r' | b'\n' | b'\t'), "control {byte} at {at}");
+            }
+            let text = String::from_utf8_lossy(&raw);
+            assert!(!text.contains("\r\n.\r\n"), "never an end of DATA: {text}");
+        }
+        assert!(reply.to_ics().split("\r\n").all(|line| !line.contains('\r')));
     }
 
     #[test]

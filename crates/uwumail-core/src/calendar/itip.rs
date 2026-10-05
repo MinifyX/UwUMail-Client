@@ -84,9 +84,16 @@ pub fn address(value: &str) -> Option<String> {
     (rest.contains('@') && !rest.contains([' ', '<', '>'])).then(|| rest.to_lowercase())
 }
 
+/// Control characters other than TAB never reach a content line: a lone CR or LF from a
+/// stranger's invitation would otherwise travel into the SMTP stream of the reply (security
+/// review 0.10 IV-1).
+fn no_controls(text: &str) -> impl Iterator<Item = char> + '_ {
+    text.chars().map(|c| if c.is_control() && c != '\t' { ' ' } else { c })
+}
+
 fn fold(line: &str, out: &mut String) {
     let mut width = 0;
-    for ch in line.chars() {
+    for ch in no_controls(line) {
         let len = ch.len_utf8();
         if width + len > FOLD_AT {
             out.push_str("\r\n ");
@@ -118,12 +125,12 @@ impl Component {
         for raw in text.split('\n') {
             let raw = raw.strip_suffix('\r').unwrap_or(raw);
             if let Some(rest) = raw.strip_prefix([' ', '\t']) {
-                lines.last_mut()?.push_str(rest);
+                lines.last_mut()?.extend(no_controls(rest));
             } else if !raw.is_empty() {
                 if lines.len() >= MAX_LINES {
                     return None;
                 }
-                lines.push(raw.to_owned());
+                lines.push(no_controls(raw).collect());
             }
         }
         let mut stack: Vec<Component> = Vec::new();
@@ -791,7 +798,11 @@ pub struct Summary {
 
 pub fn summary(calendar: &Component) -> Summary {
     let Some(event) = calendar.main_event() else { return Summary::default() };
-    let text = |name: &str| event.value(name).map(unescape).unwrap_or_default();
+    // Texts for the mail body: line breaks stay, every other control goes (IV-1).
+    let clean = |text: &str, breaks: bool| -> String {
+        text.chars().map(|c| if c.is_control() && !(breaks && c == '\n') { ' ' } else { c }).collect()
+    };
+    let text = |name: &str| event.value(name).map(|value| clean(&unescape(value), true)).unwrap_or_default();
     let when = event
         .property("DTSTART")
         .map(|start| {
@@ -810,7 +821,7 @@ pub fn summary(calendar: &Component) -> Summary {
                     let zone = if value.ends_with('Z') {
                         "UTC".to_owned()
                     } else {
-                        start.param("TZID").map(str::to_owned).unwrap_or_default()
+                        start.param("TZID").map(|zone| clean(zone, false)).unwrap_or_default()
                     };
                     let clock = format!("{}:{}", &time[..2], &time[2..4]);
                     if zone.is_empty() {
@@ -827,7 +838,7 @@ pub fn summary(calendar: &Component) -> Summary {
         title: text("SUMMARY"),
         when,
         location: text("LOCATION"),
-        organizer_name: event.property("ORGANIZER").and_then(|p| p.param("CN")).unwrap_or_default().to_owned(),
+        organizer_name: clean(event.property("ORGANIZER").and_then(|p| p.param("CN")).unwrap_or_default(), false),
     }
 }
 
