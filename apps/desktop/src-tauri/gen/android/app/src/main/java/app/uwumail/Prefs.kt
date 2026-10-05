@@ -19,6 +19,7 @@ object Prefs {
             if (args.has("backgroundPush")) putBoolean("backgroundPush", args.getBoolean("backgroundPush"))
             if (args.has("offlineDays")) putInt("offlineDays", args.getInt("offlineDays"))
             if (args.has("appLock")) putBoolean("appLock", args.getBoolean("appLock"))
+            if (args.has("showContent")) putBoolean("showContent", args.getBoolean("showContent"))
         }.apply()
     }
 
@@ -70,6 +71,9 @@ object Prefs {
 
     /** The app lock is on: notifications leave out what the mail says, Recents shows no preview. */
     fun appLock(context: Context) = prefs(context).getBoolean("appLock", false)
+
+    /** Notifications name sender and subject (Settings → "Show sender and subject", on by default). */
+    fun showContent(context: Context) = prefs(context).getBoolean("showContent", true)
 
     fun playful(context: Context) = prefs(context).getString("tone", "playful") == "playful"
 

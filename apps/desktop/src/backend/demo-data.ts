@@ -50,6 +50,22 @@ const bank: Address = { name: "Sparschwein Bank", email: "service@sparschwein.ex
 const client: Address = { name: "Emma Vogt", email: "emma.vogt@brightlabs.example" };
 const linkLab: Address = { name: "Link-Labor", email: "labor@linklabor.example" };
 
+/** A Teams meeting link inside a Microsoft Safe Link, as Exchange Online sends it. */
+const TEAMS_JOIN = `https://eur01.safelinks.protection.outlook.com/?url=${encodeURIComponent(
+  "https://teams.microsoft.com/l/meetup-join/19%3ameeting_UwUDemo%40thread.v2/0?context=%7b%7d",
+)}&data=05%7C02%7Cdemo&reserved=0`;
+
+function teamsInvite(lang: Lang) {
+  const de = lang === "de";
+  return `<div style="font-family:Segoe UI,sans-serif;font-size:14px">
+<p>${de ? "Hallo Mini,<br><br>lass uns am Donnerstag um 10 Uhr kurz das Projekt starten." : "Hi Mini,<br><br>let's kick off the project on Thursday at 10."}</p>
+<p>${de ? "Viele Grüße<br>Emma" : "Best<br>Emma"}</p>
+<hr style="border:0;border-top:1px solid #ddd">
+<p style="font-size:20px;font-weight:600">Microsoft Teams ${de ? "Besprechung" : "meeting"}</p>
+<p><a href="${TEAMS_JOIN}">${de ? "Jetzt an der Besprechung teilnehmen" : "Join the meeting now"}</a></p>
+</div>`;
+}
+
 /** Every kind of link the reader treats differently: plain, disguised, wrapped, tracked, insecure, lookalike, mail. */
 function linkLabMail(lang: Lang) {
   const de = lang === "de";
@@ -219,6 +235,21 @@ export const SAMPLE_THREADS: SampleThread[] = [
           { filename: "notizen.txt", mimeType: "text/plain", size: 2_048, inline: false },
           { filename: "logo-review.ics", mimeType: "text/calendar", size: 612, inline: false },
         ],
+      },
+    ],
+  },
+  {
+    account: "studio",
+    subject: p("Kick-off per Teams am Donnerstag", "Kick-off on Teams on Thursday"),
+    messages: [
+      {
+        from: client,
+        minutesAgo: 130,
+        html: true,
+        // Outlook through Exchange Online: the join link wrapped in a Safe Link, and a winmail.dat
+        // the engine couldn't unpack (the reader says so instead of offering an unreadable file).
+        body: p(teamsInvite("de"), teamsInvite("en")),
+        attachments: [{ filename: "winmail.dat", mimeType: "application/ms-tnef", size: 18_432, inline: false }],
       },
     ],
   },
@@ -405,6 +436,39 @@ export const SAMPLE_THREADS: SampleThread[] = [
     ],
   },
 ];
+
+// Calendar mail (see features/calendar/Invitation): an answer to Mini's own event, and a
+// cancellation that only looks like it comes from the organizer.
+SAMPLE_THREADS.push(
+  {
+    account: "private",
+    subject: p("Zugesagt: Spieleabend", "Accepted: Game night"),
+    messages: [
+      {
+        from: noah,
+        minutesAgo: 25,
+        body: p("Bin dabei! 🎮", "Count me in! 🎮"),
+        attachments: [{ filename: "game-night-reply.ics", mimeType: "text/calendar", size: 480, inline: false }],
+      },
+    ],
+  },
+  {
+    account: "studio",
+    subject: p("Abgesagt: Logo-Besprechung", "Cancelled: Logo review"),
+    messages: [
+      {
+        // Emma's name, but not her address: the invitation card doesn't believe it.
+        from: { name: "Emma Vogt", email: "emma.vogt@brightlabs-events.example" },
+        minutesAgo: 15,
+        body: p(
+          "Hallo Mini,\n\ndie Logo-Besprechung fällt leider aus.\n\nEmma",
+          "Hi Mini,\n\nthe logo review is off, sorry.\n\nEmma",
+        ),
+        attachments: [{ filename: "logo-review-cancel.ics", mimeType: "text/calendar", size: 402, inline: false }],
+      },
+    ],
+  },
+);
 
 // Appointments in mail (see features/dates): a sale, an invitation among friends, a poster.
 SAMPLE_THREADS.push(

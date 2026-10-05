@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { colorFor, formatListDate, formatSize, initials, parseAddress, textToHtml } from "./format";
+import { colorFor, formatListDate, formatSize, initials, isEmail, parseAddress, textToHtml } from "./format";
 
 describe("formatListDate", () => {
   const now = new Date(2026, 8, 14, 15, 0);
@@ -52,5 +52,30 @@ describe("helpers", () => {
 
   it("escapes text before turning it into HTML", () => {
     expect(textToHtml("a <b>\nc\n\nd")).toBe("<p>a &lt;b&gt;<br>c</p><p>d</p>");
+  });
+});
+
+describe("isEmail", () => {
+  it("wants one @ and a dot inside the domain, and no white space", () => {
+    expect(isEmail(" leni@wanders.example ")).toBe(true);
+    expect(isEmail("a@b.c")).toBe(true);
+    expect(isEmail("a@b..c")).toBe(true);
+    expect(isEmail("a@.bc")).toBe(false);
+    expect(isEmail("a@bc.")).toBe(false);
+    expect(isEmail("a@bc")).toBe(false);
+    expect(isEmail("@b.c")).toBe(false);
+    expect(isEmail("a@b@c.d")).toBe(false);
+    expect(isEmail("le ni@wanders.example")).toBe(false);
+    expect(isEmail("leni@wanders\n.example")).toBe(false);
+  });
+
+  // Regression (webmail security audit WEBMAIL-1): a domain of nothing but dots, as in a crafted
+  // List-Unsubscribe header, took quadratic time in the old pattern.
+  it("stays fast on a long run of dots", () => {
+    const started = performance.now();
+    expect(isEmail(`a@${".".repeat(200_000)}@`)).toBe(false);
+    expect(isEmail(`a@${".".repeat(200_000)} `)).toBe(true);
+    expect(isEmail(`a@${".".repeat(200_000)}x!`)).toBe(true);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 });

@@ -36,9 +36,27 @@ function unwrapOnce(url: URL): URL | null {
   const host = url.hostname.toLowerCase().replace(/\.$/, "");
   if (!SAFE_LINKS_HOST.test(host) && !isTeamsSafeLinks(url, host)) return null;
   for (const [key, value] of url.searchParams) {
-    if (key.toLowerCase() === "url") return embeddedUrl(value);
+    if (key.toLowerCase() === "url") return embeddedUrl(value) ?? mailLink(value);
   }
   return null;
+}
+
+/** A wrapped mail link (Safe Links wrap `mailto:` too), plain or encoded up to twice, as the webmail reads it. */
+function mailLink(value: string): URL | null {
+  let candidate = value.trim();
+  for (let round = 0; round < 2 && /^mailto%3a/i.test(candidate); round++) {
+    try {
+      candidate = decodeURIComponent(candidate);
+    } catch {
+      return null;
+    }
+  }
+  if (!/^mailto:[^\s]+$/i.test(candidate)) return null;
+  try {
+    return new URL(candidate);
+  } catch {
+    return null;
+  }
 }
 
 /** The original address of a Microsoft Safe Link, or null for any other link. */
@@ -53,6 +71,25 @@ export function unwrapSafeLink(href: string): SafeLink | null {
   }
   if (current === outer) return null;
   return { url: current.href, wrapper: outer.hostname.toLowerCase() };
+}
+
+/** Marks a link in the reader whose Safe Link was taken off; holds the wrapper's host. */
+export const SAFE_LINK_MARKER = "data-uwu-safelink";
+
+/**
+ * Shows and links the original address in an `<a>` or `<area>` of the reader, and marks it with the
+ * wrapper's host, so the link question can still tell that Microsoft wrapped it. Link text that
+ * spelled out the wrapped address spells out the original.
+ */
+export function unwrapSafeLinkElement(element: Element): void {
+  const href = element.getAttribute("href");
+  if (!href) return;
+  const safe = unwrapSafeLink(href);
+  if (!safe) return;
+  element.setAttribute("href", safe.url);
+  element.setAttribute(SAFE_LINK_MARKER, safe.wrapper);
+  const only = element.childNodes.length === 1 ? element.firstChild : null;
+  if (only && only.nodeType === 3 && only.textContent?.trim() === href.trim()) only.textContent = safe.url;
 }
 
 /**

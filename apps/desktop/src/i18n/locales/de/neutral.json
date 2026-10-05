@@ -17,7 +17,8 @@
       "mail": "Mail",
       "calendar": "Kalender",
       "contacts": "Kontakte"
-    }
+    },
+    "scheduled": "Geplant"
   },
   "filter": {
     "all": "Alle",
@@ -131,7 +132,9 @@
     "hideAddresses": "Adressen ausblenden",
     "replyTo": "Antwort an",
     "copyAddress": "{{email}} kopieren",
-    "addressCopied": "Adresse kopiert"
+    "addressCopied": "Adresse kopiert",
+    "teamsMeeting": "Teams-Besprechung",
+    "teamsJoin": "Teilnehmen"
   },
   "compose": {
     "new": "Neue Mail",
@@ -169,7 +172,26 @@
     "editSignatures": "Signaturen bearbeiten …",
     "companyFooter": "Beim Senden hängt der Server die Fußzeile deiner Organisation an.",
     "signatureForDomain": "Signatur für {{domain}}",
-    "signatureForAllDomains": "Signatur für alle Domains"
+    "signatureForAllDomains": "Signatur für alle Domains",
+    "later": {
+      "open": "Später senden",
+      "title": "Später senden",
+      "laterToday": "Heute Abend",
+      "tomorrowMorning": "Morgen früh",
+      "tomorrowAfternoon": "Morgen Nachmittag",
+      "mondayMorning": "Montag früh",
+      "pick": "Datum und Uhrzeit wählen",
+      "schedule": "Planen",
+      "problem": {
+        "invalid": "Wähle ein Datum und eine Uhrzeit.",
+        "tooSoon": "Wähle eine Zeit, die mindestens ein paar Minuten entfernt ist.",
+        "tooFar": "Dein Server hält Mails höchstens {{days}} Tage zurück.",
+        "tooFarLocal": "UwUMail hält Mails höchstens {{days}} Tage zurück."
+      },
+      "server": "Dein UwUMail-Server sendet die Mail zur gewählten Zeit, auch wenn UwUMail dann zu ist.",
+      "local": "Dieses Postfach kann Mails nicht auf dem Server zurückhalten. Die Mail wartet auf diesem Gerät und geht raus, wenn UwUMail zu der Zeit läuft, auch im Hintergrund. Ist UwUMail dann zu, geht sie beim nächsten Start raus.",
+      "localIos": "Dieses Postfach kann Mails nicht auf dem Server zurückhalten. Die Mail wartet auf diesem iPhone und geht raus, sobald du UwUMail zu oder nach dieser Zeit öffnest."
+    }
   },
   "toast": {
     "sent": "Mail gesendet",
@@ -186,8 +208,9 @@
     "draftGone": "In dieser Unterhaltung liegt kein Entwurf mehr.",
     "sending": "Mail wird gesendet …",
     "undo": "Rückgängig",
-    "sendUndone": "Senden abgebrochen. Du kannst weiterschreiben.",
+    "sendUndone": "Senden gestoppt. Die Mail ist wieder offen.",
     "undoTooLate": "Zu spät, die Mail ist schon unterwegs.",
+    "undoFailed": "Die Mail konnte nicht zurückgeholt werden. {{reason}}",
     "sendFailedKept": "Die Mail konnte nicht gesendet werden: {{reason}} Sie liegt in den Entwürfen.",
     "open": "Öffnen",
     "moved": "Nach „{{folder}}“ verschoben",
@@ -204,7 +227,9 @@
     "unsubscribeFailed": "Das Abmelden hat nicht geklappt. {{reason}}",
     "messageSaved": "Mail gespeichert",
     "deletedForever_one": "{{count}} Mail endgültig gelöscht",
-    "deletedForever_other": "{{count}} Mails endgültig gelöscht"
+    "deletedForever_other": "{{count}} Mails endgültig gelöscht",
+    "scheduled": "Wird gesendet: {{time}}",
+    "sendFailedHeld": "Die Mail konnte nicht gesendet werden: {{reason}} Sie wartet unter Geplant."
   },
   "status": {
     "syncing": "Suche nach neuen Mails",
@@ -240,8 +265,8 @@
       "name": "Profi",
       "desc": "Ordner immer sichtbar, drei Spalten, Tastenkürzel."
     },
-    "resizeNav": "Breite der Seitenleiste ändern",
-    "resizeList": "Breite der Mailliste ändern"
+    "resizeNav": "Breite der Seitenleiste",
+    "resizeList": "Breite der Mailliste"
   },
   "tone": {
     "playful": {
@@ -336,7 +361,7 @@
     "remoteAsk": "Jedes Mal fragen",
     "remoteAlways": "Immer laden",
     "trustedSenders": "Bilder immer laden von",
-    "trustedSendersDesc": "Eine Firma wie @shop.de schließt alle ihre Adressen ein, auch news@ oder noreply@.",
+    "trustedSendersDesc": "Eine Firma wie @shop.example schließt alle ihre Adressen ein, auch news@ oder noreply@.",
     "trustedSendersEmpty": "Noch niemand. Du fügst Absender direkt im Bilder-Hinweis einer Mail hinzu.",
     "trustedSendersInactive": "Wirkt erst mit „Jedes Mal fragen“. Gerade lädt UwUMail alle Bilder.",
     "untrustSender": "{{sender}} entfernen",
@@ -360,8 +385,8 @@
     "darkImagesDesc": "Helle Bilder in dunklen Mails werden mit umgefärbt: Weißer Hintergrund wird dunkel, dunkle Schrift hell. Fotos bleiben, wie sie sind.",
     "forgetAppearances": "Gemerkte Absender zurücksetzen ({{count}})",
     "appearancesForgotten": "Gemerkte Absender zurückgesetzt",
-    "senderPictures": "Bilder für Firmenabsender",
-    "senderPicturesDesc": "Zeigt das Markenlogo oder Website-Icon von Firmen. UwUMail fragt dafür höchstens einmal im Monat bei der Website der Firma an, nie pro Mail. Hast du ein Konto auf einem UwUMail-Server, fragt der Server statt dieses Geräts. Leute bei Mailanbietern wie Gmail behalten ihre Initialen.",
+    "senderPictures": "Absenderbilder",
+    "senderPicturesDesc": "Zeigt Bilder von Leuten und Logos von Firmen statt Initialen. Hast du ein Konto auf einem UwUMail-Server, fragt der Server statt dieses Geräts; sonst fragt UwUMail höchstens einmal im Monat bei der Website einer Firma an, nie pro Mail. Ausgeschaltet siehst du trotzdem die Fotos deiner Kontakte und die Bilder der Leute auf deinem UwUMail-Server.",
     "clearSenderPictures": "Gespeicherte Bilder löschen",
     "senderPicturesCleared": "Gespeicherte Bilder gelöscht",
     "detectEvents": "Termine in Mails erkennen",
@@ -451,6 +476,7 @@
     "signatureDefaultNew": "Neue Mails",
     "signatureDefaultReplies": "Antworten",
     "signatureSaved": "Signatur gespeichert",
+    "signatureChangedElsewhere": "Die Signaturen wurden inzwischen woanders geändert. Sie sind neu geladen, bitte prüfe sie und speichere noch einmal.",
     "signatureUntitled": "Signatur",
     "blockedSenders": "Blockierte Absender",
     "blockedSendersDesc": "Neue Mails von diesen Absendern landen im Spam-Ordner. Bei Konten auf einem UwUMail-Server sortiert der Server selbst, auch wenn die App geschlossen ist. Blockieren kannst du über „Mehr“ in einer Mail.",
@@ -507,7 +533,10 @@
     "signatureOverride": "Eigene Signatur für diese Adresse",
     "signatureBackToDomain": "Domain-Signatur verwenden",
     "signatureDeviceFirst": "In dieser App haben diese Adressen eigene Signaturen. Sie gehen hier vor der Signatur vom Server. Lösch sie, wenn die vom Server gelten soll.",
-    "signatureTooBig": "Die Signatur ist zu groß. Nimm ein kleineres Bild."
+    "signatureTooBig": "Die Signatur wird zu groß. Nimm ein kleineres Bild oder weniger Bilder.",
+    "profile": "Profilbild",
+    "masked": "Maskierte Adressen",
+    "serverAccount": "Postfach"
   },
   "theme": {
     "system": "System",
@@ -620,7 +649,15 @@
     "notPdf": "Diese Datei gibt sich als PDF aus, ist aber keins, deshalb wird sie hier nicht angezeigt. Speichere sie oder öffne sie mit einer App, wenn du ihr vertraust.",
     "dangerOpen": "Trotzdem öffnen",
     "dangerCancel": "Nicht öffnen",
-    "packageBlocked": "App-Pakete aus Mails öffnet UwUMail nicht. Speichere die Datei in Downloads, wenn du sie erwartet hast und dem Absender vertraust."
+    "packageBlocked": "App-Pakete aus Mails öffnet UwUMail nicht. Speichere die Datei in Downloads, wenn du sie erwartet hast und dem Absender vertraust.",
+    "tnef": "Outlook hat diese Mail verpackt, und sie ließ sich nicht auspacken. Bei einem UwUMail-Konto hilft ein Update des Servers.",
+    "dangerSave": "Trotzdem speichern",
+    "dangerous": {
+      "titleOpen": "Diese Datei öffnen?",
+      "titleSave": "Diese Datei speichern?",
+      "body": "Dateien dieser Art können Programme auf deinem Rechner starten. Öffne oder speichere sie nur, wenn du sie erwartet hast und der Absenderin oder dem Absender vertraust."
+    },
+    "pdfNoPreview": "Dieses PDF kann hier nicht angezeigt werden. Öffne es mit deinem PDF-Programm oder speichere es."
   },
   "update": {
     "readyTitle": "Neue Version bereit",
@@ -659,10 +696,11 @@
     "hiddenTarget": "Wohin es danach geht, steht nicht im Link.",
     "otherTarget": "Anderes Ziel als angezeigt",
     "statusRedirect": "leitet weiter zu {{target}}",
-    "safeLinkRemoved": "Microsoft-Safe-Link entfernt",
-    "safeLinkBody": "Microsoft hat diesen Link für seinen Link-Scanner verpackt ({{host}}). UwUMail zeigt und öffnet die ursprüngliche Adresse.",
+    "safeLink": "Microsoft-Safe-Link entfernt",
+    "safeLinkBody": "Microsoft hatte diesen Link in eine Prüfadresse verpackt. Du siehst und öffnest stattdessen die echte Adresse.",
     "unsupported": "Diese Art Link öffnet UwUMail nicht.",
-    "sheetTitle": "Link"
+    "sheetTitle": "Link",
+    "safeLinkRemoved": "Microsoft-Safe-Link entfernt"
   },
   "dates": {
     "barLabel": "Termine in dieser Mail",
@@ -690,7 +728,7 @@
     "notesFrom": "Aus der Mail „{{subject}}“ von {{sender}}",
     "noSubject": "(kein Betreff)",
     "findAppointment": "Termin suchen",
-    "searching": "Suche Termine in dieser Mail …",
+    "searching": "Die KI sucht nach Terminen …",
     "noneFound": "In dieser Mail steht kein anstehender Termin."
   },
   "density": {
@@ -754,7 +792,17 @@
     "mailToFallback": "Klappt das nicht direkt, geht eine Mail von dir an {{address}}.",
     "body": "UwUMail meldet dich direkt beim Absender ab. Danach sollten keine Mails mehr von dort kommen.",
     "bodyPage": "Der Absender hat dafür eine eigene Seite. UwUMail öffnet sie für dich, dort bestätigst du die Abmeldung.",
-    "archive": "Bisherige Mails von dort archivieren"
+    "bodyOneClick": "UwUMail bittet den Server des Absenders in einem Schritt, dich aus der Liste zu nehmen. Danach sollten keine Mails mehr von dort kommen.",
+    "orPage": "Klappt das so nicht, öffnet sich die Seite des Absenders.",
+    "archive": "Bisherige Mails von dort archivieren",
+    "failedTitle": "Das hat nicht geklappt",
+    "failed": "Der Server des Absenders hat es nicht angenommen: {{reason}}",
+    "failedNoReason": "Der Server des Absenders hat es nicht angenommen.",
+    "tryMail": "Du kannst dich stattdessen per Mail abmelden. Dafür geht eine Mail von dir an {{address}}.",
+    "tryPage": "Du kannst dich stattdessen auf der Seite des Absenders abmelden.",
+    "noOtherWay": "Diese Mail bietet keinen anderen Weg. Versuch es später noch mal.",
+    "sendMail": "Mail senden",
+    "openPage": "Seite öffnen"
   },
   "deleteForever": {
     "title_one": "Diese Mail endgültig löschen?",
@@ -808,9 +856,11 @@
     "renamed": "Umbenannt in „{{name}}“",
     "deleted": "Ordner „{{name}}“ gelöscht",
     "deleteTitle": "„{{name}}“ löschen?",
-    "deleteBody_one": "Die {{count}} Mail darin kommt vorher in den Papierkorb.",
-    "deleteBody_other": "Die {{count}} Mails darin kommen vorher in den Papierkorb.",
-    "deleteBodyEmpty": "Der Ordner ist leer, sonst geht nichts mit.",
+    "deleteBody_one": "Die {{count}} Mail darin kommt in den Papierkorb.",
+    "deleteBody_other": "Die {{count}} Mails darin kommen in den Papierkorb.",
+    "deleteBodyEmpty": "Der Ordner ist leer.",
+    "hasChildrenTitle": "In „{{name}}“ liegen noch Ordner",
+    "hasChildrenBody": "Lösch oder verschieb erst die Ordner darin, dann den Ordner selbst.",
     "emptyTrashTitle": "Papierkorb leeren?",
     "emptyJunkTitle": "Spam-Ordner leeren?",
     "emptyBody_one": "{{count}} Mail wird endgültig gelöscht, auch auf dem Server. Das lässt sich nicht rückgängig machen.",
@@ -818,7 +868,16 @@
     "emptyConfirm": "Endgültig löschen",
     "emptied_one": "{{count}} Mail endgültig gelöscht",
     "emptied_other": "{{count}} Mails endgültig gelöscht",
-    "alreadyEmpty": "Nichts zu löschen, der Ordner ist schon leer"
+    "alreadyEmpty": "Nichts zu löschen, der Ordner ist schon leer",
+    "problem": {
+      "empty": "Gib einen Namen ein.",
+      "slash": "Ein Ordnername darf kein „/“ enthalten.",
+      "character": "Ein Ordnername darf kein „{{character}}“ enthalten.",
+      "control": "Der Name enthält unsichtbare Steuerzeichen.",
+      "tooLong": "Der Name ist zu lang.",
+      "dots": "„.“ und „..“ gehen als Ordnername nicht.",
+      "taken": "Hier gibt es schon einen Ordner mit diesem Namen."
+    }
   },
   "calendar": {
     "title": "Kalender",
@@ -952,6 +1011,16 @@
       "calendarCreated": "Kalender „{{name}}“ angelegt",
       "calendarDeleted": "Kalender „{{name}}“ gelöscht"
     },
+    "participants": "Teilnehmende",
+    "organizer": "Organisiert",
+    "answer": {
+      "needs-action": "Noch keine Antwort",
+      "accepted": "Zugesagt",
+      "tentative": "Vielleicht",
+      "declined": "Abgesagt"
+    },
+    "moreParticipants_one": "und {{count}} weitere Person",
+    "moreParticipants_other": "und {{count}} weitere",
     "birthdays": {
       "turns_one": "wird {{count}}",
       "turns_other": "wird {{count}}",
@@ -1019,8 +1088,8 @@
     "valid": "Der Server nimmt diese Regeln an.",
     "inactive": "Diese Regeln sind auf dem Server gerade ausgeschaltet.",
     "activate": "Einschalten",
-    "otherActive": "Gerade sortiert ein anderes Filterskript, „{{name}}“, deine Mail auf dem Server. Wenn du hier Regeln speicherst, wird es ausgeschaltet.",
-    "otherActiveUnnamed": "Gerade sortiert ein anderes Filterskript deine Mail auf dem Server. Wenn du hier Regeln speicherst, wird es ausgeschaltet.",
+    "otherActive": "Gerade sortiert ein anderes Filterskript, „{{name}}“, deine Mails auf dem Server. Wenn du hier Regeln speicherst, wird es abgeschaltet.",
+    "otherActiveUnnamed": "Gerade sortiert ein anderes Filterskript deine Mails auf dem Server. Wenn du hier Regeln speicherst, wird es abgeschaltet.",
     "takeOver": "Stattdessen diese Regeln nutzen",
     "name": "Name",
     "namePlaceholder": "z. B. „Rechnungen“",
@@ -1234,7 +1303,11 @@
     "reminderWeekBefore": "1 Woche vorher",
     "reminderOther_one": "{{count}} Tag vorher um {{time}}",
     "reminderOther_other": "{{count}} Tage vorher um {{time}}",
-    "remindersHint": "Sie klingeln auf allen Geräten mit dem Geburtstagskalender."
+    "remindersHint": "Sie klingeln auf allen Geräten mit dem Geburtstagskalender.",
+    "picture": {
+      "logo": "Firmenlogo",
+      "noLogo": "Für {{domain}} gibt es kein Logo."
+    }
   },
   "accountContacts": {
     "title": "Kontakte",
@@ -1371,6 +1444,8 @@
         "sure": "sicher"
       },
       "modelVerdict": "Das Modell meinte „{{verdict}}“, das geben die Fakten aber nicht her. Das Urteil bleibt in dem Rahmen, den sie zulassen.",
+      "modelWordsTitle": "In den eigenen Worten des Modells",
+      "modelWordsHint": "Diese Gründe hat das Modell selbst formuliert und niemand hat sie geprüft. Verlass dich auf die geprüften Fakten.",
       "serverTitle": "Was der Server festgestellt hat",
       "auth": "Absenderprüfung",
       "authNone": "Nicht geprüft: Die Mail kam nicht von einem anderen Server.",
@@ -1651,18 +1726,18 @@
       "limitReached": "Das Tageslimit ist erreicht. Es gilt wieder ab Mitternacht (UTC).",
       "lastDays_one": "Letzter Tag",
       "lastDays_other": "Letzte {{count}} Tage",
-      "nothing": "In dieser Zeit nichts verbraucht."
+      "nothing": "In dieser Zeit nichts verbraucht.",
+      "thinking": "davon {{formatted}} Nachdenken"
     },
     "estimate": {
-      "tokens": "≈ {{formatted}} Tokens",
+      "tokens_one": "≈ {{formatted}} Token",
+      "tokens_other": "≈ {{formatted}} Tokens",
       "tokensLeft": "heute noch {{formatted}} übrig",
       "requestsLeft_one": "heute noch {{formatted}} Anfrage",
       "requestsLeft_other": "heute noch {{formatted}} Anfragen",
       "withMax": "{{cost}} (max. {{max}})",
       "pictures_one": "{{formatted}} Bild",
       "pictures_other": "{{formatted}} Bilder",
-      "calls_one": "{{formatted}} Aufruf",
-      "calls_other": "{{formatted}} Aufrufe",
       "calibrated": "Anhand deiner letzten Aufrufe angepasst",
       "part": {
         "input": "Eingabe",
@@ -1671,7 +1746,19 @@
         "thinking": "Nachdenken",
         "extraCalls": "Zusätzliche Aufrufe",
         "fees": "Gebühren"
-      }
+      },
+      "purpose": {
+        "pictures": "Bilder lesen",
+        "chunk": "Teile zusammenfassen",
+        "retry": "neuer Versuch",
+        "refine": "Verfeinern",
+        "other": "weitere Schritte"
+      },
+      "times": "{{count}} × {{what}}",
+      "sometimes": "{{what}} (manchmal)",
+      "tokens": "≈ {{formatted}} Tokens",
+      "calls_one": "{{formatted}} Aufruf",
+      "calls_other": "{{formatted}} Aufrufe"
     },
     "local": {
       "title": "Auf diesem Computer gefunden",
@@ -1716,17 +1803,21 @@
     "create": "Label anlegen",
     "otherMailboxes": "Andere Postfächer",
     "otherMailbox": "„{{name}}“ gehört zu einem anderen Postfach.",
-    "added_one": "„{{name}}“ vergeben",
-    "added_other": "„{{name}}“ an {{count}} Unterhaltungen vergeben",
-    "removed_one": "„{{name}}“ entfernt",
-    "removed_other": "„{{name}}“ von {{count}} Unterhaltungen entfernt",
-    "pickerTitle": "Labels",
-    "pickerSearch": "Label suchen oder anlegen",
-    "pickerEmpty": "Noch keine Labels. Tippe einen Namen, um eins anzulegen.",
-    "pickerNone": "Kein Label mit diesem Namen.",
-    "createNamed": "„{{name}}“ anlegen",
     "createdApplied": "„{{name}}“ angelegt und vergeben",
     "pick": "Labels …",
+    "quick": {
+      "title": "Labels",
+      "search": "Label suchen oder anlegen",
+      "for_one": "Für {{count}} Unterhaltung. Enter oder ein Klick setzt ein Label oder nimmt es ab.",
+      "for_other": "Für {{count}} Unterhaltungen. Enter oder ein Klick setzt ein Label oder nimmt es ab.",
+      "create": "„{{name}}“ anlegen",
+      "none": "Noch keine Labels. Tippe einen Namen, um eins anzulegen.",
+      "noMatch": "Kein Label mit diesem Namen.",
+      "added_one": "Label „{{name}}“ gesetzt",
+      "added_other": "Label „{{name}}“ bei {{count}} Unterhaltungen gesetzt",
+      "removed_one": "Label „{{name}}“ entfernt",
+      "removed_other": "Label „{{name}}“ bei {{count}} Unterhaltungen entfernt"
+    },
     "group": "Nach Label gruppieren",
     "ungroup": "Nicht mehr nach Label gruppieren",
     "none": "Ohne Label",
@@ -1853,6 +1944,11 @@
       "title": "Basis-Labels",
       "description": "Acht feste Labels mit je einer klaren Definition, damit Mails immer gleich gelabelt werden. Name und Farbe kannst du ändern, und bei jedem einzeln festlegen, ob es von selbst gesetzt wird.",
       "showDefinition": "Definition zeigen",
+      "previousDescription": "Deine frühere Beschreibung:",
+      "previousHint": "So hattest du das Label beschrieben, bevor das Basis-Label es übernommen hat. Das Modell bekommt diese Beschreibung weiter als Hinweis neben der Definition des Basis-Labels, entscheidend ist die Definition. Wenn du sie vergisst, wird sie nicht mehr mitgeschickt.",
+      "forgetPrevious": "Vergessen",
+      "previousForgotten": "Die frühere Beschreibung wird nicht mehr mitgeschickt.",
+      "usePrevious": "Als eigenes Label anlegen",
       "hideDefinition": "Definition ausblenden",
       "auto": "„{{name}}“ von selbst setzen",
       "autoOn": "wird von selbst gesetzt",
@@ -1880,7 +1976,16 @@
       "meaning": "Meint dasselbe wie das Basis-Label „{{name}}“.",
       "words": "Sehr ähnliche Wörter wie „{{name}}“: {{words}}",
       "hint": "Speichern geht trotzdem, aber Mails bekommen dann vielleicht das falsche der beiden."
-    }
+    },
+    "added_one": "„{{name}}“ vergeben",
+    "added_other": "„{{name}}“ an {{count}} Unterhaltungen vergeben",
+    "removed_one": "„{{name}}“ entfernt",
+    "removed_other": "„{{name}}“ von {{count}} Unterhaltungen entfernt",
+    "pickerTitle": "Labels",
+    "pickerSearch": "Label suchen oder anlegen",
+    "pickerEmpty": "Noch keine Labels. Tippe einen Namen, um eins anzulegen.",
+    "pickerNone": "Kein Label mit diesem Namen.",
+    "createNamed": "„{{name}}“ anlegen"
   },
   "shared": {
     "title": "Gemeinsame Postfächer",
@@ -1915,5 +2020,251 @@
   "font": {
     "system": "Systemschrift",
     "sample": "Hallo – Termin um 10:30"
+  },
+  "scheduled": {
+    "title": "Geplante Mails",
+    "desc": "Mails von Postfächern auf einem UwUMail-Server sendet dein Server zur gewählten Zeit, auch wenn UwUMail zu ist. Alle anderen warten auf diesem Gerät und gehen raus, wenn UwUMail zu der Zeit läuft, sonst beim nächsten Start.",
+    "empty": "Nichts wartet aufs Senden.",
+    "to": "An {{names}}",
+    "edit": "Bearbeiten",
+    "stop": "Nicht senden",
+    "stopped": "Nicht gesendet. Die Mail liegt wieder in den Entwürfen.",
+    "reschedule": "Andere Zeit",
+    "rescheduled": "Neue Zeit: {{time}}",
+    "sendNow": "Jetzt senden",
+    "sentNow": "Die Mail geht jetzt raus.",
+    "onServer": "Auf dem Server",
+    "onDevice": "Auf diesem Gerät",
+    "retrying": "Server nicht erreichbar, nächster Versuch: {{time}}",
+    "failed": "Das hat nicht geklappt: {{reason}}",
+    "heldFailed": "Nicht gesendet: {{reason}} Sie wartet hier, bis du sie erneut sendest, die Zeit änderst, sie bearbeitest oder stoppst.",
+    "heldUnsure": "Ist vielleicht schon raus: {{reason}} Sie wird nur erneut gesendet, wenn du das auswählst."
+  },
+  "masked": {
+    "title": "Maskierte Adressen",
+    "description": "Eine maskierte Adresse ist eine zufällige Adresse für eine einzelne Website. Mails an sie kommen hier an, aber die Seite erfährt deine echte Adresse nie. Bekommt eine davon Spam, weißt du, wer sie weitergegeben hat, und schaltest sie ab. Auch Passwortmanager können sie für dich anlegen.",
+    "closedTitle": "Maskierte Adressen sind für dich nicht freigeschaltet",
+    "closedBody": "Deine Administration hat neue maskierte Adressen für dein Konto nicht freigeschaltet. Die, die du schon hast, funktionieren weiter und lassen sich hier verwalten.",
+    "new": "Neue maskierte Adresse",
+    "create": "Adresse anlegen",
+    "created": "Deine neue Adresse ist bereit:",
+    "done": "Fertig",
+    "copy": "{{email}} kopieren",
+    "copied": "Adresse kopiert",
+    "copyFailed": "Die Adresse konnte nicht kopiert werden. Markiere sie und kopiere sie von Hand.",
+    "field": {
+      "description": "Beschreibung",
+      "site": "Website",
+      "url": "Link (optional)",
+      "prefix": "Präfix (optional)",
+      "domain": "Domain"
+    },
+    "placeholder": {
+      "description": "z. B. Onlineshop"
+    },
+    "hint": {
+      "url": "Wo du sie nutzt, zum Beispiel deine Kontoseite oder ein Eintrag im Passwortmanager.",
+      "prefix": "Steht vor dem zufälligen Teil, etwa shop.maple.otter482@…"
+    },
+    "domainAutomatic": "Automatisch",
+    "onDomain": "Neue Adressen enden auf @{{domain}}.",
+    "problem": {
+      "tooLong": "Höchstens {{max}} Zeichen.",
+      "control": "Zeilenumbrüche und Steuerzeichen gehen hier nicht.",
+      "spaces": "Ein Link darf keine Leerzeichen enthalten.",
+      "prefix": "Nur Kleinbuchstaben a–z, Ziffern und _, höchstens {{max}} Zeichen."
+    },
+    "loading": "Maskierte Adressen werden geladen …",
+    "loadFailed": "Die maskierten Adressen konnten nicht geladen werden. {{reason}}",
+    "empty": "Noch keine maskierten Adressen. Leg eine für die nächste Seite an, bei der du dich anmeldest.",
+    "emptyFilter": {
+      "active": "Keine aktiven maskierten Adressen.",
+      "disabled": "Keine ist ausgeschaltet.",
+      "deleted": "Keine ist gelöscht."
+    },
+    "noMatch": "Keine maskierte Adresse passt zu deiner Suche.",
+    "search": "Maskierte Adressen durchsuchen",
+    "filter": {
+      "label": "Anzeigen",
+      "active": "Aktiv",
+      "disabled": "Aus",
+      "deleted": "Gelöscht"
+    },
+    "onOff": "{{email}} ein- oder ausschalten",
+    "edit": "{{email}} bearbeiten",
+    "delete": "{{email}} löschen",
+    "restore": "Wiederherstellen",
+    "openUrl": "Link von {{email}} öffnen",
+    "createdAt": "Angelegt am {{date}}",
+    "lastMessage": "letzte Mail am {{date}}",
+    "noMessage": "noch keine Mail",
+    "pending": "Wartet auf ihre erste Mail. Kommt innerhalb von 24 Stunden keine, wird sie gelöscht.",
+    "saved": "Änderungen gespeichert",
+    "deleted": "{{email}} gelöscht. Mails an sie werden jetzt abgewiesen.",
+    "restored": "{{email}} funktioniert wieder",
+    "error": {
+      "forbidden": "Diese Adresse kann nicht angelegt werden: Die Domain ist für dich nicht erlaubt, oder du hast die Höchstzahl maskierter Adressen erreicht.",
+      "invalid": "Der Server hat diese Angaben nicht angenommen. Prüf die Felder und versuch es noch einmal.",
+      "notFound": "Diese maskierte Adresse gibt es nicht mehr. Die Liste wurde neu geladen.",
+      "connection": "Der Server ist nicht erreichbar. Versuch es gleich noch einmal.",
+      "signedOut": "Deine Sitzung ist abgelaufen. Melde dich neu an, um weiterzumachen.",
+      "generic": "Etwas ist schiefgegangen. Versuch es gleich noch einmal."
+    }
+  },
+  "picture": {
+    "loading": "Bild wird geladen …",
+    "crop": {
+      "title": "Bild zuschneiden",
+      "area": "Bild im Kreis",
+      "hint": "Ziehen verschiebt, Scrollen oder zwei Finger zoomen. Tastatur: Pfeiltasten verschieben, + und − zoomen.",
+      "zoom": "Zoom",
+      "zoomIn": "Vergrößern",
+      "zoomOut": "Verkleinern",
+      "use": "Bild übernehmen"
+    },
+    "error": {
+      "notImage": "Das ist kein Bild.",
+      "tooLarge": "Das Bild ist zu groß. Bis {{size}} geht.",
+      "unreadable": "Das Bild ließ sich nicht lesen."
+    },
+    "choose": "Bild auswählen",
+    "change": "Bild ändern",
+    "camera": "Foto aufnehmen",
+    "remove": "Entfernen",
+    "hint": "Oder zieh ein Bild auf den Kreis oder füge eins ein."
+  },
+  "profile": {
+    "picture": "Dein Bild",
+    "pictureDesc": "Es steht neben deinem Namen, wo Leute es sehen dürfen. Wähl ein Bild und rück es im Kreis zurecht.",
+    "visibility": "Wer es sieht",
+    "off": {
+      "title": "Niemand",
+      "body": "Deine Mails zeigen deine Initialen."
+    },
+    "server": {
+      "title": "Leute auf diesem Server",
+      "body": "Alle mit einem Postfach hier sehen es neben deinen Mails."
+    },
+    "public": {
+      "title": "Alle",
+      "body": "Auch andere Mailserver und Apps können es zeigen, über Libravatar. Wer deine Adresse kennt, kann es abrufen."
+    },
+    "publicForbidden": "Öffentliche Bilder hat deine Admin-Person ausgeschaltet.",
+    "face": "Mein Bild in Mails mitschicken",
+    "faceDesc": "Legt jeder Mail, die du schickst, eine kleine Kopie bei (der Face-Header), die manche Mailprogramme zeigen. Nur solange dein Bild öffentlich ist.",
+    "saved": "Bild gespeichert",
+    "removed": "Bild entfernt",
+    "failed": "Das hat nicht geklappt. {{reason}}",
+    "loading": "Dein Bild wird geladen …",
+    "loadFailed": "Dein Bild ließ sich nicht laden."
+  },
+  "sharing": {
+    "notAllowed": "Die Person, der dieser Ordner gehört, hat das nicht erlaubt.",
+    "sharedBy": "Geteilt von {{name}}",
+    "sharedWithCount_one": "Mit {{count}} Person geteilt",
+    "sharedWithCount_other": "Mit {{count}} Personen geteilt",
+    "title": "„{{name}}“ teilen",
+    "current": "Wer Zugriff hat",
+    "nobody": "Noch mit niemandem geteilt.",
+    "levelFor": "Zugriff für {{name}}",
+    "remove": "Nicht mehr mit {{name}} teilen",
+    "removed": "Nicht mehr mit {{name}} geteilt",
+    "add": "Mit jemandem teilen",
+    "share": "Teilen",
+    "shared": "Mit {{name}} geteilt",
+    "search": "Name oder Adresse von jemandem auf diesem Server",
+    "loadingPeople": "Personen werden geladen …",
+    "peopleFailed": "Die Personen auf diesem Server konnten nicht geladen werden.",
+    "noPeople": "Sonst passt niemand.",
+    "level": {
+      "read": "Lesen",
+      "write": "Lesen und schreiben",
+      "all": "Alles"
+    },
+    "shareCalendar": "Teilen …",
+    "leaveCalendar": "Aus meinen Kalendern entfernen",
+    "leaveCalendarTitle": "„{{name}}“ aus deinen Kalendern entfernen?",
+    "leaveCalendarBody": "Der Kalender gehört weiter {{name}}. Du siehst ihn nur nicht mehr, bis er wieder mit dir geteilt wird.",
+    "levelsDesc": {
+      "calendar": "Lesen: den Kalender und seine Termine sehen. Lesen und schreiben: außerdem Termine anlegen, ändern und löschen. Alles: außerdem ihn umbenennen, seine Farbe ändern und weiter teilen."
+    }
+  },
+  "invitation": {
+    "title": "Einladung",
+    "from": "Einladung von {{name}}",
+    "answer": "Deine Antwort",
+    "accepted": "Zusagen",
+    "tentative": "Vielleicht",
+    "declined": "Absagen",
+    "status": {
+      "needs-action": "Du hast noch nicht geantwortet.",
+      "accepted": "Du hast zugesagt.",
+      "tentative": "Du hast mit Vielleicht geantwortet.",
+      "declined": "Du hast abgesagt."
+    },
+    "answered": {
+      "needs-action": "Antwort zurückgenommen",
+      "accepted": "Zugesagt. Die einladende Person erfährt es.",
+      "tentative": "Mit Vielleicht geantwortet. Die einladende Person erfährt es.",
+      "declined": "Abgesagt. Die einladende Person erfährt es."
+    },
+    "failed": "Die Antwort konnte nicht gesendet werden. {{reason}}",
+    "cancelled": "Dieser Termin wurde abgesagt.",
+    "reply": {
+      "title": "Antwort auf deine Einladung",
+      "status": {
+        "needs-action": "{{name}} hat noch nicht geantwortet.",
+        "accepted": "{{name}} hat zugesagt.",
+        "tentative": "{{name}} hat mit Vielleicht geantwortet.",
+        "declined": "{{name}} hat abgesagt."
+      }
+    },
+    "unverified": {
+      "invitation": "Diese Einladung kommt nicht von der Person, die den Termin angelegt hat, deshalb kannst du sie hier nicht beantworten. Wenn du den Termin kennst, antworte im Kalender.",
+      "cancel": "Diese Mail sagt, der Termin fällt aus, aber nichts bestätigt, dass sie von der Person kommt, die ihn angelegt hat. Dein Kalender behält den Termin, wie er ist.",
+      "reply": "Diese Antwort kommt von niemandem, der zum Termin eingeladen ist, deshalb zählt sie nicht.",
+      "sender": "Gesendet von {{sender}}.",
+      "senderAndOrganizer": "Gesendet von {{sender}}; angelegt hat den Termin {{organizer}}."
+    },
+    "when": "Wann",
+    "where": "Wo",
+    "organizer": "Einladende Person",
+    "attendees": "Eingeladen",
+    "attendeesMore": "und {{count}} weitere",
+    "repeats": "Wiederholt sich",
+    "occurrence": "Diese Mail betrifft nur einen Termin der Reihe: {{date}}",
+    "update": "Die einladende Person hat den Termin geändert. Deine Antwort gilt für die neue Fassung.",
+    "outdated": "Dein Kalender hat schon eine neuere Fassung dieses Termins, deshalb kannst du diese Mail nicht mehr beantworten.",
+    "cancelledDate": "Dieser Termin der Reihe wurde abgesagt.",
+    "remove": "Aus dem Kalender entfernen",
+    "removeDate": "Termin aus dem Kalender entfernen",
+    "removed": "Aus deinem Kalender entfernt.",
+    "removeFailed": "Der Termin konnte nicht entfernt werden. {{reason}}",
+    "commentAdd": "Kommentar hinzufügen",
+    "commentLabel": "Kommentar an die einladende Person",
+    "commentPlaceholder": "Geht mit deiner Antwort mit",
+    "senderUnconfirmed": "Der empfangende Mailserver hat die Absenderadresse nicht bestätigt. Antworte nur, wenn du diese Einladung erwartet hast.",
+    "place": {
+      "server": "Dein UwUMail-Server sagt der einladenden Person Bescheid.",
+      "microsoft": "Microsoft sagt der einladenden Person Bescheid.",
+      "google": "Google sagt der einladenden Person Bescheid.",
+      "calendar": "UwUMail trägt den Termin in deinen Kalender ein und schickt der einladenden Person deine Antwort per Mail.",
+      "device": "UwUMail behält den Termin im Kalender „Einladungen“ auf diesem Gerät und schickt der einladenden Person deine Antwort per Mail."
+    },
+    "attendeeStatus": {
+      "needs-action": "noch keine Antwort",
+      "accepted": "zugesagt",
+      "tentative": "vielleicht",
+      "declined": "abgesagt"
+    },
+    "localCalendar": "Einladungen"
+  },
+  "push": {
+    "showContent": "Absender und Betreff zeigen",
+    "showContentDesc": "Ist das aus, sagt eine Benachrichtigung nur, dass neue Post da ist. Mit der App-Sperre sagt sie nie mehr.",
+    "notification": {
+      "newMail": "Neue Mail",
+      "hidden": "Öffne UwUMail, um sie zu lesen."
+    }
   }
 }

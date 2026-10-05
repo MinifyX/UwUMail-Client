@@ -13,7 +13,7 @@ import { useCalendarUi } from "../calendar/state";
 import { eventDraft, openInCalendar } from "./addToCalendar";
 import { useDismissedDates } from "./dismissed";
 import { useEventSearch } from "./search";
-import { EventsBar } from "./EventsBar";
+import { DatePopover, EventsBar } from "./EventsBar";
 import { swappedDay, whenLabel } from "./format";
 import { useMailEvents, type MailEvents } from "./useMailEvents";
 
@@ -282,7 +282,7 @@ describe("EventsBar", () => {
         onAdd={vi.fn()}
       />,
     );
-    expect(screen.getByRole("status").textContent).toContain("Looking for appointments");
+    expect(screen.getByRole("status").textContent).toContain("The AI is looking for appointments");
     rerender(
       <EventsBar
         accountId="a1"
@@ -362,19 +362,18 @@ describe("useMailEvents", () => {
     expect(result.current.events).toEqual([]);
   });
 
-  it("offers the dates of a mail with an invitation, since the app has no invitation card", async () => {
-    const mail = message({
-      attachments: [{ id: "a", filename: "invite.ics", mimeType: "text/calendar", size: 1, inline: false }],
-    } as Partial<Message>);
-    const { result } = renderHook(() => useMailEvents(mail, options), { wrapper: wrapper() });
-    await waitFor(() => expect(result.current.events).toHaveLength(1));
-  });
-
-  it("stays quiet when switched off, in junk and for drafts", async () => {
+  it("stays quiet when switched off, in junk, for drafts and for invitations", async () => {
     const quiet = [
       { mail: message(), options, before: () => useSettings.getState().update({ detectEvents: false }) },
       { mail: message(), options: { ...options, inJunk: true } },
       { mail: message({ flags: { seen: true, flagged: false, answered: false, draft: true } }), options },
+      // The invitation card names the event itself.
+      {
+        mail: message({
+          attachments: [{ id: "a", filename: "invite.ics", mimeType: "text/calendar", size: 1, inline: false }],
+        } as Partial<Message>),
+        options,
+      },
     ];
     for (const { mail, options: given, before } of quiet) {
       before?.();
@@ -386,6 +385,27 @@ describe("useMailEvents", () => {
     }
     expect(fake.assistFeatures).not.toHaveBeenCalled();
     expect(fake.extractEvents).not.toHaveBeenCalled();
+  });
+});
+
+describe("DatePopover", () => {
+  // Webmail security-audit W-40: a held Enter on a date opened the popover, added the date and saved it.
+  it("doesn't take the gesture that opened it as the answer", () => {
+    let clock = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => clock);
+    const onAdd = vi.fn();
+    const hit = { ...event("Lesung am 16.10. um 19 Uhr"), past: false, end: "2099-01-01T00:00:00" };
+    render(
+      <DatePopover event={hit} anchor={{ left: 10, top: 10, width: 40, height: 16 }} onAdd={onAdd} onClose={vi.fn()} />,
+    );
+    const add = screen.getByRole("button", { name: "Add to calendar" });
+    expect(fireEvent.keyDown(add, { key: "Enter", repeat: true })).toBe(false);
+    fireEvent.click(add);
+    expect(onAdd).not.toHaveBeenCalled();
+    clock += 1000;
+    fireEvent.click(add);
+    expect(onAdd).toHaveBeenCalledOnce();
+    vi.restoreAllMocks();
   });
 });
 

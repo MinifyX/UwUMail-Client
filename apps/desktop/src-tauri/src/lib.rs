@@ -1,5 +1,8 @@
+mod account;
 #[cfg(desktop)]
 mod background;
+#[cfg(not(target_os = "android"))]
+mod notify_prefs;
 #[cfg(not(target_os = "android"))]
 mod ocr;
 #[cfg(desktop)]
@@ -19,7 +22,8 @@ use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::birthdays::scan::{BirthdayFeatures, BirthdayImportEntry, BirthdayImportResult, BirthdayScan};
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
-use uwumail_core::pictures::SenderPicture;
+use uwumail_core::pictures::{PictureLookup, SenderPicture};
+use uwumail_core::send_later::{ScheduledReceipt, ScheduledRef, ScheduledSend, SendLaterInfo};
 use uwumail_core::{Engine, Error};
 
 type CommandResult<T> = Result<T, Error>;
@@ -181,6 +185,39 @@ async fn import_birthdays(
     entries: Vec<BirthdayImportEntry>,
 ) -> CommandResult<BirthdayImportResult> {
     engine.import_birthdays(&account_id, entries).await
+}
+
+/// What the reader shows of a mail's invitation, cancellation or answer; null without one.
+#[tauri::command]
+async fn mail_invitation(
+    engine: State<'_, Engine>,
+    message_id: String,
+) -> CommandResult<Option<uwumail_core::calendar::invite::MailScheduling>> {
+    engine.mail_invitation(&message_id).await
+}
+
+/// Answers a mail's invitation (only on a click in the reader); the comment goes along where it can.
+#[tauri::command]
+async fn respond_to_invitation(
+    engine: State<'_, Engine>,
+    message_id: String,
+    status: uwumail_core::calendar::invite::Partstat,
+    comment: Option<String>,
+    language: Option<String>,
+) -> CommandResult<()> {
+    engine.respond_to_invitation(&message_id, status, comment.as_deref(), language.as_deref()).await
+}
+
+/// Whether this device keeps invitations (its calendar "Invitations"), for showing the calendar at all.
+#[tauri::command]
+fn has_local_invitations(engine: State<'_, Engine>) -> CommandResult<bool> {
+    engine.has_local_invitations()
+}
+
+/// Takes the event its organizer cancelled out of the calendar (on a click in the reader).
+#[tauri::command]
+async fn remove_cancelled_event(engine: State<'_, Engine>, message_id: String) -> CommandResult<()> {
+    engine.remove_cancelled_event(&message_id).await
 }
 
 #[tauri::command]
@@ -457,8 +494,14 @@ async fn mark_spam(
 }
 
 #[tauri::command]
-async fn unsubscribe(engine: State<'_, Engine>, message_id: String) -> CommandResult<UnsubscribeOutcome> {
-    engine.unsubscribe(&message_id).await
+async fn unsubscribe(
+    engine: State<'_, Engine>,
+    message_id: String,
+    one_click: Option<bool>,
+) -> CommandResult<UnsubscribeOutcome> {
+    // Without the flag, the one click is tried where the mail offers it; `false` is the second
+    // answer after a refused one click, and asks for the mail or the page instead.
+    engine.unsubscribe(&message_id, one_click.unwrap_or(true)).await
 }
 
 #[tauri::command]
@@ -498,6 +541,45 @@ fn queue_send(engine: State<'_, Engine>, message: OutgoingMessage, delay_seconds
 #[tauri::command]
 fn cancel_send(engine: State<'_, Engine>, send_id: String) -> CommandResult<OutgoingMessage> {
     engine.cancel_send(&send_id)
+}
+
+#[tauri::command]
+async fn send_later_info(engine: State<'_, Engine>, account_id: String) -> CommandResult<SendLaterInfo> {
+    engine.send_later_info(&account_id).await
+}
+
+#[tauri::command]
+async fn send_later(
+    engine: State<'_, Engine>,
+    message: OutgoingMessage,
+    send_at: String,
+) -> CommandResult<ScheduledReceipt> {
+    engine.send_later(message, &send_at).await
+}
+
+#[tauri::command]
+async fn scheduled_sends(engine: State<'_, Engine>) -> CommandResult<Vec<ScheduledSend>> {
+    engine.scheduled_sends().await
+}
+
+#[tauri::command]
+async fn reschedule_send(engine: State<'_, Engine>, scheduled: ScheduledRef, send_at: String) -> CommandResult<()> {
+    engine.reschedule_send(&scheduled, &send_at).await
+}
+
+#[tauri::command]
+async fn send_scheduled_now(engine: State<'_, Engine>, scheduled: ScheduledRef) -> CommandResult<()> {
+    engine.send_scheduled_now(&scheduled).await
+}
+
+#[tauri::command]
+async fn stop_scheduled(engine: State<'_, Engine>, scheduled: ScheduledRef) -> CommandResult<()> {
+    engine.stop_scheduled(&scheduled).await
+}
+
+#[tauri::command]
+async fn edit_scheduled(engine: State<'_, Engine>, scheduled: ScheduledRef) -> CommandResult<OutgoingMessage> {
+    engine.edit_scheduled(&scheduled).await
 }
 
 #[tauri::command]
@@ -866,8 +948,13 @@ async fn save_message(app: AppHandle, engine: State<'_, Engine>, message_id: Str
 }
 
 #[tauri::command]
-async fn get_sender_picture(engine: State<'_, Engine>, email: String) -> CommandResult<Option<SenderPicture>> {
-    engine.sender_picture(&email).await
+async fn get_sender_picture(
+    engine: State<'_, Engine>,
+    email: String,
+    lookup: Option<PictureLookup>,
+) -> CommandResult<Option<SenderPicture>> {
+    // The engine checks the address; anything that isn't one gets no picture.
+    engine.sender_picture(&email, lookup.unwrap_or_default()).await
 }
 
 /// A remote image of a mail as raw bytes, so the reader can recolor it for dark mode.
@@ -1037,6 +1124,13 @@ fn set_mobile_prefs(language: String, tone: String, app_lock: bool) -> CommandRe
     platform::set_mobile_prefs(language, tone, app_lock)
 }
 
+/// How new-mail notifications read: sender and subject, or only that new mail came (with the
+/// texts for that in the page's language). The app lock hides them too.
+#[tauri::command]
+fn set_notification_prefs(show_content: bool, app_lock: bool, new_mail: String, hidden: String) -> CommandResult<()> {
+    platform::set_notification_prefs(show_content && !app_lock, &new_mail, &hidden)
+}
+
 /// Android: colors behind the status and navigation bars.
 #[tauri::command]
 fn set_system_bars(dark: bool, background: String) -> CommandResult<()> {
@@ -1155,6 +1249,10 @@ pub fn run() {
             create_event,
             update_event,
             delete_event,
+            mail_invitation,
+            respond_to_invitation,
+            remove_cancelled_event,
+            has_local_invitations,
             contacts_accounts,
             set_carddav_url,
             list_address_books,
@@ -1167,6 +1265,16 @@ pub fn run() {
             create_contact_card,
             update_contact_card,
             delete_contact_card,
+            account::server_account_features,
+            account::masked_addresses,
+            account::create_masked_address,
+            account::update_masked_address,
+            account::profile_picture,
+            account::set_profile_picture,
+            account::update_profile_picture,
+            account::calendar_people,
+            account::share_calendar,
+            account::contact_photo,
             add_identity,
             rename_identity,
             remove_identity,
@@ -1202,6 +1310,13 @@ pub fn run() {
             send_message,
             queue_send,
             cancel_send,
+            send_later_info,
+            send_later,
+            scheduled_sends,
+            reschedule_send,
+            send_scheduled_now,
+            stop_scheduled,
+            edit_scheduled,
             save_draft,
             delete_draft,
             open_draft,
@@ -1255,6 +1370,7 @@ pub fn run() {
             take_mailto,
             take_launch_action,
             set_mobile_prefs,
+            set_notification_prefs,
             set_system_bars,
             mobile_action,
             push_status,

@@ -237,6 +237,45 @@ pub async fn send(endpoints: &Endpoints, token: &str, call: &Call) -> Result<Ans
         .map_err(|_| Error::connection(format!("{}'s answer isn't readable.", call.api.name())))
 }
 
+/// What came back from a call that sends or reads bytes (a contact's photo).
+pub enum RawAnswer {
+    /// The bytes, or `None` for a 404 (there is none).
+    Done(Option<Vec<u8>>),
+    Unauthorized,
+}
+
+/// Sends one call whose body is `bytes` of `media_type` (or none) and reads the answer as bytes,
+/// at most `limit` of them.
+pub async fn send_raw(
+    endpoints: &Endpoints,
+    token: &str,
+    call: &Call,
+    body: Option<(&[u8], &str)>,
+    limit: usize,
+) -> Result<RawAnswer> {
+    let url = call.url(endpoints)?;
+    let http = client()?;
+    let mut request = http.request(call.method.clone(), url).bearer_auth(token);
+    if let Some((bytes, media_type)) = body {
+        request = request.header("Content-Type", media_type).body(bytes.to_vec());
+    }
+    let mut response = request.send().await?;
+    let status = response.status();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if bytes.len() + chunk.len() > limit.min(MAX_ANSWER) {
+            return Err(Error::connection(format!("{}'s answer is too big.", call.api.name())));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    match status.as_u16() {
+        401 => Ok(RawAnswer::Unauthorized),
+        404 => Ok(RawAnswer::Done(None)),
+        _ if status.is_success() => Ok(RawAnswer::Done(Some(bytes))),
+        code => Err(api_error(call.api, code, &bytes)),
+    }
+}
+
 /// The plain words for what an API refused.
 pub fn api_error(api: Api, status: u16, body: &[u8]) -> Error {
     let json: Value = serde_json::from_slice(body).unwrap_or(Value::Null);

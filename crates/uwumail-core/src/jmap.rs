@@ -40,6 +40,13 @@ pub const WEBPUSH_VAPID: &str = "urn:ietf:params:jmap:webpush-vapid";
 /// Signatures per domain and company signatures (`SignatureSettings/get`/`set`, UwUMail-Server
 /// docs/jmap-signatures.md), from UwUMail-Server 0.22 on.
 pub const SIGNATURES: &str = "urn:uwumail:jmap:signatures";
+/// Masked addresses (Fastmail's MaskedEmail extension, which UwUMail Server speaks; its
+/// docs/jmap-masked-email.md).
+pub const MASKED: &str = "https://www.fastmail.com/dev/maskedemail";
+/// The own profile picture on a UwUMail server (`ProfilePicture`, its docs/profile-pictures.md).
+pub const PROFILE: &str = "urn:uwumail:jmap:profile";
+/// The people of the server, to share calendars with (draft-ietf-jmap-sharing).
+pub const PRINCIPALS: &str = "urn:ietf:params:jmap:principals";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -140,6 +147,17 @@ pub struct Session {
     pub state: Option<String>,
     /// The server's AI assistant for this login's own account, if it has one.
     pub assist: Option<AssistSession>,
+    /// How far ahead the submission account holds mail ("send later"), in seconds; 0 when it
+    /// doesn't (`maxDelayedSend` of its submission capability, RFC 8621 §7).
+    pub max_delayed_send: u64,
+    /// The own account's masked address capability (`domains`, `defaultDomain`), if the server
+    /// makes masked addresses; an empty object from servers that don't say where.
+    pub masked: Option<Value>,
+    /// The own account's profile picture capability (`maxSize`, `mayBePublic`), if it has one.
+    pub profile: Option<Value>,
+    /// The server lists its people for sharing; `own_principal_id` is the login's own.
+    pub principals: bool,
+    pub own_principal_id: Option<String>,
 }
 
 /// What a session says about UwUMail's AI assistant.
@@ -195,15 +213,46 @@ impl Session {
                 .cloned()
                 .unwrap_or(Value::Null),
         });
+        let submission_account_id = capabilities
+            .contains_key(SUBMISSION)
+            .then(|| primary.and_then(|p| p.get(SUBMISSION)).and_then(Value::as_str).map(String::from))
+            .flatten();
+        let max_delayed_send = submission_account_id
+            .as_ref()
+            .and_then(|id| document.get("accounts")?.get(id)?.get("accountCapabilities")?.get(SUBMISSION))
+            .and_then(|capability| capability.get("maxDelayedSend"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        // An extension's object in the own account's `accountCapabilities`; `{}` when the session
+        // only names the capability.
+        let own_capability = |capability: &str| {
+            capabilities.contains_key(capability).then(|| {
+                document
+                    .get("accounts")
+                    .and_then(|accounts| accounts.get(&account_id))
+                    .and_then(|account| account.get("accountCapabilities"))
+                    .and_then(|capabilities| capabilities.get(capability))
+                    .filter(|value| value.is_object())
+                    .or_else(|| capabilities.get(capability).filter(|value| value.is_object()))
+                    .cloned()
+                    .unwrap_or_else(|| json!({}))
+            })
+        };
+        let masked = own_capability(MASKED);
+        let profile = own_capability(PROFILE);
+        let principals = own_capability(PRINCIPALS);
+        let own_principal_id = principals
+            .as_ref()
+            .and_then(|capability| capability.get("currentUserPrincipalId"))
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty() && id.len() <= 255)
+            .map(String::from);
         Ok(Self {
             api_url: absolute(base, text("apiUrl").ok_or_else(invalid)?),
             download_url: absolute(base, text("downloadUrl").ok_or_else(invalid)?),
             upload_url: absolute(base, text("uploadUrl").ok_or_else(invalid)?),
             event_source_url: text("eventSourceUrl").filter(|u| !u.is_empty()).map(|u| absolute(base, u)),
-            submission_account_id: capabilities
-                .contains_key(SUBMISSION)
-                .then(|| primary.and_then(|p| p.get(SUBMISSION)).and_then(Value::as_str).map(String::from))
-                .flatten(),
+            submission_account_id,
             account_id,
             max_objects_in_get: limit("maxObjectsInGet", 500),
             max_calls_in_request: limit("maxCallsInRequest", 16),
@@ -228,6 +277,11 @@ impl Session {
             signatures_account_id,
             state: text("state").map(String::from),
             assist,
+            max_delayed_send,
+            masked,
+            profile,
+            principals: principals.is_some(),
+            own_principal_id,
         })
     }
 
@@ -282,6 +336,18 @@ fn fill(template: &str, values: &[(&str, &str)]) -> String {
         out = out.replace(&format!("{{{key}}}"), &percent_encoding::utf8_percent_encode(value, COMPONENT).to_string());
     }
     out
+}
+
+/// The filled-in `pictureUrl` with the lookup's options appended, like the webmail asks.
+fn picture_target(template: &str, account_id: &str, email: &str, local: bool, logo_only: bool) -> String {
+    let mut target = fill(template, &[("accountId", account_id), ("email", email)]);
+    let extra: Vec<&str> =
+        [logo_only.then_some("source=logo"), local.then_some("local=1")].into_iter().flatten().collect();
+    if !extra.is_empty() {
+        target.push(if target.contains('?') { '&' } else { '?' });
+        target.push_str(&extra.join("&"));
+    }
+    target
 }
 
 /// A JMAP method error, e.g. `cannotCalculateChanges`.
@@ -434,8 +500,22 @@ impl Client {
         self.call_within(calls, CALL_TIMEOUT).await
     }
 
+    /// Like [`call`](Self::call), for a request that sends mail (`EmailSubmission/set`): when the
+    /// request may have reached the server but its answer didn't come back (a broken connection,
+    /// a timeout, a gateway error, an unreadable answer), the error is [`Error::maybe_sent`], so
+    /// nobody sends the mail a second time on their own (security review 0.10 SL-2).
+    pub async fn call_submission(&self, calls: Vec<(&str, Value)>) -> Result<Responses> {
+        self.call_inner(calls, CALL_TIMEOUT, true).await
+    }
+
     /// Like [`call`](Self::call), for methods the server may take longer for, e.g. reading pictures.
     pub async fn call_within(&self, calls: Vec<(&str, Value)>, limit: Duration) -> Result<Responses> {
+        self.call_inner(calls, limit, false).await
+    }
+
+    async fn call_inner(&self, calls: Vec<(&str, Value)>, limit: Duration, submission: bool) -> Result<Responses> {
+        // After the request went out, a submission's failure leaves it open whether the mail went.
+        let unsure = |error: Error| if submission { Error::maybe_sent(error.message) } else { error };
         let method_calls: Vec<Value> = calls
             .into_iter()
             .enumerate()
@@ -470,6 +550,15 @@ impl Client {
         if self.session.signatures_account_id.is_some() {
             using.push(SIGNATURES);
         }
+        if self.session.masked.is_some() {
+            using.push(MASKED);
+        }
+        if self.session.profile.is_some() {
+            using.push(PROFILE);
+        }
+        if self.session.principals {
+            using.push(PRINCIPALS);
+        }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self
             .http
@@ -478,25 +567,29 @@ impl Client {
             .timeout(limit)
             .json(&body)
             .send()
-            .await?;
+            .await
+            // A connection that never came about carried nothing.
+            .map_err(|error| if error.is_connect() { Error::from(error) } else { unsure(Error::from(error)) })?;
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return Err(Error::auth("The mail server didn't accept the login anymore."));
         }
         if !status.is_success() {
             let detail = read_start(response, MAX_ERROR_TEXT).await;
-            return Err(Error::connection(format!("The mail server answered {status}. {}", short(&detail))));
+            let error = Error::connection(format!("The mail server answered {status}. {}", short(&detail)));
+            // A refused request (4xx) ran nothing; a server or gateway error may have run it.
+            return Err(if status.is_client_error() { error } else { unsure(error) });
         }
-        let body = read_limited(response, MAX_ANSWER).await?;
+        let body = read_limited(response, MAX_ANSWER).await.map_err(unsure)?;
         let document: Value =
-            serde_json::from_slice(&body).map_err(|e| Error::connection(format!("Bad JMAP answer: {e}")))?;
+            serde_json::from_slice(&body).map_err(|e| unsure(Error::connection(format!("Bad JMAP answer: {e}"))))?;
         if let Some(state) = document.get("sessionState").and_then(Value::as_str) {
             *self.latest_session_state.lock().unwrap() = Some(state.to_string());
         }
         let answers = document
             .get("methodResponses")
             .and_then(Value::as_array)
-            .ok_or_else(|| Error::connection("The mail server's answer had no method responses."))?;
+            .ok_or_else(|| unsure(Error::connection("The mail server's answer had no method responses.")))?;
         Ok(Responses(
             answers
                 .iter()
@@ -635,16 +728,26 @@ impl Client {
         Ok(())
     }
 
-    /// The logo or website icon the server keeps for a company sender: whether it is a `logo` and its
-    /// bytes. `Ok(None)` when the server has none; an error when it could not be asked.
-    pub async fn sender_picture(&self, email: &str) -> Result<Option<(bool, Vec<u8>)>> {
+    /// The picture the server has for an address (`pictureUrl`): a person's photo (a contact's, or
+    /// their own profile picture), a company's logo or a website icon, with its bytes. `local` takes
+    /// only what the server has without asking another server (`local=1`); `logo_only` skips
+    /// people's pictures (`source=logo`). `Ok(None)` when the server has none; an error when it
+    /// could not be asked.
+    pub async fn sender_picture(
+        &self,
+        email: &str,
+        local: bool,
+        logo_only: bool,
+    ) -> Result<Option<(crate::pictures::PictureKind, Vec<u8>)>> {
         let Some(template) = &self.session.picture_url else {
             return Err(Error::not_supported("No sender pictures here."));
         };
-        let target = fill(template, &[("accountId", &self.session.account_id), ("email", email)]);
+        let target = picture_target(template, &self.session.account_id, email, local, logo_only);
         let Some((headers, bytes)) = self.get_from_server(&target).await? else { return Ok(None) };
-        let logo = headers.get("x-picture-kind").is_some_and(|kind| kind.as_bytes() == b"logo");
-        Ok(Some((logo, bytes)))
+        let kind = crate::pictures::PictureKind::from_header(
+            headers.get("x-picture-kind").and_then(|kind| kind.to_str().ok()),
+        );
+        Ok(Some((kind, bytes)))
     }
 
     /// An authenticated GET on the server's own site, never elsewhere: `None` for a 404.
@@ -1158,6 +1261,23 @@ mod tests {
     use crate::model::FolderRole;
 
     #[test]
+    fn asks_for_pictures_per_address_with_the_lookups_options() {
+        let template = "https://mail.example.com/jmap/picture/{accountId}?email={email}";
+        assert_eq!(
+            picture_target(template, "a1", "Kai+x@example.com", false, false),
+            "https://mail.example.com/jmap/picture/a1?email=Kai%2Bx%40example.com"
+        );
+        assert_eq!(
+            picture_target(template, "a1", "kai@example.com", true, true),
+            "https://mail.example.com/jmap/picture/a1?email=kai%40example.com&source=logo&local=1"
+        );
+        assert_eq!(
+            picture_target("https://mail.example.com/p/{accountId}/{email}", "a1", "kai@example.com", true, false),
+            "https://mail.example.com/p/a1/kai%40example.com?local=1"
+        );
+    }
+
+    #[test]
     fn resolves_relative_session_urls() {
         let base = Url::parse("http://127.0.0.1:18080/jmap/session").unwrap();
         assert_eq!(absolute(&base, "/jmap/"), "http://127.0.0.1:18080/jmap/");
@@ -1189,6 +1309,7 @@ mod tests {
         assert_eq!(session.account_id, "c");
         assert_eq!(session.submission_account_id.as_deref(), Some("c"));
         assert_eq!(session.max_objects_in_get, 250);
+        assert_eq!(session.max_delayed_send, 0, "no send later without maxDelayedSend");
         let moved = session.rebased("https://mail.uwumail.test", "http://127.0.0.1:18080");
         assert_eq!(moved.api_url, "http://127.0.0.1:18080/jmap/");
         assert!(moved.event_source_url.unwrap().starts_with("http://127.0.0.1:18080/jmap/eventsource/"));
@@ -1196,6 +1317,12 @@ mod tests {
         let no_mail = json!({ "capabilities": { CORE: {} }, "apiUrl": "/", "downloadUrl": "/", "uploadUrl": "/" });
         assert_eq!(Session::parse(&no_mail, &base).unwrap_err().code, ErrorCode::NotSupported);
         assert_eq!(session.image_url, None, "an ordinary server fetches no pictures for us");
+
+        let mut later = document.clone();
+        later["accounts"] = json!({ "c": { "accountCapabilities": { SUBMISSION: { "maxDelayedSend": 2_592_000 } } } });
+        assert_eq!(Session::parse(&later, &base).unwrap().max_delayed_send, 2_592_000);
+        later["accounts"]["c"]["accountCapabilities"][SUBMISSION]["maxDelayedSend"] = json!("30");
+        assert_eq!(Session::parse(&later, &base).unwrap().max_delayed_send, 0, "only a number counts");
     }
 
     #[test]

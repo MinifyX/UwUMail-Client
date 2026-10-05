@@ -6,6 +6,8 @@ import { formatDay, partialDay } from "@/lib/birthdays";
 import { BackendError } from "./backend";
 import { birthdayOccurrences, candidateFor, nameFromTitle } from "./demo-birthdays";
 import type {
+  Person,
+  ShareLevel,
   BirthdayCandidate,
   CalendarAccount,
   CalendarInfo,
@@ -13,6 +15,7 @@ import type {
   ContactRecord,
   EventDeleteScope,
   EventInput,
+  EventParticipant,
   Recurrence,
   Weekday,
 } from "./types";
@@ -33,6 +36,8 @@ interface StoredEvent {
   recurrence: Recurrence | null;
   /** Recurrence ids of occurrences taken out of the series. */
   excluded: string[];
+  /** Who takes part, the organizer first; none for most demo events. */
+  participants?: EventParticipant[];
 }
 
 const WEEKDAYS: Weekday[] = ["su", "mo", "tu", "we", "th", "fr", "sa"];
@@ -123,6 +128,12 @@ function check(input: EventInput) {
   return { start: format(start), end: format(end), timeZone: input.timeZone };
 }
 
+/** The other people on the demo's UwUMail server, fictional like the rest. */
+export const DEMO_PEOPLE: Person[] = [
+  { id: "p-kai", name: "Kai Kralle", email: "kai@uwumail.example" },
+  { id: "p-leni", name: "Leni", email: "leni@uwumail.example" },
+];
+
 export class DemoCalendar {
   private calendarList: CalendarInfo[];
   private events: StoredEvent[];
@@ -148,8 +159,12 @@ export class DemoCalendar {
       ...extra,
     });
     this.calendarList = [
-      calendar("personal", de ? "Privat" : "Personal", "#ec4899", { isDefault: true }),
-      calendar("sport", "Sport", "#10b981", { sortOrder: 1 }),
+      calendar("personal", de ? "Privat" : "Personal", "#ec4899", {
+        isDefault: true,
+        mayShare: true,
+        sharedWith: { "p-leni": "write" },
+      }),
+      calendar("sport", "Sport", "#10b981", { sortOrder: 1, mayShare: true }),
       calendar("holidays", de ? "Feiertage" : "Holidays", "#f59e0b", {
         sortOrder: 2,
         mayWrite: false,
@@ -160,6 +175,11 @@ export class DemoCalendar {
         mayWrite: false,
         mayDelete: false,
         isBirthdays: true,
+      }),
+      // Leni of the same UwUMail server shares her band calendar; leaving it is deleting it here.
+      calendar("shared-leni-band", de ? "Bandproben" : "Band practice", "#0ea5e9", {
+        sortOrder: 4,
+        sharedBy: { email: "leni@uwumail.example", name: "Leni" },
       }),
       // The Studio mailbox signs in with Microsoft: its calendar comes over Microsoft Graph.
       {
@@ -215,6 +235,11 @@ export class DemoCalendar {
         end: at(1, 10, 45),
         timeZone: zone,
         recurrence: null,
+        participants: [
+          { name: "Mini", email: "mini@uwumail.example", status: "accepted", organizer: true },
+          { name: "Emma Vogt", email: "emma.vogt@brightlabs.example", status: "accepted", organizer: false },
+          { name: "Leni", email: "leni@uwumail.example", status: "needs-action", organizer: false },
+        ],
       }),
       event({
         calendarId: "acc-private:personal",
@@ -384,6 +409,25 @@ export class DemoCalendar {
     this.changed();
   }
 
+  /** The demo's UwUMail server has two other people to share with. */
+  people(accountId: string): Person[] {
+    if (accountId !== "acc-private")
+      throw new BackendError("not_supported", "This needs a mailbox on a UwUMail server.");
+    return structuredClone(DEMO_PEOPLE);
+  }
+
+  shareCalendar(id: string, personId: string, level: ShareLevel | null) {
+    const calendar = this.calendar(id);
+    if (!calendar.mayShare) throw new BackendError("invalid_input", "This calendar can't be shared from here.");
+    if (!DEMO_PEOPLE.some((person) => person.id === personId))
+      throw new BackendError("not_found", "Nobody with that id is on the server.");
+    const next = { ...calendar.sharedWith };
+    if (level) next[personId] = level;
+    else delete next[personId];
+    calendar.sharedWith = next;
+    this.changed();
+  }
+
   setDefaultCalendar(id: string) {
     const calendar = this.writable(id);
     for (const other of this.calendarList) {
@@ -425,6 +469,7 @@ export class DemoCalendar {
           recurrenceId,
           readOnly: !calendar.mayWrite,
           color: null,
+          participants: structuredClone(event.participants ?? []),
         });
       }
     }

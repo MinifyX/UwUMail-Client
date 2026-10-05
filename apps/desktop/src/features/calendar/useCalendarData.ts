@@ -28,13 +28,16 @@ export function useCalendarsAvailable() {
 export function useCalendars() {
   const client = useQueryClient();
   const { t } = useT();
-  // The birthdays calendar the app makes itself is named in the UI's language.
+  // The calendars the app makes itself (birthdays, invitations) are named in the UI's language.
   const select = useCallback(
     (list: CalendarInfo[]) =>
       list.map((calendar) =>
         calendar.isBirthdays && calendar.isLocal
           ? { ...calendar, name: t("calendar.birthdays.calendarName") }
-          : calendar,
+          : calendar.isLocal
+            ? // The calendar of invitations the app keeps on this device (see Invitation.tsx).
+              { ...calendar, name: t("invitation.localCalendar") }
+            : calendar,
       ),
     [t],
   );

@@ -14,6 +14,8 @@ export interface ToastOptions {
   action?: ToastAction;
   /** Milliseconds until it goes away by itself. */
   duration?: number;
+  /** Counts the seconds down to this time (ISO 8601), e.g. until a held-back mail goes. */
+  countdownTo?: string;
 }
 
 export interface Toast {
@@ -22,6 +24,7 @@ export interface Toast {
   tone: ToastTone;
   effect?: ToastEffect;
   action?: ToastAction;
+  countdownTo?: string;
 }
 
 interface ToastState {
@@ -36,7 +39,8 @@ export const useToasts = create<ToastState>()((set, get) => ({
   toasts: [],
   show: (message, tone = "info", effect, options = {}) => {
     const id = nextId++;
-    set({ toasts: [...get().toasts.slice(-3), { id, message, tone, effect, action: options.action }] });
+    const { action, countdownTo } = options;
+    set({ toasts: [...get().toasts.slice(-3), { id, message, tone, effect, action, countdownTo }] });
     setTimeout(() => get().dismiss(id), options.duration ?? (tone === "error" ? 7000 : 3500));
     return id;
   },

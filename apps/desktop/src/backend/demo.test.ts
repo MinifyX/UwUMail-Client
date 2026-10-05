@@ -19,6 +19,7 @@ describe("DemoBackend calendar", () => {
       "acc-private",
       "acc-private",
       "acc-private",
+      "acc-private",
       "acc-studio",
     ]);
     expect(calendars.filter((c) => c.isDefault).map((c) => c.accountId)).toEqual(["acc-private", "acc-studio"]);

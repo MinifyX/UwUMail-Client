@@ -396,6 +396,15 @@ describe("the usage", () => {
       ["summarize", 5],
       ["compose", 1],
     ]);
+    // Thinking counts in the tokens and on its own.
+    const thinking = {
+      ...usage,
+      days: usage.days.map((entry) => (entry.feature === "compose" ? { ...entry, reasoningTokens: 30 } : entry)),
+    };
+    const compose = featureTotals(thinking).find((total) => total.feature === "compose")!;
+    const before = featureTotals(usage).find((total) => total.feature === "compose")!;
+    expect([compose.reasoningTokens, compose.tokens - before.tokens]).toEqual([30, 30]);
+    expect(featureTotals(usage).every((total) => total.reasoningTokens === 0)).toBe(true);
   });
 
   it("measures today against the limit that runs out first", () => {

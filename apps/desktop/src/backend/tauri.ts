@@ -48,6 +48,7 @@ import type {
   AssistProbeInput,
   AssistEventsResult,
   AssistLabelInput,
+  AssistLabelPatch,
   LabelBase,
   AssistProviderInput,
   AssistSettingsPatch,
@@ -64,6 +65,8 @@ import type {
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
+  MailScheduling,
+  ParticipationStatus,
   Contact,
   ContactInput,
   ContactsAccount,
@@ -79,12 +82,25 @@ import type {
   ImageTextResult,
   RemoteImageSize,
   MailtoDraft,
+  MaskedAddress,
+  MaskedAddressInput,
+  MaskedAddressPatch,
+  Person,
+  ProfilePicture,
+  ProfilePicturePatch,
+  ServerAccountFeatures,
+  ShareLevel,
   MovedMessage,
   NewAccount,
   OutgoingMessage,
   Protocol,
   QueuedSend,
+  ScheduledReceipt,
+  ScheduledRef,
+  ScheduledSend,
+  SendLaterInfo,
   SenderPicture,
+  SenderPictureLookup,
   Signature,
   ThreadDetail,
   ThreadPage,
@@ -98,6 +114,7 @@ import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import type { DomainSignatureChange, SignatureText } from "@/lib/domainSignatures";
 import { foreignHtml } from "@/lib/safeHtml";
 import { overviewFrom } from "./jmap/domainSignatures";
+import { blobToDataUrl, companyLogoFrom } from "./pictureBlobs";
 
 /** Where the app hands out a mail's remote pictures (`uwuimg:` in Rust), spelled for this platform. */
 let picturesBase: string | null = null;
@@ -145,6 +162,11 @@ function accountSignaturesFrom(raw: { accountId: string; overview: unknown }): A
 }
 /** The app's language, for the names of base labels this device makes. */
 const uiLanguage = (): "de" | "en" => (i18n.language?.toLowerCase().startsWith("de") ? "de" : "en");
+
+/** Only what names a scheduled mail goes to the engine, not the whole list entry. */
+function scheduledRef({ id, accountId, kind }: ScheduledRef): ScheduledRef {
+  return { id, accountId, kind };
+}
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -214,6 +236,7 @@ const EVENT_NAMES = [
   "accounts:changed",
   "send:done",
   "send:failed",
+  "scheduled:changed",
   "compose:mailto",
   "settings:changed",
   "calendar:changed",
@@ -275,7 +298,12 @@ export class TauriBackend implements Backend {
       Object.fromEntries(Object.entries(entries ?? {}).map(([key, signature]) => [key, clean(signature)]));
     const saved = await call<{ accountId: string; overview: unknown }>("save_domain_signatures", {
       accountId,
-      change: { domains: mapped(change.domains), identities: mapped(change.identities) },
+      change: {
+        domains: mapped(change.domains),
+        identities: mapped(change.identities),
+        // Two devices must not overwrite each other unseen (webmail review WF-3).
+        ...(change.ifInState !== undefined ? { ifInState: change.ifInState } : {}),
+      },
     });
     return accountSignaturesFrom(saved);
   }
@@ -371,7 +399,11 @@ export class TauriBackend implements Backend {
    */
   async calendarsAvailable() {
     const accounts = await call<CalendarAccount[]>("calendar_accounts", { look: false });
-    return accounts.some((account) => account.source !== null || !account.checked || account.needsSignIn === true);
+    return (
+      accounts.some((account) => account.source !== null || !account.checked || account.needsSignIn === true) ||
+      // Invitations answered in a mailbox without a calendar are kept on this device.
+      (await call<boolean>("has_local_invitations"))
+    );
   }
 
   calendars() {
@@ -404,6 +436,14 @@ export class TauriBackend implements Backend {
     return call<void>("set_default_calendar", { calendarId: id });
   }
 
+  calendarPeople(accountId: string) {
+    return call<Person[]>("calendar_people", { accountId });
+  }
+
+  shareCalendar(calendarId: string, personId: string, level: ShareLevel | null) {
+    return call<void>("share_calendar", { calendarId, personId, level });
+  }
+
   calendarEvents(from: string, to: string, timeZone: string) {
     return call<CalendarOccurrence[]>("calendar_events", { from, to, timeZone });
   }
@@ -418,6 +458,28 @@ export class TauriBackend implements Backend {
 
   deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
     return call<void>("delete_event", { occurrenceId, scope });
+  }
+
+  mailInvitation(messageId: string) {
+    return call<MailScheduling | null>("mail_invitation", { messageId });
+  }
+
+  respondToInvitation(
+    messageId: string,
+    status: Exclude<ParticipationStatus, "needs-action">,
+    comment?: string,
+    language?: string,
+  ) {
+    return call<void>("respond_to_invitation", {
+      messageId,
+      status,
+      comment: comment ?? null,
+      language: language ?? null,
+    });
+  }
+
+  removeCancelledEvent(messageId: string) {
+    return call<void>("remove_cancelled_event", { messageId });
   }
 
   birthdayFeatures() {
@@ -495,6 +557,43 @@ export class TauriBackend implements Backend {
     return call<void>("delete_contact_card", { cardId: id });
   }
 
+  contactPhoto(id: string) {
+    return call<string | null>("contact_photo", { cardId: id });
+  }
+
+  async companyLogo(email: string) {
+    return companyLogoFrom(await this.getSenderPicture(email, { logo: true }));
+  }
+
+  serverAccountFeatures() {
+    return call<ServerAccountFeatures[]>("server_account_features");
+  }
+
+  maskedAddresses(accountId: string) {
+    return call<MaskedAddress[]>("masked_addresses", { accountId });
+  }
+
+  createMaskedAddress(accountId: string, input: MaskedAddressInput) {
+    return call<MaskedAddress>("create_masked_address", { accountId, input });
+  }
+
+  updateMaskedAddress(accountId: string, id: string, patch: MaskedAddressPatch) {
+    return call<void>("update_masked_address", { accountId, id, patch });
+  }
+
+  profilePicture(accountId: string) {
+    return call<ProfilePicture>("profile_picture", { accountId });
+  }
+
+  async setProfilePicture(accountId: string, picture: Blob | null) {
+    const data = picture ? await blobToDataUrl(picture) : null;
+    return call<ProfilePicture>("set_profile_picture", { accountId, picture: data });
+  }
+
+  updateProfilePicture(accountId: string, patch: ProfilePicturePatch) {
+    return call<void>("update_profile_picture", { accountId, patch });
+  }
+
   createFolder(input: { accountId?: string; name: string; parentId: string | null }) {
     return call<string>("create_folder", {
       accountId: input.accountId ?? null,
@@ -547,8 +646,8 @@ export class TauriBackend implements Backend {
     return call<MovedMessage[]>("mark_spam", { messageIds, spam });
   }
 
-  unsubscribe(messageId: string) {
-    return call<UnsubscribeOutcome>("unsubscribe", { messageId });
+  unsubscribe(messageId: string, options?: { oneClick?: boolean }) {
+    return call<UnsubscribeOutcome>("unsubscribe", { messageId, oneClick: options?.oneClick ?? true });
   }
 
   inboxMessagesFrom(email: string) {
@@ -577,6 +676,34 @@ export class TauriBackend implements Backend {
 
   cancelSend(sendId: string) {
     return call<OutgoingMessage>("cancel_send", { sendId });
+  }
+
+  sendLaterInfo(accountId: string) {
+    return call<SendLaterInfo>("send_later_info", { accountId });
+  }
+
+  sendLater(message: OutgoingMessage, sendAt: string) {
+    return call<ScheduledReceipt>("send_later", { message, sendAt });
+  }
+
+  scheduledSends() {
+    return call<ScheduledSend[]>("scheduled_sends");
+  }
+
+  rescheduleSend(scheduled: ScheduledRef, sendAt: string) {
+    return call<void>("reschedule_send", { scheduled: scheduledRef(scheduled), sendAt });
+  }
+
+  sendScheduledNow(scheduled: ScheduledRef) {
+    return call<void>("send_scheduled_now", { scheduled: scheduledRef(scheduled) });
+  }
+
+  stopScheduled(scheduled: ScheduledRef) {
+    return call<void>("stop_scheduled", { scheduled: scheduledRef(scheduled) });
+  }
+
+  editScheduled(scheduled: ScheduledRef) {
+    return call<OutgoingMessage>("edit_scheduled", { scheduled: scheduledRef(scheduled) });
   }
 
   saveDraft(draft: OutgoingMessage) {
@@ -618,9 +745,14 @@ export class TauriBackend implements Backend {
     return call<boolean>("save_attachment", { attachmentId });
   }
 
-  async getSenderPicture(email: string): Promise<SenderPicture | null> {
-    const picture = await call<{ path: string; kind: SenderPicture["kind"] } | null>("get_sender_picture", { email });
-    return picture && { url: convertFileSrc(picture.path), kind: picture.kind };
+  async getSenderPicture(email: string, lookup: SenderPictureLookup = {}): Promise<SenderPicture | null> {
+    const picture = await call<{ path: string | null; dataUrl: string | null; kind: SenderPicture["kind"] } | null>(
+      "get_sender_picture",
+      { email, lookup },
+    );
+    // SVGs and the server's pictures come as data, never as a file of the app's own origin (W-35).
+    const url = picture?.dataUrl ?? (picture?.path ? convertFileSrc(picture.path) : null);
+    return picture && url ? { url, kind: picture.kind } : null;
   }
 
   clearSenderPictures() {
@@ -737,7 +869,7 @@ export class TauriBackend implements Backend {
     );
   }
 
-  async updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>) {
+  async updateAssistLabel(scope: string, id: string, patch: AssistLabelPatch) {
     await call<void>("assist_update_label", { scope, labelId: id, patch: labelUpdate(patch) });
   }
 
@@ -837,6 +969,10 @@ export class TauriBackend implements Backend {
 
   setRunInBackground(enabled: boolean) {
     return call<void>("set_run_in_background", { enabled });
+  }
+
+  setNotificationPrefs(prefs: { showContent: boolean; appLock: boolean; newMail: string; hidden: string }) {
+    return call<void>("set_notification_prefs", prefs);
   }
 
   takeMailto() {

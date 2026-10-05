@@ -564,7 +564,7 @@ impl Device<'_> {
     /// A label with what `input` sets: name, description, color, and the server's checks of
     /// `rules`, `detector`, `learnSenders`, `classifier` and `auto`. The counts are the device's to
     /// set and are ignored, like `id` and `keyword`. A base label's definition and `base` may only
-    /// come back unchanged.
+    /// come back unchanged, `previousDescription` unchanged or null (forgotten).
     fn label_input(input: &Value, base: Label) -> Result<Label> {
         let text = |key: &str| input.get(key).and_then(Value::as_str).map(|t| t.trim().to_string());
         let mut label = base;
@@ -585,6 +585,14 @@ impl Device<'_> {
             Some(value) if value.as_str() == label.base.as_deref() => {}
             Some(Value::Null) if label.base.is_none() => {}
             Some(_) => return Err(invalid("base", "Which base label a label is can't be changed.")),
+        }
+        // An adopted base label's earlier description can only be forgotten, so it no longer goes
+        // to the model as a hint (UwUMail Server, WF-1); sent back unchanged it changes nothing.
+        match input.get("previousDescription") {
+            None => {}
+            Some(Value::Null) => label.previous_description = None,
+            Some(value) if value.as_str() == label.previous_description.as_deref() => {}
+            Some(_) => return Err(invalid("previousDescription", "The earlier description can only be forgotten.")),
         }
         match input.get("color") {
             Some(Value::Null) => label.color = None,
@@ -702,8 +710,8 @@ impl Device<'_> {
     }
 
     /// Makes the base label `base`, or adopts a label of the same name that is no base label yet:
-    /// that one keeps its name, keyword and color, gets the definition, and drops a detector that
-    /// is the base label's anyway.
+    /// that one keeps its name, keyword and color, gets the definition, keeps its own description
+    /// aside as `previous_description`, and drops a detector that is the base label's anyway.
     fn make_base_label(&self, base: uwumail_labels::Base, language: &str) -> Result<Label> {
         let language = if language.to_ascii_lowercase().starts_with("de") { "de" } else { "en" };
         let text = base.text(language);
@@ -712,6 +720,15 @@ impl Device<'_> {
             labels.iter().find(|label| label.base.is_none() && uwumail_labels::Base::named(&label.name) == Some(base))
         {
             let mut adopted = own.clone();
+            // What the person had written is kept aside, not lost (UwUMail Server, LABELS22-L2):
+            // not when it is a base definition anyway, and an earlier one stays.
+            let written = own.description.trim();
+            if !written.is_empty()
+                && ["de", "en"].iter().all(|language| base.text(language).description != written)
+                && adopted.previous_description.is_none()
+            {
+                adopted.previous_description = Some(written.to_owned());
+            }
             adopted.base = Some(base.as_str().into());
             adopted.description = text.description.into();
             adopted.base_language = Some(language.into());

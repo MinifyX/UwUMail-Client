@@ -169,6 +169,7 @@ impl Inner {
                             may_delete: calendar.may_delete,
                             is_birthdays: calendar.is_birthdays,
                             is_local: false,
+                            sharing: calendar.sharing,
                         },
                         remote: calendar.id,
                     })
@@ -199,6 +200,7 @@ impl Inner {
                                 may_delete: calendar.writable,
                                 is_birthdays: false,
                                 is_local: false,
+                                sharing: Default::default(),
                             },
                             remote: path,
                         }
@@ -217,7 +219,7 @@ impl Inner {
         Ok(entries)
     }
 
-    async fn calendar_entry(&self, calendar_id: &str) -> Result<(Source, CalendarEntry)> {
+    pub(super) async fn calendar_entry(&self, calendar_id: &str) -> Result<(Source, CalendarEntry)> {
         let (account_id, _) = calendar::split_id(calendar_id)?;
         let source = self.calendar_source(account_id).await?;
         let mut entry = self.calendar_entries(account_id).await?.into_iter().find(|entry| entry.info.id == calendar_id);
@@ -433,6 +435,7 @@ impl Engine {
                 }
                 Err(error) => tracing::debug!("No calendars for {}: {error}", account.id),
             }
+            calendars.extend(self.inner.local_invites_calendar(&account.id));
             calendars.extend(birthdays);
         }
         Ok(calendars)
@@ -539,7 +542,7 @@ impl Engine {
     }
 
     pub async fn update_calendar(&self, calendar_id: &str, patch: CalendarPatch) -> Result<()> {
-        if birthday_ops::is_local(calendar_id) {
+        if birthday_ops::is_local(calendar_id) || invite_ops::is_local(calendar_id) {
             return self.update_local_calendar(calendar_id, patch);
         }
         let (source, entry) = self.inner.calendar_entry(calendar_id).await?;
@@ -599,7 +602,7 @@ impl Engine {
         let (account_id, _) = calendar::split_id(calendar_id)?;
         self.inner.store.account(account_id)?;
         if patch.name.is_some() {
-            return Err(Error::invalid("The birthdays calendar keeps its name."));
+            return Err(Error::invalid("This calendar keeps the name the app gives it."));
         }
         match &patch.color {
             Some(Some(color)) => {
@@ -619,6 +622,9 @@ impl Engine {
 
     /// Deletes a calendar with its events.
     pub async fn delete_calendar(&self, calendar_id: &str) -> Result<()> {
+        if invite_ops::is_local(calendar_id) {
+            return Err(invite_ops::read_only());
+        }
         if birthday_ops::is_local(calendar_id) {
             return Err(Error::invalid("The birthdays calendar comes from your contacts and stays."));
         }
@@ -642,6 +648,9 @@ impl Engine {
     }
 
     pub async fn set_default_calendar(&self, calendar_id: &str) -> Result<()> {
+        if invite_ops::is_local(calendar_id) {
+            return Err(invite_ops::read_only());
+        }
         if birthday_ops::is_local(calendar_id) {
             return Err(birthday_ops::read_only());
         }
@@ -678,6 +687,7 @@ impl Engine {
                 Err(error) => tracing::warn!("Events of {} couldn't be read: {error}", account.id),
             }
             found.extend(birthdays);
+            found.extend(self.inner.local_invite_occurrences(&account.id, from, to, viewer));
         }
         let (from, to) = (jscal::format_local(from), jscal::format_local(to));
         // What overlaps the range; an event of no length right at its start counts too.
@@ -688,6 +698,9 @@ impl Engine {
 
     /// Creates an event and returns its id.
     pub async fn create_event(&self, input: EventInput) -> Result<String> {
+        if invite_ops::is_local(&input.calendar_id) {
+            return Err(invite_ops::read_only());
+        }
         if birthday_ops::is_local(&input.calendar_id) {
             return Err(birthday_ops::read_only());
         }
@@ -728,6 +741,9 @@ impl Engine {
     /// `occurrence_start` is where the occurrence the edit began from was shown: a series then
     /// moves by as much as that occurrence was moved, instead of jumping to its date.
     pub async fn update_event(&self, event_id: &str, input: EventInput, occurrence_start: Option<&str>) -> Result<()> {
+        if invite_ops::is_local(event_id) || invite_ops::is_local(&input.calendar_id) {
+            return Err(invite_ops::read_only());
+        }
         if birthday_ops::is_local(event_id) || birthday_ops::is_local(&input.calendar_id) {
             return Err(birthday_ops::read_only());
         }
@@ -791,6 +807,9 @@ impl Engine {
 
     /// Deletes one occurrence of a series (or a single event), or the whole series.
     pub async fn delete_event(&self, occurrence_id: &str, scope: EventDeleteScope) -> Result<()> {
+        if invite_ops::is_local(occurrence_id) {
+            return self.inner.delete_local_invite(occurrence_id);
+        }
         if birthday_ops::is_local(occurrence_id) {
             return Err(birthday_ops::read_only());
         }

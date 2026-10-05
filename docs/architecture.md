@@ -185,6 +185,32 @@ birthday on 29 February falls on 28 February in other years. Every place that
 shows a birthday shows the age: the calendar views with a cake, the event
 popover with a button to the contact, the contact list and the contact page.
 
+### Invitations
+
+Invitations in mail follow the webmail (`features/calendar/Invitation.tsx`) and
+the server's iTIP code, which `calendar/itip.rs` copies as it is.
+`calendar/invite.rs` reads the first `text/calendar` part (at most 1 MiB, 50
+attendees shown), decides whether the sender may say this (the organizer for
+requests and cancellations, an attendee for replies; security audit WEBMAIL-2)
+and writes iTIP REPLY mails. `engine/invite_ops.rs` finds the event by UID and
+answers where it lives:
+
+- **UwUMail server:** `CalendarEvent/set` of the participant's status with
+  `sendSchedulingMessages`; the server mails the organizer.
+- **Microsoft / Google:** the event found by `iCalUId` / `iCalUID`; Graph
+  `accept` / `tentativelyAccept` / `decline`, Google a patch of the attendee's
+  `responseStatus` with `sendUpdates=all`.
+- **Everything else:** the event (with `SCHEDULE-AGENT=CLIENT` on the
+  organizer) goes into the CalDAV calendar that has it or the default one, or
+  into the read-only "Invitations" calendar on this device (`local_invites`,
+  at most 2,000 events), then a `METHOD:REPLY` mail goes out over SMTP or JMAP
+  submission.
+
+SEQUENCE decides whether a mail is new, the same, an update or
+outdated; outdated mails can't be answered. Mails for one date of a series are
+merged into the stored series. Cancellations remove the event or add an EXDATE,
+only after a click. Reply mails are shown, not applied to stored copies.
+
 ### `apps/desktop/src-tauri` — the shell
 
 Thin layer that owns the app lifecycle: windows, tray, notifications, updater,
@@ -388,11 +414,57 @@ phone the open draft always comes back as its bar.
 
 With undo send on (Settings → Writing, 10 seconds by default) the composer
 hands the message to `Engine::queue_send`, which checks it can be built,
-stores it in the `outbox` table and sends it when its time comes. `cancel_send`
-and the sender both take the row with one `DELETE … RETURNING`, so a mail is
-either taken back or sent, never both. Queued mail survives closing UwUMail and
-goes out on the next start. The result arrives as `send:done` or
-`send:failed`; a failed mail is kept as a draft.
+stores it in the `outbox` table and sends it when its time comes. The sender
+claims the row (`claimed_at`) and `cancel_send` only takes unclaimed rows, so a
+mail is either taken back or sent, never both. Queued mail survives closing
+UwUMail and goes out on the next start. The result arrives as `send:done` or
+`send:failed`; a failed mail is kept as a draft, or held in the outbox when
+Drafts can't take it (see below).
+
+### Send later
+
+`Engine::send_later_info` says where a mailbox's mail sent later waits. A JMAP
+mailbox whose server is a UwUMail server (`urn:uwumail:jmap:settings`) with a
+`maxDelayedSend` in its submission capability gets `server`: `send_later`
+imports the mail into Sent and creates an `EmailSubmission` with `sendAt`, as
+the webmail does (`jmap_scheduled`). The server takes no change to a
+submission but `undoStatus: canceled`, so a new time or "send now" cancels and
+submits the same mail again: the cancel goes alone and must be confirmed (an
+`updated` entry, or `canceled` when read again) before the new submission is
+made in a request of its own, so a mail already on its way never goes twice;
+a lost answer to the new submission is resolved by looking for the pending
+submission of that mail. When the new submission fails the mail is put into
+Drafts. Stopping moves it to Drafts as a draft; editing reads
+it back for the composer (Bcc from the envelope) and destroys the server copy,
+since the composer saves its own draft. The list leaves out submissions due
+within a minute: those are somebody's undo window, not mail sent later.
+
+Every other mailbox gets `local`: the mail goes into the `outbox` table with
+`later = 1` (`store/send_later.rs`). One outbox task (`send_later_ops`) serves
+the undo window and send later alike: it claims what is due by the wall clock
+with one `UPDATE … SET claimed_at … RETURNING`, sends it, and naps until the
+next entry but at most 30 seconds, so a time passed while the computer slept is
+noticed soon after waking and one missed while UwUMail was closed goes on the
+next start. A row leaves the outbox only once its mail went out or Drafts took
+it. A later mail whose server certainly didn't take it (connect, TLS, login,
+greeting, MAIL/RCPT/DATA, a 4xx answer) is put back with a new time (1, 2, 5,
+10, 15, 30 minutes) before it is kept as a draft and `send:failed` fires. A
+send that broke off after the message was handed over (SMTP) or whose
+submission answer got lost (JMAP, `Client::call_submission`) is
+`ErrorCode::MaybeSent` and never retried. Rows the person has to look at are
+`held` and never go on their own: `failed` (Drafts couldn't take it either,
+e.g. still offline) and `unsure` (may have gone out; also rows still claimed
+when UwUMail starts, which were being sent when it stopped). They show in the
+scheduled list with the reason; a new time or "send now" sends them again,
+edit and stop work as usual (`send:failed` carries `held: true`). Changing the
+time, sending now, stopping (held while Drafts is written, then taken out) and
+editing only touch rows that are still there and not being sent, so nothing
+goes twice. The engine runs while UwUMail does: in the tray on desktop, in the
+foreground service on Android; iOS suspends it, so there it goes when opened.
+
+Drafts: scheduling removes the mail's server draft like sending does, so there
+is one copy and no other device sends it a second time; stopping brings it back
+as a draft. Every change fires `scheduled:changed`.
 
 ### Moving, spam and blocked senders
 
@@ -426,7 +498,10 @@ sends the one-click POST (`List-Unsubscribe-Post`) itself, but only to HTTPS
 URLs with a public domain and without following redirects, so a header can't
 send requests into the local network. Otherwise it mails the list address from
 the identity the newsletter went to, and as a last resort hands the page URL to
-the app to open.
+the app to open. A one click that was sent and refused comes back as
+`OneClickFailed` with a short reason (host and status, never the link or the
+server's text) and the way left (`mail` or `page`); nothing else happens until
+the dialog asks again with `one_click: false`, like the webmail.
 
 ### Senders and signatures
 
@@ -587,7 +662,7 @@ the host too, limited to the hosts in the manifest.
 | --- | --- |
 | Mail cache, contacts, addon storage | `<app data>/uwumail.db` |
 | Opened attachments (trimmed at 1 GB) | `<app data>/attachments/<message id>/` |
-| Sender pictures (30 days per domain) | `<app data>/pictures/<domain>.<logo\|icon>.<ext>` |
+| Sender pictures without a UwUMail server (30 days per domain) | `<app data>/pictures/<domain>.<logo\|icon>.<ext>` |
 | Installed addons | `<app data>/addons/<addon id>/` |
 | Passwords, OAuth refresh tokens | OS keychain, service `UwUMail` |
 | AI providers, settings, labels, label log, usage (device scope) | `<app data>/uwumail.db` (`assist_*` tables) |
@@ -619,6 +694,23 @@ picture up instead (`/jmap/picture`), whichever mailbox the mail came to, and
 the company never sees this device. Otherwise the lookup goes through the
 privacy proxy when one is set; the BIMI record is asked of DNS directly.
 
+Pictures are asked for per address (lowercased), like the webmail does. The
+avatar first takes the own photo (a `data:` picture) of a contact that is
+already loaded; no address book is loaded just for an avatar. Then the engine:
+with a UwUMail server it asks the server per address, which answers with a
+contact's photo or the person's own picture before a company's logo
+(`X-Picture-Kind: photo|logo|icon`); its answers stay in memory for six hours
+(2,000 addresses, 32 MB at most; five minutes when the server didn't answer,
+with a cached company logo standing in meanwhile). With the setting off the
+engine asks with `local=1` (nothing that needs another server, and from here
+only the cache), and the avatar shows people's pictures only. Changed contacts
+make every avatar ask again past the engine's memory. Pictures over 2 MB or
+whose header claims more than 4096 × 4096 pixels are refused before anything
+decodes them. SVGs (BIMI logos always are) reach the page only as `data:`
+URLs, never as an asset URL of the app's own origin (audit W-35); cached raster
+pictures load through the asset protocol. The contact editor's logo button asks
+with `source=logo`.
+
 That includes IMAP accounts on a UwUMail server. The server says what it is when
 an IMAP connection opens (`UwUMail IMAP ready`), and only then does the engine
 also sign in over JMAP, at the account's JMAP address or
@@ -626,6 +718,47 @@ also sign in over JMAP, at the account's JMAP address or
 sign-in lives apart from the JMAP accounts' connections, so nothing else treats
 the account as a JMAP one, and one that fails is not tried again while the app
 runs; other providers never see a JMAP sign-in at all.
+
+## Server features of a UwUMail mailbox
+
+Masked addresses (`https://www.fastmail.com/dev/maskedemail`), the own
+profile picture (`urn:uwumail:jmap:profile`) and sharing calendars
+(`urn:ietf:params:jmap:principals`, `shareWith` on JMAP calendars) are found
+in the JMAP session of a mailbox, the same way as the assistant and domain
+signatures. The engine calls them with the login it holds
+(`jmap_masked.rs`, `jmap_profile.rs`, `calendar/jmap_cal.rs`,
+`engine/account_ops.rs`); the page only gets the results. Every field the
+page sends is checked against the server's limits first, and every answer is
+read field by field with bounds (names lose control and bidi characters). A
+profile picture reaches the engine as a `data:` URI the page cropped; its type
+comes from its bytes (JPEG, PNG, WebP, GIF, never SVG) and only pictures come
+back. Settings → Profile picture and Masked addresses show only for mailboxes
+whose server offers them (`server_account_features`, 4 s per server), with a
+choice of mailbox where there are several. Leaving a calendar someone shared
+is `Calendar/set destroy` on it; the owner keeps it.
+
+## Contact photos
+
+The editor crops every picture to a square JPEG (`lib/pictures.ts`, as in the
+webmail) and puts it into the card's JSContact `media`. UwUMail servers keep
+it in the card, CardDAV as the vCard `PHOTO`. Microsoft Graph and Google People
+keep photos apart from the contact: their cards carry the marker
+`uwuRemotePhoto`, the engine takes the photo out of the patch and writes it
+with `PUT/DELETE contacts/{id}/photo/$value` or
+`updateContactPhoto`/`deleteContactPhoto` (`engine/photo_ops.rs`), and the
+photo is fetched only when a contact opens (`contact_photo`, never for the
+whole list). Google photo links are fetched without login and redirects, up
+to 8 MB, and only from `*.googleusercontent.com`.
+
+"Take photo" uses the system camera through a file input
+(`accept="image/*" capture="user"`, phones only), not `getUserMedia`: no
+camera permission for the web view and no live preview to build. On Android
+wry's file chooser hands the camera app a file under the app's external
+`Pictures/` folder (`file_paths.xml`), and the camera app needs no CAMERA
+permission from UwUMail because none is declared. On iOS the web view's
+picker offers "Take Photo" and asks with `NSCameraUsageDescription`
+(`Info.ios.plist`). Desktops get "choose", drag and drop, and paste. The company
+logo button takes the app's sender picture of the contact's address.
 
 ## Text in pictures
 

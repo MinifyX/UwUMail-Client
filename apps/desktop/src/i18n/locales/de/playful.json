@@ -78,7 +78,8 @@
     "messageSaved": "Mail sicher abgelegt (˘ω˘)",
     "deletedForever_one": "Für immer weg (｡•́︿•̀｡)",
     "deletedForever_other": "{{count}} Mails für immer weg (｡•́︿•̀｡)",
-    "draftGone": "Hier ist kein Entwurf mehr, Nyu hat überall nachgeschaut (・_・;)"
+    "draftGone": "Hier ist kein Entwurf mehr, Nyu hat überall nachgeschaut (・_・;)",
+    "scheduled": "Nyu bringt sie {{time}} vorbei ✉︎"
   },
   "status": {
     "syncing": "Hole frische Mails…",
@@ -126,6 +127,7 @@
     "unifiedPushGone": "Deine Push-App ist weg (・_・;) Ich bleibe wieder selbst verbunden.",
     "senderAdded": "{{email}} ist startklar (｀・ω・´)ゞ",
     "signatureSaved": "Signatur sitzt ✧",
+    "signatureTooBig": "Uff, so viel passt nicht in eine Signatur (・_・;) Nimm ein kleineres Bild.",
     "signaturePlaceholder": "Liebe Grüße ✿",
     "linkConfirm": "Vor dem Öffnen von Links fragen",
     "linkConfirmDesc": "Ich zeig dir vorher, wohin ein Link aus einer Mail führt. Getarnte Links frag ich immer.",
@@ -151,7 +153,12 @@
   "attachment": {
     "loading": "Ich pack den Anhang aus…",
     "dangerTitle": "Vorsicht! Die Datei könnte Programme starten (・_・;)",
-    "noPreview": "Da kann ich nicht reinschauen (・・ )?"
+    "noPreview": "Da kann ich nicht reinschauen (・・ )?",
+    "dangerous": {
+      "titleOpen": "Nyu schaut diese Datei schief an",
+      "titleSave": "Nyu schaut diese Datei schief an",
+      "body": "Dateien dieser Art können Programme auf deinem Rechner starten. Nimm sie nur, wenn du sie erwartet hast und der Absenderin oder dem Absender vertraust."
+    }
   },
   "update": {
     "readyTitle": "Nyu hat was Neues mitgebracht ✧"
@@ -179,8 +186,8 @@
     "hiddenTarget": "Wohin's danach geht, verrät der Link nicht.",
     "otherTarget": "Anderes Ziel als angezeigt",
     "statusRedirect": "hüpft weiter zu {{target}}",
-    "safeLinkRemoved": "Microsoft-Safe-Link ausgepackt ✧",
-    "safeLinkBody": "Microsoft hat diesen Link für seinen Link-Scanner eingepackt ({{host}}). Ich hab ihn ausgepackt, du siehst und öffnest die echte Adresse.",
+    "safeLink": "Microsoft-Safe-Link ausgepackt ✧",
+    "safeLinkBody": "Microsoft hatte diesen Link in eine Prüfadresse eingepackt. Ich hab ihn ausgepackt, du siehst und öffnest die echte Adresse.",
     "unsupported": "Solche Links mach ich lieber nicht auf (・_・;)",
     "sheetTitle": "Link"
   },
@@ -208,7 +215,9 @@
   "unsubscribe": {
     "title": "Tschüss {{name}}?",
     "mailTo": "Dafür schickt Nyu eine Mail von dir an {{address}}.",
-    "mailToFallback": "Klappt das nicht direkt, schickt Nyu eine Mail von dir an {{address}}."
+    "mailToFallback": "Klappt das nicht direkt, schickt Nyu eine Mail von dir an {{address}}.",
+    "failedTitle": "Hm, das hat nicht geklappt (・_・;)",
+    "tryMail": "Nyu kann dich stattdessen per Mail abmelden. Dafür schickt Nyu eine Mail von dir an {{address}}."
   },
   "deleteForever": {
     "title_one": "Diese Mail für immer löschen? (｡•́︿•̀｡)",
@@ -235,18 +244,18 @@
     "reload": "Neu laden"
   },
   "folders": {
-    "created": "Neuer Ordner „{{name}}“ ist bereit (ﾉ◕ヮ◕)ﾉ",
+    "created": "Ordner „{{name}}“ steht bereit ✿",
     "renamed": "Heißt jetzt „{{name}}“ ✿",
     "deleted": "Ordner „{{name}}“ ist weg (｡•́︿•̀｡)",
-    "deleteTitle": "„{{name}}“ wegräumen?",
+    "deleteTitle": "Tschüss, „{{name}}“?",
     "deleteBody_one": "Die {{count}} Mail darin trage ich vorher in den Papierkorb.",
     "deleteBody_other": "Die {{count}} Mails darin trage ich vorher in den Papierkorb.",
-    "emptyTrashTitle": "Müll rausbringen? (・_・;)",
-    "emptyJunkTitle": "Spam rausfegen? (・_・;)",
+    "emptyTrashTitle": "Müll rausbringen? (・ω・)",
+    "emptyJunkTitle": "Spam rauskehren? (｀・ω・´)",
     "emptyBody_one": "{{count}} Mail ist dann für immer weg, auch auf dem Server. Zurückholen kann ich sie nicht.",
     "emptyBody_other": "{{count}} Mails sind dann für immer weg, auch auf dem Server. Zurückholen kann ich sie nicht.",
-    "emptied_one": "Puff, {{count}} Mail ist für immer weg ✧",
-    "emptied_other": "Puff, {{count}} Mails sind für immer weg ✧",
+    "emptied_one": "Blitzblank! {{count}} Mail ist für immer weg ✧",
+    "emptied_other": "Blitzblank! {{count}} Mails sind für immer weg ✧",
     "alreadyEmpty": "Hier ist schon alles blitzblank (˘ᵕ˘)"
   },
   "calendar": {
@@ -297,6 +306,36 @@
   "labels": {
     "overlap": {
       "title": "Hm, das kommt mir bekannt vor (・・?)"
+    }
+  },
+  "scheduled": {
+    "empty": "Nyu hat gerade nichts zu verteilen (・ω・)"
+  },
+  "masked": {
+    "empty": "Noch keine maskierten Adressen. Magst du für die nächste Anmeldung eine kleine Verkleidung? (｀・ω・´)",
+    "created": "Tada, deine neue Verkleidung ist fertig ✿"
+  },
+  "picture": {
+    "error": {
+      "notImage": "Hm, das ist gar kein Bild (・_・;)",
+      "unreadable": "Aus dem Bild werd ich nicht schlau (・_・;)"
+    }
+  },
+  "profile": {
+    "saved": "Siehst gut aus ✿",
+    "removed": "Bild ist weg, deine Initialen sind zurück (・ω・)"
+  },
+  "invitation": {
+    "answered": {
+      "accepted": "Zugesagt! Ich hab’s der einladenden Person gesagt ✧",
+      "tentative": "Vielleicht also! Ich hab’s weitergesagt (・ω・)",
+      "declined": "Abgesagt. Ich hab’s nett ausgerichtet (˘ᵕ˘)"
+    },
+    "removed": "Weg aus deinem Kalender ✧"
+  },
+  "push": {
+    "notification": {
+      "newMail": "Post für dich! ✉"
     }
   }
 }

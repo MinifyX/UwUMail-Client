@@ -38,6 +38,7 @@ import { useWorkspaceName } from "../workspaces/workspaces";
 import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
 import { useSelectionActions } from "./selection";
 import { droppedThreads, isThreadDrag } from "./threadDrag";
+import { ScheduledNavItem } from "../compose/ScheduledSends";
 import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
 
 const UNIFIED_ROLES = ["inbox", "unread", "flagged", "drafts", "sent"] as const;
@@ -86,7 +87,7 @@ function folderMenuItems(folder: Folder, t: (key: string) => string): MenuItem[]
   if (!folder.role) {
     items.push(
       { label: t("folders.rename"), onSelect: () => edit.open({ kind: "rename", folder }) },
-      { label: t("folders.delete"), onSelect: () => edit.open({ kind: "delete", folder }) },
+      { label: t("folders.delete"), danger: true, onSelect: () => edit.open({ kind: "delete", folder }) },
     );
   }
   if (canEmpty(folder)) {
@@ -423,6 +424,7 @@ export function MailboxNav({
               />
             );
           })}
+          <ScheduledNavItem />
         </section>
 
         <LabelNav />

@@ -58,8 +58,27 @@ const PICTURES: Record<string, SenderPicture> = {
   },
 };
 
-export function demoSenderPicture(email: string): SenderPicture | null {
+/** A drawn head and shoulders, standing in for a person's photo in the demo. */
+function demoPortrait(background: string, hair: string, shirt: string): string {
+  return svg(
+    `<rect width="64" height="64" fill="${background}"/><circle cx="32" cy="27" r="12" fill="#f3c9a8"/>` +
+      `<path d="M20 25a12 12 0 0 1 24 0c-3-5-8-7-12-7s-9 2-12 7z" fill="${hair}"/>` +
+      `<path d="M10 64c2-13 11-19 22-19s20 6 22 19z" fill="${shirt}"/>`,
+  );
+}
+
+/** The profile pictures people on the demo's "server" chose to show there. */
+export const DEMO_PROFILE_PICTURES: Record<string, string> = {
+  "kai@uwumail.example": demoPortrait("#ffe1c2", "#1f1a24", "#ff7a59"),
+};
+
+/** The demo's own domains, whose logo the "server" has without asking anyone. */
+const LOCAL_DOMAINS = new Set(["uwumail.example"]);
+
+/** A company's logo for the address; with `local`, only those of the demo's own domains. */
+export function demoSenderPicture(email: string, local = false): SenderPicture | null {
   const domain = email.split("@").pop()?.toLowerCase() ?? "";
+  if (local && !LOCAL_DOMAINS.has(domain)) return null;
   return PICTURES[domain] ?? null;
 }
 

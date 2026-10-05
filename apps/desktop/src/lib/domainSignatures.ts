@@ -70,6 +70,8 @@ export interface DomainSignatureOverview {
 export interface DomainSignatureChange {
   domains?: Record<string, SignatureText | null>;
   identities?: Record<string, SignatureText | null>;
+  /** The overview's `state` the change was made on: refused when it changed elsewhere since (WF-3). */
+  ifInState?: string;
 }
 
 export const EMPTY_SIGNATURE: SignatureText = { text: "", html: "" };

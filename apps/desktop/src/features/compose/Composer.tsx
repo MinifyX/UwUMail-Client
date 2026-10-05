@@ -4,6 +4,7 @@ import {
   Bold,
   Check,
   ChevronDown,
+  Clock,
   Italic,
   Link,
   List,
@@ -42,6 +43,8 @@ import { useWorkspaceName } from "../workspaces/workspaces";
 import { initialDraft, replyFrom, type DraftState } from "./draft";
 import { RecipientInput } from "./RecipientInput";
 import { undoSend } from "./undoSend";
+import { SendLaterDialog } from "./SendLater";
+import { announceScheduled, useSendLaterInfo } from "./scheduled";
 import { ComposeAssistButton, ComposeAssistPanel } from "../assist/ComposeAssist";
 import { AssistForAccount } from "../assist/useAssist";
 import { useComposeAssist } from "../assist/useComposeAssist";
@@ -87,12 +90,14 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const [initial] = useState(() => initialDraft(request, accounts, identities ?? [], t, i18n.language));
   const [draft, setDraft] = useState<DraftState>(initial);
   const accountId = draft.accountId || accounts[0]?.id || "";
+  const { data: sendLaterInfo } = useSendLaterInfo(accountId);
   // Show the Cc/Bcc rows when either is set, so a Bcc that arrived (e.g. from a mailto link) is
   // never present but invisible (webmail security audit W-1).
   const [showCc, setShowCc] = useState(initial.cc.length > 0 || initial.bcc.length > 0);
   const [large, setLarge] = useState(false);
   const [attachments, setAttachments] = useState<OutgoingAttachment[]>(request.attachments ?? []);
   const [sending, setSending] = useState(false);
+  const [pickingTime, setPickingTime] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editor = useRef<HTMLDivElement | null>(null);
   /** A drag that started in the editor itself: moving text, not markup from elsewhere. */
@@ -220,7 +225,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             .catch(() => {});
         draftKey.current = saved.draftKey;
         savedAccount.current = account;
-        if (!dirty.current) markLocalDraftSaved(saved.draftKey);
+        if (!dirty.current) markLocalDraftSaved(saved.draftKey, saved.messageId ?? undefined);
         setSaveState({ kind: "saved", at: saved.savedAt });
       } catch {
         // Kept on this device; the next change or closing tries again.
@@ -364,7 +369,8 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
     document.execCommand(command);
   };
 
-  const send = async () => {
+  /** Sends now (after the undo window), or at `sendAt`: on the UwUMail server or from this device's outbox. */
+  const send = async (sendAt?: string) => {
     if (draft.to.length + draft.cc.length + draft.bcc.length === 0) {
       setError(t("compose.noRecipients"));
       return;
@@ -388,9 +394,10 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         attachments,
         draftKey: savedAccount.current === accountId ? draftKey.current : undefined,
       };
-      const delay = useSettings.getState().undoSendSeconds;
+      const scheduled = sendAt ? await backend().sendLater(message, sendAt) : null;
+      const delay = scheduled ? 0 : useSettings.getState().undoSendSeconds;
       const queued = delay > 0 ? await backend().queueSend(message, delay) : null;
-      if (!queued) await backend().send(message);
+      if (!queued && !scheduled) await backend().send(message);
       // Written in another mailbox before: sending there doesn't remove that copy.
       if (draftKey.current && savedAccount.current && savedAccount.current !== accountId) {
         void backend()
@@ -401,10 +408,13 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       closeCompose();
       // Off it goes: Nyu waves the letter goodbye right away, also while it can still be taken back.
       playNyu("sent");
-      if (queued) {
+      if (scheduled) {
+        announceScheduled(scheduled, accountId);
+      } else if (queued) {
         // It goes out when the toast does; "sent" follows from the engine (send:done).
         toast(t("toast.sending"), "info", undefined, {
           duration: delay * 1000,
+          countdownTo: new Date(Date.now() + delay * 1000).toISOString(),
           action: { label: t("toast.undo"), run: () => void undoSend(queued.id) },
         });
       } else {
@@ -428,7 +438,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
     const names = [...draft.to, ...draft.cc, ...draft.bcc].map((a) => a.name || a.email).join(", ");
     return (
       <div className="fixed inset-x-3 bottom-[84px] z-30 flex animate-slide-up items-center gap-2 rounded-2xl bg-[#1c1420] py-1.5 pr-1.5 pl-4 text-white shadow-float dark:bg-elevated dark:text-ink">
-        <PenLine className="size-4 shrink-0 text-[#ff7fac]" aria-hidden />
+        <PenLine className="size-4 shrink-0 text-[#ff7fac] dark:text-pink" aria-hidden />
         <button type="button" onClick={() => setMinimized(false)} className="min-w-0 flex-1 py-1 text-left">
           <span className="block truncate text-[13.5px] font-bold">
             {names ? t("mobile.draft.to", { names }) : title}
@@ -456,7 +466,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         onClick={() => setMinimized(false)}
         className="fixed right-6 bottom-0 z-40 flex h-12 w-80 items-center gap-3 rounded-t-2xl bg-[#1c1420] px-4 text-left text-[13.5px] font-semibold text-white shadow-float dark:bg-elevated dark:text-ink"
       >
-        <Send className="size-4 text-[#ff7fac]" aria-hidden />
+        <Send className="size-4 text-[#ff7fac] dark:text-pink" aria-hidden />
         <span className="min-w-0 flex-1 truncate">{title}</span>
         <ChevronDown className="size-4 rotate-180" aria-hidden />
       </button>
@@ -723,6 +733,33 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         >
           {sending ? t("compose.sending") : t("compose.send")}
         </Button>
+        <IconButton
+          icon={Clock}
+          size="sm"
+          label={t("compose.later.open")}
+          disabled={sending || !sendLaterInfo}
+          onClick={() => {
+            if (draft.to.length + draft.cc.length + draft.bcc.length === 0) {
+              setError(t("compose.noRecipients"));
+              return;
+            }
+            setPickingTime(true);
+          }}
+        />
+        {sendLaterInfo && (
+          // Keys in the dialog are its own: Escape must not shrink the composer behind it.
+          <div onKeyDown={(event) => event.stopPropagation()}>
+            <SendLaterDialog
+              open={pickingTime}
+              info={sendLaterInfo}
+              onClose={() => setPickingTime(false)}
+              onPick={(sendAt) => {
+                setPickingTime(false);
+                void send(sendAt);
+              }}
+            />
+          </div>
+        )}
         <span className="mx-1.5 h-5 w-px bg-line" aria-hidden />
         <IconButton
           icon={Bold}

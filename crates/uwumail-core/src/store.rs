@@ -12,10 +12,13 @@ use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
 
 mod assist;
+mod invites;
+mod send_later;
 mod shared;
 pub use assist::{
     CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, LabelShot, ProviderRecord, UsageRecord,
 };
+pub use send_later::{HELD_FAILED, HELD_UNSURE, LaterSend, TakenSend};
 pub use shared::{AccountLink, shared_by_sign_in};
 
 const MIGRATIONS: &[&str] = &[
@@ -208,6 +211,10 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     assist::FROM_TRUSTED_MIGRATION,
     shared::MIGRATION,
     assist::BASE_LABELS_MIGRATION,
+    assist::PREVIOUS_DESCRIPTION_MIGRATION,
+    send_later::MIGRATION,
+    invites::MIGRATION,
+    send_later::HOLD_MIGRATION,
 ];
 
 /// What this device remembers about one calendar.
@@ -1289,6 +1296,30 @@ impl Store {
         Ok(ids)
     }
 
+    /// The local id of the message with this IMAP uid in a folder.
+    pub fn id_by_uid(&self, folder_id: &str, uid: u32) -> Result<Option<String>> {
+        let conn = self.conn();
+        Ok(conn
+            .query_row(
+                "SELECT id FROM messages WHERE folder_id = ?1 AND uid = ?2",
+                params![folder_id, i64::from(uid)],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    /// The local id of the email with this JMAP id.
+    pub fn id_by_remote_id(&self, account_id: &str, remote_id: &str) -> Result<Option<String>> {
+        let conn = self.conn();
+        Ok(conn
+            .query_row(
+                "SELECT id FROM messages WHERE account_id = ?1 AND remote_id = ?2",
+                params![account_id, remote_id],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
     pub fn locations(&self, ids: &[String]) -> Result<Vec<MessageLocation>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
@@ -1831,9 +1862,11 @@ impl Store {
     pub fn take_outbox(&self, id: &str) -> Result<Option<(String, String)>> {
         Ok(self
             .conn()
-            .query_row("DELETE FROM outbox WHERE id = ?1 RETURNING account_id, message_json", [id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
+            .query_row(
+                "DELETE FROM outbox WHERE id = ?1 AND claimed_at IS NULL RETURNING account_id, message_json",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
             .optional()?)
     }
 

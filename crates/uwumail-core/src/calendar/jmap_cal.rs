@@ -1,13 +1,14 @@
 //! JMAP Calendars (draft-ietf-jmap-calendars) on a UwUMail server: calendars, events expanded
 //! by the server in the viewer's zone, and changes as JMAP patches.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value, json};
 
 use crate::error::{Error, Result};
 use crate::jmap::{self, Client};
+use crate::model::{CalendarOwner, CalendarSharing, Person};
 
 /// Instances asked for at once; the server allows 5000.
 const QUERY_LIMIT: usize = 5000;
@@ -36,6 +37,8 @@ pub struct JmapCalendar {
     pub may_delete: bool,
     /// The server's birthdays calendar (`uwuBirthdays`), made from the contacts and read-only.
     pub is_birthdays: bool,
+    /// Who shares it, and with whom (`uwuSharedBy`, `shareWith`, `myRights.mayShare`).
+    pub sharing: CalendarSharing,
 }
 
 pub fn parse_calendar(value: &Value) -> Option<JmapCalendar> {
@@ -55,7 +58,119 @@ pub fn parse_calendar(value: &Value) -> Option<JmapCalendar> {
             && (rights.is_none() || right("mayWriteAll").unwrap_or(false) || right("mayWriteOwn").unwrap_or(false)),
         may_delete: !is_birthdays && (rights.is_none() || right("mayDelete").unwrap_or(false)),
         is_birthdays,
+        sharing: sharing_of(value, !is_birthdays && rights.is_some() && right("mayShare") == Some(true)),
     })
+}
+
+/// A short text of the server's, without control characters or the ones that turn text around.
+fn clean(text: &str, max: usize) -> String {
+    let shown = |c: &char| !c.is_control() && !matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}');
+    text.chars().filter(shown).take(max).collect::<String>().trim().to_string()
+}
+
+/// A JMAP id: what may go into a patch path (`shareWith/<id>`) and nothing else (RFC 8620 §1.2).
+pub fn valid_principal(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 255 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// The calendar's owner when somebody shares it with the account, and who it is shared with where
+/// the account may share it.
+fn sharing_of(value: &Value, may_share: bool) -> CalendarSharing {
+    let shared_by = value.get("uwuSharedBy").filter(|owner| owner.is_object()).and_then(|owner| {
+        let email = clean(owner.get("email").and_then(Value::as_str)?, 320);
+        let name = clean(owner.get("name").and_then(Value::as_str).unwrap_or_default(), 200);
+        (!email.is_empty()).then(|| CalendarOwner { name: if name.is_empty() { email.clone() } else { name }, email })
+    });
+    let shared_with = value.get("shareWith").and_then(Value::as_object).map(|share_with| {
+        share_with
+            .iter()
+            .filter(|(principal, _)| valid_principal(principal))
+            .filter_map(|(principal, rights)| Some((principal.clone(), share_level(rights.as_object()?).to_string())))
+            .take(1000)
+            .collect::<BTreeMap<_, _>>()
+    });
+    CalendarSharing { may_share, shared_by, shared_with: if may_share { shared_with } else { None } }
+}
+
+/// The level CalendarRights amount to: sharing on means everything, any writing means write.
+pub fn share_level(rights: &Map<String, Value>) -> &'static str {
+    let on = |key: &str| rights.get(key).and_then(Value::as_bool) == Some(true);
+    if on("mayShare") {
+        "all"
+    } else if on("mayWriteAll") || on("mayWriteOwn") || on("mayUpdatePrivate") || on("mayRSVP") {
+        "write"
+    } else {
+        "read"
+    }
+}
+
+/// The CalendarRights a level stands for, as `shareWith` takes them.
+pub fn rights_for(level: &str) -> Result<Value> {
+    let read = json!({ "mayReadFreeBusy": true, "mayReadItems": true });
+    let mut rights = read;
+    match level {
+        "read" => {}
+        "write" | "all" => {
+            for key in ["mayWriteAll", "mayWriteOwn", "mayUpdatePrivate", "mayRSVP"] {
+                rights[key] = json!(true);
+            }
+            if level == "all" {
+                rights["mayShare"] = json!(true);
+            }
+        }
+        _ => return Err(Error::invalid("A calendar is shared to read, to read and write, or with everything.")),
+    }
+    Ok(rights)
+}
+
+/// Shares a calendar with a person at a level (`read`, `write`, `all`), or stops sharing it with
+/// them (`None`).
+pub async fn share_calendar(client: &Client, id: &str, principal: &str, level: Option<&str>) -> Result<()> {
+    if !valid_principal(principal) {
+        return Err(Error::invalid("That person isn't on this server."));
+    }
+    let rights = match level {
+        Some(level) => rights_for(level)?,
+        None => Value::Null,
+    };
+    let mut patch = Map::new();
+    patch.insert(format!("shareWith/{principal}"), rights);
+    update_calendar(client, id, patch).await
+}
+
+/// The people of the server to share with: individuals but the login itself, by name.
+pub async fn people(client: &Client) -> Result<Vec<Person>> {
+    if !client.session.principals {
+        return Err(Error::not_supported("This server doesn't share calendars."));
+    }
+    let arguments = json!({ "accountId": client.account_id(), "ids": null,
+        "properties": ["id", "type", "name", "email"] });
+    let responses = client.call(vec![("Principal/get", arguments)]).await?;
+    let own_email = client.session.username.to_lowercase();
+    let own_id = client.session.own_principal_id.as_deref();
+    let mut people: Vec<Person> = list(responses.get(0, "Principal/get")?)
+        .iter()
+        .take(20_000)
+        .filter(|p| p.get("type").and_then(Value::as_str).unwrap_or("individual") == "individual")
+        .filter_map(|p| {
+            let id = p.get("id").and_then(Value::as_str).filter(|id| valid_principal(id))?;
+            let email = clean(p.get("email").and_then(Value::as_str).unwrap_or_default(), 320);
+            if Some(id) == own_id || (!email.is_empty() && email.to_lowercase() == own_email) {
+                return None;
+            }
+            let name = clean(p.get("name").and_then(Value::as_str).unwrap_or_default(), 200);
+            let name = if !name.is_empty() {
+                name
+            } else if !email.is_empty() {
+                email.clone()
+            } else {
+                id.to_string()
+            };
+            Some(Person { id: id.to_string(), name, email })
+        })
+        .collect();
+    people.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.email.cmp(&b.email)));
+    Ok(people)
 }
 
 pub async fn calendars(client: &Client) -> Result<Vec<JmapCalendar>> {
@@ -65,11 +180,21 @@ pub async fn calendars(client: &Client) -> Result<Vec<JmapCalendar>> {
             json!({
                 "accountId": account(client)?,
                 "ids": null,
-                "properties": ["id", "name", "color", "sortOrder", "isVisible", "isDefault", "myRights", "uwuBirthdays"],
+                "properties": ["id", "name", "color", "sortOrder", "isVisible", "isDefault", "myRights", "uwuBirthdays",
+                    "shareWith", "uwuSharedBy"],
             }),
         )])
         .await?;
-    Ok(list(responses.get(0, "Calendar/get")?).iter().filter_map(parse_calendar).collect())
+    let mut calendars: Vec<JmapCalendar> =
+        list(responses.get(0, "Calendar/get")?).iter().filter_map(parse_calendar).collect();
+    // Sharing needs the people of the server to choose from.
+    if !client.session.principals {
+        for calendar in &mut calendars {
+            calendar.sharing.may_share = false;
+            calendar.sharing.shared_with = None;
+        }
+    }
+    Ok(calendars)
 }
 
 /// A `/set` answer's first problem, as an error.
@@ -142,7 +267,7 @@ pub struct JmapInstance {
     pub utc: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
 
-const INSTANCE_PROPERTIES: [&str; 18] = [
+const INSTANCE_PROPERTIES: [&str; 20] = [
     "id",
     "baseEventId",
     "calendarIds",
@@ -160,6 +285,9 @@ const INSTANCE_PROPERTIES: [&str; 18] = [
     "color",
     "utcStart",
     "utcEnd",
+    // Who takes part, for the event popover.
+    "participants",
+    "organizerCalendarAddress",
     // Events of the birthdays calendar: whose date (UwUMail-Server docs/birthdays.md).
     "uwuBirthday",
 ];
@@ -299,6 +427,50 @@ pub async fn destroy_event(client: &Client, id: &str) -> Result<()> {
     event_set(client, "destroy", json!([id]), "The event wasn't deleted.").await.map(|_| ())
 }
 
+/// Properties read of an event an invitation names.
+const INVITATION_PROPERTIES: [&str; 9] =
+    ["id", "baseEventId", "isOrigin", "uid", "participants", "organizerCalendarAddress", "status", "sequence", "title"];
+
+/// The stored events with this UID (the series first), as far as an invitation needs them.
+pub async fn events_with_uid(client: &Client, uid: &str) -> Result<Vec<Value>> {
+    let account = account(client)?;
+    let responses = client
+        .call(vec![
+            ("CalendarEvent/query", json!({ "accountId": account, "filter": { "uid": uid }, "limit": 10 })),
+            (
+                "CalendarEvent/get",
+                json!({
+                    "accountId": account,
+                    "#ids": { "resultOf": "0", "name": "CalendarEvent/query", "path": "/ids" },
+                    "properties": INVITATION_PROPERTIES,
+                }),
+            ),
+        ])
+        .await?;
+    let mut found = list(responses.get(1, "CalendarEvent/get")?);
+    // Only that UID: a server whose filter matches parts of it doesn't hand over other events.
+    found.retain(|event| event.get("uid").and_then(Value::as_str).is_none_or(|found| found == uid));
+    found.sort_by_key(|event| event.get("baseEventId").and_then(Value::as_str).is_some());
+    Ok(found)
+}
+
+/// Sets a participant's answer. With `send`, the server tells the organizer (iTIP), as the
+/// webmail answers on a UwUMail server.
+pub async fn set_participation(client: &Client, id: &str, participant: &str, status: &str, send: bool) -> Result<()> {
+    let key = format!("participants/{}/participationStatus", super::jscal::pointer_segment(participant));
+    let responses = client
+        .call(vec![(
+            "CalendarEvent/set",
+            json!({ "accountId": account(client)?, "update": { id: { key: status } }, "sendSchedulingMessages": send }),
+        )])
+        .await?;
+    let answer = responses.get(0, "CalendarEvent/set")?.clone();
+    if jmap::set_errors(&answer).is_some() {
+        return Err(refused(&answer, "The answer wasn't taken."));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,5 +494,41 @@ mod tests {
         let birthdays = parse_calendar(&birthdays).unwrap();
         assert!(birthdays.is_birthdays && !birthdays.may_write && !birthdays.may_delete);
         assert!(!own.is_birthdays);
+    }
+
+    #[test]
+    fn reads_who_shares_and_with_whom() {
+        let own = json!({ "id": "c1", "name": "Privat", "myRights": { "mayWriteAll": true, "mayDelete": true, "mayShare": true },
+            "shareWith": { "p3": { "mayReadItems": true }, "p4": { "mayWriteAll": true }, "p5": { "mayShare": true },
+                           "../x": { "mayShare": true }, "p6": null } });
+        let own = parse_calendar(&own).unwrap();
+        assert!(own.sharing.may_share && own.sharing.shared_by.is_none());
+        let levels = own.sharing.shared_with.unwrap();
+        assert_eq!(levels.get("p3").map(String::as_str), Some("read"));
+        assert_eq!(levels.get("p4").map(String::as_str), Some("write"));
+        assert_eq!(levels.get("p5").map(String::as_str), Some("all"));
+        assert_eq!(levels.len(), 3);
+
+        let shared = json!({ "id": "c2", "name": "Team", "myRights": { "mayReadItems": true, "mayDelete": true },
+            "uwuSharedBy": { "email": "leni@example.org", "name": "  \u{7}", "principalId": "p3" },
+            "shareWith": { "p9": { "mayReadItems": true } } });
+        let shared = parse_calendar(&shared).unwrap();
+        assert!(!shared.sharing.may_share && shared.may_delete);
+        assert_eq!(
+            shared.sharing.shared_by,
+            Some(CalendarOwner { email: "leni@example.org".into(), name: "leni@example.org".into() })
+        );
+        // Who else sees it is the owner's business.
+        assert!(shared.sharing.shared_with.is_none());
+    }
+
+    #[test]
+    fn levels_are_rights_and_back() {
+        for level in ["read", "write", "all"] {
+            let rights = rights_for(level).unwrap();
+            assert_eq!(share_level(rights.as_object().unwrap()), level);
+        }
+        assert!(rights_for("admin").is_err());
+        assert!(valid_principal("p12") && !valid_principal("p/1") && !valid_principal("") && !valid_principal("a~b"));
     }
 }

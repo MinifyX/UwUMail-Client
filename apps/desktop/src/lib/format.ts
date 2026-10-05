@@ -61,10 +61,19 @@ export function colorFor(key: string): AccountColor {
   return ACCOUNT_COLORS[hash % ACCOUNT_COLORS.length]!;
 }
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
+/**
+ * One `@` with something before it and a dot inside the part after it, and no white space: what
+ * `/^[^\s@]+@[^\s@]+\.[^\s@]+$/` accepts, checked without the regex. That one tried every dot of
+ * the domain again and took quadratic time on a long run of dots, as in a crafted
+ * `List-Unsubscribe` header (security-audit WEBMAIL-1).
+ */
 export function isEmail(value: string): boolean {
-  return EMAIL_PATTERN.test(value.trim());
+  const text = value.trim();
+  if (/\s/.test(text)) return false;
+  const at = text.indexOf("@");
+  if (at < 1 || text.includes("@", at + 1)) return false;
+  // A dot neither first nor last in the domain leaves something on both sides of it.
+  return text.slice(at + 2, -1).includes(".");
 }
 
 /** Parses "Name <a@b.c>" or "a@b.c". Returns null for anything else. */

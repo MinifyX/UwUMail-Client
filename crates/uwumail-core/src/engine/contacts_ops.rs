@@ -607,7 +607,14 @@ impl Engine {
         let mut card = card_object(card)?;
         let remote = match source {
             Source::Graph { .. } | Source::Google => {
-                self.inner.cloud_create_card(&account_id, &source, &book, &card).await?
+                // Their photo is written apart from the contact (photo_ops).
+                super::photo_ops::drop_marker(&mut card);
+                let photo = super::photo_ops::photo_of_card(&mut card)?;
+                let remote = self.inner.cloud_create_card(&account_id, &source, &book, &card).await?;
+                if let Some(photo) = &photo {
+                    self.inner.cloud_set_photo(&account_id, &source, &remote, Some(photo)).await?;
+                }
+                remote
             }
             Source::Jmap => {
                 jmap_contacts::create_card(&*self.inner.jmap_client(&account_id).await?, &book.remote, card).await?
@@ -669,7 +676,15 @@ impl Engine {
         }
         match self.inner.contacts_source(account_id).await? {
             source @ (Source::Graph { .. } | Source::Google) => {
-                self.inner.cloud_update_card(account_id, &source, remote, &patch, target.as_ref()).await?;
+                // Their photo is written apart from the contact (photo_ops).
+                patch.remove(crate::contacts::cloud_cards::REMOTE_PHOTO);
+                let photo = super::photo_ops::take_photo_change(&mut patch)?;
+                if !patch.is_empty() || target.is_some() {
+                    self.inner.cloud_update_card(account_id, &source, remote, &patch, target.as_ref()).await?;
+                }
+                if let Some(photo) = &photo {
+                    self.inner.cloud_set_photo(account_id, &source, remote, photo.as_ref()).await?;
+                }
             }
             Source::Jmap => {
                 if let Some(target) = &target {

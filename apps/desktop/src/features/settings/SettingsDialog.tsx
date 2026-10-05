@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import {
   BellOff,
+  CircleUserRound,
   ExternalLink,
   ImageIcon,
   Info,
@@ -16,6 +17,7 @@ import {
   Tags,
   Upload,
   Users,
+  VenetianMask,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -62,6 +64,7 @@ import { BlockedSenders } from "./BlockedSenders";
 import { LinkSettings } from "./LinkSettings";
 import { SettingsSyncRow } from "./SettingsSync";
 import { Row } from "./Row";
+import { MaskedSettings, ProfileSettings, useServerAccounts } from "./ServerAccountSettings";
 import { PUSH_STATUS_KEY, UnifiedPush } from "./UnifiedPush";
 import { Writing } from "./Writing";
 import { useUi, type SettingsSection } from "@/state/ui";
@@ -74,7 +77,9 @@ const SECTIONS: { id: SettingsSection; icon: LucideIcon; phoneOnly?: boolean }[]
   { id: "appearance", icon: Palette },
   { id: "mail", icon: Mail },
   { id: "compose", icon: PenLine },
+  { id: "profile", icon: CircleUserRound },
   { id: "rules", icon: ListFilter },
+  { id: "masked", icon: VenetianMask },
   { id: "labels", icon: Tags },
   { id: "assistant", icon: Sparkles },
   { id: "security", icon: Lock, phoneOnly: true },
@@ -435,6 +440,14 @@ function Reading() {
           )}
         </div>
       )}
+      <div className="border-b border-hairline py-4">
+        <Toggle
+          checked={settings.notifyShowContent}
+          onChange={(notifyShowContent) => settings.update({ notifyShowContent })}
+          label={t("push.showContent")}
+          description={t("push.showContentDesc")}
+        />
+      </div>
     </>
   );
 }
@@ -715,11 +728,16 @@ export function SettingsDialog() {
   const { data: rulesAccounts = [] } = useMailRulesAccounts();
   // The AI assistant only where one can be set up: a server's, or this device's for other mailboxes.
   const { data: assistScopes = [] } = useAssistScopes();
+  // Masked addresses and the profile picture only for mailboxes on a UwUMail server that has them.
+  const maskedAccounts = useServerAccounts("masked");
+  const profileAccounts = useServerAccounts("profile");
   const sections = SECTIONS.filter(
     (item) =>
       (!item.phoneOnly || nativeMobile) &&
       (item.id !== "rules" || rulesAccounts.length > 0) &&
-      ((item.id !== "assistant" && item.id !== "labels") || assistScopes.length > 0),
+      ((item.id !== "assistant" && item.id !== "labels") || assistScopes.length > 0) &&
+      (item.id !== "masked" || maskedAccounts.length > 0) &&
+      (item.id !== "profile" || profileAccounts.length > 0),
   );
 
   const requestClose = () => {
@@ -778,6 +796,8 @@ export function SettingsDialog() {
             {section === "assistant" && <AssistantSettings />}
             {section === "security" && <Security />}
             {section === "accounts" && <Accounts />}
+            {section === "profile" && <ProfileSettings />}
+            {section === "masked" && <MaskedSettings />}
             {section === "addons" && <Addons />}
             {section === "about" && <About />}
           </div>

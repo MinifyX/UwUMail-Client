@@ -35,15 +35,25 @@ export function targetHost(href: string): string | null {
   }
 }
 
+const TRAILING_PUNCTUATION = new Set([".", ",", ";", ":", "!", "?", ")"]);
+
+/**
+ * Text without the punctuation a sentence puts after an address ("see paypal.com."). A loop from
+ * the back rather than `/[.,;:!?)]+$/`, which retries from every position of a long run and froze
+ * the view when the pointer crossed a crafted link (webmail security-audit WEBMAIL-1).
+ */
+function withoutTrailingPunctuation(text: string): string {
+  let end = text.length;
+  while (end > 0 && TRAILING_PUNCTUATION.has(text[end - 1]!)) end -= 1;
+  return text.slice(0, end);
+}
+
 /** The host the visible text claims, if the text looks like an address at all. */
 export function claimedHost(text: string): string | null {
   // Strip invisible format characters first (zero-width spaces, soft hyphens): rendered they show
   // nothing, so "paypal<U+200B>.com" reads as paypal.com but would otherwise slip past the check
   // (security-audit W-8).
-  const trimmed = text
-    .replace(/[\p{Cf}­]/gu, "")
-    .trim()
-    .replace(/[.,;:!?)]+$/, "");
+  const trimmed = withoutTrailingPunctuation(text.replace(/[\p{Cf}­]/gu, "").trim());
   if (!trimmed || /\s/.test(trimmed)) return null;
   const mail = EMAIL.exec(trimmed);
   if (mail) return bareHost(mail[2]!);
@@ -186,13 +196,17 @@ export interface LinkCheck {
   rememberable: string | null;
 }
 
-export function checkLink(href: string, text: string): LinkCheck | null {
+/**
+ * `safeLink` names the Safe Links host the reader already took off the link (see lib/safeLinks); a
+ * link still wrapped in one is unwrapped here, so every check looks at the original address.
+ */
+export function checkLink(href: string, text: string, safeLink: string | null = null): LinkCheck | null {
   const written = href.trim();
   if (!isOpenableLink(written)) return null;
   // Every check below looks at the original address, not at Microsoft's wrapper around it.
   const safe = unwrapSafeLink(written);
   const trimmed = safe?.url ?? written;
-  const safeLink = safe?.wrapper ?? null;
+  safeLink = safe?.wrapper ?? safeLink;
   const misleading = misleadingLink(trimmed, text);
   if (/^mailto:/i.test(trimmed)) {
     const mailto = parseMailto(trimmed);

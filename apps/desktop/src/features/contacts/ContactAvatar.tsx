@@ -1,21 +1,30 @@
 import clsx from "clsx";
 import { UsersRound } from "lucide-react";
+import { useState } from "react";
 import type { ContactRecord } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
+import { useContactPhoto } from "./useContactPhoto";
 
 const SIZES = {
   list: "size-9",
   lg: "size-16",
 } as const;
 
-/** The contact's own picture when the card has one; otherwise the same avatar as in the mail. */
+/**
+ * The contact's own picture when the card has one; otherwise the same avatar as in the mail. The
+ * large one (an open contact) also asks Microsoft or Google for the photo they keep apart.
+ */
 export function ContactAvatar({ contact, size = "list" }: { contact: ContactRecord; size?: keyof typeof SIZES }) {
-  if (contact.photo) {
+  const photo = useContactPhoto(contact, size === "lg");
+  // A picture that can't be shown (a broken one) falls back to the avatar instead of a broken image.
+  const [failed, setFailed] = useState<string | null>(null);
+  if (photo && photo !== failed) {
     return (
       <img
-        src={contact.photo}
+        src={photo}
         alt=""
         draggable={false}
+        onError={() => setFailed(photo)}
         className={clsx("shrink-0 rounded-full object-cover", SIZES[size])}
       />
     );

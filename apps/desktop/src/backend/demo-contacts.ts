@@ -202,7 +202,7 @@ export class DemoContacts {
       anniversary: input.anniversaryChanged ? (input.anniversary ?? null) : (before?.anniversary ?? null),
       reminders: input.reminders !== undefined ? [...input.reminders] : [...(before?.reminders ?? [])],
       note: input.note.trim(),
-      photo: before?.photo ?? null,
+      photo: input.photo !== undefined ? input.photo : (before?.photo ?? null),
       isGroup: false,
     };
   }

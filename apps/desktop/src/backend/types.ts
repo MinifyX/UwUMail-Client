@@ -186,7 +186,14 @@ export interface Unsubscribe {
   mailto?: string;
 }
 
-export type UnsubscribeOutcome = { kind: "done" } | { kind: "openPage"; url: string };
+/** The way left besides the one click: a mail to the header's address, or the sender's page. */
+export type UnsubscribeFallback = "mail" | "page" | null;
+
+export type UnsubscribeOutcome =
+  | { kind: "done" }
+  | { kind: "openPage"; url: string }
+  /** The one click was sent and the sender's side didn't take it; nothing else was done. */
+  | { kind: "oneClickFailed"; reason: string; fallback: UnsubscribeFallback };
 
 export interface Message {
   id: string;
@@ -265,9 +272,55 @@ export interface QueuedSend {
   sendAt: string;
 }
 
+/** Where a mailbox's mail sent later waits: held by its UwUMail server, or in this device's outbox. */
+export type ScheduledKind = "server" | "local";
+
+/** What "send later" can do for a mailbox. */
+export interface SendLaterInfo {
+  kind: ScheduledKind;
+  /** How far ahead a time may be, in seconds. */
+  maxDelaySeconds: number;
+}
+
+/** A mail waiting for its time, on the UwUMail server or in this device's outbox. */
+export interface ScheduledSend {
+  id: string;
+  accountId: string;
+  kind: ScheduledKind;
+  /** When it goes (ISO 8601). */
+  sendAt: string;
+  subject: string;
+  to: Address[];
+  /** Its time passed but its server couldn't be reached; it is tried again at `sendAt`. */
+  retrying?: boolean;
+  /**
+   * It waits for the person and doesn't go on its own: it couldn't be sent and Drafts couldn't
+   * take it (`failed`), or sending broke off when it may have gone out (`unsure`). A new time or
+   * "send now" sends it again.
+   */
+  held?: "failed" | "unsure";
+  /** Why it is held. */
+  heldReason?: string;
+}
+
+/** Which scheduled mail an action is about. */
+export type ScheduledRef = Pick<ScheduledSend, "id" | "accountId" | "kind">;
+
+/** What scheduling handed back. */
+export interface ScheduledReceipt {
+  id: string;
+  kind: ScheduledKind;
+  sendAt: string;
+}
+
 export interface DraftSaveResult {
   draftKey: string;
   savedAt: string;
+  /**
+   * The saved version's message id, to open it again (see `openDraft`). Missing when the server
+   * didn't say where it went: then the composer keeps its full copy on this device.
+   */
+  messageId?: string | null;
 }
 
 /** A draft from the Drafts folder, ready to continue writing. */
@@ -286,10 +339,24 @@ export interface DraftContent {
 }
 
 /** A locally available attachment file. `url` works in <img>, <video> and fetch. */
-/** A company's brand logo (fills the avatar) or website icon (sits on a plain background). */
+/**
+ * The picture for an address: a person's photo (a contact's, or their own profile picture), which
+ * fills the avatar; a company's brand logo (fills it too, unless it is see-through); or a website
+ * icon, which sits on a plain background.
+ */
 export interface SenderPicture {
   url: string;
-  kind: "logo" | "icon";
+  kind: "photo" | "logo" | "icon";
+}
+
+/** How a sender picture is looked up. */
+export interface SenderPictureLookup {
+  /** Only what is known without asking another server: a UwUMail server's own pictures, or the cache. */
+  local?: boolean;
+  /** Only a company's logo, never a person's picture. */
+  logo?: boolean;
+  /** Ask again instead of taking the remembered answer, after pictures changed. */
+  fresh?: boolean;
 }
 
 export interface AttachmentContent {
@@ -381,6 +448,22 @@ export interface CalendarInfo {
    * none): its colour and visibility are this device's; it can't be renamed or deleted.
    */
   isLocal?: boolean;
+  /** Whether it can be shared with people of its UwUMail server (its owner, with the right to). */
+  mayShare?: boolean;
+  /** For a calendar someone else shared: who did. */
+  sharedBy?: { email: string; name: string } | null;
+  /** Person id → "read", "write" or "all", for a calendar shared with people of the server. */
+  sharedWith?: Record<string, ShareLevel> | null;
+}
+
+/** How much a person may do in a shared calendar. */
+export type ShareLevel = "read" | "write" | "all";
+
+/** Someone on the same UwUMail server, to share a calendar with. */
+export interface Person {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export type Weekday = "mo" | "tu" | "we" | "th" | "fr" | "sa" | "su";
@@ -410,8 +493,19 @@ export interface CalendarOccurrence {
   recurrenceId: string | null;
   readOnly: boolean; // no write right or not the origin
   color: string | null;
+  /** Who takes part, the organizer first (at most 50); empty or missing without participants. */
+  participants?: EventParticipant[];
   /** An event of a birthdays calendar: whose date it is, and how old or how many years. */
   birthday?: OccurrenceBirthday | null;
+}
+
+/** Someone who takes part in an event, with their answer. */
+export interface EventParticipant {
+  name: string;
+  /** Lower case; empty where the event names no address. */
+  email: string;
+  status: ParticipationStatus;
+  organizer: boolean;
 }
 
 /** What a birthdays calendar event is for (the server's `uwuBirthday`, or the app's own). */
@@ -508,6 +602,70 @@ export interface CalendarAccount {
   needsSignIn?: boolean;
 }
 
+/** An answer to an invitation (iTIP `PARTSTAT`), as the webmail names them. */
+export type ParticipationStatus = "needs-action" | "accepted" | "tentative" | "declined";
+
+/** What a scheduling mail says it is (its iCalendar METHOD). */
+export type SchedulingMethod = "request" | "cancel" | "reply" | "other";
+
+/** Someone an invitation names, with their answer. */
+export interface SchedulingPerson {
+  email: string;
+  name: string | null;
+  status: ParticipationStatus;
+}
+
+/**
+ * Where an invitation's event is kept and who tells the organizer the answer: the UwUMail server,
+ * Microsoft or Google themselves; for `calendar` (the mailbox's CalDAV calendar) and `device` (the
+ * calendar "Invitations" on this device) the app, by mail (client only).
+ */
+export type InvitePlace = "server" | "microsoft" | "google" | "calendar" | "device";
+
+/** The invitation, cancellation or answer a mail carries, with its event as the calendar has it (client only). */
+export interface MailScheduling {
+  /** "invitation" also for updates and cancellations; "reply" for an answer to the mailbox's own event. */
+  kind: "invitation" | "reply";
+  method: SchedulingMethod;
+  title: string;
+  /** UTC ("…Z"), a date for all-day events, or a wall time without zone. */
+  start: string | null;
+  end: string | null;
+  allDay: boolean;
+  location: string;
+  /** Who invited: their name, else their address. */
+  organizer: string | null;
+  organizerEmail: string | null;
+  /** The organizer first; at most 50. */
+  attendees: SchedulingPerson[];
+  moreAttendees: number;
+  repeats: boolean;
+  /** The one date of a series the mail is about, if it is about one. */
+  occurrence: string | null;
+  /**
+   * The mail comes from who may say this: the organizer (for answers someone invited). An
+   * unverified one is shown as such, and nothing is offered on its account (WEBMAIL-2).
+   */
+  verified: boolean;
+  /** The mail's From address. */
+  sender: string;
+  /** The receiving server's Authentication-Results vouch for that address. */
+  senderConfirmed: boolean;
+  /** Invitations: the mailbox's answer as the calendar has it. Answers: the attendee's. */
+  status: ParticipationStatus;
+  attendee: string | null;
+  attendeeEmail: string | null;
+  cancelled: boolean;
+  /** How the mail stands to the calendar's copy: "outdated" when the calendar has a newer one. */
+  revision: "new" | "same" | "update" | "outdated";
+  inCalendar: boolean;
+  place: InvitePlace;
+  canAnswer: boolean;
+  canComment: boolean;
+  /** The cancelled event (or date) can be taken out of the calendar. */
+  canRemove: boolean;
+}
+
 /** An address book of one account (JMAP Contacts, or a CardDAV address book). */
 export interface AddressBookInfo {
   id: string;
@@ -567,8 +725,13 @@ export interface ContactRecord {
   /** Reminders of the birthday and anniversary (a UwUMail server rings them); none by default. */
   reminders?: BirthdayReminder[];
   note: string;
-  /** A picture to show (a data: or https: URL); pictures can't be changed here yet. */
+  /** A picture to show (a data: or https: URL). */
   photo: string | null;
+  /**
+   * Microsoft or Google keep a photo for this contact apart from it; `contactPhoto` fetches it
+   * when the contact opens.
+   */
+  remotePhoto?: boolean;
   /** A group rather than a person; groups are shown but not edited. */
   isGroup: boolean;
 }
@@ -592,6 +755,8 @@ export interface ContactInput {
   /** Left as they were when undefined. */
   reminders?: BirthdayReminder[];
   note: string;
+  /** A new picture (a data: URL), null to remove it, undefined to leave it as it is. */
+  photo?: string | null;
 }
 
 /** Where an account's address books come from (the app holds several mailboxes). */
@@ -619,7 +784,17 @@ export type BackendEvent =
   /** Mailboxes were added, removed or nested (shared mailboxes found or sorted under their account). */
   | { type: "accounts:changed" }
   | { type: "send:done"; sendId: string; accountId: string }
-  | { type: "send:failed"; sendId: string; accountId: string; reason: string; message: OutgoingMessage }
+  | {
+      type: "send:failed";
+      sendId: string;
+      accountId: string;
+      reason: string;
+      message: OutgoingMessage;
+      /** It waits with the scheduled mail instead of in Drafts. */
+      held?: boolean;
+    }
+  /** Mail sent later was scheduled, changed, stopped or sent. */
+  | { type: "scheduled:changed" }
   | { type: "compose:mailto" }
   /** The shared settings of a UwUMail account may have changed; `state` when the server said which. */
   | { type: "settings:changed"; accountId: string; state?: string }
@@ -1202,6 +1377,8 @@ export interface AssistLabel {
   unreadEmails: number | null;
   /** Mails the classifier learned as having it (given by hand); it acts from 15 on. */
   examples: number;
+  /** The person's own description a base label replaced when it adopted their label; null for none. */
+  previousDescription: string | null;
 }
 
 export interface AssistLabelInput {
@@ -1214,6 +1391,9 @@ export interface AssistLabelInput {
   classifier?: boolean;
   auto?: boolean;
 }
+
+/** A change to a label: what changes, and `previousDescription: null` to forget an adopted base label's earlier description, so the model no longer gets it as a hint. */
+export type AssistLabelPatch = Partial<AssistLabelInput> & { previousDescription?: null };
 
 /** How a label overlaps another: the same name, the meaning of a base label, or largely the same words. */
 export type LabelOverlapKind = "name" | "meaning" | "words";
@@ -1307,4 +1487,87 @@ export interface AssistUsageToday {
 export interface AssistUsage {
   days: AssistUsageDay[];
   today: AssistUsageToday[];
+}
+
+/**
+ * A masked address: a random address for one website that delivers to the account (Fastmail's
+ * MaskedEmail). `pending` ones wait for their first mail, `deleted` ones refuse mail for good.
+ */
+export type MaskedState = "pending" | "enabled" | "disabled" | "deleted";
+
+export interface MaskedAddress {
+  id: string;
+  email: string;
+  state: MaskedState;
+  /** The site it is for, as an origin like `https://shop.example`; empty when not given. */
+  forDomain: string;
+  description: string;
+  /** A link back to where it is used, e.g. a password manager's entry. */
+  url: string | null;
+  createdAt: string;
+  /** When the latest mail to it arrived; null before the first. */
+  lastMessageAt: string | null;
+  /** Who made it, as the server says (`JMAP`, `Portal`, …). */
+  createdBy: string;
+}
+
+/** What the server lets the account make masked addresses on. */
+export interface MaskedOptions {
+  /**
+   * The domains a new one may go on; null when the server doesn't say (older servers), which
+   * leaves the choice to it. Empty: nobody enabled masked addresses for the account.
+   */
+  domains: string[] | null;
+  /** The one taken when none is named; null leaves it to the server. */
+  defaultDomain: string | null;
+}
+
+/** A new masked address, made by hand and therefore `enabled` at once. */
+export interface MaskedAddressInput {
+  description: string;
+  forDomain: string;
+  url: string | null;
+  /** Put in front of the random part: `a-z`, `0-9` and `_`, up to 64. */
+  emailPrefix?: string;
+  /** One of `MaskedOptions.domains`; the server's default when left out. */
+  domain?: string;
+}
+
+export interface MaskedAddressPatch {
+  /** Never back to `pending`. */
+  state?: Exclude<MaskedState, "pending">;
+  description?: string;
+  forDomain?: string;
+  url?: string | null;
+}
+
+/** Who sees the own profile picture: nobody, people of the same server, or everyone. */
+export type PictureVisibility = "off" | "server" | "public";
+
+export interface ProfilePicture {
+  /** The stored picture as a data: URL; null without one. */
+  url: string | null;
+  visibility: PictureVisibility;
+  /** Whether sent mail carries it (a Face header). */
+  sendFace: boolean;
+  updated: string | null;
+}
+
+export interface ProfilePictureOptions {
+  /** Largest upload in bytes. */
+  maxSize: number;
+  /** False while an administrator switched public pictures off. */
+  mayBePublic: boolean;
+}
+
+export interface ProfilePicturePatch {
+  visibility?: PictureVisibility;
+  sendFace?: boolean;
+}
+
+/** What a mailbox's UwUMail server keeps for the person; mailboxes without any are left out. */
+export interface ServerAccountFeatures {
+  accountId: string;
+  masked: MaskedOptions | null;
+  profile: ProfilePictureOptions | null;
 }

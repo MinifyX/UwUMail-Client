@@ -17,7 +17,7 @@ use crate::jmap::Client as JmapClient;
 use crate::jmap::StateChange;
 use crate::mail_images::MailImages;
 use crate::model::*;
-use crate::pictures::{SenderPicture, SenderPictures};
+use crate::pictures::{PictureLookup, PictureServer, SenderPicture, SenderPictures};
 use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
@@ -157,6 +157,8 @@ struct Inner {
     autodiscover_url: Mutex<String>,
     /// Whether accounts sync in the background; tests that must not reach any server switch it off.
     background_sync: std::sync::atomic::AtomicBool,
+    /// The outbox task (undo send and send later, see `send_later_ops`).
+    send_later: send_later_ops::OutboxState,
 }
 
 enum Credential {
@@ -189,15 +191,20 @@ macro_rules! with_session {
     }};
 }
 
+mod account_ops;
+pub use account_ops::ServerAccountFeatures;
 mod assist_ops;
 mod birthday_ops;
 mod calendar_ops;
 mod cloud_ops;
 mod contacts_ops;
 mod folder_ops;
+mod invite_ops;
 mod ocr_ops;
+mod photo_ops;
 mod price_ops;
 mod push_ops;
+mod send_later_ops;
 mod shared_ops;
 
 impl Engine {
@@ -248,6 +255,7 @@ impl Engine {
                 shared_lock: AsyncMutex::new(()),
                 autodiscover_url: Mutex::new(crate::shared::AUTODISCOVER_URL.to_string()),
                 background_sync: std::sync::atomic::AtomicBool::new(true),
+                send_later: Default::default(),
             }),
         })
     }
@@ -287,9 +295,8 @@ impl Engine {
         for account in self.inner.store.accounts()? {
             self.inner.spawn_sync(&account.id);
         }
-        for (id, send_at) in self.inner.store.outbox()? {
-            self.schedule_send(id, send_at);
-        }
+        // Also what was due while UwUMail was closed: it goes now.
+        self.run_outbox();
         Ok(())
     }
 
@@ -917,9 +924,11 @@ impl Engine {
         self.inner.move_to(message_ids, MoveTarget::Role(role)).await
     }
 
-    /// Unsubscribes from the list a mail came from: with one click where the sender allows it,
-    /// otherwise by mail, otherwise the sender's page is for the app to open.
-    pub async fn unsubscribe(&self, message_id: &str) -> Result<UnsubscribeOutcome> {
+    /// Unsubscribes from the list a mail came from: with one click where the sender allows it (and
+    /// `one_click` is set), otherwise by mail, otherwise the sender's page is for the app to open.
+    /// A one click that was sent and refused is reported as such, with nothing else done: the mail
+    /// or the page only follow when asked for again with `one_click` false.
+    pub async fn unsubscribe(&self, message_id: &str, one_click: bool) -> Result<UnsubscribeOutcome> {
         let message = self
             .inner
             .store
@@ -929,7 +938,8 @@ impl Engine {
         let options =
             message.unsubscribe.clone().ok_or_else(|| Error::invalid("This mail has no way to unsubscribe."))?;
 
-        if options.one_click
+        if one_click
+            && options.one_click
             && let Some(url) = options.url.as_deref().and_then(|url| url::Url::parse(url).ok())
             && crate::pictures::is_public_web_url(&url)
         {
@@ -941,19 +951,13 @@ impl Engine {
                     .redirect(reqwest::redirect::Policy::none())
                     .timeout(Duration::from_secs(20))
             });
-            let answer = ONE_CLICK
-                .get()
-                .await?
-                .post(url)
-                .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-                .body("List-Unsubscribe=One-Click")
-                .send()
-                .await;
-            match answer {
-                Ok(response) if response.status().is_success() => return Ok(UnsubscribeOutcome::Done),
-                Ok(response) => tracing::warn!("One-click unsubscribe answered {}", response.status()),
-                Err(error) => tracing::warn!("One-click unsubscribe failed: {error}"),
-            }
+            return Ok(match one_click_post(&ONE_CLICK.get().await?, url).await {
+                Ok(()) => UnsubscribeOutcome::Done,
+                Err(reason) => {
+                    tracing::warn!("One-click unsubscribe failed: {reason}");
+                    UnsubscribeOutcome::OneClickFailed { reason, fallback: unsubscribe_fallback(&options) }
+                }
+            });
         }
 
         if let Some(target) = options.mailto.as_deref().and_then(unsubscribe_mail) {
@@ -1234,10 +1238,12 @@ impl Engine {
         })?;
         let raw = message.formatted();
 
-        if account.protocol == Protocol::Jmap {
+        // IMAP covers Microsoft and Google accounts too: they sign in with OAuth but save over IMAP.
+        let message_id = if account.protocol == Protocol::Jmap {
             let client = self.inner.jmap_client(&account.id).await?;
-            jmap_sync::save_draft(&client, &self.inner.store, &account.id, raw, &key).await?;
+            let saved = jmap_sync::save_draft(&client, &self.inner.store, &account.id, raw, &key).await?;
             self.inner.wake(&account.id);
+            saved
         } else {
             let folder = self.inner.ensure_folder(&account.id, FolderRole::Drafts).await?;
             with_session!(self.inner, &account.id, |session| imap::append(
@@ -1251,7 +1257,7 @@ impl Engine {
                 &folder.path,
                 &key
             ))?;
-            if let Some((&newest, older)) = uids.split_last() {
+            let message_id = if let Some((&newest, older)) = uids.split_last() {
                 with_session!(self.inner, &account.id, |session| imap::delete_permanently(
                     session,
                     &folder.path,
@@ -1260,7 +1266,7 @@ impl Engine {
                 self.inner.store.delete_uids(&folder.id, older)?;
                 let flags = MessageFlags { seen: true, draft: true, ..MessageFlags::default() };
                 let size = raw.len() as u64;
-                self.inner.store.insert_message(
+                let inserted = self.inner.store.insert_message(
                     &account.id,
                     &folder.id,
                     newest,
@@ -1269,10 +1275,19 @@ impl Engine {
                     Some(mime::now()),
                     &mime::parse(&raw),
                 )?;
-            }
+                // Already there when a sync was quicker.
+                match inserted {
+                    Some(id) => Some(id),
+                    None => self.inner.store.id_by_uid(&folder.id, newest)?,
+                }
+            } else {
+                // The server didn't find it by its Message-ID: nothing to open it by.
+                None
+            };
             self.inner.emit(EngineEvent::MailChanged { account_id: account.id.clone() });
-        }
-        Ok(SavedDraft { draft_key: key, saved_at: mime::iso8601(mime::now()) })
+            message_id
+        };
+        Ok(SavedDraft { draft_key: key, saved_at: mime::iso8601(mime::now()), message_id })
     }
 
     /// Removes every saved version of a draft.
@@ -1365,7 +1380,7 @@ impl Engine {
         let delay = i64::try_from(delay_seconds.min(MAX_SEND_DELAY)).unwrap_or(0) * 1000;
         let send_at = now_millis() + delay;
         self.inner.store.insert_outbox(&id, &account.id, &serde_json::to_string(&outgoing)?, send_at)?;
-        self.schedule_send(id.clone(), send_at);
+        self.run_outbox();
         Ok(QueuedSend { id, send_at: mime::iso8601(send_at / 1000) })
     }
 
@@ -1374,49 +1389,6 @@ impl Engine {
         match self.inner.store.take_outbox(send_id)? {
             Some((_, json)) => Ok(serde_json::from_str(&json)?),
             None => Err(Error::invalid("This mail is already on its way.")),
-        }
-    }
-
-    fn schedule_send(&self, send_id: String, send_at: i64) {
-        let engine = self.clone();
-        self.inner.runtime.spawn(async move {
-            let wait = u64::try_from(send_at - now_millis()).unwrap_or(0);
-            tokio::time::sleep(Duration::from_millis(wait)).await;
-            engine.deliver(&send_id).await;
-        });
-    }
-
-    async fn deliver(&self, send_id: &str) {
-        let (account_id, json) = match self.inner.store.take_outbox(send_id) {
-            Ok(Some(taken)) => taken,
-            // Undone in the meantime.
-            Ok(None) => return,
-            Err(error) => {
-                tracing::warn!("Couldn't read the outbox: {error}");
-                return;
-            }
-        };
-        let message: OutgoingMessage = match serde_json::from_str(&json) {
-            Ok(message) => message,
-            Err(error) => {
-                tracing::warn!("A queued message couldn't be read: {error}");
-                return;
-            }
-        };
-        match self.send(message.clone()).await {
-            Ok(()) => self.inner.emit(EngineEvent::SendDone { send_id: send_id.to_string(), account_id }),
-            Err(error) => {
-                // Nothing written gets lost: it waits in Drafts.
-                if let Err(draft_error) = self.save_draft(message.clone()).await {
-                    tracing::warn!("Couldn't keep the unsent message as a draft: {draft_error}");
-                }
-                self.inner.emit(EngineEvent::SendFailed {
-                    send_id: send_id.to_string(),
-                    account_id,
-                    reason: error.message,
-                    message: Box::new(message),
-                });
-            }
         }
     }
 
@@ -1584,12 +1556,16 @@ impl Engine {
         self.inner.attachments.dir().to_path_buf()
     }
 
-    /// The brand logo or website icon for a company address, fetched once per domain. With a UwUMail
-    /// server among the accounts, that server looks it up, whichever account the mail came to: the
-    /// picture is the company's either way, and the company never sees this device.
-    pub async fn sender_picture(&self, email: &str) -> Result<Option<SenderPicture>> {
-        let server = self.inner.picture_server().await;
-        self.inner.pictures.get(email, server).await
+    /// The picture for an address. With a UwUMail server among the accounts, that server looks it
+    /// up per address, whichever account the mail came to: a contact's photo or the person's own
+    /// picture first, then a company's logo, and the sender never sees this device. Otherwise the
+    /// brand logo or website icon of a company address, fetched once per domain from here.
+    pub async fn sender_picture(&self, email: &str, lookup: PictureLookup) -> Result<Option<SenderPicture>> {
+        if crate::pictures::picture_address(email).is_none() {
+            return Ok(None);
+        }
+        let server = self.inner.picture_server().await.map(|server| server as Arc<dyn PictureServer>);
+        self.inner.pictures.get(email, server, lookup).await
     }
 
     /// A remote picture of a mail, with its type. A UwUMail server fetches it for its own accounts;
@@ -2363,6 +2339,50 @@ async fn run_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<(
     }
 }
 
+/// The longest host a one-click failure names.
+const ONE_CLICK_HOST_LIMIT: usize = 100;
+
+/// Sends the RFC 8058 one-click request. A refusal comes back as a short reason that is safe to
+/// show: the host and what it answered, never the error's own text (which can carry the whole
+/// link, tokens and all) nor anything the server wrote.
+async fn one_click_post(client: &reqwest::Client, url: url::Url) -> std::result::Result<(), String> {
+    let host: String = url
+        .host_str()
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| c.is_ascii_graphic())
+        .take(ONE_CLICK_HOST_LIMIT)
+        .collect();
+    let host = if host.is_empty() { "The sender's server".to_string() } else { host };
+    let answer = client
+        .post(url)
+        .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body("List-Unsubscribe=One-Click")
+        .send()
+        .await;
+    match answer {
+        Ok(response) if response.status().is_success() => Ok(()),
+        Ok(response) if response.status().is_redirection() => {
+            Err(format!("{host} sent a redirect instead of taking it."))
+        }
+        Ok(response) => Err(format!("{host} answered {}.", response.status().as_u16())),
+        Err(error) if error.is_timeout() => Err(format!("{host} didn't answer in time.")),
+        Err(_) => Err(format!("{host} couldn't be reached.")),
+    }
+}
+
+/// The way that is left besides the one click: a mail where the header has a usable address,
+/// else the sender's page.
+fn unsubscribe_fallback(options: &Unsubscribe) -> Option<UnsubscribeFallback> {
+    if options.mailto.as_deref().and_then(unsubscribe_mail).is_some() {
+        Some(UnsubscribeFallback::Mail)
+    } else if options.url.is_some() {
+        Some(UnsubscribeFallback::Page)
+    } else {
+        None
+    }
+}
+
 /// What unsubscribing by mail sends.
 #[derive(Debug, PartialEq, Eq)]
 struct UnsubscribeMail {
@@ -2386,7 +2406,8 @@ fn unsubscribe_mail(mailto: &str) -> Option<UnsubscribeMail> {
     }
     let address = percent_encoding::percent_decode_str(target.path()).decode_utf8().ok()?.trim().to_string();
     // One recipient, and nothing in it that could turn into a second one or into a header of its own.
-    if address.contains(|c: char| c == ',' || c.is_whitespace() || c.is_control() || "<>;\"".contains(c))
+    if address
+        .contains(|c: char| c == ',' || c.is_whitespace() || c.is_control() || is_format_char(c) || "<>;\"".contains(c))
         || address.parse::<lettre::Address>().is_err()
     {
         return None;
@@ -2405,6 +2426,36 @@ fn unsubscribe_mail(mailto: &str) -> Option<UnsubscribeMail> {
         .filter(|subject| !subject.is_empty())
         .unwrap_or_else(|| "unsubscribe".to_string());
     Some(UnsubscribeMail { address, subject })
+}
+
+/// Unicode format characters (category Cf): they show nothing, and in an address the dialog names
+/// before the mail goes, direction or zero-width characters would make it read as another one
+/// (webmail security-audit W-30).
+fn is_format_char(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{0600}'..='\u{0605}'
+            | '\u{061C}'
+            | '\u{06DD}'
+            | '\u{070F}'
+            | '\u{0890}'..='\u{0891}'
+            | '\u{08E2}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206F}'
+            | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
+            | '\u{110BD}'
+            | '\u{110CD}'
+            | '\u{13430}'..='\u{1343F}'
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0001}'
+            | '\u{E0020}'..='\u{E007F}'
+    )
 }
 
 /// A winmail.dat as a stored attachment: mail stored before winmail.dat was read.
@@ -2464,13 +2515,145 @@ mod tests {
             "mailto:leave@[192.0.2.1]",
             "mailto:leave@list.example.",
             "mailto:not-an-address",
+            // Invisible characters that would make the named address read as another one (W-30).
+            "mailto:leave%E2%80%AE@list.example",
+            "mailto:le%E2%80%8Bave@list.example",
+            "mailto:leave@list%C2%AD.example",
             "mailto:",
             "https://list.example/leave",
             "javascript:alert(1)",
             "not a url at all",
+            // Invisible characters would make the dialog name another address (W-30).
+            "mailto:leave%E2%80%AE@list.example",
+            "mailto:le%E2%80%8Bave@list.example",
+            "mailto:leave@list%C2%AD.example",
+            "mailto:leave@list%E2%80%8D.example",
         ] {
             assert_eq!(unsubscribe_mail(mailto), None, "{mailto}");
         }
+    }
+
+    /// A sender's server for one request: answers with `status` (or never, for `None`) and hands
+    /// back what it was sent.
+    async fn one_click_server(status: Option<&'static str>) -> (url::Url, tokio::sync::oneshot::Receiver<String>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = url::Url::parse(&format!("http://{}/u?token=secret123", listener.local_addr().unwrap())).unwrap();
+        let (sent, received) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 1024];
+            loop {
+                let text = String::from_utf8_lossy(&request).to_string();
+                if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                    let length = head
+                        .lines()
+                        .find_map(|line| line.to_ascii_lowercase().strip_prefix("content-length:").map(str::to_string))
+                        .and_then(|value| value.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if body.len() >= length {
+                        break;
+                    }
+                }
+                let n = socket.read(&mut buffer).await.unwrap();
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..n]);
+            }
+            let _ = sent.send(String::from_utf8_lossy(&request).to_string());
+            match status {
+                Some(status) => {
+                    let answer = format!(
+                        "HTTP/1.1 {status}\r\nlocation: http://127.0.0.1:1/\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                    );
+                    socket.write_all(answer.as_bytes()).await.unwrap();
+                }
+                // Holds the line open and says nothing until the client gives up.
+                None => {
+                    let _ = socket.read(&mut buffer).await;
+                }
+            }
+        });
+        (url, received)
+    }
+
+    fn one_click_client(timeout: Duration) -> reqwest::Client {
+        reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(timeout).build().unwrap()
+    }
+
+    #[tokio::test]
+    async fn one_click_posts_the_rfc_8058_body_and_takes_a_2xx() {
+        let (url, received) = one_click_server(Some("200 OK")).await;
+        assert_eq!(one_click_post(&one_click_client(Duration::from_secs(10)), url).await, Ok(()));
+        let request = received.await.unwrap();
+        assert!(request.starts_with("POST /u?token=secret123 "), "{request}");
+        assert!(request.to_ascii_lowercase().contains("content-type: application/x-www-form-urlencoded"));
+        assert!(request.ends_with("\r\n\r\nList-Unsubscribe=One-Click"), "{request}");
+    }
+
+    #[tokio::test]
+    async fn a_refused_one_click_says_who_and_what_but_never_the_link() {
+        for (status, said) in [("503 Service Unavailable", "answered 503."), ("404 Not Found", "answered 404.")] {
+            let (url, _) = one_click_server(Some(status)).await;
+            let reason = one_click_post(&one_click_client(Duration::from_secs(10)), url).await.unwrap_err();
+            assert_eq!(reason, format!("127.0.0.1 {said}"));
+        }
+        // A redirect is not followed, so the request can't be sent on into the local network.
+        let (url, _) = one_click_server(Some("302 Found")).await;
+        let reason = one_click_post(&one_click_client(Duration::from_secs(10)), url).await.unwrap_err();
+        assert_eq!(reason, "127.0.0.1 sent a redirect instead of taking it.");
+        assert!(!reason.contains("secret123"));
+    }
+
+    #[tokio::test]
+    async fn a_one_click_nobody_answers_says_so() {
+        let (url, _) = one_click_server(None).await;
+        let reason = one_click_post(&one_click_client(Duration::from_millis(300)), url).await.unwrap_err();
+        assert_eq!(reason, "127.0.0.1 didn't answer in time.");
+
+        // Nobody listening at all.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = url::Url::parse(&format!("http://{}/u?token=secret123", listener.local_addr().unwrap())).unwrap();
+        drop(listener);
+        let reason = one_click_post(&one_click_client(Duration::from_secs(10)), url).await.unwrap_err();
+        assert_eq!(reason, "127.0.0.1 couldn't be reached.");
+    }
+
+    #[test]
+    fn a_refused_one_click_offers_the_mail_then_the_page() {
+        let options = |url: Option<&str>, mailto: Option<&str>| Unsubscribe {
+            one_click: true,
+            url: url.map(str::to_string),
+            mailto: mailto.map(str::to_string),
+        };
+        let page = Some("https://list.example/u");
+        assert_eq!(
+            unsubscribe_fallback(&options(page, Some("mailto:leave@list.example"))),
+            Some(UnsubscribeFallback::Mail)
+        );
+        // An address the mail would never go to is no way at all.
+        assert_eq!(
+            unsubscribe_fallback(&options(page, Some("mailto:le%E2%80%8Bave@list.example"))),
+            Some(UnsubscribeFallback::Page)
+        );
+        assert_eq!(unsubscribe_fallback(&options(None, Some("mailto:a@b,c@list.example"))), None);
+        assert_eq!(unsubscribe_fallback(&options(None, None)), None);
+    }
+
+    #[test]
+    fn a_refused_one_click_reads_as_such() {
+        let outcome = UnsubscribeOutcome::OneClickFailed {
+            reason: "list.example answered 503.".into(),
+            fallback: Some(UnsubscribeFallback::Mail),
+        };
+        assert_eq!(
+            serde_json::to_value(&outcome).unwrap(),
+            serde_json::json!({ "kind": "oneClickFailed", "reason": "list.example answered 503.", "fallback": "mail" })
+        );
+        let outcome = UnsubscribeOutcome::OneClickFailed { reason: String::new(), fallback: None };
+        assert_eq!(serde_json::to_value(&outcome).unwrap()["fallback"], serde_json::Value::Null);
     }
 
     #[test]

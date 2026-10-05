@@ -49,6 +49,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Auto-update on macOS and Linux (same signed feed as Windows)
 - [x] Security audit with fixes, `SECURITY.md`, dependency audit in CI ([report](security-audit.md))
 - [x] Security review of the whole app before 0.7: labels, the server's AI for other mailboxes, parsers, release pipeline ([report](security-audit-2026-09-30.md))
+- [x] Security review of 0.10.0-beta.1: mail frame, send later, invitations, account features; mediums fixed, lows documented as known limitations ([report](security-audit-2026-10-05.md))
 - [x] Warning for links whose text shows a different site than the target
 - [x] First beta: 0.2.0-beta.1
 - [x] Text in a mail's pictures for finding dates: the UwUMail server reads them for its accounts, the system's OCR (Vision, Windows.Media.Ocr, ML Kit) for other mailboxes; off on Linux
@@ -82,11 +83,12 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 
 ## After v0.1 — official addons
 
-- [ ] Send later + Snooze
+- [x] Send later: the UwUMail server holds it, other mailboxes wait in this device's outbox (0.10)
+- [ ] Snooze
 - [ ] Templates + snippets
 - [ ] PGP encryption
 - [x] AI helper (off by default): the UwUMail server's assistant, or own providers on this device (0.6)
-- [ ] Calendar (CalDAV, invitations)
+- [x] Calendar (CalDAV, invitations): invitations in mail answered in every mailbox (0.10)
 
 ## Later
 
@@ -94,5 +96,6 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Calendars and contacts of Microsoft (Graph) and Google (Calendar, People API) sign-ins, read and write, shared mailboxes included; "Sign in again" for older sign-ins (0.8)
 - [ ] Microsoft/Google: reminders, wedding anniversaries (Graph has none), Google contact labels as address books, birthday-event import
 - [x] Birthdays: the server's birthdays calendar with ages, a local one from CardDAV cards, moving birthday events into contacts, anniversaries and reminders (reminders on UwUMail servers only)
+- [x] Like the webmail: masked addresses, own profile picture, sharing calendars and leaving shared ones (UwUMail servers), contact photos with crop, camera and company logo for every address book (0.10)
 - [ ] Self-hostable sync server for settings, signatures and addons (AGPL-3.0)
 - [ ] Code signing for Windows and macOS

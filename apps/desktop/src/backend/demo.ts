@@ -2,17 +2,28 @@ import { AssistError, BackendError, type Backend } from "./backend";
 import { DemoAssist } from "./demo-assist";
 import { DEVICE_ASSIST_SCOPE } from "./types";
 import { isDangerous } from "@/lib/attachments";
+import { confirmDangerousFile } from "@/state/dangerousFile";
 import { hasLabel, matchesLabels } from "@/lib/labelFilter";
+import { unsubscribeFallback, unsubscribeMail } from "@/lib/unsubscribe";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
 import { DemoCalendar } from "./demo-calendar";
 import { DemoContacts } from "./demo-contacts";
+import { DemoMasked } from "./demo-masked";
+import { blobToDataUrl, companyLogoFrom } from "./pictureBlobs";
+import { DemoInvites } from "./demo-invites";
 import { DemoSignatures } from "./demo-signatures";
 import type { DomainSignatureChange } from "@/lib/domainSignatures";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMessage } from "./demo-data";
-import { DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
+import { DEMO_PROFILE_PICTURES, DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
+  MaskedAddressInput,
+  MaskedAddressPatch,
+  ProfilePicture,
+  ProfilePicturePatch,
+  ServerAccountFeatures,
+  ShareLevel,
   LabelCount,
   LabelRef,
   BlockedSender,
@@ -22,6 +33,7 @@ import type {
   AssistEventsResult,
   AssistFeatures,
   AssistLabelInput,
+  AssistLabelPatch,
   LabelBase,
   AssistProbeInput,
   AssistProviderInput,
@@ -53,11 +65,18 @@ import type {
   MailtoDraft,
   MovedMessage,
   Message,
+  ParticipationStatus,
   NewAccount,
   OutgoingMessage,
   Protocol,
   QueuedSend,
+  ScheduledKind,
+  ScheduledReceipt,
+  ScheduledRef,
+  ScheduledSend,
+  SendLaterInfo,
   SenderPicture,
+  SenderPictureLookup,
   Signature,
   ThreadDetail,
   ThreadPage,
@@ -100,22 +119,37 @@ function uniqueAddresses(addresses: Address[]): Address[] {
   });
 }
 
+/** A mail sent later in the demo. */
+interface DemoLater {
+  kind: ScheduledKind;
+  message: OutgoingMessage;
+  sendAt: string;
+  timer: ReturnType<typeof setTimeout> | undefined;
+}
+
 /** In-memory engine with sample data. Used by `pnpm dev` in a normal browser. */
 export class DemoBackend implements Backend {
   readonly kind = "demo";
 
   private accounts: Account[] = structuredClone(DEMO_ACCOUNTS);
   private folders: Folder[] = DEMO_ACCOUNTS.flatMap((a) => buildFolders(a.id, lang(), !a.parentId));
-  // Newsletters and offers carry a List-Unsubscribe like the real ones.
+  // Newsletters and offers carry a List-Unsubscribe like the real ones; the bakery's server
+  // doesn't take the one click, so its mail address is the way back.
   private messages: Message[] = buildMessages(lang()).map((message) =>
     /newsletter|aktion|offer|deal/i.test(message.subject)
       ? {
           ...message,
-          unsubscribe: {
-            oneClick: true,
-            url: "https://pixelparts.example/unsubscribe",
-            mailto: "mailto:leave@pixelparts.example?subject=unsubscribe",
-          },
+          unsubscribe: message.from.email.endsWith("@kaffeekuchen.example")
+            ? {
+                oneClick: true,
+                url: "https://kaffeekuchen.example/abmelden",
+                mailto: "mailto:abmelden@kaffeekuchen.example",
+              }
+            : {
+                oneClick: true,
+                url: "https://pixelparts.example/unsubscribe",
+                mailto: "mailto:leave@pixelparts.example?subject=unsubscribe",
+              },
         }
       : message,
   );
@@ -149,6 +183,8 @@ export class DemoBackend implements Backend {
     },
   ];
   private queued = new Map<string, { timer: ReturnType<typeof setTimeout>; message: OutgoingMessage }>();
+  /** Mail sent later: the JMAP mailbox's "server" holds it, the others this "device". */
+  private later = new Map<string, DemoLater>();
 
   constructor() {
     setTimeout(() => {
@@ -594,6 +630,16 @@ export class DemoBackend implements Backend {
     this.calendar.setDefaultCalendar(id);
   }
 
+  async calendarPeople(accountId: string) {
+    await wait(80);
+    return this.calendar.people(accountId);
+  }
+
+  async shareCalendar(calendarId: string, personId: string, level: ShareLevel | null) {
+    await wait(150);
+    this.calendar.shareCalendar(calendarId, personId, level);
+  }
+
   /** Demo events are floating, so the viewer's zone changes nothing. */
   async calendarEvents(from: string, to: string, _timeZone?: string) {
     await wait(150);
@@ -613,6 +659,29 @@ export class DemoBackend implements Backend {
   async deleteEvent(occurrenceId: string, scope: EventDeleteScope) {
     await wait(120);
     this.calendar.deleteEvent(occurrenceId, scope);
+  }
+
+  private invites = new DemoInvites();
+
+  private invitationMail(messageId: string): Message {
+    const message = this.messages.find((m) => m.id === messageId);
+    if (!message) throw new BackendError("not_found", "Message not found");
+    return message;
+  }
+
+  async mailInvitation(messageId: string) {
+    await wait(120);
+    return this.invites.scheduling(this.invitationMail(messageId), lang() === "de");
+  }
+
+  async respondToInvitation(messageId: string, status: Exclude<ParticipationStatus, "needs-action">, comment?: string) {
+    await wait(300);
+    this.invites.respond(this.invitationMail(messageId), status, comment);
+  }
+
+  async removeCancelledEvent(messageId: string) {
+    await wait(200);
+    this.invites.remove(this.invitationMail(messageId));
   }
 
   async birthdayFeatures(): Promise<BirthdayFeatures[]> {
@@ -742,6 +811,78 @@ export class DemoBackend implements Backend {
     this.addressBook.deleteContact(id);
   }
 
+  /** The demo's contacts all carry their pictures inside. */
+  async contactPhoto(): Promise<string | null> {
+    return null;
+  }
+
+  async companyLogo(email: string): Promise<Blob | null> {
+    await wait(150);
+    return companyLogoFrom(demoSenderPicture(email));
+  }
+
+  /** The private mailbox is the one on a UwUMail server (JMAP). */
+  private readonly serverAccount = "acc-private";
+  private masked = new DemoMasked(lang(), () => {});
+  /** The demo's own profile picture, kept in memory; it starts without one. */
+  private profile: ProfilePicture = { url: null, visibility: "server", sendFace: false, updated: null };
+
+  private serverOnly(accountId: string) {
+    if (accountId !== this.serverAccount || !this.accounts.some((account) => account.id === accountId)) {
+      throw new BackendError("not_supported", "This needs a mailbox on a UwUMail server.");
+    }
+  }
+
+  async serverAccountFeatures(): Promise<ServerAccountFeatures[]> {
+    await wait(60);
+    if (!this.accounts.some((account) => account.id === this.serverAccount)) return [];
+    return [
+      {
+        accountId: this.serverAccount,
+        masked: this.masked.options(),
+        profile: { maxSize: 10 * 1024 * 1024, mayBePublic: true },
+      },
+    ];
+  }
+
+  async maskedAddresses(accountId: string) {
+    await wait(120);
+    this.serverOnly(accountId);
+    return this.masked.addresses();
+  }
+
+  async createMaskedAddress(accountId: string, input: MaskedAddressInput) {
+    await wait(200);
+    this.serverOnly(accountId);
+    return this.masked.create(input);
+  }
+
+  async updateMaskedAddress(accountId: string, id: string, patch: MaskedAddressPatch) {
+    await wait(120);
+    this.serverOnly(accountId);
+    this.masked.update(id, patch);
+  }
+
+  async profilePicture(accountId: string): Promise<ProfilePicture> {
+    await wait(100);
+    this.serverOnly(accountId);
+    return { ...this.profile };
+  }
+
+  async setProfilePicture(accountId: string, picture: Blob | null): Promise<ProfilePicture> {
+    await wait(300);
+    this.serverOnly(accountId);
+    const url = picture ? await blobToDataUrl(picture) : null;
+    this.profile = { ...this.profile, url, updated: new Date().toISOString() };
+    return { ...this.profile };
+  }
+
+  async updateProfilePicture(accountId: string, patch: ProfilePicturePatch): Promise<void> {
+    await wait(120);
+    this.serverOnly(accountId);
+    this.profile = { ...this.profile, ...patch };
+  }
+
   async createFolder(input: { accountId?: string; name: string; parentId: string | null }) {
     await wait(150);
     const parent = input.parentId ? this.folders.find((f) => f.id === input.parentId) : undefined;
@@ -825,8 +966,10 @@ export class DemoBackend implements Backend {
     if (!clean) throw new BackendError("invalid_input", "Enter a name for the folder.");
     if ([...clean].length > 200)
       throw new BackendError("invalid_input", "Folder names can have at most 200 characters.");
+    if (new TextEncoder().encode(clean).length > 255)
+      throw new BackendError("invalid_input", "That folder name is too long.");
     // eslint-disable-next-line no-control-regex
-    if (/[\u0000-\u001f\u007f]/.test(clean)) {
+    if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(clean)) {
       throw new BackendError("invalid_input", "Folder names can't contain line breaks or control characters.");
     }
     if (clean.includes("/")) throw new BackendError("invalid_input", 'Folder names can\'t contain "/".');
@@ -924,10 +1067,24 @@ export class DemoBackend implements Backend {
     return this.moveToRole(messageIds, spam ? "junk" : "inbox");
   }
 
-  async unsubscribe(messageId: string): Promise<UnsubscribeOutcome> {
+  async unsubscribe(messageId: string, options: { oneClick?: boolean } = {}): Promise<UnsubscribeOutcome> {
     await wait(700);
     const message = this.messages.find((m) => m.id === messageId);
-    if (!message?.unsubscribe) throw new BackendError("invalid_input", "This mail has no way to unsubscribe.");
+    const ways = message?.unsubscribe;
+    if (!message || !ways) throw new BackendError("invalid_input", "This mail has no way to unsubscribe.");
+    // Like the engine: the one click where offered, and a refusal said as such, nothing else done.
+    if (options.oneClick !== false && ways.oneClick && ways.url?.startsWith("https://")) {
+      if (message.from.email.endsWith("@kaffeekuchen.example")) {
+        return {
+          kind: "oneClickFailed",
+          reason: "kaffeekuchen.example answered 503.",
+          fallback: unsubscribeFallback(ways),
+        };
+      }
+    } else if (!(ways.mailto && unsubscribeMail(ways.mailto))) {
+      if (ways.url) return { kind: "openPage", url: ways.url };
+      throw new BackendError("invalid_input", "This mail has no way to unsubscribe that works.");
+    }
     for (const other of this.messages) {
       if (other.from.email === message.from.email) delete other.unsubscribe;
     }
@@ -1005,6 +1162,120 @@ export class DemoBackend implements Backend {
     return entry.message;
   }
 
+  async sendLaterInfo(accountId: string): Promise<SendLaterInfo> {
+    const account = this.accounts.find((a) => a.id === accountId);
+    if (!account) throw new BackendError("not_found", "Account not found");
+    // The JMAP mailbox stands for one on a UwUMail server, which holds mail for 30 days.
+    return account.protocol === "jmap"
+      ? { kind: "server", maxDelaySeconds: 30 * 86_400 }
+      : { kind: "local", maxDelaySeconds: 365 * 86_400 };
+  }
+
+  async sendLater(message: OutgoingMessage, sendAt: string): Promise<ScheduledReceipt> {
+    if (message.to.length + message.cc.length + message.bcc.length === 0) {
+      throw new BackendError("invalid_input", "No recipients");
+    }
+    const { kind, maxDelaySeconds } = await this.sendLaterInfo(message.accountId);
+    const at = this.laterTime(sendAt, maxDelaySeconds);
+    await wait(200);
+    const id = `later-${this.nextId++}`;
+    this.later.set(id, { kind, message, sendAt: at, timer: undefined });
+    this.armLater(id);
+    if (message.draftKey) this.removeDraftMessage(message.draftKey);
+    this.emit({ type: "mail:changed", accountId: message.accountId });
+    this.emit({ type: "scheduled:changed" });
+    return { id, kind, sendAt: at };
+  }
+
+  async scheduledSends(): Promise<ScheduledSend[]> {
+    await wait(120);
+    return [...this.later.entries()]
+      .map(([id, entry]) => ({
+        id,
+        accountId: entry.message.accountId,
+        kind: entry.kind,
+        sendAt: entry.sendAt,
+        subject: entry.message.subject,
+        to: entry.message.to.length > 0 ? entry.message.to : entry.message.cc,
+      }))
+      .sort((a, b) => a.sendAt.localeCompare(b.sendAt));
+  }
+
+  async rescheduleSend(scheduled: ScheduledRef, sendAt: string) {
+    const entry = this.laterEntry(scheduled);
+    const { maxDelaySeconds } = await this.sendLaterInfo(entry.message.accountId);
+    entry.sendAt = this.laterTime(sendAt, maxDelaySeconds);
+    this.armLater(scheduled.id);
+    this.emit({ type: "scheduled:changed" });
+  }
+
+  async sendScheduledNow(scheduled: ScheduledRef) {
+    const entry = this.laterEntry(scheduled);
+    entry.sendAt = new Date().toISOString();
+    this.armLater(scheduled.id);
+  }
+
+  async stopScheduled(scheduled: ScheduledRef) {
+    const message = this.takeLater(scheduled);
+    await this.saveDraft(message);
+  }
+
+  async editScheduled(scheduled: ScheduledRef) {
+    return this.takeLater(scheduled);
+  }
+
+  private laterTime(sendAt: string, maxDelaySeconds: number): string {
+    const at = Date.parse(sendAt);
+    if (Number.isNaN(at)) throw new BackendError("invalid_input", "Pick a date and a time.");
+    const ahead = at - Date.now();
+    if (ahead < 60_000) throw new BackendError("invalid_input", "Pick a time at least a few minutes from now.");
+    if (ahead > maxDelaySeconds * 1000) throw new BackendError("invalid_input", "That is too far ahead.");
+    return new Date(at).toISOString();
+  }
+
+  private laterEntry(scheduled: ScheduledRef): DemoLater {
+    const entry = this.later.get(scheduled.id);
+    if (!entry || entry.message.accountId !== scheduled.accountId) {
+      throw new BackendError("not_found", "This mail is already on its way.");
+    }
+    return entry;
+  }
+
+  private takeLater(scheduled: ScheduledRef): OutgoingMessage {
+    const entry = this.laterEntry(scheduled);
+    clearTimeout(entry.timer);
+    this.later.delete(scheduled.id);
+    this.emit({ type: "scheduled:changed" });
+    return entry.message;
+  }
+
+  /** Waits for the mail's time; a day at most at once, as timers can't wait much longer. */
+  private armLater(id: string) {
+    const entry = this.later.get(id);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    const left = Date.parse(entry.sendAt) - Date.now();
+    entry.timer = setTimeout(
+      () => {
+        if (Date.parse(entry.sendAt) > Date.now()) return this.armLater(id);
+        this.later.delete(id);
+        this.emit({ type: "scheduled:changed" });
+        void this.send(entry.message).then(
+          () => this.emit({ type: "send:done", sendId: id, accountId: entry.message.accountId }),
+          (reason: unknown) =>
+            this.emit({
+              type: "send:failed",
+              sendId: id,
+              accountId: entry.message.accountId,
+              reason: reason instanceof Error ? reason.message : String(reason),
+              message: entry.message,
+            }),
+        );
+      },
+      Math.max(0, Math.min(left, 86_400_000)),
+    );
+  }
+
   async saveDraft(draft: OutgoingMessage): Promise<DraftSaveResult> {
     await wait(350);
     const account = this.accounts.find((a) => a.id === draft.accountId);
@@ -1040,7 +1311,7 @@ export class DemoBackend implements Backend {
     });
     this.drafts.set(draftKey, { messageId: id, draft: { ...draft, draftKey } });
     this.emit({ type: "mail:changed", accountId: account.id });
-    return { draftKey, savedAt: new Date().toISOString() };
+    return { draftKey, savedAt: new Date().toISOString(), messageId: id };
   }
 
   async deleteDraft(accountId: string, draftKey: string) {
@@ -1145,7 +1416,7 @@ export class DemoBackend implements Backend {
   async openAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
     // Stands in for the engine's native warning dialog.
-    if (file.dangerous && !window.confirm(`"${file.filename}" can run programs. Open anyway?`)) return false;
+    if (file.dangerous && !(await confirmDangerousFile(file.filename, "open"))) return false;
     window.open(file.url, "_blank", "noopener,noreferrer");
     return true;
   }
@@ -1172,7 +1443,7 @@ export class DemoBackend implements Backend {
   async saveAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
     // Stands in for the engine's native warning dialog, as when opening.
-    if (file.dangerous && !window.confirm(`"${file.filename}" can run programs. Save anyway?`)) return false;
+    if (file.dangerous && !(await confirmDangerousFile(file.filename, "save"))) return false;
     const link = document.createElement("a");
     link.href = file.url;
     link.download = file.filename;
@@ -1180,9 +1451,21 @@ export class DemoBackend implements Backend {
     return true;
   }
 
-  async getSenderPicture(email: string): Promise<SenderPicture | null> {
+  /** Like a UwUMail server's lookup: a contact's photo, a person's own picture there, then logos. */
+  async getSenderPicture(email: string, lookup: SenderPictureLookup = {}): Promise<SenderPicture | null> {
     await wait(150);
-    return demoSenderPicture(email);
+    const address = email.trim().toLowerCase();
+    if (!lookup.logo) {
+      for (const contact of this.addressBook.contacts()) {
+        if (!contact.photo?.startsWith("data:image/")) continue;
+        if (contact.emails.some((entry) => entry.address.trim().toLowerCase() === address)) {
+          return { url: contact.photo, kind: "photo" };
+        }
+      }
+      const profile = DEMO_PROFILE_PICTURES[address];
+      if (profile) return { url: profile, kind: "photo" };
+    }
+    return demoSenderPicture(address, lookup.local);
   }
 
   async clearSenderPictures() {
@@ -1375,7 +1658,7 @@ export class DemoBackend implements Backend {
     return this.assistOf(scope).createLabel(input);
   }
 
-  async updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>) {
+  async updateAssistLabel(scope: string, id: string, patch: AssistLabelPatch) {
     await wait(100);
     this.assistOf(scope).updateLabel(id, patch);
   }
@@ -1504,6 +1787,8 @@ export class DemoBackend implements Backend {
   }
 
   async setRunInBackground() {}
+
+  async setNotificationPrefs() {}
 
   async setUpdateChannel() {}
 

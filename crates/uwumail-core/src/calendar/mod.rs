@@ -11,6 +11,8 @@ pub mod dav;
 pub mod google_cal;
 pub mod graph_cal;
 pub mod ical;
+pub mod invite;
+pub mod itip;
 pub mod jmap_cal;
 pub mod jscal;
 pub mod xml;

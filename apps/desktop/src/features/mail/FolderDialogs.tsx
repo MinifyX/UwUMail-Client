@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
-import { queryKeys } from "@/lib/queries";
+import { queryKeys, useAccounts, useFolders } from "@/lib/queries";
 import { useFolderEdit, type FolderRequest } from "@/state/folderEdit";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
+import { folderNameProblem, folderNameRules, type FolderNameProblem } from "./folderName";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -66,14 +67,35 @@ function folderLabel(folder: Folder, t: (key: string) => string) {
 function NameForm({ request, onDone }: { request: FolderRequest & { kind: "create" | "rename" }; onDone: () => void }) {
   const { t } = useT();
   const refresh = useRefreshMail();
+  const { data: folders = [] } = useFolders();
+  const { data: accounts = [] } = useAccounts();
   const [name, setName] = useState(request.kind === "rename" ? request.folder.name : "");
+  const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const renaming = request.kind === "rename" ? request.folder : null;
+  const accountId = renaming?.accountId ?? (request.kind === "create" ? request.accountId : undefined);
+  const parentId = renaming ? renaming.parentId : request.kind === "create" ? (request.parent?.id ?? null) : null;
+  const mailbox = folders.filter((folder) => folder.accountId === accountId);
+  const siblings = mailbox
+    .filter((folder) => folder.parentId === parentId && folder.id !== renaming?.id)
+    .map((folder) => folder.name);
+  const protocol = accounts.find((account) => account.id === accountId)?.protocol ?? "imap";
+  const problem = folderNameProblem(name, siblings, folderNameRules(protocol, mailbox));
+  const unchanged = renaming !== null && name.trim() === renaming.name;
+  // "Empty" waits for a submit; the rest shows while typing.
+  const shownProblem = problem && (problem.kind !== "empty" || touched) ? problem : null;
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    setTouched(true);
+    if (problem) return;
+    if (unchanged) {
+      onDone();
+      return;
+    }
     const clean = name.trim();
-    if (!clean) return;
     setBusy(true);
     setError(null);
     try {
@@ -104,15 +126,19 @@ function NameForm({ request, onDone }: { request: FolderRequest & { kind: "creat
 
   return (
     <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-4 px-6 pt-2 pb-6">
-      <Field label={t("folders.name")} error={error}>
+      <Field label={t("folders.name")} error={shownProblem ? problemText(shownProblem, t) : error}>
         {(id) => (
           <TextInput
             id={id}
             value={name}
             autoFocus
-            maxLength={200}
+            maxLength={255}
+            aria-invalid={shownProblem !== null}
             placeholder={t("folders.namePlaceholder")}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => {
+              setName(event.target.value);
+              setError(null);
+            }}
           />
         )}
       </Field>
@@ -120,7 +146,7 @@ function NameForm({ request, onDone }: { request: FolderRequest & { kind: "creat
         <Button variant="ghost" onClick={onDone}>
           {t("common.cancel")}
         </Button>
-        <Button type="submit" variant="primary" busy={busy} disabled={!name.trim()}>
+        <Button type="submit" variant="primary" busy={busy} disabled={shownProblem !== null}>
           {request.kind === "create" ? t("folders.create") : t("folders.renameConfirm")}
         </Button>
       </div>
@@ -128,11 +154,34 @@ function NameForm({ request, onDone }: { request: FolderRequest & { kind: "creat
   );
 }
 
+function problemText(problem: FolderNameProblem, t: (key: string, options?: Record<string, string>) => string) {
+  return problem.kind === "character"
+    ? t("folders.problem.character", { character: problem.character })
+    : t(`folders.problem.${problem.kind}`);
+}
+
 function DeleteQuestion({ folder, onDone }: { folder: Folder; onDone: () => void }) {
   const { t } = useT();
   const refresh = useRefreshMail();
+  const { data: folders = [] } = useFolders();
   const [busy, setBusy] = useState(false);
   const name = folderLabel(folder, t);
+  // The count as the mailbox has it now, not as it was when the menu opened.
+  const current = folders.find((f) => f.id === folder.id) ?? folder;
+  // The engine keeps folders that hold folders; say so before asking, not after.
+  const hasChildren = folders.some((f) => f.parentId === folder.id);
+
+  if (hasChildren) {
+    return (
+      <div className="flex flex-col items-center gap-3 px-6 pt-6 pb-6 text-center">
+        <h2 className="text-[18px] font-extrabold text-balance">{t("folders.hasChildrenTitle", { name })}</h2>
+        <p className="text-[13px] text-muted">{t("folders.hasChildrenBody")}</p>
+        <Button autoFocus onClick={onDone}>
+          {t("common.close")}
+        </Button>
+      </div>
+    );
+  }
 
   const confirm = async () => {
     setBusy(true);
@@ -157,7 +206,7 @@ function DeleteQuestion({ folder, onDone }: { folder: Folder; onDone: () => void
       <NyuScene name="goodbye" className="w-36" />
       <h2 className="text-[18px] font-extrabold text-balance">{t("folders.deleteTitle", { name })}</h2>
       <p className="text-[13px] text-muted">
-        {folder.total > 0 ? t("folders.deleteBody", { count: folder.total }) : t("folders.deleteBodyEmpty")}
+        {current.total > 0 ? t("folders.deleteBody", { count: current.total }) : t("folders.deleteBodyEmpty")}
       </p>
       <div className="flex flex-wrap justify-center gap-2 pt-1">
         <ArmedButton variant="danger" busy={busy} autoFocus onClick={() => void confirm()}>
@@ -174,14 +223,19 @@ function DeleteQuestion({ folder, onDone }: { folder: Folder; onDone: () => void
 function EmptyQuestion({ folder, onDone }: { folder: Folder; onDone: () => void }) {
   const { t } = useT();
   const refresh = useRefreshMail();
+  const { data: folders = [] } = useFolders();
   const [busy, setBusy] = useState(false);
   const junk = folder.role === "junk";
+  const count = (folders.find((f) => f.id === folder.id) ?? folder).total;
 
   const confirm = async () => {
     setBusy(true);
     try {
       const removed = await backend().emptyFolder(folder.id);
       useUi.getState().setCheckedThreadIds([]);
+      // The open mail was in there.
+      const ui = useUi.getState();
+      if (ui.view.kind === "folder" && ui.view.folderId === folder.id) ui.selectThread(null);
       toast(removed > 0 ? t("folders.emptied", { count: removed }) : t("folders.alreadyEmpty"), "success");
       onDone();
     } catch (reason) {
@@ -198,7 +252,7 @@ function EmptyQuestion({ folder, onDone }: { folder: Folder; onDone: () => void 
       <h2 className="text-[18px] font-extrabold text-balance">
         {junk ? t("folders.emptyJunkTitle") : t("folders.emptyTrashTitle")}
       </h2>
-      <p className="text-[13px] text-muted">{t("folders.emptyBody", { count: folder.total })}</p>
+      <p className="text-[13px] text-muted">{t("folders.emptyBody", { count })}</p>
       <div className="flex flex-wrap justify-center gap-2 pt-1">
         <ArmedButton variant="danger" busy={busy} autoFocus onClick={() => void confirm()}>
           {t("folders.emptyConfirm")}

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { Signature } from "@/backend/types";
 import { sinceText } from "@/features/settings/SettingsSync";
 import { MAX_VALUE_BYTES } from "@/lib/settingsSync";
-import { cleanSyncedSignature, holdBackWeakening, signatureTravels } from "./accountSync";
+import { cleanSyncedSignature, holdBackWeakening, loadMeta, signatureTravels } from "./accountSync";
 import { DEFAULT_SETTINGS } from "./settings";
 
 const signature = (html: string): Signature => ({
@@ -65,5 +65,28 @@ describe("protections from the server", () => {
     });
     const relaxed = { ...here, linkConfirm: false, remoteImages: "always" as const };
     expect(holdBackWeakening({ linkConfirm: false, remoteImages: "always" }, relaxed).kept).toEqual({});
+  });
+});
+
+describe("the settings sync's bookkeeping on this device", () => {
+  const KEY = "uwumail.settingsSync";
+  afterEach(() => localStorage.removeItem(KEY));
+
+  it("comes back when it has the expected shape", () => {
+    const meta = { account: "a@example.org", state: "s1", pending: {}, refused: ["x"], synced: true, lastSync: 5 };
+    localStorage.setItem(KEY, JSON.stringify(meta));
+    expect(loadMeta()).toEqual(meta);
+  });
+
+  it("starts over when it is broken", () => {
+    for (const broken of [
+      { account: "a@example.org" },
+      { account: "a@example.org", state: null, pending: [], refused: [], synced: true, lastSync: null },
+      { account: "a@example.org", state: null, pending: {}, refused: [1], synced: true, lastSync: null },
+      "text",
+    ]) {
+      localStorage.setItem(KEY, JSON.stringify(broken));
+      expect(loadMeta()).toBeNull();
+    }
   });
 });

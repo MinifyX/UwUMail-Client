@@ -393,6 +393,23 @@ pub enum UnsubscribeOutcome {
     Done,
     /// The sender only offers a web page; the app opens it.
     OpenPage { url: String },
+    /// The one click was sent and the sender's side didn't take it. Nothing else was done: the
+    /// app says so and offers the other way, which only goes when asked for again.
+    OneClickFailed {
+        /// Short, safe to show (the host and what it answered), never the server's own text.
+        reason: String,
+        fallback: Option<UnsubscribeFallback>,
+    },
+}
+
+/// The way to unsubscribe that is left besides the one click.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UnsubscribeFallback {
+    /// A mail to the header's address, from the reader's own account.
+    Mail,
+    /// The sender's page, which the app opens through its link question.
+    Page,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -582,6 +599,41 @@ pub struct CalendarInfo {
     /// visibility are this device's; it can't be renamed, shared or deleted.
     #[serde(default)]
     pub is_local: bool,
+    /// Who it is shared with, and by whom (UwUMail servers only).
+    #[serde(flatten, default)]
+    pub sharing: CalendarSharing,
+}
+
+/// A calendar's sharing on a UwUMail server (its docs/jmap-calendars.md "Shared calendars").
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarSharing {
+    /// May share it with others: own calendars, or shared with everything, on a server that lists
+    /// its people.
+    #[serde(default)]
+    pub may_share: bool,
+    /// The owner of a calendar somebody shares with the account; leaving it only removes it here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_by: Option<CalendarOwner>,
+    /// Who else sees it: principal id → `read`, `write` or `all`; only where it may be shared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_with: Option<std::collections::BTreeMap<String, String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarOwner {
+    pub email: String,
+    pub name: String,
+}
+
+/// Somebody on the same server to share with (a JMAP Principal).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Person {
+    pub id: String,
+    pub name: String,
+    pub email: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -644,9 +696,23 @@ pub struct CalendarOccurrence {
     pub recurrence_id: Option<String>,
     pub read_only: bool,
     pub color: Option<String>,
+    /// Who takes part, the organizer first; at most [`crate::calendar::jscal::MAX_PARTICIPANTS`].
+    #[serde(default)]
+    pub participants: Vec<EventParticipant>,
     /// An event of a birthdays calendar: whose date it is, and how old or how many years.
     #[serde(default)]
     pub birthday: Option<crate::birthdays::OccurrenceBirthday>,
+}
+
+/// Someone who takes part in an event, with their answer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventParticipant {
+    pub name: String,
+    /// Lower case; empty where the event names no address.
+    pub email: String,
+    pub status: crate::calendar::invite::Partstat,
+    pub organizer: bool,
 }
 
 /// An event as the editor fills it in.
@@ -824,6 +890,10 @@ pub struct QueuedSend {
 pub struct SavedDraft {
     pub draft_key: String,
     pub saved_at: String,
+    /// The saved version's message id, for [`crate::engine::Engine::open_draft`]; `None` when the
+    /// server didn't say where it went (then the composer keeps its full copy on the device).
+    #[serde(default)]
+    pub message_id: Option<String>,
 }
 
 /// A draft from the Drafts folder, ready to continue writing.
@@ -961,9 +1031,11 @@ pub enum EngineEvent {
     /// A queued message went out.
     #[serde(rename = "send:done", rename_all = "camelCase")]
     SendDone { send_id: String, account_id: String },
-    /// A queued message couldn't be sent; it was kept as a draft where possible.
+    /// A queued message couldn't be sent; it was kept as a draft where possible. `held` when it
+    /// waits in the outbox instead (with the scheduled mail), because Drafts couldn't take it or
+    /// it may have gone out already.
     #[serde(rename = "send:failed", rename_all = "camelCase")]
-    SendFailed { send_id: String, account_id: String, reason: String, message: Box<OutgoingMessage> },
+    SendFailed { send_id: String, account_id: String, reason: String, message: Box<OutgoingMessage>, held: bool },
     /// The shared settings of a UwUMail account may have changed; `state` when the server said which.
     #[serde(rename = "settings:changed", rename_all = "camelCase")]
     SettingsChanged {
@@ -991,6 +1063,9 @@ pub enum EngineEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         account_id: Option<String>,
     },
+    /// Mail sent later was scheduled, changed, stopped or sent (see `send_later`).
+    #[serde(rename = "scheduled:changed")]
+    ScheduledChanged {},
 }
 
 impl EngineEvent {
@@ -1007,6 +1082,7 @@ impl EngineEvent {
             Self::PushChanged { .. } => "push:changed",
             Self::AccountsChanged {} => "accounts:changed",
             Self::AssistChanged { .. } => "assist:changed",
+            Self::ScheduledChanged {} => "scheduled:changed",
         }
     }
 }

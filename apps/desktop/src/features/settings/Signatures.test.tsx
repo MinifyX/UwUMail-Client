@@ -178,7 +178,7 @@ describe("Signatures", () => {
     await waitFor(() => expect(fake.saveDomainSignatures).toHaveBeenCalled());
     expect(fake.saveDomainSignatures.mock.calls[0]).toEqual([
       "u",
-      { domains: { "example.org": { text: "Gruß, {name}", html: "<p>Gruß, {name}</p>" } } },
+      { domains: { "example.org": { text: "Gruß, {name}", html: "<p>Gruß, {name}</p>" } }, ifInState: "3" },
     ]);
   });
 
@@ -191,6 +191,7 @@ describe("Signatures", () => {
     await waitFor(() => expect(fake.saveDomainSignatures).toHaveBeenCalled());
     expect(fake.saveDomainSignatures.mock.calls[0]![1]).toEqual({
       domains: { "*": { text: "Für alle", html: "<p>Für alle</p>" }, "example.net": null },
+      ifInState: "3",
     });
   });
 
@@ -204,10 +205,27 @@ describe("Signatures", () => {
     await waitFor(() => expect(fake.saveDomainSignatures).toHaveBeenCalled());
     expect(fake.saveDomainSignatures.mock.calls[0]![1]).toEqual({
       identities: { i2: { text: "Nur Mini", html: "<p>Nur Mini</p>" } },
+      ifInState: "3",
     });
     fake.saveDomainSignatures.mockClear();
     fireEvent.click(screen.getAllByRole("button", { name: "Use the domain signature" }).at(-1)!);
-    await waitFor(() => expect(fake.saveDomainSignatures).toHaveBeenCalledWith("u", { identities: { i3: null } }));
+    await waitFor(() =>
+      expect(fake.saveDomainSignatures).toHaveBeenCalledWith("u", { identities: { i3: null }, ifInState: "3" }),
+    );
+  });
+
+  it("reloads and says so when another device changed the signatures (WF-3)", async () => {
+    const { BackendError } = await import("@/backend/backend");
+    fake.saveDomainSignatures.mockRejectedValueOnce(new BackendError("state_mismatch", "changed"));
+    renderPage();
+    await pick("example.org (2 addresses)");
+    const reads = fake.domainSignatures.mock.calls.length;
+    write("<p>Neu</p>");
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]!);
+    await waitFor(() => expect(fake.domainSignatures.mock.calls.length).toBeGreaterThan(reads));
+    expect(useToasts.getState().toasts.map((toast) => toast.message)).toEqual([
+      "The signatures were changed elsewhere in the meantime. They have been reloaded; please check them and save again.",
+    ]);
   });
 
   it("keeps a device domain's signature on the device", async () => {

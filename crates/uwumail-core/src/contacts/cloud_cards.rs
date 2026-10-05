@@ -10,9 +10,24 @@ use serde_json::{Map, Value, json};
 pub const DEFAULT_BOOK: &str = "contacts";
 /// The fields of a person Google is asked for and written to.
 pub const GOOGLE_FIELDS: &str =
-    "names,nicknames,emailAddresses,phoneNumbers,addresses,organizations,biographies,birthdays,events,metadata";
+    "names,nicknames,emailAddresses,phoneNumbers,addresses,organizations,biographies,birthdays,events,photos,metadata";
 pub const GOOGLE_UPDATE_FIELDS: &str =
     "names,nicknames,emailAddresses,phoneNumbers,addresses,organizations,biographies,birthdays,events";
+/// A card property of the app's own: the provider may keep a photo that is fetched when the
+/// contact shows (Graph lists none, Google only links them).
+pub const REMOTE_PHOTO: &str = "uwuRemotePhoto";
+
+/// A photo link Google hands out: https on its own picture host, nothing else.
+pub fn google_photo_url(url: &str) -> bool {
+    url::Url::parse(url).is_ok_and(|url| {
+        url.scheme() == "https"
+            && url.port().is_none()
+            && url
+                .host_str()
+                .is_some_and(|host| host == "googleusercontent.com" || host.ends_with(".googleusercontent.com"))
+    })
+}
+
 /// Graph keeps at most this many email addresses per contact.
 const GRAPH_EMAILS: usize = 3;
 
@@ -320,6 +335,8 @@ pub fn graph_card(value: &Value) -> Option<(String, Option<String>, Map<String, 
             );
         }
     }
+    // Graph lists no photos; whether there is one, and the picture, are asked when it shows.
+    card.insert(REMOTE_PHOTO.into(), json!(true));
     let folder = text(value, "parentFolderId").map(String::from);
     Some((id, folder, card))
 }
@@ -488,6 +505,16 @@ pub fn google_card(person: &Value) -> Option<(String, Option<String>, Map<String
     }
     if !anniversaries.is_empty() {
         card.insert("anniversaries".into(), Value::Object(anniversaries));
+    }
+    // The contact's own photo, not the letter Google draws for those without one. It is fetched
+    // by the engine when it shows (`google_photo_url`), never by the page.
+    if let Some(url) = list("photos")
+        .iter()
+        .filter(|photo| photo.get("default").and_then(Value::as_bool) != Some(true))
+        .find_map(|photo| text(photo, "url").filter(|url| google_photo_url(url)))
+    {
+        card.insert("media".into(), json!({ "p1": { "@type": "Media", "kind": "photo", "uri": url } }));
+        card.insert(REMOTE_PHOTO.into(), json!(true));
     }
     Some((resource, text(person, "etag").map(String::from), card))
 }

@@ -614,6 +614,19 @@ pub async fn all_objects(client: &DavClient, calendar: &Url) -> Result<Vec<DavOb
     Ok(parse_objects(&root, &landed))
 }
 
+/// The objects of a calendar whose event has this UID (RFC 4791, 9.7.5). Servers match the text
+/// as they like; the caller checks the UID it gets.
+pub async fn objects_with_uid(client: &DavClient, calendar: &Url, uid: &str) -> Result<Vec<DavObject>> {
+    let escaped = uid.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+    let body = format!(
+        r#"<?xml version="1.0" encoding="utf-8"?>
+<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data/></d:prop>
+<c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:prop-filter name="UID"><c:text-match collation="i;octet">{escaped}</c:text-match></c:prop-filter></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>"#
+    );
+    let (root, landed) = client.multistatus("REPORT", calendar, "1", &body).await?;
+    Ok(parse_objects(&root, &landed))
+}
+
 pub fn parse_objects(root: &Element, base: &Url) -> Vec<DavObject> {
     responses(root, base)
         .into_iter()

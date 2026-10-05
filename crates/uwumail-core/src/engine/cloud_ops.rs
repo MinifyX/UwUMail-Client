@@ -76,7 +76,8 @@ fn utc_text(time: DateTime<Utc>) -> String {
 }
 
 fn graph_event_select() -> &'static str {
-    "id,subject,body,start,end,isAllDay,location,type,seriesMasterId,originalStartTimeZone,recurrence"
+    // `attendees` and `organizer`: who takes part, for the event popover (and the move check).
+    "id,subject,body,start,end,isAllDay,location,type,seriesMasterId,originalStartTimeZone,recurrence,attendees,organizer"
 }
 
 impl Inner {
@@ -185,6 +186,27 @@ impl Inner {
             match cloud::send(&endpoints, &token.token, call).await? {
                 Answer::Done(value) => return Ok(value),
                 Answer::Unauthorized => refused = Some(token.token),
+            }
+        }
+        Err(Error::sign_in_again("Sign in again to see calendar and contacts."))
+    }
+
+    /// Like [`Self::cloud_call`] for bytes: sends `body` and reads at most `limit` bytes back;
+    /// `None` when the API has nothing there (404).
+    pub(super) async fn cloud_raw(
+        &self,
+        account: &AccountRecord,
+        call: &Call,
+        body: Option<(&[u8], &str)>,
+        limit: usize,
+    ) -> Result<Option<Vec<u8>>> {
+        let mut refused: Option<String> = None;
+        for _ in 0..2 {
+            let token = self.cloud_token(account, call.api.token(), refused.as_deref()).await?;
+            let endpoints = self.cloud.endpoints.lock().unwrap().clone();
+            match cloud::send_raw(&endpoints, &token.token, call, body, limit).await? {
+                cloud::RawAnswer::Done(bytes) => return Ok(bytes),
+                cloud::RawAnswer::Unauthorized => refused = Some(token.token),
             }
         }
         Err(Error::sign_in_again("Sign in again to see calendar and contacts."))
@@ -350,6 +372,7 @@ impl Inner {
                             may_delete: found.can_remove && !found.is_default,
                             is_birthdays: false,
                             is_local: false,
+                            sharing: Default::default(),
                         },
                         remote: found.id,
                     });
@@ -379,6 +402,7 @@ impl Inner {
                             may_delete: !found.primary,
                             is_birthdays: false,
                             is_local: false,
+                            sharing: Default::default(),
                         },
                         remote: found.id,
                     });
@@ -724,12 +748,12 @@ impl Inner {
         match source {
             calendar::Source::Graph { base } => {
                 let path = format!("{base}/calendars/{}/events/{}", segment(&calendar_id), segment(&event_id));
-                let select =
-                    if moving { format!("{},attendees", graph_event_select()) } else { graph_event_select().into() };
                 let read = self
                     .cloud_call(
                         &account,
-                        &Call::get(Api::Graph, path.clone()).query("$select", select).prefer(graph_cal::PREFER),
+                        &Call::get(Api::Graph, path.clone())
+                            .query("$select", graph_event_select())
+                            .prefer(graph_cal::PREFER),
                     )
                     .await?;
                 // A move is a copy and a delete at Graph: for a meeting the delete would cancel it

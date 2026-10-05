@@ -228,7 +228,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
       ? "noAccount"
       : accountsLoaded && shown.length === 0
         ? "workspace"
-        : search
+        : search || chipEntry
           ? "search"
           : shown.length > 0 && shown.every((account) => account.status.state === "offline")
             ? "offline"

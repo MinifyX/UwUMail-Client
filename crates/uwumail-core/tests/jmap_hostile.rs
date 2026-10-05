@@ -1,6 +1,8 @@
 //! Mail rules, calendars and birthdays against a hostile JMAP server on this machine (plain HTTP on
 //! loopback, which the JMAP client allows for local servers). Runs everywhere.
 
+mod jmap_account;
+mod jmap_scheduled;
 mod support;
 
 use chrono_tz::Tz;
@@ -586,4 +588,111 @@ async fn signatures_per_domain_are_set_all_or_nothing() {
     let before = stub.seen().len();
     assert!(jmap_signatures::save(&client, &json!({ "domains": { "a.test": 1 } })).await.is_err());
     assert_eq!(stub.seen().len(), before);
+}
+
+/// A Drafts mailbox with an older version of the draft; the new one is imported as "e9".
+fn draft_answer(request: &Request, created: &str) -> Response {
+    if request.path.starts_with("/.well-known/jmap") {
+        return Response::json(&session());
+    }
+    if request.path.starts_with("/upload/") {
+        return Response::json(&json!({ "accountId": "a1", "blobId": "b9", "type": "message/rfc822", "size": 10 }));
+    }
+    let body: Value = serde_json::from_slice(&request.body).unwrap_or_default();
+    let calls = body["methodCalls"].as_array().cloned().unwrap_or_default();
+    // One page of drafts; the next page is empty.
+    let first_page = body["methodCalls"][0][1]["position"].as_u64().unwrap_or(0) == 0;
+    let responses: Vec<Value> = calls
+        .iter()
+        .map(|call| {
+            let (name, id) = (call[0].as_str().unwrap_or_default(), &call[2]);
+            let result = match name {
+                "Core/echo" => call[1].clone(),
+                "Email/query" | "Email/get" if !first_page => json!({ "ids": [], "list": [] }),
+                "Mailbox/get" => json!({ "list": [{ "id": "mb-drafts", "name": "Drafts", "parentId": null }] }),
+                "Email/import" => json!({ "created": { "draft": { "id": created, "blobId": "b9" } } }),
+                "Email/query" => json!({ "ids": ["e9", "e3"] }),
+                "Email/get" => json!({ "list": [
+                    { "id": "e9", "messageId": ["draft-1@a.test"] },
+                    { "id": "e3", "messageId": ["draft-1@a.test"] },
+                ] }),
+                "Email/set" => json!({ "destroyed": ["e3"] }),
+                _ => return json!(["error", { "type": "unknownMethod" }, id]),
+            };
+            json!([name, result, id])
+        })
+        .collect();
+    Response::json(&json!({ "methodResponses": responses, "sessionState": "s1" }))
+}
+
+fn draft_store() -> uwumail_core::store::Store {
+    use uwumail_core::model::{AccountColor, AuthKind, Protocol, Security, ServerSettings};
+    let store = uwumail_core::store::Store::open_in_memory().unwrap();
+    store
+        .insert_account(&uwumail_core::store::AccountRecord {
+            id: "acc".into(),
+            name: "Mini".into(),
+            email: "mini@a.test".into(),
+            display_name: "Mini".into(),
+            color: AccountColor::Pink,
+            auth: AuthKind::Password,
+            username: "mini@a.test".into(),
+            imap: ServerSettings { host: "imap.a.test".into(), port: 993, security: Security::Tls },
+            smtp: ServerSettings { host: "smtp.a.test".into(), port: 465, security: Security::Tls },
+            protocol: Protocol::Jmap,
+            jmap_url: None,
+        })
+        .unwrap();
+    store
+}
+
+const DRAFT: &[u8] = b"Message-ID: <draft-1@a.test>\r\nFrom: mini@a.test\r\nTo: leni@b.test\r\nSubject: Hi Leni\r\n\r\nHast du Zeit?\r\n";
+
+/// A saved draft comes back with the id it can be opened by, and only the older version is
+/// destroyed on the server.
+#[tokio::test]
+async fn a_saved_draft_names_the_id_it_opens_by() {
+    let stub = http_stub(|request| draft_answer(request, "e9")).await;
+    let client = client(&stub).await;
+    let store = draft_store();
+
+    let id = uwumail_core::jmap_sync::save_draft(&client, &store, "acc", DRAFT.to_vec(), "draft-1@a.test")
+        .await
+        .unwrap()
+        .expect("the new version has an id");
+    let message = store.messages_by_ids(std::slice::from_ref(&id)).unwrap().pop().unwrap();
+    assert_eq!(message.subject, "Hi Leni");
+    assert!(message.flags.draft);
+    let location = store.locations(std::slice::from_ref(&id)).unwrap().pop().unwrap();
+    assert_eq!(location.remote_id.as_deref(), Some("e9"));
+    assert_eq!(location.folder_path, "mb-drafts");
+
+    let destroyed: Vec<Value> = stub
+        .seen()
+        .iter()
+        .filter_map(|r| serde_json::from_slice::<Value>(&r.body).ok())
+        .flat_map(|b| b["methodCalls"].as_array().cloned().unwrap_or_default())
+        .filter(|call| call[0] == "Email/set")
+        .map(|call| call[1]["destroy"].clone())
+        .collect();
+    assert_eq!(destroyed, vec![json!(["e3"])]);
+
+    // Saving the same version again (a sync was quicker) names the same id.
+    let again =
+        uwumail_core::jmap_sync::save_draft(&client, &store, "acc", DRAFT.to_vec(), "draft-1@a.test").await.unwrap();
+    assert_eq!(again, Some(id));
+}
+
+/// A server that names no usable id leaves the composer its full copy (no id comes back).
+#[tokio::test]
+async fn a_draft_without_a_usable_id_names_none() {
+    for created in [String::new(), "x".repeat(300)] {
+        let stub = http_stub(move |request| draft_answer(request, &created)).await;
+        let client = client(&stub).await;
+        let store = draft_store();
+        let saved = uwumail_core::jmap_sync::save_draft(&client, &store, "acc", DRAFT.to_vec(), "draft-1@a.test")
+            .await
+            .unwrap();
+        assert_eq!(saved, None);
+    }
 }

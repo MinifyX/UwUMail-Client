@@ -2129,9 +2129,19 @@ fn prompt_label(label: &Label) -> prompts::PromptLabel {
     match label.base() {
         Some(base) => {
             let text = base.text(local::base_label_language(base, label));
+            // What the person had written for the label before it became a base label: a hint
+            // that says what they mean by it, the definition still decides (UwUMail Server,
+            // LABELS22-L2). One line, at most 500 characters.
+            let description = match label.previous_description.as_deref().map(str::trim).filter(|own| !own.is_empty()) {
+                Some(own) => {
+                    let own: String = own.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(500).collect();
+                    format!("{} The person's own words for this label (a hint): \"{own}\"", text.description)
+                }
+                None => text.description.to_owned(),
+            };
             prompts::PromptLabel {
                 name: label.name.clone(),
-                description: text.description.to_owned(),
+                description,
                 examples: text.examples.iter().map(|e| e.to_string()).collect(),
                 counter_examples: text.counter_examples.iter().map(|e| e.to_string()).collect(),
             }
@@ -3150,6 +3160,64 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         let own = engine.assist_check_overlap(DEVICE_SCOPE, "Rechnungen", "", Some(&id("invoice"))).await.unwrap();
         assert!(!own["overlaps"].as_array().unwrap().iter().any(|o| o["id"] == id("invoice").as_str()), "not itself");
         assert!(engine.assist_check_overlap(DEVICE_SCOPE, &"x".repeat(101), "", None).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn an_adopted_label_keeps_its_own_words_as_a_forgettable_hint() {
+        let (_dir, engine, _) = engine_with_mail();
+        let own = "Alles vom\nSteuerberater";
+        engine
+            .assist_create_label(
+                DEVICE_SCOPE,
+                json!({ "name": "Rechnungen", "description": "Alles vom Steuerberater" }),
+                None,
+            )
+            .await
+            .unwrap();
+        // Without words of its own there is nothing to keep.
+        engine.assist_create_label(DEVICE_SCOPE, json!({ "name": "Newsletter" }), None).await.unwrap();
+        let labels = engine.assist_labels(DEVICE_SCOPE, Some("de-DE")).await.unwrap();
+        let labels = labels.as_array().unwrap().clone();
+        let invoice = labels.iter().find(|l| l["base"] == "invoice").unwrap();
+        assert_eq!(invoice["previousDescription"], "Alles vom Steuerberater", "kept, not lost");
+        assert!(labels.iter().find(|l| l["base"] == "newsletter").unwrap()["previousDescription"].is_null());
+        assert!(labels.iter().find(|l| l["base"] == "shipping").unwrap()["previousDescription"].is_null());
+        let id = invoice["id"].as_str().unwrap().to_string();
+
+        // The model gets it as a hint next to the definition, on one line.
+        let mut label = engine.device().labels().unwrap().into_iter().find(|l| l.id == id).unwrap();
+        label.previous_description = Some(own.into());
+        let prompt = prompt_label(&label);
+        assert!(prompt.description.starts_with(uwumail_labels::Base::Invoice.text("de").description));
+        assert!(prompt.description.ends_with("(a hint): \"Alles vom Steuerberater\""), "{}", prompt.description);
+        label.previous_description = None;
+        assert_eq!(prompt_label(&label).description, uwumail_labels::Base::Invoice.text("de").description);
+
+        // Sent back unchanged it changes nothing; it can't be rewritten, only forgotten.
+        engine
+            .assist_update_label(
+                DEVICE_SCOPE,
+                &id,
+                json!({ "previousDescription": "Alles vom Steuerberater", "auto": false }),
+            )
+            .await
+            .unwrap();
+        let refused = engine
+            .assist_update_label(DEVICE_SCOPE, &id, json!({ "previousDescription": "Etwas anderes" }))
+            .await
+            .unwrap_err();
+        assert_eq!(refused.assist.unwrap().properties, ["previousDescription"]);
+        engine.assist_update_label(DEVICE_SCOPE, &id, json!({ "previousDescription": null })).await.unwrap();
+        let after = engine.assist_labels(DEVICE_SCOPE, None).await.unwrap();
+        let invoice = after.as_array().unwrap().iter().find(|l| l["id"] == id.as_str()).unwrap().clone();
+        assert!(invoice["previousDescription"].is_null());
+        assert_eq!(invoice["auto"], false);
+        // A new label can't bring one along.
+        let made = engine
+            .assist_create_label(DEVICE_SCOPE, json!({ "name": "Clubs", "previousDescription": "x" }), None)
+            .await
+            .unwrap_err();
+        assert_eq!(made.assist.unwrap().properties, ["previousDescription"]);
     }
 
     #[tokio::test]

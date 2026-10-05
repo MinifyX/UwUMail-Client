@@ -8,9 +8,9 @@ import { escapeHtml, textToHtml } from "@/lib/format";
 import { replaceContentIds } from "@/lib/inlineImages";
 import { fontVariables, rewriteElementFonts } from "@/lib/mailFonts";
 import { proxyRemoteImages, type ImageProxy } from "@/lib/remoteImages";
-import { unwrappedText } from "@/lib/safeLinks";
+import { SAFE_LINK_MARKER, unwrapSafeLink, unwrapSafeLinkElement, unwrappedText } from "@/lib/safeLinks";
 import type { MailAppearance } from "@/state/settings";
-import { hideLinkStatus, watchLinks } from "./linkEvents";
+import { hideLinkStatus, keepFrameOnMail, watchLinks } from "./linkEvents";
 import { darkenImages, type RemoteImageLoader } from "./darkImages";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
 import { forwardFrameKeys } from "./readerKeys";
@@ -20,18 +20,21 @@ import { deferRemotePictures, loadRemotePictures, PICTURE_STYLES, type PicturePr
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)"'\]]/g;
 
-/**
- * Web addresses in plain text as links. A Microsoft Safe Link reads as the address it wraps; the
- * link itself stays as written (opening it unwraps it too, see lib/links).
- */
+/** Web addresses in escaped plain text as links; a Microsoft Safe Link shows and links its original address. */
 function linkify(html: string) {
-  return html.replace(URL_PATTERN, (url) => {
-    const original = unwrappedText(url.replace(/&amp;/g, "&"));
-    return `<a href="${url}">${original === null ? url : escapeHtml(original)}</a>`;
+  return html.replace(URL_PATTERN, (escaped) => {
+    const safe = unwrapSafeLink(unescapeHtml(escaped));
+    if (!safe) return `<a href="${escaped}">${escaped}</a>`;
+    const original = escapeHtml(safe.url);
+    return `<a href="${original}" ${SAFE_LINK_MARKER}="${escapeHtml(safe.wrapper)}">${original}</a>`;
   });
 }
 
-/** A link whose whole text is a Microsoft Safe Link reads as the address it wraps. */
+function unescapeHtml(text: string) {
+  return text.replace(/&(amp|lt|gt|quot);/g, (_, name: string) => ({ amp: "&", lt: "<", gt: ">", quot: '"' })[name]!);
+}
+
+/** A link whose whole text is a Microsoft Safe Link (whatever it points to) reads as the address it wraps. */
 function unwrapLinkText(node: Element) {
   if (node.tagName !== "A" || node.children.length > 0) return;
   const original = unwrappedText(node.textContent ?? "");
@@ -57,16 +60,40 @@ function dropOwnMarkers(node: Element) {
   }
 }
 
+/** Link attributes that would point into the mail's own parts or the app's own files. */
+const LINK_ATTRIBUTES = ["href", "xlink:href", "action", "formaction", "data"];
+const OWN_FILES = /^(cid|blob):/i;
+
+/**
+ * Links may not lead to the mail's embedded parts (`cid:`) or the app's own files (`blob:`): those
+ * have the app's origin, and the mail frame may run scripts (security review 0.10 RD-1). Pictures
+ * keep their `cid:` sources (see lib/inlineImages).
+ */
+function dropOwnFileLinks(node: Element) {
+  for (const name of LINK_ATTRIBUTES) {
+    const value = node.getAttribute(name);
+    // Browsers skip leading whitespace and controls and ignore tabs and newlines in a scheme.
+    if (value === null) continue;
+    const scheme = [...value].filter((char) => char.charCodeAt(0) > 0x20).join("");
+    if (OWN_FILES.test(scheme)) node.removeAttribute(name);
+  }
+}
+
 /**
  * The engine already sanitizes HTML. We sanitize again here because the demo
- * backend and future addons can also produce message bodies.
+ * backend and future addons can also produce message bodies. `alsoForbid` drops more elements with
+ * their content.
  */
-function sanitize(html: string) {
+function sanitize(html: string, alsoForbid: string[] = []) {
   const purify = DOMPurify();
   purify.addHook("afterSanitizeAttributes", (node) => {
+    // The mail's own markers go first, so only the reader sets the Safe Link one.
+    dropOwnMarkers(node);
+    dropOwnFileLinks(node);
+    // Microsoft Safe Links show and open their original address (lib/safeLinks).
+    if (node.tagName === "A" || node.tagName === "AREA") unwrapSafeLinkElement(node);
     unwrapLinkText(node);
     dropMathLinks(node);
-    dropOwnMarkers(node);
     // Same output whatever the font settings say; the frame decides (see lib/mailFonts).
     rewriteElementFonts(node);
   });
@@ -85,6 +112,7 @@ function sanitize(html: string) {
       "meta",
       "link",
       "base",
+      ...alsoForbid,
     ],
     FORBID_ATTR: ["srcdoc", "formaction", "ping"],
     // Without this, a leading <style> (the first thing in most newsletters) is
@@ -94,6 +122,27 @@ function sanitize(html: string) {
 }
 
 export const ROOT_ID = "uwu-mail-root";
+
+/**
+ * The sandbox of every frame that shows a mail. `allow-same-origin` lets the app measure the
+ * height, recolor for dark mode and read the document. `allow-scripts` is there for WebKit (macOS,
+ * iOS, Linux): in a frame without it, WebKit never calls the listeners the app puts on the mail's
+ * document, so a click on a link went past the link question and opened the page inside the
+ * frame, and dates and shortcuts did nothing either. The mail itself still runs nothing: the
+ * sanitizer drops scripts and event attributes, the document's own policy (`default-src 'none'`,
+ * the first thing in its head) blocks whatever would be left, and the app's policy applies on top.
+ */
+export const MAIL_FRAME_SANDBOX = "allow-same-origin allow-scripts";
+
+/** Whether a mail frame shows something else than its mail, e.g. a page a link opened in it. */
+export function frameStrayed(frame: HTMLIFrameElement): boolean {
+  const doc = frame.contentDocument;
+  // Another origin's page can't be read at all; about:blank is where a frame starts out.
+  return !doc || (doc.URL !== "about:srcdoc" && doc.URL !== "about:blank");
+}
+
+/** How often a frame is put back on its mail before the reader gives up (a page fighting back). */
+const MAX_RETURNS = 3;
 
 const readable = new WeakMap<Message, string>();
 
@@ -209,8 +258,10 @@ a{color:${dark ? "#ff9dbf" : "#c8165f"}}`;
 a{color:${dark ? "#ff9dbf" : "#c8165f"}}
 p{margin:0 0 12px}
 blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${dark ? "#4d2338" : "#ffd0e2"};color:${dark ? "#b3a8b3" : "#716672"}}`;
-  return `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="${csp}">
+  // The policy comes first, before anything else in the document: the frame may run scripts (see
+  // MessageBody), so this is what keeps the mail from running any of its own.
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${csp}">
+<meta charset="utf-8">
 <style>${frame}
 ${isHtml ? html : text}${defer ? `\n${PICTURE_STYLES}` : ""}</style></head><body><div id="${ROOT_ID}">${body}</div></body></html>`;
 }
@@ -237,8 +288,12 @@ export function buildPrintDocument(
   const escape = (text: string) => text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
   const people = (list: Message["to"]) =>
     escape(list.map((a) => (a.name ? `${a.name} <${a.email}>` : a.email)).join(", "));
+  // The mail shares this one document with the app's own trusted header. The sanitizer drops its
+  // <style> blocks -- only a selector there can reach the header's h1/table to hide it -- and the
+  // body sits in its own stacking/paint box so an absolutely-positioned element cannot overlay the
+  // header above it (webmail security audit W-3). Inline styles, which is what mail uses in practice, are kept.
   const pictures = withRemoteImages(
-    message.bodyHtml !== null ? sanitize(message.bodyHtml) : "",
+    message.bodyHtml !== null ? sanitize(message.bodyHtml, ["style"]) : "",
     allowRemote,
     imageProxy,
   );
@@ -246,11 +301,7 @@ export function buildPrintDocument(
     message.bodyHtml !== null
       ? replaceContentIds(pictures.html, inlineImages)
       : `<div style="white-space:pre-wrap">${textToHtml(message.bodyText ?? "")}</div>`;
-  // The mail shares this one document with the app's own trusted header. Strip its <style> blocks --
-  // only a selector there can reach the header's h1/table to hide it -- and contain the body in its
-  // own stacking/paint box so an absolutely-positioned element cannot overlay the header above it
-  // (webmail security audit W-3). Inline styles, which is what mail uses in practice, are kept.
-  const body = `<section style="position:relative;isolation:isolate;contain:content">${rendered.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")}</section>`;
+  const body = `<section style="position:relative;isolation:isolate;contain:content">${rendered}</section>`;
   const imageSources = `data: blob:${pictures.remote}`;
   const rows = [
     [labels.from, people([message.from])],
@@ -260,8 +311,9 @@ export function buildPrintDocument(
   ]
     .map(([label, value]) => `<tr><th>${escape(label!)}</th><td>${value}</td></tr>`)
     .join("");
-  return `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:">
+  // The policy first, as in buildDocument: the print frame may run scripts, the mail may not.
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:">
+<meta charset="utf-8">
 <title>${escape(message.subject)}</title>
 <style>@page{margin:16mm}body{margin:0;color:#1c1420;background:#fff;font:14px/1.5 system-ui,sans-serif}
 h1{font-size:20px;margin:0 0 8px}table.head{border-collapse:collapse;margin:0 0 12px;font-size:12.5px}
@@ -382,6 +434,20 @@ export function MessageBody({
   /** Documents already set up, so the early start and the load event never both do it. */
   const prepared = useRef(new WeakSet<Document>());
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const returns = useRef({ signature: "", count: 0 });
+
+  /** The frame loaded something: its mail, to set up, or something else, to replace by the mail. */
+  const onLoad = (frame: HTMLIFrameElement) => {
+    if (!frameStrayed(frame)) {
+      setUp(frame);
+      return;
+    }
+    if (returns.current.signature !== signature) returns.current = { signature, count: 0 };
+    if (returns.current.count >= MAX_RETURNS) return;
+    returns.current.count += 1;
+    // React wouldn't set an unchanged srcdoc again; setting it loads the mail anew.
+    frame.srcdoc = html;
+  };
 
   const setUp = (frame: HTMLIFrameElement) => {
     const doc = frame.contentDocument;
@@ -406,8 +472,11 @@ export function MessageBody({
     if (darkImages && shownDark && message.bodyHtml !== null) {
       stops.push(darkenImages(root, allowRemote ? loadRemoteImage : undefined));
     }
-    // After darkenImages, which follows each picture from the moment it gets its real address.
-    stops.push(loadRemotePictures(root, imageSizes, (next) => setProgress({ ...next, signature })));
+    // After darkenImages, which follows each picture from the moment it gets its real address. Only
+    // where remote pictures may load at all: asking for the sizes fetches each address.
+    if (allowRemote && message.bodyHtml !== null) {
+      stops.push(loadRemotePictures(root, imageSizes, (next) => setProgress({ ...next, signature })));
+    }
 
     let pending = 0;
     let last = 0;
@@ -447,6 +516,7 @@ export function MessageBody({
     // ↑/↓ and the other shortcuts keep working while the focus is inside the mail.
     forwardFrameKeys(frame, doc);
     watchLinks(frame, doc);
+    keepFrameOnMail(doc);
   };
 
   // A srcdoc frame's load event waits for every picture in it, and one dead host held the whole
@@ -514,11 +584,11 @@ export function MessageBody({
         key={signature}
         ref={frameRef}
         title={message.subject}
-        // No allow-scripts: mail content can never run code. allow-same-origin only
-        // lets the app measure the height, recolor for dark mode and intercept links.
-        sandbox="allow-same-origin"
+        // See MAIL_FRAME_SANDBOX: the app's listeners need allow-scripts in WebKit, the mail's
+        // own code is kept out by the sanitizer and the document's policy.
+        sandbox={MAIL_FRAME_SANDBOX}
         srcDoc={html}
-        onLoad={(event) => setUp(event.currentTarget)}
+        onLoad={(event) => onLoad(event.currentTarget)}
         style={{ height, colorScheme: scheme, opacity: hidden ? 0 : 1 }}
         className="block w-full rounded-2xl border-0 transition-opacity duration-150"
       />

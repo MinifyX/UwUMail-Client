@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/backend/types";
+import { teamsMeetingLink } from "@/lib/outlook";
 import {
   buildDocument,
   buildPrintDocument,
@@ -36,21 +37,48 @@ describe("Microsoft Safe Links", () => {
   const wrapped =
     "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwanders.example%2Fclip%3Fv%3D2&data=05%7C02&reserved=0";
 
-  it("read as the address they wrap, while the link stays as written", () => {
+  it("show and link the address they wrap, marked for the link question", () => {
     const html = readableBody(
-      message({ bodyHtml: `<p><a href="${wrapped}">${wrapped}</a> und <a href="${wrapped}">Lenis Clip</a></p>` }),
+      message({
+        bodyHtml: `<p><a href="${wrapped}">${wrapped}</a> und <a href="${wrapped}">Lenis Clip</a> und <a href="https://wanders.example/" data-uwu-safelink="evil.example">ok</a></p>`,
+      }),
     );
     const doc = new DOMParser().parseFromString(html, "text/html");
     const links = [...doc.querySelectorAll("a")];
-    expect(links.map((link) => link.textContent)).toEqual(["https://wanders.example/clip?v=2", "Lenis Clip"]);
-    expect(links.every((link) => link.getAttribute("href") === wrapped)).toBe(true);
+    expect(links.map((link) => link.textContent)).toEqual(["https://wanders.example/clip?v=2", "Lenis Clip", "ok"]);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "https://wanders.example/clip?v=2",
+      "https://wanders.example/clip?v=2",
+      "https://wanders.example/",
+    ]);
+    // A mail can't set the marker itself.
+    expect(links.map((link) => link.getAttribute("data-uwu-safelink"))).toEqual([
+      "eur01.safelinks.protection.outlook.com",
+      "eur01.safelinks.protection.outlook.com",
+      null,
+    ]);
+  });
+
+  it("keep the text unwrapped where only the text is a Safe Link", () => {
+    const html = readableBody(message({ bodyHtml: `<a href="https://other.example/">${wrapped}</a>` }));
+    const link = new DOMParser().parseFromString(html, "text/html").querySelector("a")!;
+    expect(link.textContent).toBe("https://wanders.example/clip?v=2");
+    expect(link.getAttribute("href")).toBe("https://other.example/");
+    expect(link.hasAttribute("data-uwu-safelink")).toBe(false);
+  });
+
+  it("leave a Teams join link the reader can find", () => {
+    const join = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7b%7d";
+    const safe = `https://eur01.safelinks.protection.outlook.com/?url=${encodeURIComponent(join)}&amp;data=05`;
+    expect(teamsMeetingLink(readableBody(message({ bodyHtml: `<a href="${safe}">Join</a>` })))).toBe(join);
   });
 
   it("in plain-text mail too", () => {
     const html = readableBody(message({ bodyText: `Hier: ${wrapped}\nBis bald` }));
     const link = new DOMParser().parseFromString(html, "text/html").querySelector("a")!;
     expect(link.textContent).toBe("https://wanders.example/clip?v=2");
-    expect(link.getAttribute("href")).toBe(wrapped);
+    expect(link.getAttribute("href")).toBe("https://wanders.example/clip?v=2");
+    expect(link.getAttribute("data-uwu-safelink")).toBe("eur01.safelinks.protection.outlook.com");
     const plain = readableBody(message({ bodyText: "Siehe https://wanders.example/a?b=1&c=2" }));
     expect(plain).toContain(
       '<a href="https://wanders.example/a?b=1&amp;c=2">https://wanders.example/a?b=1&amp;c=2</a>',
@@ -303,6 +331,24 @@ describe("embedded images", () => {
     );
     expect(doc).toContain('src="blob:logo"');
   });
+
+  it("never turn a link into one of the app's own addresses (RD-1)", () => {
+    const doc = buildDocument(
+      message({
+        bodyHtml:
+          '<a href="cid:x@shop">open</a><a href=" CID:x@shop">2</a><a href="blob:tauri://localhost/1">3</a>' +
+          '<area href="cid:x@shop"><svg><a xlink:href="cid:x@shop"><text>4</text></a></svg><img src="cid:x@shop">',
+      }),
+      false,
+      "light",
+      new Map([["x@shop", "blob:x"]]),
+    );
+    expect(doc).not.toMatch(/href="\s*(cid|blob):/i);
+    expect(doc).toContain('<img src="blob:x">');
+    for (const element of Array.from(new DOMParser().parseFromString(doc, "text/html").querySelectorAll("a, area"))) {
+      expect(element.getAttribute("href") ?? "").not.toMatch(/blob:|cid:/i);
+    }
+  });
 });
 
 describe("buildPrintDocument", () => {
@@ -343,5 +389,23 @@ describe("buildPrintDocument", () => {
     expect(doc).not.toContain("display:none");
     expect(doc).not.toContain("<style>table.head");
     expect(doc).toContain("contain:content");
+  });
+
+  it("drops every kind of style block from the printed body, content and all", () => {
+    const doc = buildPrintDocument(
+      message({
+        bodyHtml:
+          '<STYLE media="print">h1{visibility:hidden}</STYLE><svg><style>table{opacity:0}</style></svg><p style="color:#333">Text</p>',
+      }),
+      false,
+      new Map(),
+      labels,
+      "14. September 2026",
+    );
+    expect(doc).not.toContain("visibility:hidden");
+    expect(doc).not.toContain("opacity:0");
+    expect(doc).toContain('<p style="color:#333">Text</p>');
+    // The page's own style block is still there.
+    expect(doc.match(/<style>/g)).toHaveLength(1);
   });
 });

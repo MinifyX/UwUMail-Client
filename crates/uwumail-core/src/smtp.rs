@@ -3,11 +3,13 @@
 use std::time::Duration;
 
 use base64::Engine as _;
+use lettre::Message;
 use lettre::message::header::ContentType;
 use lettre::message::{Attachment, Mailbox, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::{Credentials, Mechanism};
-use lettre::transport::smtp::extension::ClientId;
-use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
+use lettre::transport::smtp::client::{AsyncSmtpConnection, TlsParameters};
+use lettre::transport::smtp::commands::{self, Data, Rcpt};
+use lettre::transport::smtp::extension::{ClientId, Extension, MailBodyParameter, MailParameter};
 
 use crate::error::{Error, Result};
 use crate::model::{Address, AttachmentSource, OutgoingAttachment, Security, ServerSettings};
@@ -197,40 +199,97 @@ pub fn build(mail: &Mail<'_>) -> Result<Message> {
     message.map_err(|e| Error::invalid(format!("Couldn't build the message: {e}")))
 }
 
+/// Sends one message. Only a failure before the message itself went over the wire, or the
+/// server's own refusal of it, can be tried again safely; a connection that breaks off while the
+/// message is handed over or before the server answered it is [`Error::maybe_sent`], because the
+/// server may have taken it (security review 0.10 SL-2).
 pub async fn send(settings: &ServerSettings, username: &str, auth: SmtpAuth, message: &Message) -> Result<()> {
     let host = settings.host.as_str();
-    let builder = match settings.security {
-        Security::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(host),
-        Security::Starttls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(host),
-        Security::None => Ok(AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)),
-    }
-    .map_err(|e| Error::connection(format!("Couldn't prepare a connection to {host}: {e}")))?;
-
     let (secret, mechanisms) = match auth {
         SmtpAuth::Password(password) => (password, vec![Mechanism::Plain, Mechanism::Login]),
         SmtpAuth::OAuth(token) => (token, vec![Mechanism::Xoauth2]),
     };
-    let transport = builder
-        .port(settings.port)
-        .credentials(Credentials::new(username.to_string(), secret))
-        .authentication(mechanisms)
-        // Like Thunderbird: greet with an address literal instead of revealing the computer name.
-        .hello_name(ClientId::Ipv4(std::net::Ipv4Addr::LOCALHOST))
-        .timeout(Some(Duration::from_secs(60)))
-        .build();
+    let credentials = Credentials::new(username.to_string(), secret);
+    // Like Thunderbird: greet with an address literal instead of revealing the computer name.
+    let hello = ClientId::Ipv4(std::net::Ipv4Addr::LOCALHOST);
+    let tls = || {
+        TlsParameters::new(host.to_string())
+            .map_err(|e| Error::connection(format!("Couldn't prepare a connection to {host}: {e}")))
+    };
+    let wrapper = match settings.security {
+        Security::Tls => Some(tls()?),
+        Security::Starttls | Security::None => None,
+    };
 
-    transport.send(message.clone()).await.map(|_| ()).map_err(|error| {
-        let text = error.to_string();
-        if let Some(refused) = explain_refusal(&text) {
-            refused
-        } else if text.contains("535") || text.to_lowercase().contains("authentication") {
-            Error::auth("The mail server rejected the login for sending.")
-        } else if error.is_permanent() {
-            Error::invalid(format!("The server refused the message: {text}"))
-        } else {
-            Error::connection(format!("Sending failed: {text}"))
+    // Everything up to and including DATA: the server hasn't seen the message yet.
+    let mut connection =
+        AsyncSmtpConnection::connect_tokio1((host, settings.port), Some(SMTP_TIMEOUT), &hello, wrapper, None)
+            .await
+            .map_err(refused)?;
+    let prepared = async {
+        if settings.security == Security::Starttls {
+            connection.starttls(tls()?, &hello).await.map_err(refused)?;
         }
-    })
+        connection.auth(&mechanisms, &credentials).await.map_err(refused)?;
+        let envelope = message.envelope();
+        let raw = message.formatted();
+        let mut options = Vec::new();
+        let utf8_addresses = envelope
+            .from()
+            .into_iter()
+            .chain(envelope.to())
+            .any(|address: &lettre::Address| !AsRef::<str>::as_ref(address).is_ascii());
+        if utf8_addresses {
+            if !connection.server_info().supports_feature(Extension::SmtpUtfEight) {
+                return Err(Error::invalid("The mail server can't send to addresses with international characters."));
+            }
+            options.push(MailParameter::SmtpUtfEight);
+        }
+        if !raw.is_ascii() {
+            if !connection.server_info().supports_feature(Extension::EightBitMime) {
+                return Err(Error::invalid("The mail server can't send this message's characters."));
+            }
+            options.push(MailParameter::Body(MailBodyParameter::EightBitMime));
+        }
+        connection.command(commands::Mail::new(envelope.from().cloned(), options)).await.map_err(refused)?;
+        for recipient in envelope.to() {
+            connection.command(Rcpt::new(recipient.clone(), vec![])).await.map_err(refused)?;
+        }
+        connection.command(Data).await.map_err(refused)?;
+        Ok(raw)
+    }
+    .await;
+    let raw = match prepared {
+        Ok(raw) => raw,
+        Err(error) => {
+            connection.abort().await;
+            return Err(error);
+        }
+    };
+
+    // From here on the server may take the message even if its answer never arrives.
+    let result = connection.message(&raw).await.map_err(|error| {
+        if error.is_transient() || error.is_permanent() { refused(error) } else { Error::maybe_sent(error) }
+    });
+    connection.abort().await;
+    result.map(|_| ())
+}
+
+/// How long one connection may wait on the server, as lettre's transport did.
+const SMTP_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// An SMTP failure where the server certainly didn't take the mail (or answered with a refusal).
+fn refused(error: lettre::transport::smtp::Error) -> Error {
+    let text = error.to_string();
+    if let Some(refused) = explain_refusal(&text) {
+        refused
+    } else if text.contains("535") || text.to_lowercase().contains("authentication") {
+        Error::auth("The mail server rejected the login for sending.")
+    } else if error.is_permanent() {
+        Error::invalid(format!("The server refused the message: {text}"))
+    } else {
+        Error::connection(format!("Sending failed: {text}"))
+    }
 }
 
 /// Recognises a server that refuses to let this mailbox submit mail at all.
@@ -409,5 +468,95 @@ mod tests {
         assert!(!is_draft_key("abc"));
         assert!(!is_draft_key("a@b\" OR ALL"));
         assert!(!is_draft_key("<a@b>"));
+    }
+
+    /// Where a fake submission server stops answering.
+    #[derive(Clone, Copy)]
+    enum BreakOff {
+        AfterMail,
+        AfterMessage,
+        RefuseMessage,
+        Accept,
+    }
+
+    /// A submission server on 127.0.0.1:0 that behaves as told, once.
+    async fn fake_server(at: BreakOff) -> super::ServerSettings {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let (read, mut write) = socket.into_split();
+            let mut lines = BufReader::new(read).lines();
+            write.write_all(b"220 fake ESMTP\r\n").await.unwrap();
+            let mut in_data = false;
+            while let Ok(Some(line)) = lines.next_line().await {
+                if in_data {
+                    if line != "." {
+                        continue;
+                    }
+                    match at {
+                        // The connection breaks before the server's answer arrives.
+                        BreakOff::AfterMessage => return,
+                        BreakOff::RefuseMessage => write.write_all(b"451 4.3.0 try later\r\n").await.unwrap(),
+                        _ => write.write_all(b"250 2.0.0 queued\r\n").await.unwrap(),
+                    }
+                    in_data = false;
+                    continue;
+                }
+                let verb = line.split(' ').next().unwrap_or_default().to_ascii_uppercase();
+                let answer: &[u8] = match verb.as_str() {
+                    "EHLO" => b"250-fake\r\n250-8BITMIME\r\n250 AUTH PLAIN LOGIN\r\n",
+                    "AUTH" => b"235 2.7.0 ok\r\n",
+                    "MAIL" if matches!(at, BreakOff::AfterMail) => return,
+                    "MAIL" | "RCPT" => b"250 ok\r\n",
+                    "DATA" => {
+                        in_data = true;
+                        b"354 go ahead\r\n"
+                    }
+                    "QUIT" => b"221 bye\r\n",
+                    _ => b"500 what\r\n",
+                };
+                if write.write_all(answer).await.is_err() {
+                    return;
+                }
+            }
+        });
+        super::ServerSettings { host: "127.0.0.1".into(), port, security: super::Security::None }
+    }
+
+    async fn send_to(at: BreakOff) -> super::Result<()> {
+        let from = super::Address { name: None, email: "mini@uwumail.example".into() };
+        let to = [super::Address { name: None, email: "kim@uwumail.example".into() }];
+        let message = super::build(&super::Mail {
+            from: &from,
+            to: &to,
+            cc: &[],
+            bcc: &[],
+            subject: "Hallo",
+            text: "Hallo",
+            html: "<p>Hallo</p>",
+            threading: None,
+            attachments: &[],
+            message_id: None,
+            draft: false,
+        })
+        .unwrap();
+        let settings = fake_server(at).await;
+        super::send(&settings, "mini", super::SmtpAuth::Password("pw".into()), &message).await
+    }
+
+    #[tokio::test]
+    async fn only_a_break_after_the_message_went_over_counts_as_maybe_sent() {
+        use crate::error::ErrorCode;
+        assert!(send_to(BreakOff::Accept).await.is_ok());
+        // Before the message: certainly not sent, so it may be tried again.
+        assert_eq!(send_to(BreakOff::AfterMail).await.unwrap_err().code, ErrorCode::ConnectionFailed);
+        // The server's own "not now" for the message: not taken either.
+        assert_eq!(send_to(BreakOff::RefuseMessage).await.unwrap_err().code, ErrorCode::ConnectionFailed);
+        // Handed over but no answer: it may have gone out, never retried on its own (SL-2).
+        let unsure = send_to(BreakOff::AfterMessage).await.unwrap_err();
+        assert_eq!(unsure.code, ErrorCode::MaybeSent);
+        assert!(unsure.message.contains("may have been sent"), "{}", unsure.message);
     }
 }

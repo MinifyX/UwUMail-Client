@@ -1,61 +1,20 @@
-import { AlignLeft, CalendarDays, Clock, MapPin, Pencil, Repeat, Trash, UserRound, X } from "lucide-react";
-import { Fragment, useState } from "react";
+import { AlignLeft, CalendarDays, Clock, MapPin, Pencil, Repeat, Trash, UserRound, Users, X } from "lucide-react";
+import { useState } from "react";
+import { Avatar } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { deviceTimeZone } from "@/lib/calendarDates";
-import { requestOpenLink } from "@/state/links";
 import { showContact } from "../contacts/state";
 import { BirthdayMark } from "./BirthdayMark";
 import { describeRecurrence, eventColor, formatWhen } from "./format";
+import { LinkedText } from "./LinkedText";
 import { Popover } from "./Popover";
 import { useCalendarUi } from "./state";
 import { useCalendars, useEventActions } from "./useCalendarData";
 
-const URL_PATTERN = /\bhttps?:\/\/[^\s<>"'()]+[^\s<>"'().,;:!?]/g;
-
-/** Plain text with its web addresses clickable, through the same link check as links in mail. */
-export function LinkedText({ text }: { text: string }) {
-  const parts: { text: string; url: boolean }[] = [];
-  let last = 0;
-  for (const match of text.matchAll(URL_PATTERN)) {
-    if (match.index > last) parts.push({ text: text.slice(last, match.index), url: false });
-    parts.push({ text: match[0], url: true });
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) parts.push({ text: text.slice(last), url: false });
-  return (
-    <>
-      {parts.map((part, index) =>
-        part.url ? (
-          <a
-            key={index}
-            href={part.text}
-            rel="noopener noreferrer"
-            onClick={(event) => {
-              event.preventDefault();
-              requestOpenLink(part.text, part.text);
-            }}
-            // A middle click asks like a click; dragging the link out would open it elsewhere
-            // without the question (security-audit C-12, as the mail reader does for W-17).
-            onAuxClick={(event) => {
-              event.preventDefault();
-              if (event.button === 1) requestOpenLink(part.text, part.text);
-            }}
-            draggable={false}
-            onDragStart={(event) => event.preventDefault()}
-            onContextMenu={(event) => event.preventDefault()}
-            className="break-all text-pink-ink underline decoration-pink/40 underline-offset-2 hover:decoration-pink"
-          >
-            {part.text}
-          </a>
-        ) : (
-          <Fragment key={index}>{part.text}</Fragment>
-        ),
-      )}
-    </>
-  );
-}
+/** Participants listed before "and N more". */
+const SHOWN_PARTICIPANTS = 8;
 
 function Detail({ icon: Icon, children }: { icon: typeof Clock; children: React.ReactNode }) {
   return (
@@ -102,6 +61,17 @@ export function EventPopover() {
               }}
             />
           </>
+        )}
+        {occurrence.readOnly && calendar?.isLocal && !calendar.isBirthdays && (
+          // An invitation kept on this device: answered from its mail, but it can go as a whole.
+          <IconButton
+            icon={Trash}
+            label={t("calendar.delete")}
+            onClick={() => {
+              close();
+              void actions.remove({ ...occurrence, recurrence: null });
+            }}
+          />
         )}
         <IconButton icon={X} label={t("common.close")} onClick={close} />
       </div>
@@ -162,9 +132,32 @@ export function EventPopover() {
             </p>
           </Detail>
         )}
+        {(occurrence.participants?.length ?? 0) > 0 && (
+          <Detail icon={Users}>
+            <ul aria-label={t("calendar.participants")} className="flex flex-col gap-1.5">
+              {occurrence.participants!.slice(0, SHOWN_PARTICIPANTS).map((person, index) => (
+                <li key={`${person.email}-${index}`} className="flex min-w-0 items-center gap-2">
+                  <Avatar address={{ name: person.name, email: person.email || person.name }} size="sm" />
+                  <span className="min-w-0 truncate">{person.name}</span>
+                  <span className="shrink-0 text-[12px] text-muted">
+                    {person.organizer ? t("calendar.organizer") : t(`calendar.answer.${person.status}`)}
+                  </span>
+                </li>
+              ))}
+              {occurrence.participants!.length > SHOWN_PARTICIPANTS && (
+                <li className="text-[12px] text-muted">
+                  {t("calendar.moreParticipants", { count: occurrence.participants!.length - SHOWN_PARTICIPANTS })}
+                </li>
+              )}
+            </ul>
+          </Detail>
+        )}
         {calendar && (
           <Detail icon={CalendarDays}>
             {calendar.name}
+            {calendar.sharedBy && (
+              <span className="text-muted"> · {t("sharing.sharedBy", { name: calendar.sharedBy.name })}</span>
+            )}
             {birthday ? (
               <span className="text-muted"> · {t("calendar.birthdays.fromContacts")}</span>
             ) : (

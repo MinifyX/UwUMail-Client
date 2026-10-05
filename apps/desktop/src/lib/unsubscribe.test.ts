@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { unsubscribeMail } from "./unsubscribe";
+import { unsubscribeFallback, unsubscribeMail } from "./unsubscribe";
 
 describe("unsubscribeMail", () => {
   it("takes the address and a subject list managers can match on", () => {
@@ -35,9 +35,39 @@ describe("unsubscribeMail", () => {
     expect(unsubscribeMail("mailto:")).toBeNull();
   });
 
+  it("refuses an address that would read as another one (W-30)", () => {
+    // A right-to-left override turns what follows around; a zero-width space or joiner hides.
+    expect(unsubscribeMail("mailto:leave%E2%80%AEelpmaxe.knab@list.example")).toBeNull();
+    expect(unsubscribeMail("mailto:le%E2%80%8Bave@list.example")).toBeNull();
+    expect(unsubscribeMail("mailto:leave@list%E2%80%8D.example")).toBeNull();
+    expect(unsubscribeMail("mailto:leave%C2%AD@list.example")).toBeNull();
+    expect(unsubscribeMail("mailto:leave%00@list.example")).toBeNull();
+  });
+
   it("refuses a scheme that is not mailto", () => {
     expect(unsubscribeMail("https://list.example/leave")).toBeNull();
     expect(unsubscribeMail("javascript:alert(1)")).toBeNull();
     expect(unsubscribeMail("not a url at all")).toBeNull();
+  });
+
+  it("refuses an address that would read as another one (W-30)", () => {
+    // A right-to-left override turns what follows around; a zero-width space or joiner hides.
+    expect(unsubscribeMail("mailto:leave%E2%80%AEelpmaxe.knab@list.example")).toBeNull();
+    expect(unsubscribeMail("mailto:le%E2%80%8Bave@list.example")).toBeNull();
+    expect(unsubscribeMail("mailto:leave@list%E2%80%8D.example")).toBeNull();
+    expect(unsubscribeMail("mailto:leave%C2%AD@list.example")).toBeNull();
+    expect(unsubscribeMail("mailto:leave%00@list.example")).toBeNull();
+  });
+});
+
+describe("unsubscribeFallback", () => {
+  it("offers the mail first, then the page, and nothing for an address that would never be used", () => {
+    const page = "https://list.example/u";
+    expect(unsubscribeFallback({ oneClick: true, url: page, mailto: "mailto:leave@list.example" })).toBe("mail");
+    expect(unsubscribeFallback({ oneClick: true, url: page, mailto: "mailto:le%E2%80%8Bave@list.example" })).toBe(
+      "page",
+    );
+    expect(unsubscribeFallback({ oneClick: true, mailto: "mailto:a@b,c@list.example" })).toBeNull();
+    expect(unsubscribeFallback({ oneClick: true })).toBeNull();
   });
 });

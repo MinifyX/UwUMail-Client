@@ -113,7 +113,12 @@ fn graph_handler(tokens: Arc<AtomicUsize>, base: &'static str) -> impl Fn(&Reque
                 graph_event("OCC-1", "occurrence", "2026-09-24T16:00:00.0000000", "2026-09-24T17:00:00.0000000", Some("SER-1")),
                 { "id": "ONE-1", "type": "singleInstance", "subject": "Dentist", "isAllDay": false,
                   "start": { "dateTime": "2026-09-25T08:00:00", "timeZone": "UTC" }, "end": { "dateTime": "2026-09-25T08:30:00", "timeZone": "UTC" },
-                  "originalStartTimeZone": "Europe/Berlin" }
+                  "originalStartTimeZone": "Europe/Berlin",
+                  "organizer": { "emailAddress": { "name": "Dr. Kim", "address": "Kim@example.com" } },
+                  "attendees": [
+                    { "type": "required", "status": { "response": "tentativelyAccepted" }, "emailAddress": { "name": "Nyu", "address": "nyu@example.com" } },
+                    { "type": "resource", "status": { "response": "none" }, "emailAddress": { "name": "Room 1", "address": "room@example.com" } }
+                  ] }
             ] })),
             ("GET", "calendars/CAL-2/calendarView") => Reply::json(json!({ "value": [
                 { "id": "ANNA-1", "type": "singleInstance", "subject": "Busy", "isAllDay": true,
@@ -199,6 +204,17 @@ async fn microsoft_calendars_through_graph() {
     assert_eq!(yoga.time_zone.as_deref(), Some("Europe/Berlin"));
     assert_eq!(yoga.event_id, "m:CAL-1/SER-1");
     assert_eq!(yoga.id, "m:CAL-1/OCC-1");
+    assert!(yoga.participants.is_empty(), "no one invited, no list");
+    let dentist = events.iter().find(|e| e.title == "Dentist").unwrap();
+    let who: Vec<_> = dentist.participants.iter().map(|p| (p.email.as_str(), p.status, p.organizer)).collect();
+    assert_eq!(
+        who,
+        [
+            ("kim@example.com", crate::calendar::invite::Partstat::Accepted, true),
+            ("nyu@example.com", crate::calendar::invite::Partstat::Tentative, false),
+            ("room@example.com", crate::calendar::invite::Partstat::NeedsAction, false),
+        ]
+    );
     let busy = events.iter().find(|e| e.title == "Busy").unwrap();
     assert!(busy.all_day && busy.read_only);
     assert_eq!(busy.start, "2026-09-26T00:00:00");
@@ -206,6 +222,7 @@ async fn microsoft_calendars_through_graph() {
     assert!(view.header("Prefer").unwrap().contains("outlook.timezone=\"UTC\""));
     assert_eq!(view.header("Authorization"), Some("Bearer access-1"));
     assert_eq!(view.query("startDateTime").as_deref(), Some("2026-09-19T22:00:00Z"), "a day wider");
+    assert!(view.query("$select").unwrap().contains("attendees,organizer"));
 
     // Writing: a new event, the series renamed, an occurrence and the series deleted.
     let id = s.engine.create_event(input("m:CAL-1", "Run")).await.unwrap();
@@ -392,7 +409,12 @@ async fn google_calendars_and_contacts() {
                 }
                 Reply::json(json!({ "items": [
                     { "id": "gone", "status": "cancelled" },
-                    { "id": "trip", "summary": "Trip", "start": { "date": "2026-09-26" }, "end": { "date": "2026-09-28" } }
+                    { "id": "trip", "summary": "Trip", "start": { "date": "2026-09-26" }, "end": { "date": "2026-09-28" },
+                      "organizer": { "email": "mina@example.org", "displayName": "Mina" },
+                      "attendees": [
+                        { "email": "mini@example.com", "self": true, "responseStatus": "accepted" },
+                        { "email": "mina@example.org", "organizer": true, "responseStatus": "tentative" }
+                      ] }
                 ] }))
             }
             ("GET", "/gcal/calendars/mini%40example.com/events/yoga") => Reply::json(json!({
@@ -436,6 +458,15 @@ async fn google_calendars_and_contacts() {
     let trip = events.iter().find(|e| e.title == "Trip").unwrap();
     assert!(trip.all_day);
     assert_eq!((trip.start.as_str(), trip.end.as_str()), ("2026-09-26T00:00:00", "2026-09-28T00:00:00"));
+    let who: Vec<_> = trip.participants.iter().map(|p| (p.name.as_str(), p.status, p.organizer)).collect();
+    assert_eq!(
+        who,
+        [
+            ("Mina", crate::calendar::invite::Partstat::Tentative, true),
+            ("mini@example.com", crate::calendar::invite::Partstat::Accepted, false),
+        ]
+    );
+    assert!(yoga.participants.is_empty());
 
     let id = s.engine.create_event(input("m:mini@example.com", "Run")).await.unwrap();
     assert_eq!(id, "m:mini%40example.com/new1");
@@ -669,4 +700,125 @@ async fn sign_ins_saved_before_the_business_app_refresh_with_the_personal_one() 
     assert_eq!(refreshes.len(), 2);
     assert!(refreshes.iter().all(|r| r.form("client_id").as_deref() == Some("test-app")));
     assert!(matches!(s.secrets.get("m").unwrap(), Secret::OAuth { microsoft_app: None, .. }));
+}
+
+/// A small GIF whose bytes are all ASCII, so the fake server can hand it out as text.
+const GIF: &str = "GIF89a\u{1}\u{0}\u{1}\u{0}\u{0}\u{0}\u{0};";
+
+fn photo_uri() -> String {
+    use base64::Engine as _;
+    format!("data:image/gif;base64,{}", base64::engine::general_purpose::STANDARD.encode(GIF))
+}
+
+/// Contact photos at Microsoft go through Graph's photo calls, apart from the contact: written
+/// with a new contact or a change, removed, and read when the contact shows.
+#[tokio::test]
+async fn microsoft_contact_photos_go_their_own_way() {
+    let tokens = Arc::new(AtomicUsize::new(0));
+    let s = setup(AuthKind::Microsoft, OWN, move |request: &Request| {
+        let path = request.path();
+        if path == "/token" {
+            return token_reply(request, &tokens, None);
+        }
+        match (request.method.as_str(), path) {
+            ("GET", "/graph/me") => Reply::json(json!({ "mail": OWN, "userPrincipalName": OWN })),
+            ("GET", "/graph/me/contactFolders") => Reply::json(json!({ "value": [] })),
+            ("GET", "/graph/me/contacts") => {
+                Reply::json(json!({ "value": [{ "id": "K1", "givenName": "Mina", "parentFolderId": "F0" }] }))
+            }
+            ("GET", "/graph/me/contacts/K1") => Reply::json(json!({ "id": "K1", "givenName": "Mina" })),
+            ("POST", "/graph/me/contacts") => Reply::json(json!({ "id": "K2" })),
+            ("PATCH", "/graph/me/contacts/K1") => Reply::json(json!({})),
+            ("GET", "/graph/me/contacts/K1/photo/$value") => Reply { status: 200, body: GIF.into() },
+            ("GET", "/graph/me/contacts/K2/photo/$value") => {
+                Reply::status(404, json!({ "error": { "code": "ErrorItemNotFound" } }))
+            }
+            ("PUT", "/graph/me/contacts/K1/photo/$value" | "/graph/me/contacts/K2/photo/$value") => Reply::empty(),
+            ("DELETE", "/graph/me/contacts/K1/photo/$value") => Reply::empty(),
+            _ => Reply::status(404, json!({ "error": { "code": "ErrorItemNotFound", "message": path } })),
+        }
+    })
+    .await;
+    let cards = s.engine.contact_cards().await.unwrap();
+    assert_eq!(cards[0].card["uwuRemotePhoto"], true, "Graph lists no photos: asked when shown");
+    let shown = s.engine.contact_photo("m:K1").await.unwrap().unwrap();
+    assert!(shown.starts_with("data:image/gif;base64,"), "{shown}");
+    assert_eq!(s.engine.contact_photo("m:K2").await.unwrap(), None);
+
+    let card = json!({ "name": { "full": "Otto" }, "uwuRemotePhoto": true,
+        "media": { "p1": { "kind": "photo", "uri": photo_uri() } } });
+    assert_eq!(s.engine.create_contact_card("m:contacts", card).await.unwrap(), "m:K2");
+    let created = s.server.seen().into_iter().find(|r| r.method == "POST" && r.path() == "/graph/me/contacts").unwrap();
+    assert!(created.json().get("media").is_none() && created.json().get("uwuRemotePhoto").is_none());
+    let put = s.server.seen().into_iter().find(|r| r.method == "PUT").unwrap();
+    assert_eq!(put.path(), "/graph/me/contacts/K2/photo/$value");
+    assert_eq!(put.header("content-type"), Some("image/gif"));
+    assert_eq!(put.body, GIF);
+
+    // Only the photo changes: the contact itself isn't written.
+    let mut patch = Map::new();
+    patch.insert("media".into(), json!({ "p1": { "kind": "photo", "uri": photo_uri() } }));
+    s.engine.update_contact_card("m:K1", patch).await.unwrap();
+    assert_eq!(s.server.count("PATCH", "/graph/"), 0);
+    assert_eq!(s.server.count("PUT", "/graph/me/contacts/K1/photo"), 1);
+    let mut patch = Map::new();
+    patch.insert("media".into(), Value::Null);
+    patch.insert("notes".into(), json!({ "n1": { "note": "hi" } }));
+    s.engine.update_contact_card("m:K1", patch).await.unwrap();
+    assert_eq!(s.server.count("PATCH", "/graph/me/contacts/K1"), 1);
+    assert_eq!(s.server.count("DELETE", "/graph/me/contacts/K1/photo"), 1);
+
+    // Something that isn't a picture never leaves.
+    let mut patch = Map::new();
+    patch.insert("media/p1".into(), json!({ "kind": "photo", "uri": "data:image/png;base64,PGh0bWw+" }));
+    assert!(s.engine.update_contact_card("m:K1", patch).await.is_err());
+    assert_eq!(s.server.count("PUT", "/graph/"), 2);
+}
+
+/// Google links the photos of its contacts (the page never loads them itself) and takes new
+/// ones through its own photo calls.
+#[tokio::test]
+async fn google_contact_photos_go_their_own_way() {
+    let tokens = Arc::new(AtomicUsize::new(0));
+    let full = "https://mail.google.com/ https://www.googleapis.com/auth/contacts";
+    let s = setup(AuthKind::Google, "mini@example.com", move |request: &Request| {
+        let path = request.path();
+        if path == "/token" {
+            return token_reply(request, &tokens, Some(full));
+        }
+        match (request.method.as_str(), path) {
+            ("GET", "/people/people/me/connections") => {
+                assert!(request.query("personFields").unwrap().contains("photos"));
+                Reply::json(json!({ "connections": [
+                    { "resourceName": "people/c1", "etag": "e1", "names": [{ "givenName": "Mina" }],
+                      "photos": [{ "url": "https://lh3.googleusercontent.com/a/letter", "default": true },
+                                 { "url": "https://lh3.googleusercontent.com/a/mina" }] },
+                    { "resourceName": "people/c2", "etag": "e2", "names": [{ "givenName": "Otto" }],
+                      "photos": [{ "url": "https://tracker.example/pixel.gif" }] }
+                ] }))
+            }
+            ("PATCH", "/people/people/c1:updateContactPhoto") | ("DELETE", "/people/people/c2:deleteContactPhoto") => {
+                Reply::json(json!({}))
+            }
+            _ => Reply::status(404, json!({ "error": { "code": 404, "message": path } })),
+        }
+    })
+    .await;
+    let cards = s.engine.contact_cards().await.unwrap();
+    let mina = cards.iter().find(|c| c.card["id"] == "m:people/c1").unwrap();
+    assert_eq!(mina.card["media"]["p1"]["uri"], "https://lh3.googleusercontent.com/a/mina", "not the drawn letter");
+    let otto = cards.iter().find(|c| c.card["id"] == "m:people/c2").unwrap();
+    assert!(otto.card.get("media").is_none() && otto.card.get("uwuRemotePhoto").is_none(), "only Google's own host");
+
+    let mut patch = Map::new();
+    patch.insert("media/p1".into(), json!({ "kind": "photo", "uri": photo_uri() }));
+    s.engine.update_contact_card("m:people/c1", patch).await.unwrap();
+    let mut patch = Map::new();
+    patch.insert("media".into(), Value::Null);
+    s.engine.update_contact_card("m:people/c2", patch).await.unwrap();
+    let seen = s.server.seen();
+    let photo = seen.iter().find(|r| r.path().ends_with(":updateContactPhoto")).unwrap();
+    assert_eq!(photo.json()["photoBytes"], photo_uri().split_once(',').unwrap().1);
+    assert_eq!(s.server.count("DELETE", "/people/people/c2:deleteContactPhoto"), 1);
+    assert!(!seen.iter().any(|r| r.path() == "/people/people/c1:updateContact"), "the contact itself stays");
 }

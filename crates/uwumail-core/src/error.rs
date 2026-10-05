@@ -24,6 +24,16 @@ pub enum ErrorCode {
     /// Google mailbox signed in before UwUMail asked for them), or it ran out. Signing in again
     /// fixes it; mail keeps working meanwhile.
     SignInAgain,
+    /// The server doesn't allow this for the person: a domain or a limit an administrator set
+    /// (masked addresses), or a public picture where public ones are switched off.
+    Forbidden,
+    /// Changed elsewhere since it was read (JMAP `stateMismatch` on an `ifInState`): read it
+    /// again, then change it.
+    StateMismatch,
+    /// Sending broke off after the server may have taken the mail (the connection was lost
+    /// after the message was handed over, or the answer to the submission never came). It may
+    /// have gone out, so it is never sent again on its own.
+    MaybeSent,
 }
 
 /// Error type crossing the boundary to the UI. The message is shown to users,
@@ -142,6 +152,17 @@ impl Error {
 
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Internal, message)
+    }
+
+    /// Sending broke off when the server may already have taken the mail (see [`ErrorCode::MaybeSent`]).
+    pub fn maybe_sent(detail: impl std::fmt::Display) -> Self {
+        Self::new(
+            ErrorCode::MaybeSent,
+            format!(
+                "The connection broke off after the mail was handed over, so it may have been sent. \
+                 Check Sent before you send it again. ({detail})"
+            ),
+        )
     }
 }
 

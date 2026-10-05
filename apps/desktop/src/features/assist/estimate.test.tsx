@@ -18,7 +18,15 @@ import { Menu } from "@/components/ui/Menu";
 import { i18n } from "@/i18n";
 import { useSettings } from "@/state/settings";
 import { composeEstimate } from "./ComposeAssist";
-import { EstimateLabel, EstimateTip, estimateDetails, estimateKey, estimateText, LONG_PRESS_MS } from "./estimate";
+import {
+  EstimateLabel,
+  EstimateTip,
+  estimateBreakdown,
+  estimateKey,
+  estimateText,
+  LONG_PRESS_MS,
+  tipPlace,
+} from "./estimate";
 import { useEventSearch } from "../dates/search";
 import { ThreadAssistButton } from "./ReaderAssist";
 import { ProviderSettings } from "./settings/ProviderSettings";
@@ -157,14 +165,27 @@ describe("the estimate's words", () => {
       "Assist/extractEvents",
     )!;
     expect(estimateText(rich, t, "en")).toBe("≈ 1,300 tokens · ≈ €0.02 (max €0.05) · 48,000 left today");
-    expect(estimateDetails(rich, t, "en")).toEqual([
+    const lines = (estimate: typeof rich) =>
+      estimateBreakdown(estimate, t, "en").map((line) => `${line.label}: ${line.value}`);
+    expect(lines(rich)).toEqual([
       "Input: ≈ 900 tokens · ≈ €0.004",
       "Pictures: 2 pictures · ≈ €0.002",
       "Answer: ≈ 150 tokens · ≈ €0.006",
       "Thinking: ≈ 200 tokens · ≈ €0.008",
-      "Extra calls: 1 call · ≈ 200 tokens",
-      "Calibrated from your last calls",
+      "Extra calls: retry (sometimes)",
     ]);
+    // Extra calls by what they are for, counted, the unknown ones as "more steps".
+    const many = {
+      ...rich,
+      calls: [
+        ...rich.calls,
+        ...[1, 2].map(() => ({ ...rich.calls[0]!, purpose: "pictures", weight: 1 })),
+        { ...rich.calls[0]!, purpose: "translate", weight: 0.2 },
+        { ...rich.calls[0]!, purpose: "chunk", weight: 0 },
+      ],
+    };
+    expect(lines(many).at(-1)).toBe("Extra calls: retry (sometimes), 2 × reading pictures, more steps (sometimes)");
+    expect(lines({ ...rich, inputTokens: 1, cost: null })[0]).toBe("Input: ≈ 1 token");
     const german = estimateText(rich, i18n.getFixedT("de", "neutral"), "de").replace(/\u00a0/g, " ");
     expect(german).toBe("≈ 1.300 Tokens · ≈ 0,02 € (max. 0,05 €) · heute noch 48.000 übrig");
     // Only lines that aren't zero; fees where there are some.
@@ -176,7 +197,7 @@ describe("the estimate's words", () => {
       calls: rich.calls.slice(0, 1),
       cost: { ...rich.cost!, parts: { ...rich.cost!.parts!, images: 0, reasoning: 0, requests: 0.001 } },
     };
-    expect(estimateDetails(plain, t, "en")).toEqual([
+    expect(lines(plain)).toEqual([
       "Input: ≈ 900 tokens · ≈ €0.004",
       "Answer: ≈ 150 tokens · ≈ €0.006",
       "Fees: ≈ €0.001",
@@ -194,7 +215,7 @@ describe("the estimate's words", () => {
     expect(old).toMatchObject({ reasoningTokens: 0, imageCount: 0, calls: [], calibrated: false });
     expect(old.cost).toMatchObject({ max: null, parts: null });
     expect(estimateText(old, t, "en")).toBe("≈ 1,300 tokens · ≈ €0.02 · 48,000 left today");
-    expect(estimateDetails(old, t, "en")).toEqual([]);
+    expect(estimateBreakdown(old, t, "en")).toEqual([]);
   });
 
   it("keeps one cache entry per call, whatever the order of its arguments", () => {
@@ -309,6 +330,45 @@ describe("the tooltip", () => {
     fireEvent.pointerEnter(screen.getByRole("button").parentElement!, { pointerType: "mouse" });
     await waitFor(() => expect(fake.assistEstimate).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("shows the breakdown as a table and the calibration below it", async () => {
+    fake.assistEstimate.mockResolvedValueOnce({
+      ...ESTIMATE,
+      reasoningTokens: 40,
+      calibrated: true,
+      calls: [
+        { purpose: "main", inputTokens: 1100, outputTokens: 150, reasoningTokens: 40, images: 0, weight: 1 },
+        { purpose: "retry", inputTokens: 300, outputTokens: 0, reasoningTokens: 0, images: 0, weight: 0.3 },
+      ],
+    });
+    renderWith(
+      <EstimateTip request={REQUEST} hint="Summarize the conversation">
+        <button type="button">Summarize</button>
+      </EstimateTip>,
+    );
+    fireEvent.pointerEnter(screen.getByRole("button", { name: "Summarize" }), { pointerType: "mouse" });
+    const tip = await screen.findByRole("tooltip");
+    await waitFor(() => expect(tip.textContent).toContain("Extra calls"));
+    expect(tip.textContent).toContain("Summarize the conversation");
+    expect(tip.textContent).toContain("Input≈ 1,100 tokens");
+    expect(tip.textContent).toContain("Thinking≈ 40 tokens");
+    expect(tip.textContent).toContain("Extra callsretry (sometimes)");
+    expect(tip.textContent).toMatch(/Calibrated from your last calls$/);
+  });
+
+  it("places tooltips beside menu items and above buttons at the screen's bottom", () => {
+    const rect = (left: number, top: number, width = 100, height = 30) =>
+      ({ left, top, right: left + width, bottom: top + height, width, height }) as DOMRect;
+    const viewport = { width: 1000, height: 800 };
+    expect(tipPlace(rect(100, 100), false, viewport)).toEqual({ left: 100, top: 136 });
+    expect(tipPlace(rect(100, 760), false, viewport)).toEqual({ left: 100, bottom: 46 });
+    expect(tipPlace(rect(100, 100), true, viewport)).toEqual({ left: 208, top: 100 });
+    // No room on the right: on the left of the item.
+    expect(tipPlace(rect(800, 100, 150), true, viewport)).toEqual({ left: 512, top: 100 });
+    // Narrow screens: below, kept inside.
+    expect(tipPlace(rect(10, 100, 300), true, { width: 360, height: 800 })).toEqual({ left: 10, top: 136 });
+    expect(tipPlace(rect(300, 100, 50), false, { width: 360, height: 800 })).toEqual({ left: 80, top: 136 });
   });
 
   it("shows on a long press on touch screens, which then doesn't tap the button", async () => {

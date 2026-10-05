@@ -16,6 +16,7 @@ use tauri_plugin_opener::OpenerExt;
 use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::EngineEvent;
+use uwumail_core::notify;
 use uwumail_core::secrets::KeyringSecrets;
 use uwumail_core::{Engine, EngineOptions, Error};
 
@@ -47,6 +48,8 @@ pub fn plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
 
 pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>> {
     let data_dir = app.path().app_data_dir()?;
+    // Before anything can ring: how notifications read, as last chosen.
+    crate::notify_prefs::init(&data_dir);
     let opener = app.handle().clone();
     // Only ever sign-in pages; anything but a web address stays unopened.
     let open_url = Arc::new(move |url: &str| {
@@ -84,14 +87,19 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
         return;
     }
     if let Ok(messages) = engine.messages(message_ids) {
-        let (title, body) = match messages.as_slice() {
-            [one] => (
-                one.from.name.clone().unwrap_or_else(|| one.from.email.clone()),
-                if one.subject.is_empty() { one.snippet.clone() } else { one.subject.clone() },
-            ),
-            many => ("UwUMail".to_string(), format!("{} ✉︎", many.len())),
-        };
-        let _ = app.notification().builder().title(title).body(body).show();
+        let mails: Vec<notify::NotifiedMail<'_>> = messages
+            .iter()
+            .map(|message| notify::NotifiedMail {
+                name: message.from.name.as_deref(),
+                email: &message.from.email,
+                subject: &message.subject,
+                snippet: &message.snippet,
+            })
+            .collect();
+        // Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
+        if let Some((title, body)) = notify::mail_notification(&crate::notify_prefs::get(), &mails) {
+            let _ = app.notification().builder().title(title).body(body).show();
+        }
     }
 }
 
@@ -195,6 +203,11 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
 
 /// Notifications only go out while UwUMail itself runs, so iOS needs no copy
 /// of the language, the tone or the app lock.
+pub fn set_notification_prefs(show_content: bool, new_mail: &str, hidden: &str) -> Result<(), Error> {
+    crate::notify_prefs::set(notify::NotifyPrefs::new(show_content, new_mail, hidden));
+    Ok(())
+}
+
 pub fn set_mobile_prefs(_language: String, _tone: String, _app_lock: bool) -> Result<(), Error> {
     Ok(())
 }

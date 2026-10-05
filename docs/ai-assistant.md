@@ -77,8 +77,11 @@ Hovering an AI button (a long press on the phone) shows a line like
 
 > ≈ 1,250 tokens · ≈ €0.02 (max €0.05) · 48,000 left today
 
-and below it a small breakdown: input, pictures, answer, thinking, extra calls
-and fees, only the lines that aren't zero.
+and below it a small table: input, pictures, answer, thinking, extra calls by
+what they are for (e.g. *2 × reading pictures, retry (sometimes)*) and fees,
+only the lines that aren't zero. On a menu's items the tooltip sits beside the
+item, so it never covers the next one; near the bottom of the screen it opens
+above the button.
 
 - **Tokens:** everything the request would take: the prompt with what the API
   adds around it, the expected answer, the thinking of reasoning models (OpenAI's

@@ -14,6 +14,7 @@ import type {
   AssistFeatures,
   AssistLabel,
   AssistLabelInput,
+  AssistLabelPatch,
   AssistLabelLogEntry,
   AssistLabelSuggestion,
   LabelBase,
@@ -41,6 +42,8 @@ import type {
   CalendarAccount,
   CalendarInfo,
   CalendarOccurrence,
+  MailScheduling,
+  ParticipationStatus,
   Contact,
   ContactInput,
   ContactRecord,
@@ -57,12 +60,25 @@ import type {
   ImageTextResult,
   LocalModelServer,
   MailtoDraft,
+  MaskedAddress,
+  MaskedAddressInput,
+  MaskedAddressPatch,
   MovedMessage,
   NewAccount,
   OutgoingMessage,
+  Person,
+  ProfilePicture,
+  ProfilePicturePatch,
   Protocol,
   QueuedSend,
+  ScheduledReceipt,
+  ScheduledRef,
+  ScheduledSend,
+  SendLaterInfo,
   SenderPicture,
+  SenderPictureLookup,
+  ServerAccountFeatures,
+  ShareLevel,
   Signature,
   ThreadDetail,
   ThreadPage,
@@ -90,7 +106,13 @@ export type BackendErrorCode =
   /** This build carries no client id for the provider. */
   | "oauth_not_configured"
   /** The sign-in lacks a permission it needs now (calendars, contacts): signing in again asks for it. */
-  | "sign_in_again";
+  | "sign_in_again"
+  /** The server refused: the mailbox may not do this (e.g. public profile pictures switched off). */
+  | "forbidden"
+  /** Changed elsewhere since it was read (`ifInState` didn't match): read it again first. */
+  | "state_mismatch"
+  /** Sending broke off after the server may have taken the mail; it may have gone out. */
+  | "maybe_sent";
 
 export class BackendError extends Error {
   readonly code: BackendErrorCode;
@@ -216,8 +238,12 @@ export interface Backend {
   setCalDavUrl(accountId: string, url: string | null): Promise<void>;
   createCalendar(input: { accountId?: string; name: string; color: string | null }): Promise<CalendarInfo>;
   updateCalendar(id: string, patch: { name?: string; color?: string | null; isVisible?: boolean }): Promise<void>;
-  /** Removes its events too. */
+  /** Removes its events too; for a calendar someone else shared, only this mailbox leaves it. */
   deleteCalendar(id: string): Promise<void>;
+  /** The people of a mailbox's UwUMail server a calendar can be shared with, not the mailbox itself. */
+  calendarPeople(accountId: string): Promise<Person[]>;
+  /** Shares a calendar (one with `mayShare`) with a person at a level; null stops sharing with them. */
+  shareCalendar(calendarId: string, personId: string, level: ShareLevel | null): Promise<void>;
   setDefaultCalendar(id: string): Promise<void>;
   /** Occurrences in [from, to): wall times ("YYYY-MM-DDTHH:mm:ss") in `timeZone`, the viewer's IANA zone. */
   calendarEvents(from: string, to: string, timeZone: string): Promise<CalendarOccurrence[]>;
@@ -230,6 +256,23 @@ export interface Backend {
    */
   updateEvent(eventId: string, input: EventInput, occurrenceStart?: string): Promise<void>;
   deleteEvent(occurrenceId: string, scope: EventDeleteScope): Promise<void>;
+  /**
+   * The invitation, cancellation or answer a mail's iCalendar part carries, with its event as the
+   * mailbox's calendar has it; null for mail without one, or one the mailbox isn't part of.
+   */
+  mailInvitation(messageId: string): Promise<MailScheduling | null>;
+  /**
+   * Answers a mail's invitation, only ever on a click: the provider tells the organizer, or the app
+   * mails them an iTIP REPLY (in `language`, with the comment where `canComment`).
+   */
+  respondToInvitation(
+    messageId: string,
+    status: Exclude<ParticipationStatus, "needs-action">,
+    comment?: string,
+    language?: string,
+  ): Promise<void>;
+  /** Takes the event (or the dates) the organizer cancelled out of the calendar; only on a click. */
+  removeCancelledEvent(messageId: string): Promise<void>;
   /**
    * Per account: whether its server keeps birthdays (calendar and reminders), and whether birthday
    * events of its calendars can be moved into its contacts. Never searches for DAV servers.
@@ -269,6 +312,28 @@ export interface Backend {
   /** Changes what the editor shows and leaves the rest of the card as it is. */
   updateContact(id: string, input: ContactInput): Promise<void>;
   deleteContact(id: string): Promise<void>;
+  /**
+   * The photo Microsoft or Google keep for a contact with `remotePhoto`, as a data: URL; null
+   * without one. Cards of other address books carry theirs in `photo`.
+   */
+  contactPhoto(id: string): Promise<string | null>;
+  /** A company's logo for a contact's picture; null for people and mail providers. */
+  companyLogo(email: string): Promise<Blob | null>;
+
+  /**
+   * Per mailbox on a UwUMail server, whether it makes masked addresses and keeps a profile
+   * picture; other mailboxes and servers that can't be reached right now are left out.
+   */
+  serverAccountFeatures(): Promise<ServerAccountFeatures[]>;
+  /** Every masked address of the mailbox, deleted ones included, newest first. */
+  maskedAddresses(accountId: string): Promise<MaskedAddress[]>;
+  /** Makes one by hand; it is `enabled` at once. */
+  createMaskedAddress(accountId: string, input: MaskedAddressInput): Promise<MaskedAddress>;
+  updateMaskedAddress(accountId: string, id: string, patch: MaskedAddressPatch): Promise<void>;
+  profilePicture(accountId: string): Promise<ProfilePicture>;
+  /** Stores a new picture (already cropped) or removes it with null; returns it after the change. */
+  setProfilePicture(accountId: string, picture: Blob | null): Promise<ProfilePicture>;
+  updateProfilePicture(accountId: string, patch: ProfilePicturePatch): Promise<void>;
 
   listFolders(accountId?: string): Promise<Folder[]>;
   /** A new folder below `parentId`, or at the top of the mailbox (the only one when `accountId` is left out). Returns its id. */
@@ -294,8 +359,11 @@ export interface Backend {
   markSpam(messageIds: string[], spam: boolean): Promise<MovedMessage[]>;
   /** The app's own blocked senders, then what each account keeps on its UwUMail server. New mail from them goes to junk. */
   blockedSenders(): Promise<BlockedSender[]>;
-  /** One click or a mail where possible; otherwise the page to open. */
-  unsubscribe(messageId: string): Promise<UnsubscribeOutcome>;
+  /**
+   * One click or a mail where possible; otherwise the page to open. A refused one click comes back
+   * as `oneClickFailed`; `{ oneClick: false }` then takes the other way.
+   */
+  unsubscribe(messageId: string, options?: { oneClick?: boolean }): Promise<UnsubscribeOutcome>;
   /** Inbox mail from an address, e.g. a newsletter's earlier issues. */
   inboxMessagesFrom(email: string): Promise<string[]>;
   /** Blocks on the account's UwUMail server where there is one, otherwise in this app. */
@@ -306,6 +374,18 @@ export interface Backend {
   queueSend(message: OutgoingMessage, delaySeconds: number): Promise<QueuedSend>;
   /** Takes a queued mail back and returns it for the composer. */
   cancelSend(sendId: string): Promise<OutgoingMessage>;
+  /** Where this mailbox's mail sent later waits (its UwUMail server or this device) and how far ahead it may go. */
+  sendLaterInfo(accountId: string): Promise<SendLaterInfo>;
+  /** Sends at `sendAt` (ISO 8601): held by the UwUMail server, or in this device's outbox for every other mailbox. */
+  sendLater(message: OutgoingMessage, sendAt: string): Promise<ScheduledReceipt>;
+  /** Mail waiting for its time, soonest first. */
+  scheduledSends(): Promise<ScheduledSend[]>;
+  rescheduleSend(scheduled: ScheduledRef, sendAt: string): Promise<void>;
+  sendScheduledNow(scheduled: ScheduledRef): Promise<void>;
+  /** Stops it without opening it: it is a draft in Drafts again. */
+  stopScheduled(scheduled: ScheduledRef): Promise<void>;
+  /** Stops it and returns it for the composer, which saves it as a draft. */
+  editScheduled(scheduled: ScheduledRef): Promise<OutgoingMessage>;
   /** Saves into the account's Drafts folder, replacing the draft's earlier version. */
   saveDraft(draft: OutgoingMessage): Promise<DraftSaveResult>;
   deleteDraft(accountId: string, draftKey: string): Promise<void>;
@@ -326,8 +406,11 @@ export interface Backend {
   /** The whole mail as an .eml file, where the user picks. False when cancelled. */
   saveMessage(messageId: string): Promise<boolean>;
 
-  /** Brand logo or website icon for a company address; null for people and mail providers. */
-  getSenderPicture(email: string): Promise<SenderPicture | null>;
+  /**
+   * The picture for an address, looked up per address: with a UwUMail server a person's photo
+   * first, then a company's brand logo or website icon. Null when there is none.
+   */
+  getSenderPicture(email: string, lookup?: SenderPictureLookup): Promise<SenderPicture | null>;
   clearSenderPictures(): Promise<void>;
   /** A remote image of a mail, for dark mode to recolor; null where the page has to do without. */
   fetchMailImage(url: string): Promise<Blob | null>;
@@ -404,7 +487,7 @@ export interface Backend {
   assistUsage(scope: string, days?: number, currency?: string): Promise<AssistUsage>;
   assistLabels(scope: string): Promise<AssistLabel[]>;
   createAssistLabel(scope: string, input: AssistLabelInput): Promise<AssistLabel>;
-  updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>): Promise<void>;
+  updateAssistLabel(scope: string, id: string, patch: AssistLabelPatch): Promise<void>;
   /** Also takes its keyword off every mail (on the server; on this device off the mail it labelled). */
   deleteAssistLabel(scope: string, id: string): Promise<void>;
   /** Makes a deleted base label again (the existing one when it is there). */
@@ -453,6 +536,16 @@ export interface Backend {
 
   /** Whether closing the window keeps UwUMail running in the tray. */
   setRunInBackground(enabled: boolean): Promise<void>;
+  /**
+   * How new-mail notifications read: sender and subject, or only that new mail came (`newMail`
+   * and `hidden` are those texts in the page's language). The app lock hides them too.
+   */
+  setNotificationPrefs(prefs: {
+    showContent: boolean;
+    appLock: boolean;
+    newMail: string;
+    hidden: string;
+  }): Promise<void>;
   /** The mailto: link UwUMail was opened with, handed out once. */
   takeMailto(): Promise<MailtoDraft | null>;
 

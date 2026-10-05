@@ -33,10 +33,16 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
 - **Simple or Pro.** A calm two-column layout, or a dense three-column one with
   keyboard shortcuts (`g i`, `v`, `x`, `z`, `!` and more), switchable any time.
 - **Conversations**, a folder tree, multi-select, drag and drop, spam and not
-  spam, blocked senders, and undo for moves.
+  spam, blocked senders, and undo for moves. A folder name that won't work
+  (a "/" or the server's separator, control characters, too long, taken) is
+  explained while you type.
 - **Safe HTML.** Mail is cleaned before it is shown, remote content is blocked
   until you allow it (per sender or domain), and links whose text shows another
-  site than their target get a warning.
+  site than their target get a warning. Microsoft Safe Links show and open the
+  address they wrap, and the link question says the wrapper was removed.
+- **Outlook and Teams.** A Teams meeting link in a mail gets a "Join" button
+  (asked about like every link), and a winmail.dat that couldn't be unpacked
+  says so instead of looking like a file to open.
 - **Pictures without the wait.** Once they may load, the text shows at once and
   every picture waits in its final size with a shimmer; a bar counts them in,
   and dead hosts and tracking pixels hold nothing up. Pictures can go through
@@ -58,16 +64,37 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   any device.
 - **Undo send** for 0–30 seconds (10 by default): the mail waits in a local
   outbox and goes out even after UwUMail was closed.
+- **Send later** (clock next to Send): this evening, tomorrow morning or
+  afternoon, Monday morning, or any date and time. Mailboxes on a UwUMail
+  server hand the mail to the server, which sends it even while UwUMail is
+  closed (up to 30 days ahead, like the webmail). Every other mailbox (IMAP,
+  other JMAP servers, Microsoft, Google) keeps it in this device's outbox: it
+  goes out if UwUMail is running at that time, also in the tray or Android's
+  background service, and a time missed while UwUMail was closed sends on the
+  next start; on the iPhone it goes when UwUMail is opened. The dialog says
+  which applies. **Scheduled** in the folder list shows what waits, with a new
+  time, send now, edit (back into the composer) or don't send (back to Drafts).
 - **Signatures** per domain: pick a domain, write one signature for all your
   addresses there (or for all domains), with `{name}`, `{adresse}` and
   `{domain}` filled in per address. On a UwUMail server (0.22 and later) it
   lives on the server, shared with the webmail and the portal, single
   addresses can differ, and the composer says when the server adds your
-  organisation's mandatory footer. For other mailboxes the domain signature
+  organisation's mandatory footer. Saving names the state it was made on
+  (`ifInState`), so two devices can't overwrite each other unseen; on a
+  conflict the signatures reload (0.10). For other mailboxes the domain signature
   stays on the device. Signatures of single addresses work as before:
   formatted, with pictures, several per address, with defaults for new mail
-  and replies, and they go first on this device.
+  and replies, and they go first on this device. Pictures shrink until the
+  whole signature fits (256 KB).
 - **Addresses** suggested from the address books and the mail history.
+- **Masked addresses** (UwUMail servers only, 0.10): Settings → Masked
+  addresses makes a random address for one website, with an optional prefix
+  and domain, a description and a link back. Switch one off when it starts to
+  spam, delete it (with undo), restore it, search and filter. The same list as
+  the webmail, the portal and password managers (JMAP MaskedEmail).
+- **Profile picture** (UwUMail servers only, 0.10): Settings → Profile picture
+  uploads a cropped square, chooses who sees it (nobody, people on the server,
+  everyone through Libravatar) and whether mail carries it as a Face header.
 
 ## Calendar, contacts and birthdays
 
@@ -83,6 +110,26 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   their own. Anniversaries, birthdays without a year, and birthday events from
   other calendars moved into the contacts; reminders per contact on UwUMail
   servers.
+- **Sharing calendars** (UwUMail servers, 0.10): "Share …" in a calendar's menu
+  gives people on the same server read, read and write, or full access; a
+  calendar someone shared shows who did and can be removed from your
+  calendars again (the owner keeps it).
+- **Contact photos** (0.10): choose a picture, drop or paste one, take a photo
+  on a phone, or take the company logo of the contact's address; every
+  picture is cropped to a square first. Stored in the card on UwUMail servers
+  and CardDAV, through Microsoft Graph's and Google People's own photo calls
+  for those sign-ins. Microsoft may refuse to remove a photo; Outlook on the
+  web can.
+- **Invitations in mail** like the webmail: the card in the reader shows when,
+  where, the organizer, who is invited and what they answered, updates and
+  cancellations, and your answer so far. *Accept*, *Maybe* and *Decline* (with
+  a comment where the answer can carry one) work in every mailbox: UwUMail
+  servers tell the organizer themselves, Microsoft and Google answer through
+  their calendar, other mailboxes keep the event in their CalDAV calendar or
+  the device's "Invitations" calendar and mail an iTIP answer (RFC 5546) to
+  the organizer. Cancellations offer removing the event or date. Nothing is
+  sent without a click; invitations or cancellations that don't come from the
+  organizer get a warning and no buttons.
 
 ## Appointments in mail
 
@@ -103,10 +150,17 @@ providers (a local Ollama or LM Studio in one click) for all others. Every AI
 button tells on hover what it will take in tokens and money. The spam check
 weighs the facts and phishing checks (lookalike domains, spoofed display names,
 misleading links) first and shows them with their weights; the model only
-chooses among the verdicts they allow. Labels start with eight base labels
+chooses among the verdicts they allow, and its own reasons stand apart, marked
+as unchecked. Labels start with eight base labels
 (invoice, shipping, appointment, newsletter, account, personal, work,
 promotions), each switchable; a mail gets at most two, and the model is only
-asked when the rules, detectors and what was learned leave a label in doubt. See [ai-assistant.md](ai-assistant.md).
+asked when the rules, detectors and what was learned leave a label in doubt.
+When a base label takes over a label of yours with the same name, your own
+description is kept: the settings show it, it goes to the model as a hint next
+to the definition, and you can start a new label with it or forget it. The
+quick label picker (L, or *Labels…* on a row or the selection) finds a label as
+you type, works with the arrow keys and Enter, shows which labels are on all or
+some of the chosen conversations, and creates a missing one in place. See [ai-assistant.md](ai-assistant.md).
 
 ## Phones
 
@@ -122,6 +176,11 @@ asked when the rules, detectors and what was learned leave a label in doubt. See
 
 - **Updates** by itself on Windows, macOS and Linux (.deb/.rpm), signed, with
   Stable and Beta channels; the installer needs no administrator.
+- **Notifications without content** (0.10): Settings → "Show sender and
+  subject", as in the webmail. Off, a new-mail notification only says that new
+  mail came, on the desktop, Android and iOS; with the app lock on it never
+  says more. Sender names and subjects are shown plain, on one line and short.
+  Kept on this device, not synced (like the webmail's).
 - **Tray and default mail app** on the desktop: keep running in the notification
   area, start with the system, open `mailto:` links.
 - **Playful or plain.** UwUMail talks with a wink by default (Settings → Tone →

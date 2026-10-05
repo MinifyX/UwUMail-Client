@@ -65,6 +65,9 @@ export class DemoSignatures {
   }
 
   change(identities: Identity[], change: DomainSignatureChange): DomainSignatureOverview {
+    if (change.ifInState !== undefined && change.ifInState !== String(this.state)) {
+      throw new BackendError("state_mismatch", "The signatures were changed elsewhere.");
+    }
     const own = new Set(identities.map((identity) => domainOf(identity.email)));
     for (const domain of Object.keys(change.domains ?? {})) {
       if (domain !== ALL_DOMAINS && !own.has(domain)) {

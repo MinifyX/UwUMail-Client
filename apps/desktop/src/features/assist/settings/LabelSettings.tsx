@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { Check, ChevronDown, Pencil, Plus, RotateCcw, Sparkles, Tags, Trash, TriangleAlert, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AssistError, backend } from "@/backend/backend";
 import {
   LABEL_BASES,
@@ -61,6 +61,16 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
   const room = own.length < options.maxLabels;
   const missing = missingBases(labels, LABEL_BASES, options.baseLabels);
   const auto = options.features.autoLabels;
+  // What a new label starts with: an adopted base label's earlier description, or nothing.
+  const [seed, setSeed] = useState("");
+  const newEditor = useRef<HTMLDivElement>(null);
+  const startNew = (description: string) => {
+    setSeed(description);
+    setEditing("new");
+  };
+  useEffect(() => {
+    if (editing === "new" && seed) newEditor.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, [editing, seed]);
 
   const applyNow = async () => {
     setApplying(true);
@@ -89,7 +99,14 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
             />
           </li>
         ) : (
-          <LabelRow key={label.id} label={label} onEdit={() => setEditing(label.id)} />
+          <LabelRow
+            key={label.id}
+            label={label}
+            onEdit={() => setEditing(label.id)}
+            onUsePrevious={
+              room && label.previousDescription ? () => startNew(label.previousDescription ?? "") : undefined
+            }
+          />
         ),
       )}
     </ul>
@@ -159,19 +176,26 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
         action={
           room &&
           editing !== "new" && (
-            <Button size="sm" icon={Plus} onClick={() => setEditing("new")}>
+            <Button size="sm" icon={Plus} onClick={() => startNew("")}>
               {t("assist.labels.new")}
             </Button>
           )
         }
       >
         {editing === "new" && (
-          <LabelEditor
-            label={null}
-            labels={labels}
-            maxConditions={options.maxLabelConditions}
-            onDone={() => setEditing(null)}
-          />
+          <div ref={newEditor}>
+            <LabelEditor
+              key={seed}
+              label={null}
+              labels={labels}
+              description={seed}
+              maxConditions={options.maxLabelConditions}
+              onDone={() => {
+                setEditing(null);
+                setSeed("");
+              }}
+            />
+          </div>
         )}
         {!isPending && own.length === 0 && editing !== "new" && (
           <p className="text-[13px] text-muted">{t("assist.labels.empty")}</p>
@@ -221,9 +245,28 @@ function MissingBases({ missing }: { missing: LabelBase[] }) {
   );
 }
 
-function LabelRow({ label, onEdit }: { label: AssistLabel; onEdit: () => void }) {
+function LabelRow({
+  label,
+  onEdit,
+  onUsePrevious,
+}: {
+  label: AssistLabel;
+  onEdit: () => void;
+  /** Starts a new own label with the description the base label replaced; missing when there is no room. */
+  onUsePrevious?: () => void;
+}) {
   const { t } = useT();
   const scope = useAssistScope();
+  const [forgetting, setForgetting] = useState(false);
+  // The model gets the earlier description as a hint until it is forgotten (webmail WF-1).
+  const forgetPrevious = () => {
+    setForgetting(true);
+    backend()
+      .updateAssistLabel(scope, label.id, { previousDescription: null })
+      .then(() => toast(t("labels.base.previousForgotten"), "success"))
+      .catch((error: unknown) => toast(assistErrorText(error), "error"))
+      .finally(() => setForgetting(false));
+  };
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [definition, setDefinition] = useState(false);
@@ -278,6 +321,25 @@ function LabelRow({ label, onEdit }: { label: AssistLabel; onEdit: () => void })
                 {definition ? t("labels.base.hideDefinition") : t("labels.base.showDefinition")}
               </button>
               {definition && <p className="text-[12.5px] break-words text-muted">{label.description}</p>}
+              {label.previousDescription && (
+                <div className="mt-1.5 flex flex-col items-start gap-1 rounded-xl bg-canvas px-3 py-2 text-[12.5px]">
+                  <p className="break-words">
+                    <span className="font-semibold">{t("labels.base.previousDescription")}</span>{" "}
+                    <span className="selectable italic">{label.previousDescription}</span>
+                  </p>
+                  <p className="text-[11.5px] text-muted">{t("labels.base.previousHint")}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {onUsePrevious && (
+                      <Button size="sm" variant="ghost" icon={Plus} onClick={onUsePrevious}>
+                        {t("labels.base.usePrevious")}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" icon={X} busy={forgetting} onClick={forgetPrevious}>
+                      {t("labels.base.forgetPrevious")}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <p className="text-[12.5px] break-words text-muted">
@@ -361,11 +423,14 @@ function AutoSwitch({
 function LabelEditor({
   label,
   labels,
+  description = "",
   maxConditions,
   onDone,
 }: {
   label: AssistLabel | null;
   labels: AssistLabel[];
+  /** What a new label's description starts with. */
+  description?: string;
   maxConditions: number;
   onDone: () => void;
 }) {
@@ -385,7 +450,7 @@ function LabelEditor({
         }
       : {
           name: "",
-          description: "",
+          description,
           color: LABEL_COLORS[labels.length % LABEL_COLORS.length]!,
           rules: null,
           detector: null,

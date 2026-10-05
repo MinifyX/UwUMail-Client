@@ -164,13 +164,49 @@ function nameParts(card: Json): { given: string; surname: string; full: string }
   return { given: of("given"), surname: of("surname"), full };
 }
 
-function photoOf(card: Json): string | null {
-  for (const [, entry] of entries(card.media)) {
+/** The card's picture and its key in `media`: the first photo inside the card. */
+function photoEntry(card: Json): { key: string; uri: string } | null {
+  for (const [key, entry] of entries(card.media)) {
     const uri = text(entry.uri);
     // Only pictures inside the card: a link elsewhere would tell that site who looks at the contact.
-    if (entry.kind === "photo" && /^data:image\//i.test(uri)) return uri;
+    if (entry.kind === "photo" && /^data:image\//i.test(uri)) return { key, uri };
   }
   return null;
+}
+
+function photoOf(card: Json): string | null {
+  return photoEntry(card)?.uri ?? null;
+}
+
+/** A media entry for a picture the editor made; what the card's old entry said besides stays. */
+function photoMedia(uri: string, before: Json = {}): Json {
+  const next: Json = { ...before, kind: "photo", uri };
+  const mediaType = /^data:([\w.+-]+\/[\w.+-]+)[;,]/i.exec(uri)?.[1]?.toLowerCase();
+  if (mediaType) next.mediaType = mediaType;
+  else delete next.mediaType;
+  return next;
+}
+
+/**
+ * Puts the editor's picture into the card: it replaces the photo the app showed, and every other
+ * photo goes, so no older one wins elsewhere. Media that aren't photos (logos, sounds) stay.
+ * `null` removes the photos; for Microsoft and Google, whose photo lives apart from the card
+ * (`uwuRemotePhoto`), the engine takes `media: null` as "remove the photo".
+ */
+function photoPatch(patch: Json, card: Json, photo: string | null) {
+  const photos = entries(card.media).filter(([, entry]) => entry.kind === "photo");
+  const shown = photoEntry(card);
+  if (photo === null) {
+    for (const [key] of photos) patch[`media/${key}`] = null;
+    if (photos.length === 0 && card.uwuRemotePhoto === true) patch.media = null;
+    return;
+  }
+  if (shown?.uri === photo && photos.length === 1) return;
+  const replaced = shown ? photos.find(([key]) => key === shown.key) : photos[0];
+  for (const [key] of photos) if (key !== replaced?.[0]) patch[`media/${key}`] = null;
+  if (replaced) patch[`media/${replaced[0]}`] = photoMedia(photo, replaced[1]);
+  else if (isObject(card.media)) patch[`media/${freeKey(new Set(Object.keys(card.media)), "p")}`] = photoMedia(photo);
+  else patch.media = { p1: photoMedia(photo) };
 }
 
 export function toContactRecord(card: JmapCard, accountId: string): ContactRecord {
@@ -199,6 +235,7 @@ export function toContactRecord(card: JmapCard, accountId: string): ContactRecor
     reminders: remindersOf(card),
     note: firstText(card.notes, "note")?.value ?? "",
     photo: photoOf(card),
+    ...(card.uwuRemotePhoto === true ? { remotePhoto: true } : {}),
     isGroup: card.kind === "group",
   };
 }
@@ -417,6 +454,7 @@ export function cardFromInput(input: ContactInput): Json {
     };
   }
   if (input.reminders?.length) card.uwuReminders = normalizeReminders(input.reminders);
+  if (input.photo) card.media = { p1: photoMedia(input.photo) };
   return card;
 }
 
@@ -471,5 +509,6 @@ export function patchFromInput(card: JmapCard, input: ContactInput): Json {
   if (input.addressBookId && input.addressBookId !== before.addressBookId) {
     patch.addressBookIds = { [input.addressBookId]: true };
   }
+  if (input.photo !== undefined) photoPatch(patch, card, input.photo);
   return patch;
 }

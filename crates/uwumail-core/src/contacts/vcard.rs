@@ -103,6 +103,23 @@ END:VCARD\r
         assert!(!text.contains("acc:"), "{text}");
     }
 
+    /// The photo the app puts into a card (a `data:` URI in `media`) becomes the vCard's PHOTO
+    /// and comes back as it went.
+    #[test]
+    fn a_photo_goes_into_the_vcard_and_back() {
+        let photo = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==";
+        let mut card = from_vcard(CARD).unwrap();
+        card.insert(
+            "media".into(),
+            json!({ "p1": { "@type": "Media", "kind": "photo", "uri": photo, "mediaType": "image/jpeg" } }),
+        );
+        let text = to_vcard(&card).unwrap();
+        assert!(text.contains("PHOTO"), "{text}");
+        let back = from_vcard(&text).unwrap();
+        let uri = back["media"].as_object().unwrap().values().find(|m| m["kind"] == "photo").unwrap()["uri"].clone();
+        assert_eq!(uri, photo);
+    }
+
     #[test]
     fn broken_and_deeply_nested_cards_are_left_out() {
         assert!(from_vcard("BEGIN:VEVENT\nEND:VEVENT\n").is_none());

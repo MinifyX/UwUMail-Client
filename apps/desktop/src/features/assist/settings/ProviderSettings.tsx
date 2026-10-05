@@ -564,7 +564,10 @@ function ProviderEditor({
             <TextInput
               id={id}
               type="password"
-              autoComplete="off"
+              // Not a login's password: browsers ignore "off" here and would offer to save the key.
+              autoComplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
               value={form.apiKey}
               placeholder={provider?.hasKey ? (provider.keyHint ?? "") : ""}
               onChange={(event) => change({ apiKey: event.target.value, removeKey: false })}

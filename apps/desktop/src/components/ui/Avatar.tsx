@@ -40,7 +40,7 @@ export const COLOR_CLASSES: Record<AccountColor, { bg: string; text: string; dot
 
 interface AvatarProps {
   address: Address;
-  size?: "sm" | "list" | "md" | "lg";
+  size?: "xs" | "sm" | "list" | "md" | "lg";
   className?: string;
 }
 
@@ -56,8 +56,9 @@ export function Avatar({ address, size = "md", className }: AvatarProps) {
   const ready = shown !== null && loaded === shown.url;
   // Filled in by onLoad before `ready` flips. Null when the pixels couldn't be read.
   const look = ready ? cachedLook(shown.url) : undefined;
-  // Logos that cover the whole circle stay edge to edge; everything else sits on a plain backdrop.
-  const fill = shown?.kind === "logo" && !look?.seeThrough;
+  // People's pictures and logos that cover the whole circle stay edge to edge; everything else
+  // sits on a plain backdrop.
+  const fill = shown?.kind === "photo" || (shown?.kind === "logo" && !look?.seeThrough);
 
   return (
     <span
@@ -66,6 +67,7 @@ export function Avatar({ address, size = "md", className }: AvatarProps) {
         "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold",
         // Initials wait underneath until the picture is there, and come back if it can't load.
         !ready && [color.bg, color.text],
+        size === "xs" && "size-5 text-[8.5px]",
         size === "list" && "size-9 text-[12px]",
         size === "sm" && "size-7 text-[11px]",
         size === "md" && "size-10 text-[13px]",

@@ -13,6 +13,7 @@ import {
   Sun,
   UserPlus,
   UserRound,
+  Video,
 } from "lucide-react";
 import { Fragment, useId, useMemo, useState } from "react";
 import type { Account, Message } from "@/backend/types";
@@ -30,10 +31,13 @@ import { useCompanyDomain, useFolders } from "@/lib/queries";
 import { useUi } from "@/state/ui";
 import { useResolvedTheme } from "@/lib/theme";
 import { domainEntry, isDomainEntry, matchingEntries } from "@/lib/trustedSenders";
+import { teamsMeetingLink } from "@/lib/outlook";
+import { requestOpenLink } from "@/state/links";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { AttachmentTiles } from "../attachments/AttachmentTiles";
 import { MessageLabels } from "../assist/LabelChips";
+import { MailInvitationCard } from "../calendar/Invitation";
 import { MessageAssistCards, useMessageAssistItems } from "../assist/ReaderAssist";
 import { AssistForAccount } from "../assist/useAssist";
 import { contactWithEmail, draftFromSender } from "../contacts/format";
@@ -45,7 +49,14 @@ import { nativeMobile } from "@/backend/mobile";
 import { backend } from "@/backend/backend";
 import { blockSender } from "./selection";
 import { UnsubscribeButton } from "./Unsubscribe";
-import { buildPrintDocument, MessageBody, resolveAppearance, type Appearance } from "./MessageBody";
+import {
+  buildPrintDocument,
+  MAIL_FRAME_SANDBOX,
+  MessageBody,
+  readableBody,
+  resolveAppearance,
+  type Appearance,
+} from "./MessageBody";
 import { useMailDates } from "../dates/useMailDates";
 
 interface AppearanceToggleProps {
@@ -180,6 +191,25 @@ interface MessageViewProps {
 
 const loadMailImage = (url: string) => backend().fetchMailImage(url);
 
+/** A Teams meeting link in the mail: one button to join, asked about like every link from a mail. */
+function TeamsMeetingBar({ message }: { message: Message }) {
+  const { t } = useT();
+  const link = useMemo(() => teamsMeetingLink(readableBody(message)), [message]);
+  if (!link) return null;
+  return (
+    <section
+      aria-label={t("reader.teamsMeeting")}
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-hairline bg-canvas px-4 py-2.5 text-[13px]"
+    >
+      <Video className="size-4 shrink-0 text-pink" aria-hidden />
+      <p className="min-w-0 flex-1 font-semibold">{t("reader.teamsMeeting")}</p>
+      <Button size="sm" icon={Video} onClick={() => requestOpenLink(link, link)}>
+        {t("reader.teamsJoin")}
+      </Button>
+    </section>
+  );
+}
+
 export function MessageView({ message, accounts, collapsed, onExpand }: MessageViewProps) {
   const { t, i18n } = useT();
   const theme = useResolvedTheme();
@@ -209,7 +239,11 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
 
   // A remembered choice for this sender wins; plain text otherwise follows the app.
   const preference = senderChoice ?? (message.bodyHtml !== null ? mailAppearance : "auto");
-  const appearance = resolveAppearance(message, theme === "dark", preference);
+  // Looks through the whole body, so once per mail and look rather than on every render.
+  const appearance = useMemo(
+    () => resolveAppearance(message, theme === "dark", preference),
+    [message, theme, preference],
+  );
   const decisionKey = `${message.id}|${allowRemote}`;
   const autoDark = autoDecision?.key === decisionKey ? autoDecision.dark : undefined;
   const dates = useMailDates(message, { open: !collapsed, allowRemote, inJunk });
@@ -319,6 +353,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
         )}
 
         {dates.bar}
+        {!message.flags.draft && <TeamsMeetingBar message={message} />}
 
         <div className="selectable">
           <MessageBody
@@ -335,6 +370,8 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           />
         </div>
         {dates.popover}
+
+        {!message.flags.draft && <MailInvitationCard message={message} />}
 
         <AttachmentTiles
           attachments={message.attachments.filter((attachment) => !inlineImages.shown.has(attachment.id))}
@@ -525,8 +562,9 @@ function printMessage(
     date: translate("reader.date"),
   };
   const frame = document.createElement("iframe");
-  // allow-modals lets the print dialog open; without allow-scripts nothing in the mail runs.
-  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+  // allow-modals lets the print dialog open. allow-scripts only so WebKit calls the app's
+  // afterprint listener (see MAIL_FRAME_SANDBOX); the mail runs nothing under the document's policy.
+  frame.setAttribute("sandbox", `${MAIL_FRAME_SANDBOX} allow-modals`);
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none";
   frame.srcdoc = buildPrintDocument(

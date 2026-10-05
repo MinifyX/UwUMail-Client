@@ -14,6 +14,7 @@ use serde_json::json;
 use tokio::sync::broadcast::error::RecvError;
 use uwumail_core::jmap_push::Endpoint;
 use uwumail_core::model::{EngineEvent, FlagChange, Message};
+use uwumail_core::notify;
 use uwumail_core::{Engine, EngineOptions, Error, Result};
 
 use crate::{bridge, launch, secrets::KeystoreSecrets};
@@ -138,9 +139,10 @@ pub(crate) fn start_engine(data_dir: PathBuf, cache_dir: PathBuf) -> Result<()> 
 struct NotifiedMessage<'a> {
     id: &'a str,
     thread_id: &'a str,
-    from: &'a str,
-    subject: &'a str,
-    snippet: &'a str,
+    /// Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
+    from: String,
+    subject: String,
+    snippet: String,
 }
 
 /// Hands new mail to Kotlin, which shows it unless UwUMail is on screen.
@@ -156,9 +158,9 @@ fn notify(engine: &Engine, account_id: &str, message_ids: &[String]) -> Result<(
         .map(|message| NotifiedMessage {
             id: &message.id,
             thread_id: &message.thread_id,
-            from: message.from.name.as_deref().filter(|name| !name.is_empty()).unwrap_or(&message.from.email),
-            subject: &message.subject,
-            snippet: &message.snippet,
+            from: notify::notification_sender(message.from.name.as_deref(), &message.from.email),
+            subject: notify::notification_text(&message.subject, notify::MAX_LINE),
+            snippet: notify::notification_text(&message.snippet, notify::MAX_LINE),
         })
         .collect();
     bridge::call(
