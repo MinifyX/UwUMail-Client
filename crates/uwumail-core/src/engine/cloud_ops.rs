@@ -76,7 +76,8 @@ fn utc_text(time: DateTime<Utc>) -> String {
 }
 
 fn graph_event_select() -> &'static str {
-    "id,subject,body,start,end,isAllDay,location,type,seriesMasterId,originalStartTimeZone,recurrence"
+    // `attendees` and `organizer`: who takes part, for the event popover (and the move check).
+    "id,subject,body,start,end,isAllDay,location,type,seriesMasterId,originalStartTimeZone,recurrence,attendees,organizer"
 }
 
 impl Inner {
@@ -747,12 +748,12 @@ impl Inner {
         match source {
             calendar::Source::Graph { base } => {
                 let path = format!("{base}/calendars/{}/events/{}", segment(&calendar_id), segment(&event_id));
-                let select =
-                    if moving { format!("{},attendees", graph_event_select()) } else { graph_event_select().into() };
                 let read = self
                     .cloud_call(
                         &account,
-                        &Call::get(Api::Graph, path.clone()).query("$select", select).prefer(graph_cal::PREFER),
+                        &Call::get(Api::Graph, path.clone())
+                            .query("$select", graph_event_select())
+                            .prefer(graph_cal::PREFER),
                     )
                     .await?;
                 // A move is a copy and a delete at Graph: for a meeting the delete would cancel it

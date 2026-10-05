@@ -113,7 +113,12 @@ fn graph_handler(tokens: Arc<AtomicUsize>, base: &'static str) -> impl Fn(&Reque
                 graph_event("OCC-1", "occurrence", "2026-09-24T16:00:00.0000000", "2026-09-24T17:00:00.0000000", Some("SER-1")),
                 { "id": "ONE-1", "type": "singleInstance", "subject": "Dentist", "isAllDay": false,
                   "start": { "dateTime": "2026-09-25T08:00:00", "timeZone": "UTC" }, "end": { "dateTime": "2026-09-25T08:30:00", "timeZone": "UTC" },
-                  "originalStartTimeZone": "Europe/Berlin" }
+                  "originalStartTimeZone": "Europe/Berlin",
+                  "organizer": { "emailAddress": { "name": "Dr. Kim", "address": "Kim@example.com" } },
+                  "attendees": [
+                    { "type": "required", "status": { "response": "tentativelyAccepted" }, "emailAddress": { "name": "Nyu", "address": "nyu@example.com" } },
+                    { "type": "resource", "status": { "response": "none" }, "emailAddress": { "name": "Room 1", "address": "room@example.com" } }
+                  ] }
             ] })),
             ("GET", "calendars/CAL-2/calendarView") => Reply::json(json!({ "value": [
                 { "id": "ANNA-1", "type": "singleInstance", "subject": "Busy", "isAllDay": true,
@@ -199,6 +204,17 @@ async fn microsoft_calendars_through_graph() {
     assert_eq!(yoga.time_zone.as_deref(), Some("Europe/Berlin"));
     assert_eq!(yoga.event_id, "m:CAL-1/SER-1");
     assert_eq!(yoga.id, "m:CAL-1/OCC-1");
+    assert!(yoga.participants.is_empty(), "no one invited, no list");
+    let dentist = events.iter().find(|e| e.title == "Dentist").unwrap();
+    let who: Vec<_> = dentist.participants.iter().map(|p| (p.email.as_str(), p.status, p.organizer)).collect();
+    assert_eq!(
+        who,
+        [
+            ("kim@example.com", crate::calendar::invite::Partstat::Accepted, true),
+            ("nyu@example.com", crate::calendar::invite::Partstat::Tentative, false),
+            ("room@example.com", crate::calendar::invite::Partstat::NeedsAction, false),
+        ]
+    );
     let busy = events.iter().find(|e| e.title == "Busy").unwrap();
     assert!(busy.all_day && busy.read_only);
     assert_eq!(busy.start, "2026-09-26T00:00:00");
@@ -206,6 +222,7 @@ async fn microsoft_calendars_through_graph() {
     assert!(view.header("Prefer").unwrap().contains("outlook.timezone=\"UTC\""));
     assert_eq!(view.header("Authorization"), Some("Bearer access-1"));
     assert_eq!(view.query("startDateTime").as_deref(), Some("2026-09-19T22:00:00Z"), "a day wider");
+    assert!(view.query("$select").unwrap().contains("attendees,organizer"));
 
     // Writing: a new event, the series renamed, an occurrence and the series deleted.
     let id = s.engine.create_event(input("m:CAL-1", "Run")).await.unwrap();
@@ -392,7 +409,12 @@ async fn google_calendars_and_contacts() {
                 }
                 Reply::json(json!({ "items": [
                     { "id": "gone", "status": "cancelled" },
-                    { "id": "trip", "summary": "Trip", "start": { "date": "2026-09-26" }, "end": { "date": "2026-09-28" } }
+                    { "id": "trip", "summary": "Trip", "start": { "date": "2026-09-26" }, "end": { "date": "2026-09-28" },
+                      "organizer": { "email": "mina@example.org", "displayName": "Mina" },
+                      "attendees": [
+                        { "email": "mini@example.com", "self": true, "responseStatus": "accepted" },
+                        { "email": "mina@example.org", "organizer": true, "responseStatus": "tentative" }
+                      ] }
                 ] }))
             }
             ("GET", "/gcal/calendars/mini%40example.com/events/yoga") => Reply::json(json!({
@@ -436,6 +458,15 @@ async fn google_calendars_and_contacts() {
     let trip = events.iter().find(|e| e.title == "Trip").unwrap();
     assert!(trip.all_day);
     assert_eq!((trip.start.as_str(), trip.end.as_str()), ("2026-09-26T00:00:00", "2026-09-28T00:00:00"));
+    let who: Vec<_> = trip.participants.iter().map(|p| (p.name.as_str(), p.status, p.organizer)).collect();
+    assert_eq!(
+        who,
+        [
+            ("Mina", crate::calendar::invite::Partstat::Tentative, true),
+            ("mini@example.com", crate::calendar::invite::Partstat::Accepted, false),
+        ]
+    );
+    assert!(yoga.participants.is_empty());
 
     let id = s.engine.create_event(input("m:mini@example.com", "Run")).await.unwrap();
     assert_eq!(id, "m:mini%40example.com/new1");

@@ -102,8 +102,9 @@ pub struct Instance {
     pub recurrence_id: Option<String>,
 }
 
-/// What an occurrence needs of its event. Everything else (attendees, attachments, unknown
-/// properties) stays behind, so an occurrence never copies more than it shows.
+/// What an occurrence needs of its event, besides its participants ([`shown_part`]). Everything
+/// else (attachments, unknown properties) stays behind, so an occurrence never copies more than it
+/// shows.
 const SHOWN: [&str; 12] = [
     "@type",
     "uid",
@@ -162,7 +163,12 @@ impl Budget {
 
 fn shown_part(event: &Value) -> Value {
     let Some(object) = event.as_object() else { return Value::Null };
-    Value::Object(SHOWN.iter().filter_map(|key| Some(((*key).to_string(), object.get(*key)?.clone()))).collect())
+    let mut shown: serde_json::Map<String, Value> =
+        SHOWN.iter().filter_map(|key| Some(((*key).to_string(), object.get(*key)?.clone()))).collect();
+    // Who takes part (ATTENDEE and ORGANIZER), cleaned and capped once per event: an invitation
+    // to thousands copies only the first few to each occurrence. Overrides keep the series' list.
+    jscal::set_participants(&mut shown, &jscal::participants_of(event));
+    Value::Object(shown)
 }
 
 /// Every occurrence of the object's events that overlaps `[from, to)`, as far as `budget`
@@ -448,6 +454,75 @@ ACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\
             "END:VEVENT\r\n".repeat(MAX_NESTING)
         );
         assert!(parse(&nine_deep).is_err());
+    }
+
+    fn participants_in(text: &str) -> Vec<crate::model::EventParticipant> {
+        let ical = parse(text).unwrap();
+        let group = to_jscalendar(&ical).unwrap();
+        let found = instances(
+            &ical,
+            &group,
+            utc("2026-10-01T00:00:00Z"),
+            utc("2026-10-10T00:00:00Z"),
+            chrono_tz::UTC,
+            &mut Budget::default(),
+        );
+        assert!(!found.is_empty());
+        let ids = jscal::OccurrenceIds {
+            id: "o".into(),
+            event_id: "e".into(),
+            account_id: "a".into(),
+            calendar_id: "c".into(),
+            read_only: true,
+        };
+        jscal::occurrence(ids, &found[0].event, Some(found[0].series.as_ref()), &found[0].time, chrono_tz::UTC)
+            .participants
+    }
+
+    #[test]
+    fn lists_attendees_and_the_organizer() {
+        use super::super::invite::Partstat;
+        let text = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\nBEGIN:VEVENT\r\nUID:meet\r\n\
+DTSTAMP:20260901T100000Z\r\nDTSTART:20261003T100000Z\r\nDURATION:PT1H\r\nSUMMARY:Meeting\r\n\
+ORGANIZER;CN=Mini:mailto:Mini@example.org\r\n\
+ATTENDEE;CN=Nyu;PARTSTAT=ACCEPTED;ROLE=REQ-PARTICIPANT:mailto:nyu@example.com\r\n\
+ATTENDEE;PARTSTAT=TENTATIVE:mailto:leni@example.com\r\n\
+ATTENDEE;CN=\"Evil\u{202e}gnp.exe\";PARTSTAT=DECLINED:mailto:evil@example.com\r\n\
+ATTENDEE;CN=Room;PARTSTAT=X-ODD;CUTYPE=ROOM:mailto:room@example.net\r\n\
+ATTENDEE;CN=Spaced:mailto:not an address\r\n\
+END:VEVENT\r\nEND:VCALENDAR\r\n";
+        let found = participants_in(text);
+        let shown: Vec<_> = found.iter().map(|p| (p.name.as_str(), p.email.as_str(), p.status, p.organizer)).collect();
+        assert_eq!(shown[0], ("Mini", "mini@example.org", Partstat::NeedsAction, true), "{shown:?}");
+        for expected in [
+            ("Nyu", "nyu@example.com", Partstat::Accepted, false),
+            ("leni@example.com", "leni@example.com", Partstat::Tentative, false),
+            ("Evilgnp.exe", "evil@example.com", Partstat::Declined, false),
+            ("Room", "room@example.net", Partstat::NeedsAction, false),
+            ("Spaced", "", Partstat::NeedsAction, false),
+        ] {
+            assert!(shown.contains(&expected), "{expected:?} in {shown:?}");
+        }
+        assert_eq!(shown.len(), 6, "{shown:?}");
+    }
+
+    #[test]
+    fn caps_attendees_and_their_names() {
+        let long = "N".repeat(5000);
+        let attendees: String =
+            (0..300).map(|i| format!("ATTENDEE;CN={long}\u{7}:mailto:p{i}@example.com\r\n")).collect();
+        let text = format!(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:big\r\nDTSTART:20261003T100000Z\r\nDURATION:PT1H\r\n\
+SUMMARY:All hands\r\nORGANIZER:mailto:boss@example.com\r\n{attendees}\
+ATTENDEE;CN=Boss;PARTSTAT=ACCEPTED:mailto:boss@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        let found = participants_in(&text);
+        assert_eq!(found.len(), jscal::MAX_PARTICIPANTS);
+        // The organizer comes first even when the calendar names them last.
+        assert!(found[0].organizer && found[0].email == "boss@example.com");
+        assert!(
+            found.iter().skip(1).all(|p| !p.organizer && p.name.chars().count() == 200 && !p.name.contains('\u{7}'))
+        );
     }
 
     #[test]
