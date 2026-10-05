@@ -20,6 +20,7 @@ import {
   type AssistFeatures,
   type AssistLabel,
   type AssistLabelInput,
+  type AssistLabelPatch,
   type AssistLabelLogEntry,
   type AssistLabelSuggestion,
   LABEL_BASES,
@@ -424,6 +425,7 @@ export function toAssistLabel(raw: Raw): AssistLabel {
     totalEmails: asNumber(raw.totalEmails),
     unreadEmails: asNumber(raw.unreadEmails),
     examples: asCount(raw.examples),
+    previousDescription: asString(raw.previousDescription)?.trim() || null,
   };
 }
 
@@ -476,7 +478,7 @@ export function toLabelOverlaps(value: unknown): LabelOverlap[] {
 /** What `AssistLabel/checkOverlap` reads at most; longer text is not sent at all. */
 export const OVERLAP_LIMITS = { name: 100, description: 2000 } as const;
 
-export function labelUpdate(patch: Partial<AssistLabelInput>): Raw {
+export function labelUpdate(patch: AssistLabelPatch): Raw {
   const out: Raw = {};
   if (patch.name !== undefined) out.name = patch.name.trim();
   if (patch.description !== undefined) out.description = patch.description.trim();
@@ -486,6 +488,7 @@ export function labelUpdate(patch: Partial<AssistLabelInput>): Raw {
   if (patch.learnSenders !== undefined) out.learnSenders = patch.learnSenders;
   if (patch.classifier !== undefined) out.classifier = patch.classifier;
   if (patch.auto !== undefined) out.auto = patch.auto;
+  if (patch.previousDescription === null) out.previousDescription = null;
   return out;
 }
 

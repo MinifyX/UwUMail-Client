@@ -64,8 +64,9 @@ export function estimateKey(request: EstimateRequest, currency = "EUR"): unknown
   ];
 }
 
-/** A count as rough as the estimate is: to tens below 1,000, to hundreds above. */
+/** A count as rough as the estimate is: exact below 100 (at least 1), to tens below 1,000, to hundreds above. */
 export function roughly(tokens: number): number {
+  if (tokens < 100) return Math.max(1, Math.round(tokens));
   return tokens < 1000 ? Math.round(tokens / 10) * 10 : Math.round(tokens / 100) * 100;
 }
 
@@ -76,7 +77,7 @@ export function roughly(tokens: number): number {
 export function estimateText(estimate: AssistEstimate, t: TFunction, locale: string): string {
   const number = new Intl.NumberFormat(locale);
   const total = roughly(estimate.totalTokens);
-  const parts = [t("assist.estimate.tokens", { formatted: number.format(total) })];
+  const parts = [t("assist.estimate.tokens", { count: total, formatted: number.format(total) })];
   // A server from before prices has no cost, and one whose admin keeps them to themselves says null.
   const cost = estimate.cost;
   if (cost) {
@@ -104,49 +105,84 @@ export function estimateText(estimate: AssistEstimate, t: TFunction, locale: str
   return parts.join(" · ");
 }
 
+/** One line of the breakdown: "Input" and "≈ 900 tokens · ≈ €0.004". */
+export interface BreakdownLine {
+  key: "input" | "pictures" | "answer" | "thinking" | "extraCalls" | "fees";
+  label: string;
+  value: string;
+}
+
+/** Purposes of extra calls the texts know; others read as "other". */
+const PURPOSES = ["pictures", "chunk", "retry", "refine"];
+
 /**
- * The small breakdown under the estimate: input, pictures, answer, thinking, extra calls and fees,
- * only the lines that aren't zero, and a hint when recent calls corrected it. Empty for an older
- * server, which says none of it.
+ * The small breakdown under the estimate (as in the webmail): input, pictures, answer, thinking,
+ * the extra calls by what they are for, and fees, only the parts that aren't zero. Empty for an
+ * older server, which says none of it. Whether recent calls corrected it is `estimate.calibrated`.
  */
-export function estimateDetails(estimate: AssistEstimate, t: TFunction, locale: string): string[] {
-  if (estimate.calls.length === 0) return [];
-  const number = new Intl.NumberFormat(locale);
+export function estimateBreakdown(estimate: AssistEstimate, t: TFunction, locale: string): BreakdownLine[] {
   const parts = estimate.cost?.parts ?? null;
+  if (estimate.calls.length === 0 && !parts) return [];
+  const number = new Intl.NumberFormat(locale);
   const currency = estimate.cost?.currency ?? "EUR";
-  const tokens = (count: number) => t("assist.estimate.tokens", { formatted: number.format(roughly(count)) });
+  const tokens = (count: number) => {
+    const rough = roughly(count);
+    return t("assist.estimate.tokens", { count: rough, formatted: number.format(rough) });
+  };
   const money = (amount: number | undefined) =>
     amount && amount > 0 ? formatCost({ amount, currency }, locale, t, true) : null;
-  const line = (label: string, values: (string | null)[]) => {
-    const shown = values.filter((value): value is string => value !== null);
-    return shown.length > 0 ? `${t(`assist.estimate.part.${label}`)}: ${shown.join(" · ")}` : null;
-  };
-  const extra = estimate.calls.filter((call) => call.purpose !== "main");
-  const extraCount = Math.ceil(extra.reduce((sum, call) => sum + call.weight, 0));
-  const extraTokens = extra.reduce(
-    (sum, call) => sum + (call.inputTokens + call.outputTokens + call.reasoningTokens) * call.weight,
-    0,
-  );
-  const fees = (parts?.requests ?? 0) + (parts?.other ?? 0);
-  const lines = [
-    line("input", [estimate.inputTokens > 0 ? tokens(estimate.inputTokens) : null, money(parts?.input)]),
-    line("pictures", [
-      estimate.imageCount > 0
-        ? t("assist.estimate.pictures", { count: estimate.imageCount, formatted: number.format(estimate.imageCount) })
-        : null,
-      money(parts?.images),
-    ]),
-    line("answer", [estimate.outputTokens > 0 ? tokens(estimate.outputTokens) : null, money(parts?.output)]),
-    line("thinking", [estimate.reasoningTokens > 0 ? tokens(estimate.reasoningTokens) : null, money(parts?.reasoning)]),
-    extraCount > 0
-      ? line("extraCalls", [
-          t("assist.estimate.calls", { count: extraCount, formatted: number.format(extraCount) }),
-          extraTokens > 0 ? tokens(extraTokens) : null,
-        ])
-      : null,
-    line("fees", [money(fees)]),
-  ].filter((entry): entry is string => entry !== null);
-  if (estimate.calibrated) lines.push(t("assist.estimate.calibrated"));
+  const join = (...values: (string | null)[]) => values.filter(Boolean).join(" · ");
+  const label = (key: BreakdownLine["key"]) => t(`assist.estimate.part.${key}`);
+  const lines: BreakdownLine[] = [];
+  if (estimate.inputTokens > 0 || money(parts?.input)) {
+    lines.push({ key: "input", label: label("input"), value: join(tokens(estimate.inputTokens), money(parts?.input)) });
+  }
+  if (estimate.imageCount > 0 || money(parts?.images)) {
+    lines.push({
+      key: "pictures",
+      label: label("pictures"),
+      value: join(
+        estimate.imageCount > 0
+          ? t("assist.estimate.pictures", { count: estimate.imageCount, formatted: number.format(estimate.imageCount) })
+          : null,
+        money(parts?.images),
+      ),
+    });
+  }
+  if (estimate.outputTokens > 0 || money(parts?.output)) {
+    lines.push({
+      key: "answer",
+      label: label("answer"),
+      value: join(tokens(estimate.outputTokens), money(parts?.output)),
+    });
+  }
+  if (estimate.reasoningTokens > 0 || money(parts?.reasoning)) {
+    lines.push({
+      key: "thinking",
+      label: label("thinking"),
+      value: join(estimate.reasoningTokens > 0 ? tokens(estimate.reasoningTokens) : null, money(parts?.reasoning)),
+    });
+  }
+  // Extra calls by purpose, in the order they come: "4 × reading pictures, retry (sometimes)".
+  const extra = new Map<string, { count: number; sometimes: boolean }>();
+  for (const call of estimate.calls) {
+    if (call.purpose === "main" || call.weight <= 0) continue;
+    const purpose = PURPOSES.includes(call.purpose) ? call.purpose : "other";
+    const entry = extra.get(purpose) ?? { count: 0, sometimes: true };
+    entry.count += 1;
+    entry.sometimes &&= call.weight < 1;
+    extra.set(purpose, entry);
+  }
+  if (extra.size > 0) {
+    const what = [...extra].map(([purpose, { count, sometimes }]) => {
+      const name = t(`assist.estimate.purpose.${purpose}`);
+      const counted = count > 1 ? t("assist.estimate.times", { count, what: name }) : name;
+      return sometimes ? t("assist.estimate.sometimes", { what: counted }) : counted;
+    });
+    lines.push({ key: "extraCalls", label: label("extraCalls"), value: what.join(", ") });
+  }
+  const fees = money((parts?.requests ?? 0) + (parts?.other ?? 0));
+  if (fees) lines.push({ key: "fees", label: label("fees"), value: fees });
   return lines;
 }
 
@@ -181,12 +217,37 @@ interface Tip {
   describedBy: string | undefined;
 }
 
+type Place = { left: number; top?: number; bottom?: number };
+
+/** Tooltips are at most this wide (plus a gap where they sit beside a menu item). */
+const TIP_WIDTH = 280;
+
+/**
+ * Where a tooltip goes: below the element, or above it where the screen ends (the composer's
+ * toolbar, a phone). `beside` (menu items): next to the item where there is room, so the tooltip
+ * never covers the item below.
+ */
+export function tipPlace(
+  rect: DOMRect,
+  beside: boolean,
+  viewport = { width: window.innerWidth, height: window.innerHeight },
+): Place {
+  if (beside) {
+    if (rect.right + TIP_WIDTH + 8 <= viewport.width) return { left: rect.right + 8, top: rect.top };
+    if (rect.left >= TIP_WIDTH + 8) return { left: rect.left - TIP_WIDTH - 8, top: rect.top };
+  }
+  const left = Math.max(8, Math.min(rect.left, viewport.width - TIP_WIDTH));
+  return rect.bottom + 48 > viewport.height
+    ? { left, bottom: viewport.height - rect.top + 6 }
+    : { left, top: rect.bottom + 6 };
+}
+
 /** The state behind one button's tooltip. `hint` is shown above the estimate, e.g. what the button does. */
-function useEstimateTip(source: EstimateSource, hint?: string): Tip {
+function useEstimateTip(source: EstimateSource, hint?: string, beside = false): Tip {
   const { t, i18n } = useT();
   const id = useId();
   const [request, setRequest] = useState<EstimateRequest | null>(null);
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const [position, setPosition] = useState<Place | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pressed = useRef(false);
   // A source that is a plain request follows it once shown (e.g. a debounced instruction).
@@ -196,9 +257,8 @@ function useEstimateTip(source: EstimateSource, hint?: string): Tip {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const show = (element: Element, byTouch: boolean) => {
-    const rect = element.getBoundingClientRect();
     setRequest(resolve(source));
-    setPosition({ left: Math.max(8, Math.min(rect.left, window.innerWidth - 248)), top: rect.bottom + 6 });
+    setPosition(tipPlace(element.getBoundingClientRect(), beside));
     clearTimeout(timer.current);
     if (byTouch) timer.current = setTimeout(() => setPosition(null), TOUCH_SHOW_MS);
   };
@@ -221,21 +281,33 @@ function useEstimateTip(source: EstimateSource, hint?: string): Tip {
   };
 
   const estimate = data ? estimateText(data, t, i18n.language) : null;
-  const details = data ? estimateDetails(data, t, i18n.language) : [];
-  const text = [hint, estimate].filter(Boolean).join("\n");
+  const breakdown = data ? estimateBreakdown(data, t, i18n.language) : [];
+  const lines = [hint, estimate].filter((line): line is string => Boolean(line));
   const tooltip =
-    position && text
+    position && lines.length > 0
       ? createPortal(
           <span
             id={id}
             role="tooltip"
             style={position}
-            className="pointer-events-none fixed z-50 w-max max-w-[min(320px,calc(100vw-16px))] animate-fade rounded-lg bg-ink px-2.5 py-1 text-[12px] font-medium whitespace-pre-line text-canvas shadow-float"
+            className="pointer-events-none fixed z-50 flex w-max max-w-[min(280px,calc(100vw-16px))] animate-fade flex-col gap-0.5 rounded-lg bg-ink px-2.5 py-1.5 text-[12px] font-medium whitespace-pre-line text-canvas shadow-float"
           >
-            {text}
-            {details.length > 0 && (
-              <span className="mt-0.5 block text-[11px] leading-snug font-normal opacity-75">{details.join("\n")}</span>
+            {lines.map((line, index) => (
+              <span key={index} className={index < lines.length - 1 ? "opacity-80" : undefined}>
+                {line}
+              </span>
+            ))}
+            {breakdown.length > 0 && (
+              <span className="mt-1 grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-px border-t border-canvas/20 pt-1 text-[11.5px]">
+                {breakdown.map((line) => (
+                  <span key={line.key} className="contents">
+                    <span className="opacity-70">{line.label}</span>
+                    <span>{line.value}</span>
+                  </span>
+                ))}
+              </span>
             )}
+            {data?.calibrated && <span className="text-[11px] opacity-70">{t("assist.estimate.calibrated")}</span>}
           </span>,
           document.body,
         )
@@ -303,7 +375,8 @@ export function EstimateTip({
  * long press), since the menu draws the item itself.
  */
 export function EstimateLabel({ request, children }: { request: EstimateSource; children: ReactNode }) {
-  const tip = useEstimateTip(request);
+  // Beside the item, so the tooltip never covers the one below it.
+  const tip = useEstimateTip(request, undefined, true);
   const anchor = useRef<HTMLSpanElement>(null);
   const handle = useEffectEvent((item: HTMLElement, event: Event) => {
     const pointer = event instanceof PointerEvent ? event.pointerType : "";

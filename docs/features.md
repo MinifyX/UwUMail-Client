@@ -103,10 +103,17 @@ providers (a local Ollama or LM Studio in one click) for all others. Every AI
 button tells on hover what it will take in tokens and money. The spam check
 weighs the facts and phishing checks (lookalike domains, spoofed display names,
 misleading links) first and shows them with their weights; the model only
-chooses among the verdicts they allow. Labels start with eight base labels
+chooses among the verdicts they allow, and its own reasons stand apart, marked
+as unchecked. Labels start with eight base labels
 (invoice, shipping, appointment, newsletter, account, personal, work,
 promotions), each switchable; a mail gets at most two, and the model is only
-asked when the rules, detectors and what was learned leave a label in doubt. See [ai-assistant.md](ai-assistant.md).
+asked when the rules, detectors and what was learned leave a label in doubt.
+When a base label takes over a label of yours with the same name, your own
+description is kept: the settings show it, it goes to the model as a hint next
+to the definition, and you can start a new label with it or forget it. The
+quick label picker (L, or *Labels…* on a row or the selection) finds a label as
+you type, works with the arrow keys and Enter, shows which labels are on all or
+some of the chosen conversations, and creates a missing one in place. See [ai-assistant.md](ai-assistant.md).
 
 ## Phones
 

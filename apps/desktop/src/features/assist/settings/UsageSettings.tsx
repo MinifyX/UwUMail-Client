@@ -133,6 +133,8 @@ export function UsageSettings() {
                     <span className="text-muted">
                       {t("assist.usage.requests", { count: entry.requests, formatted: number.format(entry.requests) })}{" "}
                       · {t("assist.usage.tokens", { formatted: compact.format(entry.tokens) })}
+                      {entry.reasoningTokens > 0 &&
+                        ` (${t("assist.usage.thinking", { formatted: compact.format(entry.reasoningTokens) })})`}
                       {entry.cost && ` · ${cost(entry.cost)}`}
                     </span>
                   </li>

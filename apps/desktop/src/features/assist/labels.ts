@@ -26,6 +26,7 @@ export const LABEL_DEFAULTS = {
   totalEmails: null,
   unreadEmails: null,
   examples: 0,
+  previousDescription: null,
 } as const satisfies Omit<AssistLabel, "id" | "name" | "description" | "keyword" | "color">;
 
 /** The server's limits for a label. */

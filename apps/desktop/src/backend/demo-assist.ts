@@ -18,6 +18,7 @@ import {
   type AssistFeature,
   type AssistLabel,
   type AssistLabelInput,
+  type AssistLabelPatch,
   type AssistLabelLogEntry,
   type AssistLabelSuggestion,
   LABEL_BASES,
@@ -211,6 +212,7 @@ function newLabel(id: string, input: AssistLabelInput, others: readonly AssistLa
     totalEmails: 0,
     unreadEmails: 0,
     examples: 0,
+    previousDescription: null,
   };
 }
 
@@ -303,6 +305,11 @@ export class DemoAssist {
       const examples = ["invoice", "newsletter", "shipping"].includes(base) ? 4 : 0;
       this.labels.push({ ...this.baseLabel(base), examples });
     }
+    // The newsletters were the person's own label before the base label took it over, with their own words.
+    this.byBase("newsletter")!.previousDescription =
+      lang === "de"
+        ? "Newsletter und Rundmails von Vereinen, die ich abonniert habe"
+        : "Newsletters and circulars from clubs I signed up for";
     this.seedLabels();
     this.seedUsage();
   }
@@ -1068,7 +1075,13 @@ export class DemoAssist {
       cost: this.estimateCost(effective.providerId, effective.model, input, output, currency),
       reasoningTokens: 0,
       imageCount: 0,
-      calls: [{ purpose: "main", inputTokens: input, outputTokens: output, reasoningTokens: 0, images: 0, weight: 1 }],
+      calls: [
+        { purpose: "main", inputTokens: input, outputTokens: output, reasoningTokens: 0, images: 0, weight: 1 },
+        // A server asks once more, now and then, when a JSON answer comes back unusable.
+        ...(!this.device && method !== "Assist/summarize" && method !== "Assist/compose"
+          ? [{ purpose: "retry", inputTokens: input, outputTokens: output, reasoningTokens: 0, images: 0, weight: 0.1 }]
+          : []),
+      ],
       calibrated: false,
     };
   }
@@ -1202,7 +1215,7 @@ export class DemoAssist {
     return structuredClone(label);
   }
 
-  updateLabel(id: string, patch: Partial<AssistLabelInput>) {
+  updateLabel(id: string, patch: AssistLabelPatch) {
     const label = this.labels.find((entry) => entry.id === id);
     if (!label) throw new AssistError("notFound", "No such label.");
     this.checkLabel(patch, id);
@@ -1214,6 +1227,7 @@ export class DemoAssist {
     if (patch.learnSenders !== undefined) label.learnSenders = patch.learnSenders;
     if (patch.classifier !== undefined) label.classifier = patch.classifier;
     if (patch.auto !== undefined) label.auto = patch.auto;
+    if (patch.previousDescription === null) label.previousDescription = null;
     for (const entry of this.log) if (entry.labelId === id) entry.name = label.name;
     this.changed(false);
   }

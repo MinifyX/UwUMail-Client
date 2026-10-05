@@ -1202,6 +1202,8 @@ export interface AssistLabel {
   unreadEmails: number | null;
   /** Mails the classifier learned as having it (given by hand); it acts from 15 on. */
   examples: number;
+  /** The person's own description a base label replaced when it adopted their label; null for none. */
+  previousDescription: string | null;
 }
 
 export interface AssistLabelInput {
@@ -1214,6 +1216,9 @@ export interface AssistLabelInput {
   classifier?: boolean;
   auto?: boolean;
 }
+
+/** A change to a label: what changes, and `previousDescription: null` to forget an adopted base label's earlier description, so the model no longer gets it as a hint. */
+export type AssistLabelPatch = Partial<AssistLabelInput> & { previousDescription?: null };
 
 /** How a label overlaps another: the same name, the meaning of a base label, or largely the same words. */
 export type LabelOverlapKind = "name" | "meaning" | "words";

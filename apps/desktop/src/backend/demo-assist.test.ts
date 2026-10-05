@@ -26,6 +26,15 @@ describe("the demo's assistant", () => {
     expect(demoKeyword("✈️", ["a"])).toBe("label-2");
   });
 
+  it("shows an earlier description on the adopted newsletter label, until it is forgotten", () => {
+    const { assist } = setup("en");
+    const newsletter = assist.listLabels().find((label) => label.base === "newsletter")!;
+    expect(newsletter.previousDescription).toBe("Newsletters and circulars from clubs I signed up for");
+    expect(assist.listLabels().filter((label) => label.previousDescription)).toHaveLength(1);
+    assist.updateLabel(newsletter.id, { previousDescription: null });
+    expect(assist.listLabels().find((label) => label.id === newsletter.id)!.previousDescription).toBeNull();
+  });
+
   it("starts with labels on the sample mail, each with a reason", () => {
     const { assist, messages } = setup();
     const labels = assist.listLabels();

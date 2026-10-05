@@ -153,6 +153,11 @@ CREATE TABLE label_shots (
 );
 "#;
 
+/// What the person had written for a label a base label adopted (UwUMail Server's migration 0073,
+/// LABELS22-L2): kept instead of lost, shown in the settings and given to the model as a hint.
+pub(super) const PREVIOUS_DESCRIPTION_MIGRATION: &str =
+    "ALTER TABLE assist_labels ADD COLUMN previous_description TEXT;";
+
 /// Calls kept per provider, model and feature for calibration.
 const CALIBRATION_KEPT: i64 = 50;
 
@@ -302,6 +307,7 @@ fn label_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Label> {
         base: row.get(9)?,
         auto: row.get(10)?,
         base_language: row.get(11)?,
+        previous_description: row.get(12)?,
     })
 }
 
@@ -597,7 +603,7 @@ impl Store {
         let conn = self.conn();
         let mut stmt = conn.prepare(
             "SELECT id, name, description, keyword, color, rules, detector, learn_senders, classifier, base, auto,
-                    base_language
+                    base_language, previous_description
              FROM assist_labels ORDER BY created_at, rowid",
         )?;
         let rows = stmt.query_map([], label_row)?;
@@ -608,8 +614,8 @@ impl Store {
         self.conn().execute(
             "INSERT INTO assist_labels
                 (id, name, description, keyword, color, created_at, rules, detector, learn_senders, classifier,
-                 base, auto, base_language)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                 base, auto, base_language, previous_description)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 label.id,
                 label.name,
@@ -623,7 +629,8 @@ impl Store {
                 label.classifier,
                 label.base,
                 label.auto,
-                label.base_language
+                label.base_language,
+                label.previous_description
             ],
         )?;
         Ok(())
@@ -634,7 +641,7 @@ impl Store {
         Ok(self.conn().execute(
             "UPDATE assist_labels SET name = ?2, description = ?3, color = ?4, rules = ?5, detector = ?6,
                 learn_senders = ?7, classifier = ?8, base = ?9, auto = ?10,
-                base_language = ?11 WHERE id = ?1",
+                base_language = ?11, previous_description = ?12 WHERE id = ?1",
             params![
                 label.id,
                 label.name,
@@ -646,7 +653,8 @@ impl Store {
                 label.classifier,
                 label.base,
                 label.auto,
-                label.base_language
+                label.base_language,
+                label.previous_description
             ],
         )? > 0)
     }

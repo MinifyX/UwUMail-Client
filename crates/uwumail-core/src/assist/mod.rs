@@ -94,6 +94,11 @@ pub struct Label {
     /// The language a base label's definition was written in (`de`, `en`), for newer wordings.
     #[serde(skip)]
     pub base_language: Option<String>,
+    /// What the person had written for the label before a base label adopted it (UwUMail Server
+    /// 0.22, LABELS22-L2): shown in the settings and given to the model as a hint next to the
+    /// definition until it is forgotten. `None` for every other label.
+    #[serde(default)]
+    pub previous_description: Option<String>,
     /// A sender whose mail got it by hand twice gets it on new mail.
     #[serde(default = "on")]
     pub learn_senders: bool,
@@ -120,6 +125,7 @@ impl Label {
             base: None,
             auto: true,
             base_language: None,
+            previous_description: None,
             learn_senders: true,
             classifier: true,
         }

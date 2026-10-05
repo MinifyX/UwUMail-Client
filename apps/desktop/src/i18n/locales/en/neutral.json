@@ -1371,6 +1371,8 @@
         "sure": "sure"
       },
       "modelVerdict": "The model said “{{verdict}}”, but the facts don’t allow that, so the verdict stays within what they support.",
+      "modelWordsTitle": "In the model's own words",
+      "modelWordsHint": "These reasons were written by the model itself and not checked by anyone. Rely on the checked facts.",
       "serverTitle": "What the server found",
       "auth": "Sender check",
       "authNone": "Not checked: the mail didn't come from another server.",
@@ -1651,18 +1653,18 @@
       "limitReached": "Today's limit is reached. It resets at midnight (UTC).",
       "lastDays_one": "Last day",
       "lastDays_other": "Last {{count}} days",
-      "nothing": "Nothing used in this time."
+      "nothing": "Nothing used in this time.",
+      "thinking": "{{formatted}} thinking"
     },
     "estimate": {
-      "tokens": "≈ {{formatted}} tokens",
+      "tokens_one": "≈ {{formatted}} token",
+      "tokens_other": "≈ {{formatted}} tokens",
       "tokensLeft": "{{formatted}} left today",
       "requestsLeft_one": "{{formatted}} request left today",
       "requestsLeft_other": "{{formatted}} requests left today",
       "withMax": "{{cost}} (max {{max}})",
       "pictures_one": "{{formatted}} picture",
       "pictures_other": "{{formatted}} pictures",
-      "calls_one": "{{formatted}} call",
-      "calls_other": "{{formatted}} calls",
       "calibrated": "Calibrated from your last calls",
       "part": {
         "input": "Input",
@@ -1671,7 +1673,16 @@
         "thinking": "Thinking",
         "extraCalls": "Extra calls",
         "fees": "Fees"
-      }
+      },
+      "purpose": {
+        "pictures": "reading pictures",
+        "chunk": "summarizing parts",
+        "retry": "retry",
+        "refine": "refining",
+        "other": "more steps"
+      },
+      "times": "{{count}} × {{what}}",
+      "sometimes": "{{what}} (sometimes)"
     },
     "local": {
       "title": "Found on this computer",
@@ -1716,17 +1727,21 @@
     "create": "Create a label",
     "otherMailboxes": "Other mailboxes",
     "otherMailbox": "“{{name}}” belongs to another mailbox.",
-    "added_one": "“{{name}}” added",
-    "added_other": "“{{name}}” added to {{count}} conversations",
-    "removed_one": "“{{name}}” removed",
-    "removed_other": "“{{name}}” removed from {{count}} conversations",
-    "pickerTitle": "Labels",
-    "pickerSearch": "Find or create a label",
-    "pickerEmpty": "No labels yet. Type a name to create one.",
-    "pickerNone": "No label with this name.",
-    "createNamed": "Create “{{name}}”",
     "createdApplied": "“{{name}}” created and added",
     "pick": "Labels…",
+    "quick": {
+      "title": "Labels",
+      "search": "Find or create a label",
+      "for_one": "For {{count}} conversation. Enter or a click puts a label on or takes it off.",
+      "for_other": "For {{count}} conversations. Enter or a click puts a label on or takes it off.",
+      "create": "Create “{{name}}”",
+      "none": "No labels yet. Type a name to create one.",
+      "noMatch": "No label with this name.",
+      "added_one": "Label “{{name}}” added",
+      "added_other": "Label “{{name}}” added to {{count}} conversations",
+      "removed_one": "Label “{{name}}” removed",
+      "removed_other": "Label “{{name}}” removed from {{count}} conversations"
+    },
     "group": "Group by label",
     "ungroup": "Stop grouping by label",
     "none": "No label",
@@ -1853,6 +1868,11 @@
       "title": "Base labels",
       "description": "Eight fixed labels, each with a sharp definition, so mail gets the same label every time. Rename them or change their colour as you like, and choose for each one whether it goes on by itself.",
       "showDefinition": "Show definition",
+      "previousDescription": "Your earlier description:",
+      "previousHint": "This is how you described the label before the base label took it over. The model still gets it as a hint next to the base label's definition, and the definition decides. Forget it to stop sending it.",
+      "forgetPrevious": "Forget",
+      "previousForgotten": "The earlier description is no longer sent.",
+      "usePrevious": "Use it for a new label",
       "hideDefinition": "Hide definition",
       "auto": "Put “{{name}}” on by itself",
       "autoOn": "goes on by itself",

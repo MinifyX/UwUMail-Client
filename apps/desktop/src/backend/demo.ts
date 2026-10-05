@@ -22,6 +22,7 @@ import type {
   AssistEventsResult,
   AssistFeatures,
   AssistLabelInput,
+  AssistLabelPatch,
   LabelBase,
   AssistProbeInput,
   AssistProviderInput,
@@ -1375,7 +1376,7 @@ export class DemoBackend implements Backend {
     return this.assistOf(scope).createLabel(input);
   }
 
-  async updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>) {
+  async updateAssistLabel(scope: string, id: string, patch: AssistLabelPatch) {
     await wait(100);
     this.assistOf(scope).updateLabel(id, patch);
   }
