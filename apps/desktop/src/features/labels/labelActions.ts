@@ -8,12 +8,25 @@ import { toast } from "@/state/toasts";
 import { assistErrorText } from "../assist/useAssist";
 import { useSelectionActions } from "../mail/selection";
 
+export type LabelState = "none" | "some" | "all";
+
 /** Whether a label is on none, some or all of these messages (only those it can be on count). */
-export function labelState(messages: readonly Message[], entry: LabelEntry): "none" | "some" | "all" {
+export function labelState(messages: readonly Message[], entry: LabelEntry): LabelState {
   const ref = labelRef(entry);
   const eligible = messages.filter((message) => ref.accountIds.includes(message.accountId));
   const on = eligible.filter((message) => hasLabel(message, ref)).length;
   return on === 0 ? "none" : on === eligible.length ? "all" : "some";
+}
+
+/** The labels whose name holds `query`: those starting with it first, each in the directory's order. */
+export function filterLabelEntries(entries: readonly LabelEntry[], query: string): LabelEntry[] {
+  const wanted = query.trim().toLowerCase();
+  if (!wanted) return [...entries];
+  const starts = entries.filter((entry) => entry.label.name.toLowerCase().startsWith(wanted));
+  const contains = entries.filter(
+    (entry) => !starts.includes(entry) && entry.label.name.toLowerCase().includes(wanted),
+  );
+  return [...starts, ...contains];
 }
 
 /**
@@ -59,7 +72,10 @@ export function useLabelActions() {
     }
     const changed = await setOnMessages(eligible, entry, on);
     toast(
-      translate(on ? "labels.added" : "labels.removed", { name: entry.label.name, count: threadIds.length }),
+      translate(on ? "labels.quick.added" : "labels.quick.removed", {
+        name: entry.label.name,
+        count: threadIds.length,
+      }),
       "success",
     );
     return changed;

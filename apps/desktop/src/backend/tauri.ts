@@ -48,6 +48,7 @@ import type {
   AssistProbeInput,
   AssistEventsResult,
   AssistLabelInput,
+  AssistLabelPatch,
   LabelBase,
   AssistProviderInput,
   AssistSettingsPatch,
@@ -737,7 +738,7 @@ export class TauriBackend implements Backend {
     );
   }
 
-  async updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>) {
+  async updateAssistLabel(scope: string, id: string, patch: AssistLabelPatch) {
     await call<void>("assist_update_label", { scope, labelId: id, patch: labelUpdate(patch) });
   }
 

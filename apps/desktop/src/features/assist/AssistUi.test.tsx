@@ -8,6 +8,7 @@ import type {
   AssistComposeRequest,
   AssistLabel,
   AssistLabelInput,
+  AssistLabelPatch,
   AssistLabelLogEntry,
   AssistOptions,
   AssistProviderInput,
@@ -91,7 +92,7 @@ const fake = {
     labels = [...labels, made];
     return made;
   }),
-  updateAssistLabel: vi.fn(async (_scope: string, id: string, patch: Partial<AssistLabelInput>) => {
+  updateAssistLabel: vi.fn(async (_scope: string, id: string, patch: AssistLabelPatch) => {
     labels = labels.map((label) => (label.id === id ? { ...label, ...patch } : label));
   }),
   restoreBaseLabel: vi.fn(async (_scope: string, base: LabelBase) => {
@@ -393,6 +394,49 @@ describe("the assistant's UI", () => {
     expect(screen.queryByRole("button", { name: "Restore Shipping" })).toBeNull();
   });
 
+  it("shows an adopted base label's earlier description, starts a new label with it and forgets it", async () => {
+    labels = [
+      {
+        ...LABEL_DEFAULTS,
+        id: "g1",
+        name: "Newsletter",
+        keyword: "newsletter",
+        description: "Fixed definition",
+        color: null,
+        base: "newsletter",
+        previousDescription: "Club mail I signed up for",
+      },
+    ];
+    inScope("device", <LabelSettings options={OPTIONS} />);
+    expect(await screen.findByText("Your earlier description:")).toBeTruthy();
+    expect(screen.getByText("Club mail I signed up for")).toBeTruthy();
+    expect(screen.getByText(/The model still gets it as a hint/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use it for a new label" }));
+    expect((screen.getByLabelText("What belongs here") as HTMLTextAreaElement).value).toBe("Club mail I signed up for");
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Clubs" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create label" }));
+    await waitFor(() =>
+      expect(fake.createAssistLabel).toHaveBeenCalledWith(
+        "device",
+        expect.objectContaining({ name: "Clubs", description: "Club mail I signed up for" }),
+      ),
+    );
+    // It can be forgotten, so the model no longer gets it as a hint.
+    fireEvent.click(screen.getByRole("button", { name: "Forget" }));
+    await waitFor(() =>
+      expect(fake.updateAssistLabel).toHaveBeenCalledWith("device", "g1", { previousDescription: null }),
+    );
+    // Without room for another own label, it is only shown, and can still be forgotten.
+    cleanup();
+    labels = labels
+      .filter((label) => label.base)
+      .map((label) => ({ ...label, previousDescription: "Club mail I signed up for" }));
+    inScope("device", <LabelSettings options={{ ...OPTIONS, maxLabels: 0 }} />);
+    expect(await screen.findByText("Club mail I signed up for")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Use it for a new label" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Forget" })).toBeTruthy();
+  });
+
   it("edits a base label's name but never its definition", async () => {
     labels = [
       {
@@ -507,8 +551,15 @@ describe("the assistant's UI", () => {
     expect(screen.getByText("sure")).toBeTruthy();
     expect(screen.queryByText(/%/)).toBeNull();
     expect(screen.queryByText(/The model said/)).toBeNull();
-    expect(screen.getByText("Asks to confirm a password through a link")).toBeTruthy();
-    expect(screen.getByText("In the mail: “confirm your password”")).toBeTruthy();
+    // The reasons are the model's own words, in their own list apart from the facts.
+    const reasons = within(screen.getByRole("list", { name: "In the model's own words" }));
+    expect(reasons.getByText("Asks to confirm a password through a link")).toBeTruthy();
+    expect(screen.getByText(/written by the model itself and not checked/)).toBeTruthy();
+    // Mail text is isolated, so its direction marks can't reorder the line (webmail WF-2).
+    const quote = reasons.getByText("confirm your password");
+    expect(quote.tagName).toBe("BDI");
+    expect(quote.parentElement!.textContent).toBe("In the mail: “confirm your password”");
+    expect(screen.getByText("paypa1.example looks like PayPal").tagName).toBe("BDI");
     expect(screen.getByText(/1 reason of the model was left out/)).toBeTruthy();
     // The facts, strongest first, with codes the app does not know yet shown as they are.
     expect(screen.getByText(/rather spam/)).toBeTruthy();

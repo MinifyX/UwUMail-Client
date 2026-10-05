@@ -14,6 +14,7 @@ import type {
   AssistFeatures,
   AssistLabel,
   AssistLabelInput,
+  AssistLabelPatch,
   AssistLabelLogEntry,
   AssistLabelSuggestion,
   LabelBase,
@@ -404,7 +405,7 @@ export interface Backend {
   assistUsage(scope: string, days?: number, currency?: string): Promise<AssistUsage>;
   assistLabels(scope: string): Promise<AssistLabel[]>;
   createAssistLabel(scope: string, input: AssistLabelInput): Promise<AssistLabel>;
-  updateAssistLabel(scope: string, id: string, patch: Partial<AssistLabelInput>): Promise<void>;
+  updateAssistLabel(scope: string, id: string, patch: AssistLabelPatch): Promise<void>;
   /** Also takes its keyword off every mail (on the server; on this device off the mail it labelled). */
   deleteAssistLabel(scope: string, id: string): Promise<void>;
   /** Makes a deleted base label again (the existing one when it is there). */
