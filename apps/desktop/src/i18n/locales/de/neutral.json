@@ -1371,6 +1371,8 @@
         "sure": "sicher"
       },
       "modelVerdict": "Das Modell meinte „{{verdict}}“, das geben die Fakten aber nicht her. Das Urteil bleibt in dem Rahmen, den sie zulassen.",
+      "modelWordsTitle": "In den eigenen Worten des Modells",
+      "modelWordsHint": "Diese Gründe hat das Modell selbst formuliert und niemand hat sie geprüft. Verlass dich auf die geprüften Fakten.",
       "serverTitle": "Was der Server festgestellt hat",
       "auth": "Absenderprüfung",
       "authNone": "Nicht geprüft: Die Mail kam nicht von einem anderen Server.",
@@ -1654,15 +1656,14 @@
       "nothing": "In dieser Zeit nichts verbraucht."
     },
     "estimate": {
-      "tokens": "≈ {{formatted}} Tokens",
+      "tokens_one": "≈ {{formatted}} Token",
+      "tokens_other": "≈ {{formatted}} Tokens",
       "tokensLeft": "heute noch {{formatted}} übrig",
       "requestsLeft_one": "heute noch {{formatted}} Anfrage",
       "requestsLeft_other": "heute noch {{formatted}} Anfragen",
       "withMax": "{{cost}} (max. {{max}})",
       "pictures_one": "{{formatted}} Bild",
       "pictures_other": "{{formatted}} Bilder",
-      "calls_one": "{{formatted}} Aufruf",
-      "calls_other": "{{formatted}} Aufrufe",
       "calibrated": "Anhand deiner letzten Aufrufe angepasst",
       "part": {
         "input": "Eingabe",
@@ -1671,7 +1672,16 @@
         "thinking": "Nachdenken",
         "extraCalls": "Zusätzliche Aufrufe",
         "fees": "Gebühren"
-      }
+      },
+      "purpose": {
+        "pictures": "Bilder lesen",
+        "chunk": "Teile zusammenfassen",
+        "retry": "neuer Versuch",
+        "refine": "Verfeinern",
+        "other": "weitere Schritte"
+      },
+      "times": "{{count}} × {{what}}",
+      "sometimes": "{{what}} (manchmal)"
     },
     "local": {
       "title": "Auf diesem Computer gefunden",
@@ -1716,17 +1726,21 @@
     "create": "Label anlegen",
     "otherMailboxes": "Andere Postfächer",
     "otherMailbox": "„{{name}}“ gehört zu einem anderen Postfach.",
-    "added_one": "„{{name}}“ vergeben",
-    "added_other": "„{{name}}“ an {{count}} Unterhaltungen vergeben",
-    "removed_one": "„{{name}}“ entfernt",
-    "removed_other": "„{{name}}“ von {{count}} Unterhaltungen entfernt",
-    "pickerTitle": "Labels",
-    "pickerSearch": "Label suchen oder anlegen",
-    "pickerEmpty": "Noch keine Labels. Tippe einen Namen, um eins anzulegen.",
-    "pickerNone": "Kein Label mit diesem Namen.",
-    "createNamed": "„{{name}}“ anlegen",
     "createdApplied": "„{{name}}“ angelegt und vergeben",
     "pick": "Labels …",
+    "quick": {
+      "title": "Labels",
+      "search": "Label suchen oder anlegen",
+      "for_one": "Für {{count}} Unterhaltung. Enter oder ein Klick setzt ein Label oder nimmt es ab.",
+      "for_other": "Für {{count}} Unterhaltungen. Enter oder ein Klick setzt ein Label oder nimmt es ab.",
+      "create": "„{{name}}“ anlegen",
+      "none": "Noch keine Labels. Tippe einen Namen, um eins anzulegen.",
+      "noMatch": "Kein Label mit diesem Namen.",
+      "added_one": "Label „{{name}}“ gesetzt",
+      "added_other": "Label „{{name}}“ bei {{count}} Unterhaltungen gesetzt",
+      "removed_one": "Label „{{name}}“ entfernt",
+      "removed_other": "Label „{{name}}“ bei {{count}} Unterhaltungen entfernt"
+    },
     "group": "Nach Label gruppieren",
     "ungroup": "Nicht mehr nach Label gruppieren",
     "none": "Ohne Label",
@@ -1853,6 +1867,11 @@
       "title": "Basis-Labels",
       "description": "Acht feste Labels mit je einer klaren Definition, damit Mails immer gleich gelabelt werden. Name und Farbe kannst du ändern, und bei jedem einzeln festlegen, ob es von selbst gesetzt wird.",
       "showDefinition": "Definition zeigen",
+      "previousDescription": "Deine frühere Beschreibung:",
+      "previousHint": "So hattest du das Label beschrieben, bevor das Basis-Label es übernommen hat. Das Modell bekommt diese Beschreibung weiter als Hinweis neben der Definition des Basis-Labels, entscheidend ist die Definition. Wenn du sie vergisst, wird sie nicht mehr mitgeschickt.",
+      "forgetPrevious": "Vergessen",
+      "previousForgotten": "Die frühere Beschreibung wird nicht mehr mitgeschickt.",
+      "usePrevious": "Als eigenes Label anlegen",
       "hideDefinition": "Definition ausblenden",
       "auto": "„{{name}}“ von selbst setzen",
       "autoOn": "wird von selbst gesetzt",
