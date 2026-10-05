@@ -10,6 +10,7 @@ use tauri_plugin_opener::OpenerExt;
 use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::EngineEvent;
+use uwumail_core::notify;
 use uwumail_core::secrets::KeyringSecrets;
 use uwumail_core::{Engine, EngineOptions, Error};
 
@@ -91,9 +92,13 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
     }
     if let Ok(messages) = engine.messages(message_ids) {
         let (title, body) = match messages.as_slice() {
+            // Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
             [one] => (
-                one.from.name.clone().unwrap_or_else(|| one.from.email.clone()),
-                if one.subject.is_empty() { one.snippet.clone() } else { one.subject.clone() },
+                notify::notification_sender(one.from.name.as_deref(), &one.from.email),
+                notify::notification_text(
+                    if one.subject.is_empty() { &one.snippet } else { &one.subject },
+                    notify::MAX_LINE,
+                ),
             ),
             many => ("UwUMail".to_string(), format!("{} ✉︎", many.len())),
         };

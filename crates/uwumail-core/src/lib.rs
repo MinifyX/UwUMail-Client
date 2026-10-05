@@ -30,6 +30,7 @@ pub mod mail_images;
 pub mod mailto;
 pub mod mime;
 pub mod model;
+pub mod notify;
 pub mod oauth;
 pub mod ocr;
 pub mod phishing;
