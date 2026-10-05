@@ -40,7 +40,7 @@ const TRAILING_PUNCTUATION = new Set([".", ",", ";", ":", "!", "?", ")"]);
 /**
  * Text without the punctuation a sentence puts after an address ("see paypal.com."). A loop from
  * the back rather than `/[.,;:!?)]+$/`, which retries from every position of a long run and froze
- * the page when the pointer crossed a crafted link (webmail security audit WEBMAIL-1).
+ * the view when the pointer crossed a crafted link (webmail security-audit WEBMAIL-1).
  */
 function withoutTrailingPunctuation(text: string): string {
   let end = text.length;

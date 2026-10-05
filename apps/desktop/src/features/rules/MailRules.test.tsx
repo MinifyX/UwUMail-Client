@@ -83,6 +83,21 @@ describe("mail rules settings", () => {
     expect(fake.saveMailRules.mock.calls[0]![0]).toBe(stored);
   });
 
+  it("offers no new rule over another app's active script until these rules are chosen", async () => {
+    stored = null;
+    fake.mailRules.mockResolvedValueOnce({ script: null, active: false, otherActive: "vacation" });
+    renderRules();
+    expect(await screen.findByText(/Another filter script, “vacation”/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "New rule" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(fake.saveMailRules).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use these rules instead" }));
+    await waitFor(() => expect(fake.saveMailRules).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "New rule" }) as HTMLButtonElement).disabled).toBe(false),
+    );
+  });
+
   it("saves nothing the server refuses", async () => {
     stored = rulesToSieve(RULES);
     fake.validateMailRules.mockResolvedValueOnce("line 3: syntax error");

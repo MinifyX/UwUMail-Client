@@ -847,13 +847,19 @@ async fn drafts_with_message_id(client: &Client, mailbox_id: &str, message_id: &
 }
 
 /// Stores a draft in the Drafts mailbox and removes its older versions (same Message-ID).
+///
+/// Returns the local id of the new version, which is entered here right away (the next sync
+/// knows it by its JMAP id), so the composer can open it again by that id. `None` when the
+/// server named no usable id for it.
 pub async fn save_draft(
     client: &Client,
     store: &Store,
     account_id: &str,
     raw: Vec<u8>,
     message_id: &str,
-) -> Result<()> {
+) -> Result<Option<String>> {
+    let parsed = mime::parse(&raw);
+    let size = raw.len() as u64;
     let blob = client.upload(raw, "message/rfc822").await?;
     let drafts = ensure_mailbox(client, store, account_id, FolderRole::Drafts).await?;
     let responses = client
@@ -882,7 +888,18 @@ pub async fn save_draft(
     if !older.is_empty() {
         destroy_emails(client, &older).await?;
     }
-    Ok(())
+    // JMAP ids are at most 255 characters (RFC 8620 §1.2); anything else isn't kept.
+    if created.is_empty() || created.len() > 255 {
+        return Ok(None);
+    }
+    let blob = imported.pointer("/created/draft/blobId").and_then(Value::as_str).unwrap_or(&blob);
+    let flags = MessageFlags { seen: true, draft: true, ..MessageFlags::default() };
+    if let Some(local) =
+        store.insert_jmap_message(account_id, &drafts.id, created, blob, flags, size, Some(mime::now()), &parsed)?
+    {
+        return Ok(Some(local));
+    }
+    store.id_by_remote_id(account_id, created)
 }
 
 /// Removes every version of a draft, e.g. after it was sent or thrown away.

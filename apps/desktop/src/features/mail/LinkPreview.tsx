@@ -67,7 +67,7 @@ export function LinkStatus() {
       {check.safeLink && (
         <span className="flex min-w-0 items-center gap-1 text-muted">
           <ShieldOff className="size-3.5 shrink-0" aria-hidden />
-          <span className="truncate">{t("link.safeLinkRemoved")}</span>
+          <span className="truncate">{t("link.safeLink")}</span>
         </span>
       )}
     </div>

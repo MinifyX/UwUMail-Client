@@ -393,6 +393,23 @@ pub enum UnsubscribeOutcome {
     Done,
     /// The sender only offers a web page; the app opens it.
     OpenPage { url: String },
+    /// The one click was sent and the sender's side didn't take it. Nothing else was done: the
+    /// app says so and offers the other way, which only goes when asked for again.
+    OneClickFailed {
+        /// Short, safe to show (the host and what it answered), never the server's own text.
+        reason: String,
+        fallback: Option<UnsubscribeFallback>,
+    },
+}
+
+/// The way to unsubscribe that is left besides the one click.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UnsubscribeFallback {
+    /// A mail to the header's address, from the reader's own account.
+    Mail,
+    /// The sender's page, which the app opens through its link question.
+    Page,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -679,9 +696,23 @@ pub struct CalendarOccurrence {
     pub recurrence_id: Option<String>,
     pub read_only: bool,
     pub color: Option<String>,
+    /// Who takes part, the organizer first; at most [`crate::calendar::jscal::MAX_PARTICIPANTS`].
+    #[serde(default)]
+    pub participants: Vec<EventParticipant>,
     /// An event of a birthdays calendar: whose date it is, and how old or how many years.
     #[serde(default)]
     pub birthday: Option<crate::birthdays::OccurrenceBirthday>,
+}
+
+/// Someone who takes part in an event, with their answer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventParticipant {
+    pub name: String,
+    /// Lower case; empty where the event names no address.
+    pub email: String,
+    pub status: crate::calendar::invite::Partstat,
+    pub organizer: bool,
 }
 
 /// An event as the editor fills it in.
@@ -859,6 +890,10 @@ pub struct QueuedSend {
 pub struct SavedDraft {
     pub draft_key: String,
     pub saved_at: String,
+    /// The saved version's message id, for [`crate::engine::Engine::open_draft`]; `None` when the
+    /// server didn't say where it went (then the composer keeps its full copy on the device).
+    #[serde(default)]
+    pub message_id: Option<String>,
 }
 
 /// A draft from the Drafts folder, ready to continue writing.

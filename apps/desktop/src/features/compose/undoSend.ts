@@ -1,4 +1,4 @@
-import { backend } from "@/backend/backend";
+import { backend, BackendError } from "@/backend/backend";
 import type { OutgoingMessage } from "@/backend/types";
 import { translate } from "@/i18n";
 import { toast } from "@/state/toasts";
@@ -33,7 +33,15 @@ export async function undoSend(sendId: string) {
     const message = await backend().cancelSend(sendId);
     composeAgain(message);
     toast(translate("toast.sendUndone"));
-  } catch {
-    toast(translate("toast.undoTooLate"), "error");
+  } catch (reason) {
+    // The queue no longer has it: it went out (or is going). Anything else is a real failure.
+    if (reason instanceof BackendError && (reason.code === "invalid_input" || reason.code === "not_found")) {
+      toast(translate("toast.undoTooLate"), "error");
+    } else {
+      toast(
+        translate("toast.undoFailed", { reason: reason instanceof Error ? reason.message : String(reason) }),
+        "error",
+      );
+    }
   }
 }

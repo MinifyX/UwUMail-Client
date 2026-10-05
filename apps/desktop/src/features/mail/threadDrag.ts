@@ -13,7 +13,8 @@ let dragged: readonly string[] | null = null;
 export function startThreadDrag(dataTransfer: DataTransfer, threadIds: readonly string[]) {
   dragged = [...threadIds];
   dataTransfer.setData(THREAD_DRAG_TYPE, JSON.stringify(threadIds));
-  dataTransfer.effectAllowed = "move";
+  // Onto a folder it moves, onto a label it copies (the label goes on).
+  dataTransfer.effectAllowed = "copyMove";
 }
 
 /** The drag ended, dropped or not. */

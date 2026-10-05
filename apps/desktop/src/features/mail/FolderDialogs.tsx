@@ -163,8 +163,25 @@ function problemText(problem: FolderNameProblem, t: (key: string, options?: Reco
 function DeleteQuestion({ folder, onDone }: { folder: Folder; onDone: () => void }) {
   const { t } = useT();
   const refresh = useRefreshMail();
+  const { data: folders = [] } = useFolders();
   const [busy, setBusy] = useState(false);
   const name = folderLabel(folder, t);
+  // The count as the mailbox has it now, not as it was when the menu opened.
+  const current = folders.find((f) => f.id === folder.id) ?? folder;
+  // The engine keeps folders that hold folders; say so before asking, not after.
+  const hasChildren = folders.some((f) => f.parentId === folder.id);
+
+  if (hasChildren) {
+    return (
+      <div className="flex flex-col items-center gap-3 px-6 pt-6 pb-6 text-center">
+        <h2 className="text-[18px] font-extrabold text-balance">{t("folders.hasChildrenTitle", { name })}</h2>
+        <p className="text-[13px] text-muted">{t("folders.hasChildrenBody")}</p>
+        <Button autoFocus onClick={onDone}>
+          {t("common.close")}
+        </Button>
+      </div>
+    );
+  }
 
   const confirm = async () => {
     setBusy(true);
@@ -189,7 +206,7 @@ function DeleteQuestion({ folder, onDone }: { folder: Folder; onDone: () => void
       <NyuScene name="goodbye" className="w-36" />
       <h2 className="text-[18px] font-extrabold text-balance">{t("folders.deleteTitle", { name })}</h2>
       <p className="text-[13px] text-muted">
-        {folder.total > 0 ? t("folders.deleteBody", { count: folder.total }) : t("folders.deleteBodyEmpty")}
+        {current.total > 0 ? t("folders.deleteBody", { count: current.total }) : t("folders.deleteBodyEmpty")}
       </p>
       <div className="flex flex-wrap justify-center gap-2 pt-1">
         <ArmedButton variant="danger" busy={busy} autoFocus onClick={() => void confirm()}>
@@ -206,14 +223,19 @@ function DeleteQuestion({ folder, onDone }: { folder: Folder; onDone: () => void
 function EmptyQuestion({ folder, onDone }: { folder: Folder; onDone: () => void }) {
   const { t } = useT();
   const refresh = useRefreshMail();
+  const { data: folders = [] } = useFolders();
   const [busy, setBusy] = useState(false);
   const junk = folder.role === "junk";
+  const count = (folders.find((f) => f.id === folder.id) ?? folder).total;
 
   const confirm = async () => {
     setBusy(true);
     try {
       const removed = await backend().emptyFolder(folder.id);
       useUi.getState().setCheckedThreadIds([]);
+      // The open mail was in there.
+      const ui = useUi.getState();
+      if (ui.view.kind === "folder" && ui.view.folderId === folder.id) ui.selectThread(null);
       toast(removed > 0 ? t("folders.emptied", { count: removed }) : t("folders.alreadyEmpty"), "success");
       onDone();
     } catch (reason) {
@@ -230,7 +252,7 @@ function EmptyQuestion({ folder, onDone }: { folder: Folder; onDone: () => void 
       <h2 className="text-[18px] font-extrabold text-balance">
         {junk ? t("folders.emptyJunkTitle") : t("folders.emptyTrashTitle")}
       </h2>
-      <p className="text-[13px] text-muted">{t("folders.emptyBody", { count: folder.total })}</p>
+      <p className="text-[13px] text-muted">{t("folders.emptyBody", { count })}</p>
       <div className="flex flex-wrap justify-center gap-2 pt-1">
         <ArmedButton variant="danger" busy={busy} autoFocus onClick={() => void confirm()}>
           {t("folders.emptyConfirm")}

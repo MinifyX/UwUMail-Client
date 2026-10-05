@@ -186,8 +186,8 @@
     "hiddenTarget": "Wohin's danach geht, verrät der Link nicht.",
     "otherTarget": "Anderes Ziel als angezeigt",
     "statusRedirect": "hüpft weiter zu {{target}}",
-    "safeLinkRemoved": "Microsoft-Safe-Link ausgepackt ✧",
-    "safeLinkBody": "Microsoft hat diesen Link für seinen Link-Scanner eingepackt ({{host}}). Ich hab ihn ausgepackt, du siehst und öffnest die echte Adresse.",
+    "safeLink": "Microsoft-Safe-Link ausgepackt ✧",
+    "safeLinkBody": "Microsoft hatte diesen Link in eine Prüfadresse eingepackt. Ich hab ihn ausgepackt, du siehst und öffnest die echte Adresse.",
     "unsupported": "Solche Links mach ich lieber nicht auf (・_・;)",
     "sheetTitle": "Link"
   },
@@ -215,7 +215,9 @@
   "unsubscribe": {
     "title": "Tschüss {{name}}?",
     "mailTo": "Dafür schickt Nyu eine Mail von dir an {{address}}.",
-    "mailToFallback": "Klappt das nicht direkt, schickt Nyu eine Mail von dir an {{address}}."
+    "mailToFallback": "Klappt das nicht direkt, schickt Nyu eine Mail von dir an {{address}}.",
+    "failedTitle": "Hm, das hat nicht geklappt (・_・;)",
+    "tryMail": "Nyu kann dich stattdessen per Mail abmelden. Dafür schickt Nyu eine Mail von dir an {{address}}."
   },
   "deleteForever": {
     "title_one": "Diese Mail für immer löschen? (｡•́︿•̀｡)",
@@ -242,18 +244,18 @@
     "reload": "Neu laden"
   },
   "folders": {
-    "created": "Neuer Ordner „{{name}}“ ist bereit (ﾉ◕ヮ◕)ﾉ",
+    "created": "Ordner „{{name}}“ steht bereit ✿",
     "renamed": "Heißt jetzt „{{name}}“ ✿",
     "deleted": "Ordner „{{name}}“ ist weg (｡•́︿•̀｡)",
-    "deleteTitle": "„{{name}}“ wegräumen?",
+    "deleteTitle": "Tschüss, „{{name}}“?",
     "deleteBody_one": "Die {{count}} Mail darin trage ich vorher in den Papierkorb.",
     "deleteBody_other": "Die {{count}} Mails darin trage ich vorher in den Papierkorb.",
-    "emptyTrashTitle": "Müll rausbringen? (・_・;)",
-    "emptyJunkTitle": "Spam rausfegen? (・_・;)",
+    "emptyTrashTitle": "Müll rausbringen? (・ω・)",
+    "emptyJunkTitle": "Spam rauskehren? (｀・ω・´)",
     "emptyBody_one": "{{count}} Mail ist dann für immer weg, auch auf dem Server. Zurückholen kann ich sie nicht.",
     "emptyBody_other": "{{count}} Mails sind dann für immer weg, auch auf dem Server. Zurückholen kann ich sie nicht.",
-    "emptied_one": "Puff, {{count}} Mail ist für immer weg ✧",
-    "emptied_other": "Puff, {{count}} Mails sind für immer weg ✧",
+    "emptied_one": "Blitzblank! {{count}} Mail ist für immer weg ✧",
+    "emptied_other": "Blitzblank! {{count}} Mails sind für immer weg ✧",
     "alreadyEmpty": "Hier ist schon alles blitzblank (˘ᵕ˘)"
   },
   "calendar": {

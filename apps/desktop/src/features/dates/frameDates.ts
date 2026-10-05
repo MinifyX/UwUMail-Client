@@ -45,6 +45,11 @@ export function watchDates(frame: HTMLIFrameElement, doc: Document, report: Date
     if (event.key !== "Enter" && event.key !== " ") return;
     const date = dateOf(event.target);
     if (!date) return;
+    // A held key opens the date once; its repeats would reach what the popover focuses (webmail W-40).
+    if (event.repeat) {
+      event.preventDefault();
+      return;
+    }
     // Space would scroll the reader and Enter open things elsewhere.
     event.preventDefault();
     event.stopPropagation();

@@ -69,7 +69,10 @@ export interface Settings {
   senderAppearance: Record<string, "light" | "dark">;
   /** Folder ids whose subfolders are hidden in the sidebar. */
   collapsedFolders: string[];
-  /** Brand logos and website icons for company senders. */
+  /**
+   * Sender pictures from elsewhere: people's pictures and company logos. Off, only contacts'
+   * photos and people on a UwUMail server.
+   */
   senderPictures: boolean;
   /**
    * The proxy remote pictures, sender pictures and one-click unsubscribes take (`socks5://…`,

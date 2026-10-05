@@ -6,6 +6,20 @@ export const SIGNATURE_ATTRIBUTE = "data-uwu-signature";
 
 export type SignaturePlacement = "end" | "beforeQuote";
 
+/**
+ * Signature HTML made safe to show or insert: the composer's own cleaner (no scripts, styles,
+ * forms, remote content or `data-uwu-*` markers), and pictures only as embedded `data:image/…`
+ * URLs. Signatures come from this device, a server's shared settings or a domain's signature,
+ * which other clients write too, so they are never trusted (security-audit CS-8).
+ */
+export function cleanSignatureHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(`<body>${quotableHtml(html, { foreign: true })}</body>`, "text/html");
+  for (const image of doc.body.querySelectorAll("img")) {
+    if (!/^data:image\/(png|jpeg|gif|webp);/i.test(image.getAttribute("src") ?? "")) image.remove();
+  }
+  return doc.body.innerHTML;
+}
+
 /** The signature an address uses by default for new mail or for replies and forwards. */
 export function defaultSignature(signatures: Signature[], email: string, kind: "new" | "reply"): Signature | undefined {
   const own = signatures.filter((s) => s.email.toLowerCase() === email.toLowerCase());
@@ -29,7 +43,7 @@ export function withSignature(html: string, signature: Signature | null, placeme
   block.setAttribute(SIGNATURE_ATTRIBUTE, signature.id);
   // The composer writes the result straight into its editor, in the app's own page: stored or
   // synced signature HTML goes through the composer's cleaner first (security-audit CS-8).
-  block.innerHTML = quotableHtml(signature.html, { foreign: true });
+  block.innerHTML = cleanSignatureHtml(signature.html);
   if (current) {
     current.replaceWith(block);
   } else if (placement === "beforeQuote" && body.firstElementChild) {

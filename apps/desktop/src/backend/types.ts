@@ -186,7 +186,14 @@ export interface Unsubscribe {
   mailto?: string;
 }
 
-export type UnsubscribeOutcome = { kind: "done" } | { kind: "openPage"; url: string };
+/** The way left besides the one click: a mail to the header's address, or the sender's page. */
+export type UnsubscribeFallback = "mail" | "page" | null;
+
+export type UnsubscribeOutcome =
+  | { kind: "done" }
+  | { kind: "openPage"; url: string }
+  /** The one click was sent and the sender's side didn't take it; nothing else was done. */
+  | { kind: "oneClickFailed"; reason: string; fallback: UnsubscribeFallback };
 
 export interface Message {
   id: string;
@@ -301,6 +308,11 @@ export interface ScheduledReceipt {
 export interface DraftSaveResult {
   draftKey: string;
   savedAt: string;
+  /**
+   * The saved version's message id, to open it again (see `openDraft`). Missing when the server
+   * didn't say where it went: then the composer keeps its full copy on this device.
+   */
+  messageId?: string | null;
 }
 
 /** A draft from the Drafts folder, ready to continue writing. */
@@ -319,10 +331,24 @@ export interface DraftContent {
 }
 
 /** A locally available attachment file. `url` works in <img>, <video> and fetch. */
-/** A company's brand logo (fills the avatar) or website icon (sits on a plain background). */
+/**
+ * The picture for an address: a person's photo (a contact's, or their own profile picture), which
+ * fills the avatar; a company's brand logo (fills it too, unless it is see-through); or a website
+ * icon, which sits on a plain background.
+ */
 export interface SenderPicture {
   url: string;
-  kind: "logo" | "icon";
+  kind: "photo" | "logo" | "icon";
+}
+
+/** How a sender picture is looked up. */
+export interface SenderPictureLookup {
+  /** Only what is known without asking another server: a UwUMail server's own pictures, or the cache. */
+  local?: boolean;
+  /** Only a company's logo, never a person's picture. */
+  logo?: boolean;
+  /** Ask again instead of taking the remembered answer, after pictures changed. */
+  fresh?: boolean;
 }
 
 export interface AttachmentContent {
@@ -459,8 +485,19 @@ export interface CalendarOccurrence {
   recurrenceId: string | null;
   readOnly: boolean; // no write right or not the origin
   color: string | null;
+  /** Who takes part, the organizer first (at most 50); empty or missing without participants. */
+  participants?: EventParticipant[];
   /** An event of a birthdays calendar: whose date it is, and how old or how many years. */
   birthday?: OccurrenceBirthday | null;
+}
+
+/** Someone who takes part in an event, with their answer. */
+export interface EventParticipant {
+  name: string;
+  /** Lower case; empty where the event names no address. */
+  email: string;
+  status: ParticipationStatus;
+  organizer: boolean;
 }
 
 /** What a birthdays calendar event is for (the server's `uwuBirthday`, or the app's own). */

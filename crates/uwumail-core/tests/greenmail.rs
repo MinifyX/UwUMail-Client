@@ -412,6 +412,9 @@ async fn drafts_are_saved_replaced_continued_and_removed_on_send() {
         .await
         .unwrap();
     assert_eq!(first.draft_key, second.draft_key);
+    // The newest version names the id it opens by (the composer keeps only that on the device).
+    let reopened = engine.open_draft(second.message_id.as_deref().expect("an id for the draft")).await.unwrap();
+    assert!(reopened.html.contains("hast du Zeit"));
 
     let drafts_query = ThreadQuery { view: MailboxView::Unified { role: UnifiedRole::Drafts }, ..inbox_query(None) };
     let drafts = engine.list_threads(&drafts_query).unwrap().threads;
@@ -780,7 +783,7 @@ async fn unsubscribes_from_a_newsletter_by_mail() {
     assert!(String::from_utf8_lossy(&std::fs::read(&file.path).unwrap()).contains("List-Unsubscribe"));
 
     // UwUMail writes to the list address itself.
-    assert!(matches!(engine.unsubscribe(&message.id).await.unwrap(), UnsubscribeOutcome::Done));
+    assert!(matches!(engine.unsubscribe(&message.id, true).await.unwrap(), UnsubscribeOutcome::Done));
     let list_imap = ServerSettings { host, port: 3143, security: Security::None };
     let request = format!("raus {unique}");
     wait_for("the unsubscribe mail at the list", async || {

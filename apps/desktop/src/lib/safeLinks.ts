@@ -36,9 +36,27 @@ function unwrapOnce(url: URL): URL | null {
   const host = url.hostname.toLowerCase().replace(/\.$/, "");
   if (!SAFE_LINKS_HOST.test(host) && !isTeamsSafeLinks(url, host)) return null;
   for (const [key, value] of url.searchParams) {
-    if (key.toLowerCase() === "url") return embeddedUrl(value);
+    if (key.toLowerCase() === "url") return embeddedUrl(value) ?? mailLink(value);
   }
   return null;
+}
+
+/** A wrapped mail link (Safe Links wrap `mailto:` too), plain or encoded up to twice, as the webmail reads it. */
+function mailLink(value: string): URL | null {
+  let candidate = value.trim();
+  for (let round = 0; round < 2 && /^mailto%3a/i.test(candidate); round++) {
+    try {
+      candidate = decodeURIComponent(candidate);
+    } catch {
+      return null;
+    }
+  }
+  if (!/^mailto:[^\s]+$/i.test(candidate)) return null;
+  try {
+    return new URL(candidate);
+  } catch {
+    return null;
+  }
 }
 
 /** The original address of a Microsoft Safe Link, or null for any other link. */

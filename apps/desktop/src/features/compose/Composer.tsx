@@ -225,7 +225,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             .catch(() => {});
         draftKey.current = saved.draftKey;
         savedAccount.current = account;
-        if (!dirty.current) markLocalDraftSaved(saved.draftKey);
+        if (!dirty.current) markLocalDraftSaved(saved.draftKey, saved.messageId ?? undefined);
         setSaveState({ kind: "saved", at: saved.savedAt });
       } catch {
         // Kept on this device; the next change or closing tries again.
@@ -438,7 +438,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
     const names = [...draft.to, ...draft.cc, ...draft.bcc].map((a) => a.name || a.email).join(", ");
     return (
       <div className="fixed inset-x-3 bottom-[84px] z-30 flex animate-slide-up items-center gap-2 rounded-2xl bg-[#1c1420] py-1.5 pr-1.5 pl-4 text-white shadow-float dark:bg-elevated dark:text-ink">
-        <PenLine className="size-4 shrink-0 text-[#ff7fac]" aria-hidden />
+        <PenLine className="size-4 shrink-0 text-[#ff7fac] dark:text-pink" aria-hidden />
         <button type="button" onClick={() => setMinimized(false)} className="min-w-0 flex-1 py-1 text-left">
           <span className="block truncate text-[13.5px] font-bold">
             {names ? t("mobile.draft.to", { names }) : title}
@@ -466,7 +466,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         onClick={() => setMinimized(false)}
         className="fixed right-6 bottom-0 z-40 flex h-12 w-80 items-center gap-3 rounded-t-2xl bg-[#1c1420] px-4 text-left text-[13.5px] font-semibold text-white shadow-float dark:bg-elevated dark:text-ink"
       >
-        <Send className="size-4 text-[#ff7fac]" aria-hidden />
+        <Send className="size-4 text-[#ff7fac] dark:text-pink" aria-hidden />
         <span className="min-w-0 flex-1 truncate">{title}</span>
         <ChevronDown className="size-4 rotate-180" aria-hidden />
       </button>

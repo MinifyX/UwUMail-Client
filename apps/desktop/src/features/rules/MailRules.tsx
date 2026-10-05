@@ -5,6 +5,7 @@ import { backend } from "@/backend/backend";
 import { ArmedButton } from "@/components/ui/ArmedButton";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
+import { Switch } from "@/components/ui/Switch";
 import { useT } from "@/i18n";
 import { emptyRuleSet, newRule, type MailRule, type RuleSet } from "@/lib/sieveRules";
 import { useFolders } from "@/lib/queries";
@@ -161,7 +162,7 @@ function AccountRules({ accountId }: { accountId: string }) {
         <ol className="flex flex-col gap-1 rounded-2xl border border-hairline p-1" aria-label={t("rules.title")}>
           {set.rules.map((rule, index) => (
             <li key={rule.id} className={clsx("flex items-center gap-2 rounded-xl py-1.5 pr-1 pl-3 hover:bg-elevated")}>
-              <RuleSwitch
+              <Switch
                 checked={rule.enabled}
                 disabled={saving || locked}
                 label={t("rules.enabled", { name: rule.name })}
@@ -231,41 +232,6 @@ function OtherScriptNote({ name, children }: { name: string; children?: ReactNod
       </span>
       {children}
     </div>
-  );
-}
-
-function RuleSwitch({
-  checked,
-  disabled,
-  label,
-  onChange,
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  label: string;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={clsx(
-        "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-60",
-        checked ? "bg-pink" : "bg-line",
-      )}
-    >
-      <span
-        className={clsx(
-          "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform duration-200",
-          checked && "translate-x-4",
-        )}
-      />
-    </button>
   );
 }
 

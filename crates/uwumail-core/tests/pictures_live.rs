@@ -17,19 +17,19 @@ async fn fetches_pictures_from_real_domains() {
     let pictures = SenderPictures::new(&path).unwrap();
 
     for email in ["news@mozilla.org", "noreply@github.com", "service@paypal.de", "no-reply@accounts.google.com"] {
-        let picture = pictures.get(email, None).await.unwrap();
+        let picture = pictures.get(email, None, Default::default()).await.unwrap();
         match &picture {
             Some(found) => {
-                let size = std::fs::metadata(&found.path).unwrap().len();
-                println!("{email}: {:?} {} ({size} bytes)", found.kind, found.path.display());
+                let size = found.path.as_ref().and_then(|path| std::fs::metadata(path).ok()).map_or(0, |m| m.len());
+                println!("{email}: {:?} {:?} ({size} bytes)", found.kind, found.path);
             }
             None => println!("{email}: none"),
         }
     }
 
     // Personal addresses at mail providers never cause a request.
-    assert!(pictures.get("someone@gmail.com", None).await.unwrap().is_none());
+    assert!(pictures.get("someone@gmail.com", None, Default::default()).await.unwrap().is_none());
     // The second lookup comes from the cache.
-    let github = pictures.get("support@github.com", None).await.unwrap();
+    let github = pictures.get("support@github.com", None, Default::default()).await.unwrap();
     assert!(github.is_some_and(|p| matches!(p.kind, PictureKind::Logo | PictureKind::Icon)));
 }

@@ -338,6 +338,18 @@ fn fill(template: &str, values: &[(&str, &str)]) -> String {
     out
 }
 
+/// The filled-in `pictureUrl` with the lookup's options appended, like the webmail asks.
+fn picture_target(template: &str, account_id: &str, email: &str, local: bool, logo_only: bool) -> String {
+    let mut target = fill(template, &[("accountId", account_id), ("email", email)]);
+    let extra: Vec<&str> =
+        [logo_only.then_some("source=logo"), local.then_some("local=1")].into_iter().flatten().collect();
+    if !extra.is_empty() {
+        target.push(if target.contains('?') { '&' } else { '?' });
+        target.push_str(&extra.join("&"));
+    }
+    target
+}
+
 /// A JMAP method error, e.g. `cannotCalculateChanges`.
 #[derive(Debug, Clone)]
 pub struct MethodError {
@@ -698,16 +710,26 @@ impl Client {
         Ok(())
     }
 
-    /// The logo or website icon the server keeps for a company sender: whether it is a `logo` and its
-    /// bytes. `Ok(None)` when the server has none; an error when it could not be asked.
-    pub async fn sender_picture(&self, email: &str) -> Result<Option<(bool, Vec<u8>)>> {
+    /// The picture the server has for an address (`pictureUrl`): a person's photo (a contact's, or
+    /// their own profile picture), a company's logo or a website icon, with its bytes. `local` takes
+    /// only what the server has without asking another server (`local=1`); `logo_only` skips
+    /// people's pictures (`source=logo`). `Ok(None)` when the server has none; an error when it
+    /// could not be asked.
+    pub async fn sender_picture(
+        &self,
+        email: &str,
+        local: bool,
+        logo_only: bool,
+    ) -> Result<Option<(crate::pictures::PictureKind, Vec<u8>)>> {
         let Some(template) = &self.session.picture_url else {
             return Err(Error::not_supported("No sender pictures here."));
         };
-        let target = fill(template, &[("accountId", &self.session.account_id), ("email", email)]);
+        let target = picture_target(template, &self.session.account_id, email, local, logo_only);
         let Some((headers, bytes)) = self.get_from_server(&target).await? else { return Ok(None) };
-        let logo = headers.get("x-picture-kind").is_some_and(|kind| kind.as_bytes() == b"logo");
-        Ok(Some((logo, bytes)))
+        let kind = crate::pictures::PictureKind::from_header(
+            headers.get("x-picture-kind").and_then(|kind| kind.to_str().ok()),
+        );
+        Ok(Some((kind, bytes)))
     }
 
     /// An authenticated GET on the server's own site, never elsewhere: `None` for a 404.
@@ -1219,6 +1241,23 @@ pub fn primary_mailbox<'a, F>(
 mod tests {
     use super::*;
     use crate::model::FolderRole;
+
+    #[test]
+    fn asks_for_pictures_per_address_with_the_lookups_options() {
+        let template = "https://mail.example.com/jmap/picture/{accountId}?email={email}";
+        assert_eq!(
+            picture_target(template, "a1", "Kai+x@example.com", false, false),
+            "https://mail.example.com/jmap/picture/a1?email=Kai%2Bx%40example.com"
+        );
+        assert_eq!(
+            picture_target(template, "a1", "kai@example.com", true, true),
+            "https://mail.example.com/jmap/picture/a1?email=kai%40example.com&source=logo&local=1"
+        );
+        assert_eq!(
+            picture_target("https://mail.example.com/p/{accountId}/{email}", "a1", "kai@example.com", true, false),
+            "https://mail.example.com/p/a1/kai%40example.com?local=1"
+        );
+    }
 
     #[test]
     fn resolves_relative_session_urls() {

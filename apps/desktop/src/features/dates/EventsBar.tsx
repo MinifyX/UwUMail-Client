@@ -3,6 +3,7 @@ import { CalendarPlus, CalendarSearch, ChevronDown, ImageIcon, MapPin, Sparkles,
 import { useId, useState } from "react";
 import { NyuThinking } from "@/components/nyu/NyuThinking";
 import { Button, IconButton, Spinner } from "@/components/ui/Button";
+import { armedActivation } from "@/components/ui/armed";
 import { useT } from "@/i18n";
 import type { DetectedEvent } from "@/lib/dates";
 import { toast } from "@/state/toasts";
@@ -248,6 +249,9 @@ export function DatePopover({ event, anchor, onAdd, onClose }: DatePopoverProps)
   const { t, i18n } = useT();
   const locale = i18n.language;
   const title = titleOf(event, t("calendar.untitled"));
+  // The Enter that opened this on a date must not also add it, and then save it in the editor
+  // (webmail security-audit W-40).
+  const [shownAt] = useState(() => performance.now());
   return (
     <Popover anchor={anchor} label={t("dates.popoverLabel", { title })} onClose={onClose}>
       <div className="relative flex flex-col gap-3 p-5">
@@ -269,7 +273,7 @@ export function DatePopover({ event, anchor, onAdd, onClose }: DatePopoverProps)
             {!isUpcoming(event) && <p className="text-[12.5px] text-muted">{t("dates.over")}</p>}
           </div>
         </div>
-        <Button variant="primary" icon={CalendarPlus} data-autofocus onClick={() => onAdd(event)}>
+        <Button variant="primary" icon={CalendarPlus} data-autofocus {...armedActivation(shownAt, () => onAdd(event))}>
           {t("dates.addLong")}
         </Button>
         {/* After the main button, so that one takes the focus first. */}

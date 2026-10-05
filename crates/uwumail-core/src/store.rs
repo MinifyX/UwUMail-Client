@@ -1295,6 +1295,30 @@ impl Store {
         Ok(ids)
     }
 
+    /// The local id of the message with this IMAP uid in a folder.
+    pub fn id_by_uid(&self, folder_id: &str, uid: u32) -> Result<Option<String>> {
+        let conn = self.conn();
+        Ok(conn
+            .query_row(
+                "SELECT id FROM messages WHERE folder_id = ?1 AND uid = ?2",
+                params![folder_id, i64::from(uid)],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    /// The local id of the email with this JMAP id.
+    pub fn id_by_remote_id(&self, account_id: &str, remote_id: &str) -> Result<Option<String>> {
+        let conn = self.conn();
+        Ok(conn
+            .query_row(
+                "SELECT id FROM messages WHERE account_id = ?1 AND remote_id = ?2",
+                params![account_id, remote_id],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
     pub fn locations(&self, ids: &[String]) -> Result<Vec<MessageLocation>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(

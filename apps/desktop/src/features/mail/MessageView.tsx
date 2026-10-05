@@ -239,7 +239,11 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
 
   // A remembered choice for this sender wins; plain text otherwise follows the app.
   const preference = senderChoice ?? (message.bodyHtml !== null ? mailAppearance : "auto");
-  const appearance = resolveAppearance(message, theme === "dark", preference);
+  // Looks through the whole body, so once per mail and look rather than on every render.
+  const appearance = useMemo(
+    () => resolveAppearance(message, theme === "dark", preference),
+    [message, theme, preference],
+  );
   const decisionKey = `${message.id}|${allowRemote}`;
   const autoDark = autoDecision?.key === decisionKey ? autoDecision.dark : undefined;
   const dates = useMailDates(message, { open: !collapsed, allowRemote, inJunk });

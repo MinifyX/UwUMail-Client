@@ -158,6 +158,7 @@ export function buildCommands(
       title: t("shortcuts.label"),
       icon: Tag,
       keys: ["l"],
+      needsThread: true,
       // The ticked conversations, else the open one.
       run: () => {
         const { checkedThreadIds, selectedThreadId, openLabeling } = useUi.getState();

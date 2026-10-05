@@ -232,6 +232,7 @@ pub fn event(value: &Value, calendar_zone: Option<Tz>) -> Option<GoogleEvent> {
         (jscal::in_zone(utc_start, zone), Some((utc_start, utc_end)))
     };
     event.insert("start".into(), json!(format_local(start)));
+    jscal::set_participants(&mut event, &participants(value));
     let all_day = utc.is_none();
     let rule_zone = event.get("timeZone").and_then(Value::as_str).and_then(jscal::parse_zone).or(calendar_zone);
     let recurrence: Vec<String> = value
@@ -264,6 +265,36 @@ pub fn event(value: &Value, calendar_zone: Option<Tz>) -> Option<GoogleEvent> {
         utc,
         recurrence,
     })
+}
+
+/// Who takes part in a meeting (`attendees`, `organizer`), the organizer first; nobody for an
+/// event without guests, where the organizer is only the calendar's owner.
+fn participants(value: &Value) -> Vec<crate::model::EventParticipant> {
+    use super::invite::Partstat;
+    let Some(attendees) = value.get("attendees").and_then(Value::as_array).filter(|list| !list.is_empty()) else {
+        return Vec::new();
+    };
+    let organizer = value.get("organizer").unwrap_or(&Value::Null);
+    let guests = attendees.iter().map(|attendee| jscal::NamedParticipant {
+        name: text(attendee, "displayName"),
+        address: text(attendee, "email"),
+        status: match text(attendee, "responseStatus") {
+            Some("accepted") => Partstat::Accepted,
+            Some("tentative") => Partstat::Tentative,
+            Some("declined") => Partstat::Declined,
+            _ => Partstat::NeedsAction,
+        },
+        organizer: attendee.get("organizer").and_then(Value::as_bool).unwrap_or(false),
+    });
+    // The organizer is usually a guest too, with their own answer; otherwise they come last
+    // here and first in the list.
+    let own = jscal::NamedParticipant {
+        name: text(organizer, "displayName"),
+        address: text(organizer, "email"),
+        status: Partstat::Accepted,
+        organizer: true,
+    };
+    jscal::clean_participants(guests.chain(std::iter::once(own)), text(organizer, "email"))
 }
 
 /// Start and end as Google writes them.
@@ -481,5 +512,53 @@ mod tests {
         let new = new_body(&day.event);
         assert_eq!(new["start"]["date"], "2026-10-03");
         assert_eq!(new["end"]["date"], "2026-10-06");
+    }
+
+    #[test]
+    fn reads_who_takes_part_in_a_meeting() {
+        use crate::calendar::invite::Partstat;
+        let base = |extra: Value| {
+            let mut value = json!({
+                "id": "m", "summary": "Planning",
+                "start": { "dateTime": "2026-10-03T10:00:00Z" }, "end": { "dateTime": "2026-10-03T11:00:00Z" },
+            });
+            value.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            jscal::participants_of(&event(&value, None).unwrap().event)
+        };
+        let found = base(json!({
+            "organizer": { "email": "kim@example.com", "displayName": "Kim" },
+            "attendees": [
+                { "email": "Nyu@Example.com", "displayName": "\u{1b}[31mNyu", "responseStatus": "declined", "self": true },
+                { "email": "kim@example.com", "organizer": true, "responseStatus": "accepted" },
+                { "email": "room@resource.calendar.google.com", "displayName": "Room", "resource": true, "responseStatus": "tentative" },
+                { "displayName": "   " },
+                { "email": "x y@example.com", "responseStatus": "needsAction" },
+            ],
+        }));
+        let shown: Vec<_> = found.iter().map(|p| (p.name.as_str(), p.email.as_str(), p.status, p.organizer)).collect();
+        assert_eq!(
+            shown,
+            [
+                ("Kim", "kim@example.com", Partstat::Accepted, true),
+                ("[31mNyu", "nyu@example.com", Partstat::Declined, false),
+                ("Room", "room@resource.calendar.google.com", Partstat::Tentative, false),
+            ]
+        );
+        // The organizer missing from the guests still leads the list.
+        let found = base(json!({
+            "organizer": { "email": "kim@example.com" },
+            "attendees": [{ "email": "nyu@example.com", "responseStatus": "accepted" }],
+        }));
+        assert_eq!(found[0].email, "kim@example.com");
+        assert!(found[0].organizer && found.len() == 2);
+        assert!(base(json!({ "organizer": { "email": "kim@example.com", "self": true } })).is_empty());
+
+        let many: Vec<Value> = (0..400)
+            .map(|i| json!({ "email": format!("p{i}@example.com"), "displayName": "\u{7}".repeat(300) + &"N".repeat(900) }))
+            .collect();
+        let found = base(json!({ "organizer": { "email": "p399@example.com" }, "attendees": many }));
+        assert_eq!(found.len(), jscal::MAX_PARTICIPANTS);
+        assert_eq!(found[0].email, "p399@example.com");
+        assert!(found.iter().all(|p| p.name.chars().count() == 200 && p.name.chars().all(|c| c == 'N')));
     }
 }

@@ -15,6 +15,7 @@ import type {
   ContactRecord,
   EventDeleteScope,
   EventInput,
+  EventParticipant,
   Recurrence,
   Weekday,
 } from "./types";
@@ -35,6 +36,8 @@ interface StoredEvent {
   recurrence: Recurrence | null;
   /** Recurrence ids of occurrences taken out of the series. */
   excluded: string[];
+  /** Who takes part, the organizer first; none for most demo events. */
+  participants?: EventParticipant[];
 }
 
 const WEEKDAYS: Weekday[] = ["su", "mo", "tu", "we", "th", "fr", "sa"];
@@ -232,6 +235,11 @@ export class DemoCalendar {
         end: at(1, 10, 45),
         timeZone: zone,
         recurrence: null,
+        participants: [
+          { name: "Mini", email: "mini@uwumail.example", status: "accepted", organizer: true },
+          { name: "Emma Vogt", email: "emma.vogt@brightlabs.example", status: "accepted", organizer: false },
+          { name: "Leni", email: "leni@uwumail.example", status: "needs-action", organizer: false },
+        ],
       }),
       event({
         calendarId: "acc-private:personal",
@@ -461,6 +469,7 @@ export class DemoCalendar {
           recurrenceId,
           readOnly: !calendar.mayWrite,
           color: null,
+          participants: structuredClone(event.participants ?? []),
         });
       }
     }

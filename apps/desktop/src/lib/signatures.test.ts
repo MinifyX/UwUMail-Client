@@ -55,4 +55,16 @@ describe("signatures", () => {
     expect(html).toContain('<img src="data:image/png;base64,AAAA">');
     expect(html).toContain(">Hi<");
   });
+
+  it("keeps only embedded raster pictures in a signature", () => {
+    const stored: Signature = {
+      ...all[0]!,
+      html:
+        '<p>Hi<img src="x"><img src="cid:logo"><img src="data:image/svg+xml;base64,PHN2Zz4=">' +
+        '<img src="data:image/png;base64,iVBORw0KGgo="></p>',
+    };
+    const html = withSignature("", stored, "end");
+    expect(html).not.toMatch(/cid:|src="x"|svg/);
+    expect(html.match(/<img/g)).toHaveLength(1);
+  });
 });
