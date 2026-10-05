@@ -58,6 +58,16 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   any device.
 - **Undo send** for 0–30 seconds (10 by default): the mail waits in a local
   outbox and goes out even after UwUMail was closed.
+- **Send later** (clock next to Send): this evening, tomorrow morning or
+  afternoon, Monday morning, or any date and time. Mailboxes on a UwUMail
+  server hand the mail to the server, which sends it even while UwUMail is
+  closed (up to 30 days ahead, like the webmail). Every other mailbox (IMAP,
+  other JMAP servers, Microsoft, Google) keeps it in this device's outbox: it
+  goes out if UwUMail is running at that time, also in the tray or Android's
+  background service, and a time missed while UwUMail was closed sends on the
+  next start; on the iPhone it goes when UwUMail is opened. The dialog says
+  which applies. **Scheduled** in the folder list shows what waits, with a new
+  time, send now, edit (back into the composer) or don't send (back to Drafts).
 - **Signatures** per domain: pick a domain, write one signature for all your
   addresses there (or for all domains), with `{name}`, `{adresse}` and
   `{domain}` filled in per address. On a UwUMail server (0.22 and later) it

@@ -1,0 +1,4 @@
+{
+  "de": "- Neu: Später senden (die Uhr neben Senden) und „Geplant“ in der Ordnerliste, wie im Webmail. Bei Postfächern auf einem UwUMail-Server sendet der Server zur gewählten Zeit, auch wenn UwUMail zu ist. Alle anderen Postfächer warten auf diesem Gerät: Die Mail geht raus, wenn UwUMail zu der Zeit läuft (auch im Hintergrund), sonst beim nächsten Start. Geplante Mails bekommen eine neue Zeit, gehen sofort raus, lassen sich bearbeiten oder zurück in die Entwürfe holen",
+  "en": "- New: send later (the clock next to Send) and “Scheduled” in the folder list, like in the webmail. Mailboxes on a UwUMail server have the server send at the chosen time, also while UwUMail is closed. Every other mailbox waits on this device: the mail goes out if UwUMail is running at that time (also in the background), otherwise on the next start. Scheduled mail can get a new time, go right away, be edited or go back to Drafts"
+}
