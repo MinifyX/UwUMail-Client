@@ -6,16 +6,17 @@ Python dependencies by requirements.txt. Run from a venv:
 
     python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
     .venv/bin/python build.py            # writes UwUSans[wght].woff2 (+ .ttf in .cache/)
-    .venv/bin/python test_ligatures.py   # shaping tests
+    .venv/bin/python test_shaping.py     # shaping tests
     .venv/bin/python specimen.py out.png # proof sheet
 
 What it does (see FONTLOG.txt):
   1. download + verify the upstream variable font (roman, wght 200-800)
   2. subset to Latin, Latin Extended, punctuation, currency, arrows
   3. add new glyphs drawn here as code: Nyu cat face (U+E000), heart (U+2665),
-     arrows (U+2190-2193); every glyph gets gvar deltas so its strokes follow wght
-  4. add a `calt` lookup: ":3" -> Nyu, "<3" -> heart, only in safe contexts
-  5. rename everything (family "UwU Sans"), rebuild HVAR, write WOFF2
+     arrows (U+2190-2193); every glyph gets gvar deltas so its strokes follow wght.
+     They are reachable by code point only: no ligatures (dropped in 1.100,
+     ":3" and "<3" must keep their meaning)
+  4. rename everything (family "UwU Sans"), rebuild HVAR, write WOFF2
 """
 
 from __future__ import annotations
@@ -24,12 +25,10 @@ import hashlib
 import math
 import shutil
 import sys
-import unicodedata
 import urllib.request
 from pathlib import Path
 
 from fontTools import subset
-from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables._g_l_y_f import flagOverlapSimple as OVERLAP_SIMPLE
@@ -48,7 +47,7 @@ UPSTREAM_URL = (
 UPSTREAM_SHA256 = "5a455d1cfa099b601ab70751bb9673e8fe1854dc4500c80e1a220d0d75e31745"
 UPSTREAM_VERSION = "2.001"
 
-VERSION = "1.000"
+VERSION = "1.100"
 FAMILY = "UwU Sans"
 PS_FAMILY = "UwUSans"
 OUT_NAME = "UwUSans[wght].woff2"
@@ -488,120 +487,6 @@ def _deltas_in_glyph_order(base_contours, master_contours):
 
 
 # --------------------------------------------------------------------------
-# features
-
-
-def letter_and_digit_glyphs(font):
-    """All glyphs that render a letter or digit, incl. unencoded alternates
-    (one.tf, i.loclTRK ...). Used to block ligatures next to words/numbers."""
-    cmap = font.getBestCmap()
-    base = {}
-    for cp, name in cmap.items():
-        cat = unicodedata.category(chr(cp))
-        if cat[0] in ("L", "N"):
-            base[name] = cat[0]
-    names = set(base)
-    for name in font.getGlyphOrder():
-        stem = name.split(".")[0]
-        if stem in base or stem in ("dotlessi", "dotlessj"):
-            names.add(name)
-    return sorted(names)
-
-
-def variants(font, base):
-    return [n for n in font.getGlyphOrder() if n == base or n.startswith(base + ".")]
-
-
-def add_calt(font: TTFont):
-    blockers = letter_and_digit_glyphs(font)
-    colon = variants(font, "colon")
-    three = variants(font, "three")
-    less = variants(font, "less")
-    fea = f"""
-languagesystem DFLT dflt;
-languagesystem latn dflt;
-@WORD = [{' '.join(blockers)}];
-@COLON = [{' '.join(colon)}];
-@THREE = [{' '.join(three)}];
-@LESS = [{' '.join(less)}];
-
-lookup NYU_LIGA {{
-    sub @COLON @THREE by nyu;
-}} NYU_LIGA;
-
-lookup HEART_LIGA {{
-    sub @LESS @THREE by heart;
-}} HEART_LIGA;
-
-lookup EMOTICONS {{
-    ignore sub @WORD @COLON' @THREE';
-    ignore sub @COLON' @THREE' @WORD;
-    ignore sub @WORD @LESS' @THREE';
-    ignore sub @LESS' @THREE' @WORD;
-    sub @COLON' lookup NYU_LIGA @THREE';
-    sub @LESS' lookup HEART_LIGA @THREE';
-}} EMOTICONS;
-
-feature calt {{
-    lookup EMOTICONS;
-}} calt;
-"""
-    # feaLib replaces GSUB; build into a scratch copy and graft the result
-    scratch = TTFont()
-    scratch.setGlyphOrder(font.getGlyphOrder())
-    addOpenTypeFeaturesFromString(scratch, fea, tables=["GSUB"])
-    new = scratch["GSUB"].table
-    gsub = font["GSUB"].table
-    shift = len(gsub.LookupList.Lookup)
-    for lk in new.LookupList.Lookup:
-        for st in lk.SubTable:
-            _shift_lookup_records(st, shift)
-        gsub.LookupList.Lookup.append(lk)
-    gsub.LookupList.LookupCount = len(gsub.LookupList.Lookup)
-    calt_index = [shift + i for i, lk in enumerate(new.LookupList.Lookup) if lk.LookupType == 6]
-    from fontTools.ttLib.tables import otTables as ot
-
-    feat = ot.Feature()
-    feat.FeatureParams = None
-    feat.LookupListIndex = calt_index
-    feat.LookupCount = len(calt_index)
-    rec = ot.FeatureRecord()
-    rec.FeatureTag = "calt"
-    rec.Feature = feat
-    gsub.FeatureList.FeatureRecord.append(rec)
-    gsub.FeatureList.FeatureCount = len(gsub.FeatureList.FeatureRecord)
-    # keep FeatureRecords sorted by tag (spec), remap LangSys indices
-    old = list(gsub.FeatureList.FeatureRecord)
-    order = sorted(range(len(old)), key=lambda i: old[i].FeatureTag)
-    remap = {o: n for n, o in enumerate(order)}
-    gsub.FeatureList.FeatureRecord = [old[i] for i in order]
-    calt_new = remap[len(old) - 1]
-    for srec in gsub.ScriptList.ScriptRecord:
-        langsys = [srec.Script.DefaultLangSys] + [l.LangSys for l in srec.Script.LangSysRecord]
-        for ls in langsys:
-            if ls is None:
-                continue
-            ls.FeatureIndex = sorted(remap[i] for i in ls.FeatureIndex) + [calt_new]
-            ls.FeatureIndex = sorted(set(ls.FeatureIndex))
-            ls.FeatureCount = len(ls.FeatureIndex)
-    if getattr(gsub, "FeatureVariations", None):
-        raise SystemExit("upstream GSUB has FeatureVariations; remap them too")
-
-
-def _shift_lookup_records(st, shift):
-    for attr in ("SubstLookupRecord",):
-        for rec in getattr(st, attr, []) or []:
-            rec.LookupListIndex += shift
-    for attr in ("ChainSubRuleSet", "ChainSubClassSet"):
-        for rs in getattr(st, attr, []) or []:
-            if rs is None:
-                continue
-            for rule in getattr(rs, "ChainSubRule", []) or getattr(rs, "ChainSubClassRule", []) or []:
-                for rec in rule.SubstLookupRecord:
-                    rec.LookupListIndex += shift
-
-
-# --------------------------------------------------------------------------
 # naming
 
 
@@ -624,10 +509,10 @@ def rename(font: TTFont):
         9: "Elliott Scott, Megan Eiswerth, Linus Boman, Theodore Petrosky, Letters from Sweden "
         "(Atkinson Hyperlegible Next); MinifyX (UwU Sans additions)",
         10: "UwU Sans is a modified version of Atkinson Hyperlegible Next (Braille Institute) "
-        "with a Nyu cat face, a heart, arrows and :3 / <3 ligatures. It is not affiliated "
+        "with a Nyu cat face, a heart and arrows. It is not affiliated "
         "with or endorsed by the Braille Institute.",
-        11: "https://github.com/MinifyX/UwUMail-Client",
-        12: "https://github.com/MinifyX/UwUMail-Client",
+        11: "https://github.com/MinifyX/UwUSuite-Design",
+        12: "https://github.com/MinifyX/UwUSuite-Design",
         25: PS_FAMILY,
     }
     # drop names we do not set (16/17 typographic family, trademark, ...)
@@ -664,7 +549,6 @@ def build() -> Path:
     sub.subset(font)
 
     add_new_glyphs(font)
-    add_calt(font)
     rename(font)
     if "HVAR" in font:
         del font["HVAR"]

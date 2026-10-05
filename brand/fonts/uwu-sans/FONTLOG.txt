@@ -17,6 +17,16 @@ Upstream
 
 ChangeLog
 ---------
+2026-10-05  Version 1.100 (MinifyX)
+- Removed the `calt` lookup. ":3" and "<3" are no longer replaced by nyu
+  and heart: the substitution changed the meaning of the symbols. The font
+  has no contextual or ligature features any more; every character shapes
+  to its own glyph.
+- The glyphs nyu (U+E000), heart (U+2665) and the arrows (U+2190-2193)
+  stay unchanged and are reachable by code point.
+- Description and URL names (IDs 10-12) updated; the source now lives in
+  https://github.com/MinifyX/UwUSuite-Design (fonts/uwu-sans-source).
+
 2026-10-02  Version 1.000 (MinifyX)
 - Renamed: family "UwU Sans", PostScript "UwUSans-Regular", variations
   prefix "UwUSans", unique ID "1.000;MFX;UwUSans-Regular", vendor "MFX".
