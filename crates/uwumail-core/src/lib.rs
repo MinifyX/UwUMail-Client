@@ -17,6 +17,8 @@ pub mod folders;
 pub mod image_size;
 pub mod imap;
 pub mod jmap;
+pub mod jmap_masked;
+pub mod jmap_profile;
 pub mod jmap_push;
 pub mod jmap_scheduled;
 pub mod jmap_settings;

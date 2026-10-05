@@ -15,10 +15,12 @@ import { Field, Select, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
 import { useBirthdayFeatures } from "../calendar/BirthdayImport";
+import { ContactPictureField } from "./ContactPicture";
 import { DayField, RemindersField } from "./DateFields";
 import { hasName, inputFrom } from "./format";
 import { useContactsUi, type ContactEditorRequest } from "./state";
 import { useAddressBooks, useContactActions } from "./useContactsData";
+import { useContactPhoto } from "./useContactPhoto";
 
 const KINDS: ContactKind[] = ["home", "work", "other"];
 const PHONE_KINDS: ContactPhone["kind"][] = ["mobile", "home", "work", "other"];
@@ -58,6 +60,7 @@ function EditorDialog({ request, onClose }: { request: ContactEditorRequest | nu
   // Fields that give a day that doesn't exist (31 April): saving waits until they're fixed.
   const [badDays, setBadDays] = useState<{ birthday?: boolean; anniversary?: boolean }>({});
   const actions = useContactActions();
+  const storedPhoto = useContactPhoto(request?.contact ?? null, true);
   if (!request || !form)
     return (
       <Dialog open={false} onClose={onClose}>
@@ -73,6 +76,8 @@ function EditorDialog({ request, onClose }: { request: ContactEditorRequest | nu
     setFormState({ ...form, ...patch });
   };
   const requestClose = () => (dirty ? setAsking(true) : onClose());
+  const photo = form.photo !== undefined ? form.photo : storedPhoto;
+  const firstEmail = form.emails.find((email) => email.address.includes("@"))?.address.trim() ?? null;
 
   const save = async () => {
     setTried(true);
@@ -105,6 +110,13 @@ function EditorDialog({ request, onClose }: { request: ContactEditorRequest | nu
             void save();
           }}
         >
+          <ContactPictureField
+            photo={photo}
+            src={photo}
+            email={firstEmail}
+            onChange={(next) => setForm({ photo: next })}
+          />
+
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("contacts.given")}>
               {(id) => (

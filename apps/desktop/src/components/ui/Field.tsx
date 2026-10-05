@@ -58,9 +58,10 @@ interface ToggleProps {
   onChange: (checked: boolean) => void;
   label: ReactNode;
   description?: ReactNode;
+  disabled?: boolean;
 }
 
-export function Toggle({ checked, onChange, label, description }: ToggleProps) {
+export function Toggle({ checked, onChange, label, description, disabled }: ToggleProps) {
   const id = useId();
   return (
     <div className="flex items-start justify-between gap-6">
@@ -73,9 +74,10 @@ export function Toggle({ checked, onChange, label, description }: ToggleProps) {
         type="button"
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
         className={clsx(
-          "relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
+          "relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50",
           checked ? "bg-pink" : "bg-line",
         )}
       >

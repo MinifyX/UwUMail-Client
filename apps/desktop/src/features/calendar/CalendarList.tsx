@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Cake, Check, Ellipsis, Plus } from "lucide-react";
+import { Cake, Check, Ellipsis, Plus, Users } from "lucide-react";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { CalendarInfo } from "@/backend/types";
@@ -14,6 +14,7 @@ import { useT } from "@/i18n";
 import { queryKeys, useAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { SignInAgainHint } from "../accounts/SignInAgain";
+import { ShareDialog } from "../sharing/ShareDialog";
 import { defaultCalendarAccount, groupByAccount, useCalendarAccounts } from "./accounts";
 import { BirthdayHint, BirthdayImportDialog, useBirthdayImportAccounts } from "./BirthdayImport";
 import { CALENDAR_COLORS, DEFAULT_COLOR } from "./format";
@@ -31,6 +32,9 @@ export function CalendarList() {
   const [editing, setEditing] = useState<CalendarInfo | "new" | null>(null);
   const [deleting, setDeleting] = useState<CalendarInfo | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
+  // By id, so the dialog shows who has it now after every change.
+  const [sharing, setSharing] = useState<string | null>(null);
+  const sharingCalendar = calendars.find((calendar) => calendar.id === sharing);
   const importable = useBirthdayImportAccounts();
   const groups = groupByAccount(calendars, accounts);
   // New calendars can go to every account with a calendar source.
@@ -93,11 +97,19 @@ export function CalendarList() {
           },
         ]
       : []),
-    // Every account keeps at least one calendar.
+    // Only the owner shares, on a UwUMail server (JMAP calendars with people to share with).
+    ...(calendar.mayShare ? [{ label: t("sharing.shareCalendar"), onSelect: () => setSharing(calendar.id) }] : []),
+    // Every account keeps at least one calendar of its own; a shared one can always be left.
     ...(calendar.mayDelete &&
     !calendar.isBirthdays &&
-    calendars.filter((c) => c.accountId === calendar.accountId).length > 1
-      ? [{ label: t("calendar.deleteCalendar"), danger: true, onSelect: () => setDeleting(calendar) }]
+    (calendar.sharedBy || calendars.filter((c) => c.accountId === calendar.accountId).length > 1)
+      ? [
+          {
+            label: calendar.sharedBy ? t("sharing.leaveCalendar") : t("calendar.deleteCalendar"),
+            danger: true,
+            onSelect: () => setDeleting(calendar),
+          },
+        ]
       : []),
   ];
   const rows = (list: CalendarInfo[]) =>
@@ -175,14 +187,34 @@ export function CalendarList() {
 
       <BirthdayImportDialog accountId={importing} onClose={() => setImporting(null)} />
 
+      <ShareDialog
+        open={sharingCalendar !== undefined}
+        onClose={() => setSharing(null)}
+        accountId={sharingCalendar?.accountId ?? ""}
+        name={sharingCalendar?.name ?? ""}
+        kind="calendar"
+        sharedWith={sharingCalendar?.sharedWith ?? {}}
+        onShare={async (personId, level) => {
+          if (!sharingCalendar) return;
+          await backend().shareCalendar(sharingCalendar.id, personId, level);
+          await refresh();
+        }}
+      />
+
       <Dialog open={deleting !== null} onClose={() => setDeleting(null)} width="sm">
         {deleting && (
           <div className="flex flex-col items-center gap-3 px-6 pt-2 pb-6 text-center">
             <NyuScene name="goodbye" className="w-36" />
             <h2 className="text-[18px] font-extrabold text-balance">
-              {t("calendar.deleteCalendarTitle", { name: deleting.name })}
+              {deleting.sharedBy
+                ? t("sharing.leaveCalendarTitle", { name: deleting.name })
+                : t("calendar.deleteCalendarTitle", { name: deleting.name })}
             </h2>
-            <p className="text-[13px] text-muted">{t("calendar.deleteCalendarBody")}</p>
+            <p className="text-[13px] text-muted">
+              {deleting.sharedBy
+                ? t("sharing.leaveCalendarBody", { name: deleting.sharedBy.name })
+                : t("calendar.deleteCalendarBody")}
+            </p>
             <div className="flex flex-wrap justify-center gap-2 pt-1">
               <ArmedButton
                 variant="danger"
@@ -196,7 +228,7 @@ export function CalendarList() {
                   );
                 }}
               >
-                {t("calendar.deleteCalendar")}
+                {deleting.sharedBy ? t("sharing.leaveCalendar") : t("calendar.deleteCalendar")}
               </ArmedButton>
               <Button variant="ghost" onClick={() => setDeleting(null)}>
                 {t("common.cancel")}
@@ -223,7 +255,10 @@ function CalendarRow({
   const color = calendar.color ?? DEFAULT_COLOR;
   return (
     <li
-      className="group relative flex h-9 items-center gap-2.5 rounded-xl pr-1 pl-3 hover:bg-pink-tint/50"
+      className={clsx(
+        "group relative flex items-center gap-2.5 rounded-xl pr-1 pl-3 hover:bg-pink-tint/50",
+        calendar.sharedBy ? "min-h-9 py-1" : "h-9",
+      )}
       onContextMenu={(event) => {
         if (items.length === 0) return;
         event.preventDefault();
@@ -245,7 +280,20 @@ function CalendarRow({
           {calendar.isVisible && <Check className="size-3 text-white" strokeWidth={3.5} />}
         </span>
         {calendar.isBirthdays && <Cake className="size-3.5 shrink-0 text-muted" aria-hidden />}
-        <span className={clsx("min-w-0 flex-1 truncate", !calendar.isVisible && "text-muted")}>{calendar.name}</span>
+        <span className={clsx("min-w-0 flex-1 truncate", !calendar.isVisible && "text-muted")}>
+          {calendar.name}
+          {calendar.sharedBy && (
+            <span className="block truncate text-[11.5px] text-muted">
+              {t("sharing.sharedBy", { name: calendar.sharedBy.name })}
+            </span>
+          )}
+        </span>
+        {Object.keys(calendar.sharedWith ?? {}).length > 0 && (
+          <Users
+            className="size-3.5 shrink-0 text-muted"
+            aria-label={t("sharing.sharedWithCount", { count: Object.keys(calendar.sharedWith ?? {}).length })}
+          />
+        )}
         {calendar.isDefault && (
           <span className="shrink-0 text-[11px] font-semibold text-muted">{t("calendar.default")}</span>
         )}

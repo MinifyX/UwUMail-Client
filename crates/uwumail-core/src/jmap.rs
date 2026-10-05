@@ -40,6 +40,13 @@ pub const WEBPUSH_VAPID: &str = "urn:ietf:params:jmap:webpush-vapid";
 /// Signatures per domain and company signatures (`SignatureSettings/get`/`set`, UwUMail-Server
 /// docs/jmap-signatures.md), from UwUMail-Server 0.22 on.
 pub const SIGNATURES: &str = "urn:uwumail:jmap:signatures";
+/// Masked addresses (Fastmail's MaskedEmail extension, which UwUMail Server speaks; its
+/// docs/jmap-masked-email.md).
+pub const MASKED: &str = "https://www.fastmail.com/dev/maskedemail";
+/// The own profile picture on a UwUMail server (`ProfilePicture`, its docs/profile-pictures.md).
+pub const PROFILE: &str = "urn:uwumail:jmap:profile";
+/// The people of the server, to share calendars with (draft-ietf-jmap-sharing).
+pub const PRINCIPALS: &str = "urn:ietf:params:jmap:principals";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -143,6 +150,14 @@ pub struct Session {
     /// How far ahead the submission account holds mail ("send later"), in seconds; 0 when it
     /// doesn't (`maxDelayedSend` of its submission capability, RFC 8621 §7).
     pub max_delayed_send: u64,
+    /// The own account's masked address capability (`domains`, `defaultDomain`), if the server
+    /// makes masked addresses; an empty object from servers that don't say where.
+    pub masked: Option<Value>,
+    /// The own account's profile picture capability (`maxSize`, `mayBePublic`), if it has one.
+    pub profile: Option<Value>,
+    /// The server lists its people for sharing; `own_principal_id` is the login's own.
+    pub principals: bool,
+    pub own_principal_id: Option<String>,
 }
 
 /// What a session says about UwUMail's AI assistant.
@@ -208,6 +223,30 @@ impl Session {
             .and_then(|capability| capability.get("maxDelayedSend"))
             .and_then(Value::as_u64)
             .unwrap_or(0);
+        // An extension's object in the own account's `accountCapabilities`; `{}` when the session
+        // only names the capability.
+        let own_capability = |capability: &str| {
+            capabilities.contains_key(capability).then(|| {
+                document
+                    .get("accounts")
+                    .and_then(|accounts| accounts.get(&account_id))
+                    .and_then(|account| account.get("accountCapabilities"))
+                    .and_then(|capabilities| capabilities.get(capability))
+                    .filter(|value| value.is_object())
+                    .or_else(|| capabilities.get(capability).filter(|value| value.is_object()))
+                    .cloned()
+                    .unwrap_or_else(|| json!({}))
+            })
+        };
+        let masked = own_capability(MASKED);
+        let profile = own_capability(PROFILE);
+        let principals = own_capability(PRINCIPALS);
+        let own_principal_id = principals
+            .as_ref()
+            .and_then(|capability| capability.get("currentUserPrincipalId"))
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty() && id.len() <= 255)
+            .map(String::from);
         Ok(Self {
             api_url: absolute(base, text("apiUrl").ok_or_else(invalid)?),
             download_url: absolute(base, text("downloadUrl").ok_or_else(invalid)?),
@@ -239,6 +278,10 @@ impl Session {
             state: text("state").map(String::from),
             assist,
             max_delayed_send,
+            masked,
+            profile,
+            principals: principals.is_some(),
+            own_principal_id,
         })
     }
 
@@ -480,6 +523,15 @@ impl Client {
         }
         if self.session.signatures_account_id.is_some() {
             using.push(SIGNATURES);
+        }
+        if self.session.masked.is_some() {
+            using.push(MASKED);
+        }
+        if self.session.profile.is_some() {
+            using.push(PROFILE);
+        }
+        if self.session.principals {
+            using.push(PRINCIPALS);
         }
         let body = json!({ "using": using, "methodCalls": method_calls });
         let response = self

@@ -95,5 +95,6 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Calendars and contacts of Microsoft (Graph) and Google (Calendar, People API) sign-ins, read and write, shared mailboxes included; "Sign in again" for older sign-ins (0.8)
 - [ ] Microsoft/Google: reminders, wedding anniversaries (Graph has none), Google contact labels as address books, birthday-event import
 - [x] Birthdays: the server's birthdays calendar with ages, a local one from CardDAV cards, moving birthday events into contacts, anniversaries and reminders (reminders on UwUMail servers only)
+- [x] Like the webmail: masked addresses, own profile picture, sharing calendars and leaving shared ones (UwUMail servers), contact photos with crop, camera and company logo for every address book (0.10)
 - [ ] Self-hostable sync server for settings, signatures and addons (AGPL-3.0)
 - [ ] Code signing for Windows and macOS

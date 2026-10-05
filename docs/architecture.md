@@ -658,6 +658,47 @@ sign-in lives apart from the JMAP accounts' connections, so nothing else treats
 the account as a JMAP one, and one that fails is not tried again while the app
 runs; other providers never see a JMAP sign-in at all.
 
+## Server features of a UwUMail mailbox
+
+Masked addresses (`https://www.fastmail.com/dev/maskedemail`), the own
+profile picture (`urn:uwumail:jmap:profile`) and sharing calendars
+(`urn:ietf:params:jmap:principals`, `shareWith` on JMAP calendars) are found
+in the JMAP session of a mailbox, the same way as the assistant and domain
+signatures. The engine calls them with the login it holds
+(`jmap_masked.rs`, `jmap_profile.rs`, `calendar/jmap_cal.rs`,
+`engine/account_ops.rs`); the page only gets the results. Every field the
+page sends is checked against the server's limits first, and every answer is
+read field by field with bounds (names lose control and bidi characters). A
+profile picture reaches the engine as a `data:` URI the page cropped; its type
+comes from its bytes (JPEG, PNG, WebP, GIF, never SVG) and only pictures come
+back. Settings → Profile picture and Masked addresses show only for mailboxes
+whose server offers them (`server_account_features`, 4 s per server), with a
+choice of mailbox where there are several. Leaving a calendar someone shared
+is `Calendar/set destroy` on it; the owner keeps it.
+
+## Contact photos
+
+The editor crops every picture to a square JPEG (`lib/pictures.ts`, as in the
+webmail) and puts it into the card's JSContact `media`. UwUMail servers keep
+it in the card, CardDAV as the vCard `PHOTO`. Microsoft Graph and Google People
+keep photos apart from the contact: their cards carry the marker
+`uwuRemotePhoto`, the engine takes the photo out of the patch and writes it
+with `PUT/DELETE contacts/{id}/photo/$value` or
+`updateContactPhoto`/`deleteContactPhoto` (`engine/photo_ops.rs`), and the
+photo is fetched only when a contact opens (`contact_photo`, never for the
+whole list). Google photo links are fetched without login and redirects, up
+to 8 MB, and only from `*.googleusercontent.com`.
+
+"Take photo" uses the system camera through a file input
+(`accept="image/*" capture="user"`, phones only), not `getUserMedia`: no
+camera permission for the web view and no live preview to build. On Android
+wry's file chooser hands the camera app a file under the app's external
+`Pictures/` folder (`file_paths.xml`), and the camera app needs no CAMERA
+permission from UwUMail because none is declared. On iOS the web view's
+picker offers "Take Photo" and asks with `NSCameraUsageDescription`
+(`Info.ios.plist`). Desktops get "choose", drag and drop, and paste. The company
+logo button takes the app's sender picture of the contact's address.
+
 ## Text in pictures
 
 Some mails carry what matters only as a picture: a poster, an invitation, a

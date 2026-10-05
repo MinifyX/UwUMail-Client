@@ -191,6 +191,8 @@ macro_rules! with_session {
     }};
 }
 
+mod account_ops;
+pub use account_ops::ServerAccountFeatures;
 mod assist_ops;
 mod birthday_ops;
 mod calendar_ops;
@@ -198,6 +200,7 @@ mod cloud_ops;
 mod contacts_ops;
 mod folder_ops;
 mod ocr_ops;
+mod photo_ops;
 mod price_ops;
 mod push_ops;
 mod send_later_ops;

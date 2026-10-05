@@ -530,7 +530,10 @@
     "signatureOverride": "Own signature for this address",
     "signatureBackToDomain": "Use the domain signature",
     "signatureDeviceFirst": "In this app these addresses have signatures of their own. Here they go before the server's signature. Delete them if the server's should apply.",
-    "signatureTooBig": "This signature is too big. Try a smaller picture."
+    "signatureTooBig": "This signature is too big. Try a smaller picture.",
+    "profile": "Profile picture",
+    "masked": "Masked addresses",
+    "serverAccount": "Mailbox"
   },
   "theme": {
     "system": "System",
@@ -1273,7 +1276,11 @@
     "reminderWeekBefore": "1 week before",
     "reminderOther_one": "{{count}} day before at {{time}}",
     "reminderOther_other": "{{count}} days before at {{time}}",
-    "remindersHint": "They ring on every device with the birthdays calendar."
+    "remindersHint": "They ring on every device with the birthdays calendar.",
+    "picture": {
+      "logo": "Company logo",
+      "noLogo": "No logo found for {{domain}}."
+    }
   },
   "accountContacts": {
     "title": "Contacts",
@@ -1721,7 +1728,10 @@
         "other": "more steps"
       },
       "times": "{{count}} × {{what}}",
-      "sometimes": "{{what}} (sometimes)"
+      "sometimes": "{{what}} (sometimes)",
+      "tokens": "≈ {{formatted}} tokens",
+      "calls_one": "{{formatted}} call",
+      "calls_other": "{{formatted}} calls"
     },
     "local": {
       "title": "Found on this computer",
@@ -1939,7 +1949,16 @@
       "meaning": "Means the same as the base label “{{name}}”.",
       "words": "Very similar words to “{{name}}”: {{words}}",
       "hint": "You can still save it, but mail might then get the wrong one of the two."
-    }
+    },
+    "added_one": "“{{name}}” added",
+    "added_other": "“{{name}}” added to {{count}} conversations",
+    "removed_one": "“{{name}}” removed",
+    "removed_other": "“{{name}}” removed from {{count}} conversations",
+    "pickerTitle": "Labels",
+    "pickerSearch": "Find or create a label",
+    "pickerEmpty": "No labels yet. Type a name to create one.",
+    "pickerNone": "No label with this name.",
+    "createNamed": "Create “{{name}}”"
   },
   "shared": {
     "title": "Shared mailboxes",
@@ -1991,5 +2010,154 @@
     "onDevice": "On this device",
     "retrying": "Server not reachable, trying again: {{time}}",
     "failed": "That didn't work: {{reason}}"
+  },
+  "masked": {
+    "title": "Masked addresses",
+    "description": "A masked address is a random address for one website. Mail to it arrives here, but the site never learns your real address. If one starts getting spam, you know who passed it on and switch it off. Password managers can make them for you too.",
+    "closedTitle": "Masked addresses aren't enabled for you",
+    "closedBody": "Your administrator hasn't enabled new masked addresses for your account. The ones you already have keep working and stay manageable here.",
+    "new": "New masked address",
+    "create": "Create address",
+    "created": "Your new address is ready:",
+    "done": "Done",
+    "copy": "Copy {{email}}",
+    "copied": "Address copied",
+    "copyFailed": "The address couldn't be copied. Select it and copy it by hand.",
+    "field": {
+      "description": "Description",
+      "site": "Website",
+      "url": "Link (optional)",
+      "prefix": "Prefix (optional)",
+      "domain": "Domain"
+    },
+    "placeholder": {
+      "description": "e.g. Online shop"
+    },
+    "hint": {
+      "url": "Where you use it, for example your account page or a password manager entry.",
+      "prefix": "Goes in front of the random part, like shop.maple.otter482@…"
+    },
+    "domainAutomatic": "Automatic",
+    "onDomain": "New addresses end in @{{domain}}.",
+    "problem": {
+      "tooLong": "At most {{max}} characters.",
+      "control": "Line breaks and control characters don't work here.",
+      "spaces": "A link can't contain spaces.",
+      "prefix": "Only lower-case letters a–z, digits and _, at most {{max}} characters."
+    },
+    "loading": "Loading masked addresses …",
+    "loadFailed": "The masked addresses couldn't be loaded. {{reason}}",
+    "empty": "No masked addresses yet. Make one for the next site you sign up to.",
+    "emptyFilter": {
+      "active": "No active masked addresses.",
+      "disabled": "None are switched off.",
+      "deleted": "None are deleted."
+    },
+    "noMatch": "No masked address matches your search.",
+    "search": "Search masked addresses",
+    "filter": {
+      "label": "Show",
+      "active": "Active",
+      "disabled": "Off",
+      "deleted": "Deleted"
+    },
+    "onOff": "{{email}} on or off",
+    "edit": "Edit {{email}}",
+    "delete": "Delete {{email}}",
+    "restore": "Restore",
+    "openUrl": "Open the link of {{email}}",
+    "createdAt": "Made {{date}}",
+    "lastMessage": "last mail {{date}}",
+    "noMessage": "no mail yet",
+    "pending": "Waiting for its first mail. Without one within 24 hours it is deleted.",
+    "saved": "Changes saved",
+    "deleted": "{{email}} deleted. Mail to it is refused now.",
+    "restored": "{{email}} works again",
+    "error": {
+      "forbidden": "This address can't be made: the domain isn't allowed for you, or you've reached the limit of masked addresses.",
+      "invalid": "The server didn't accept these details. Check the fields and try again.",
+      "notFound": "This masked address is gone. The list has been refreshed.",
+      "connection": "The server can't be reached. Try again in a moment.",
+      "signedOut": "Your session has ended. Sign in again to continue.",
+      "generic": "Something went wrong. Try again in a moment."
+    }
+  },
+  "picture": {
+    "loading": "Loading the picture…",
+    "crop": {
+      "title": "Crop picture",
+      "area": "Picture in the circle",
+      "hint": "Drag to move it, scroll or pinch to zoom. Keyboard: arrow keys move, + and − zoom.",
+      "zoom": "Zoom",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "use": "Use picture"
+    },
+    "error": {
+      "notImage": "That isn't a picture.",
+      "tooLarge": "That picture is too big. Up to {{size}} works.",
+      "unreadable": "That picture couldn't be read."
+    },
+    "choose": "Choose picture",
+    "change": "Change picture",
+    "camera": "Take photo",
+    "remove": "Remove",
+    "hint": "Or drop a picture on the circle, or paste one."
+  },
+  "profile": {
+    "picture": "Your picture",
+    "pictureDesc": "It shows next to your name wherever people may see it. Choose a picture and place it in the circle.",
+    "visibility": "Who sees it",
+    "off": {
+      "title": "Nobody",
+      "body": "Your mails show your initials."
+    },
+    "server": {
+      "title": "People on this server",
+      "body": "Everyone with a mailbox here sees it next to your mails."
+    },
+    "public": {
+      "title": "Everyone",
+      "body": "Other mail servers and apps can show it too, through Libravatar. Anyone who knows your address can look it up."
+    },
+    "publicForbidden": "Your admin switched public pictures off.",
+    "face": "Send my picture in mails",
+    "faceDesc": "Puts a small copy into every mail you send (the Face header), which some mail programs show. Only while your picture is public.",
+    "saved": "Picture saved",
+    "removed": "Picture removed",
+    "failed": "That didn't work. {{reason}}",
+    "loading": "Loading your picture…",
+    "loadFailed": "Your picture couldn't be loaded."
+  },
+  "sharing": {
+    "notAllowed": "The owner of this folder didn't allow that.",
+    "sharedBy": "Shared by {{name}}",
+    "sharedWithCount_one": "Shared with {{count}} person",
+    "sharedWithCount_other": "Shared with {{count}} people",
+    "title": "Share “{{name}}”",
+    "current": "Who has access",
+    "nobody": "Not shared with anybody yet.",
+    "levelFor": "Access for {{name}}",
+    "remove": "Stop sharing with {{name}}",
+    "removed": "No longer shared with {{name}}",
+    "add": "Share with somebody",
+    "share": "Share",
+    "shared": "Shared with {{name}}",
+    "search": "Name or address of somebody on this server",
+    "loadingPeople": "Loading people …",
+    "peopleFailed": "The people on this server couldn't be loaded.",
+    "noPeople": "Nobody else fits.",
+    "level": {
+      "read": "Read",
+      "write": "Read and write",
+      "all": "Everything"
+    },
+    "shareCalendar": "Share …",
+    "leaveCalendar": "Remove from my calendars",
+    "leaveCalendarTitle": "Remove “{{name}}” from your calendars?",
+    "leaveCalendarBody": "The calendar stays {{name}}'s. You only stop seeing it, until they share it again.",
+    "levelsDesc": {
+      "calendar": "Read: see the calendar and its events. Read and write: also add, change and delete events. Everything: also rename it, change its colour and share it on."
+    }
   }
 }

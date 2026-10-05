@@ -169,6 +169,7 @@ impl Inner {
                             may_delete: calendar.may_delete,
                             is_birthdays: calendar.is_birthdays,
                             is_local: false,
+                            sharing: calendar.sharing,
                         },
                         remote: calendar.id,
                     })
@@ -199,6 +200,7 @@ impl Inner {
                                 may_delete: calendar.writable,
                                 is_birthdays: false,
                                 is_local: false,
+                                sharing: Default::default(),
                             },
                             remote: path,
                         }
@@ -217,7 +219,7 @@ impl Inner {
         Ok(entries)
     }
 
-    async fn calendar_entry(&self, calendar_id: &str) -> Result<(Source, CalendarEntry)> {
+    pub(super) async fn calendar_entry(&self, calendar_id: &str) -> Result<(Source, CalendarEntry)> {
         let (account_id, _) = calendar::split_id(calendar_id)?;
         let source = self.calendar_source(account_id).await?;
         let mut entry = self.calendar_entries(account_id).await?.into_iter().find(|entry| entry.info.id == calendar_id);

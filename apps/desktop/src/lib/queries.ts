@@ -51,6 +51,14 @@ export const queryKeys = {
   assistEstimate: ["assistEstimate"] as const,
   /** Ollama and LM Studio found on this computer. */
   assistLocalModels: ["assistLocalModels"] as const,
+  /** Per mailbox on a UwUMail server: masked addresses and profile picture. */
+  serverAccountFeatures: ["serverAccountFeatures"] as const,
+  maskedAddresses: (accountId: string) => ["maskedAddresses", accountId] as const,
+  profilePicture: (accountId: string) => ["profilePicture", accountId] as const,
+  /** The people of a mailbox's server, to share calendars with. */
+  calendarPeople: (accountId: string) => ["calendarPeople", accountId] as const,
+  /** The photo Microsoft or Google keep for a contact. */
+  contactPhoto: (id: string) => ["contactPhoto", id] as const,
 };
 
 export function useAccounts() {
@@ -459,6 +467,7 @@ export function useBackendEvents() {
           void client.invalidateQueries({ queryKey: queryKeys.accounts });
           void client.invalidateQueries({ queryKey: queryKeys.folders });
           void client.invalidateQueries({ queryKey: queryKeys.identities });
+          void client.invalidateQueries({ queryKey: queryKeys.serverAccountFeatures });
           break;
         case "calendar:changed":
           void client.invalidateQueries({ queryKey: queryKeys.calendars });
@@ -472,6 +481,7 @@ export function useBackendEvents() {
           void client.invalidateQueries({ queryKey: queryKeys.contacts });
           void client.invalidateQueries({ queryKey: queryKeys.contactsAccounts });
           void client.invalidateQueries({ queryKey: ["contactsAvailable"] });
+          void client.invalidateQueries({ queryKey: ["contactPhoto"] });
           // Birthdays calendars are made from the contacts.
           void client.invalidateQueries({ queryKey: queryKeys.calendars });
           void client.invalidateQueries({ queryKey: queryKeys.calendarEvents });

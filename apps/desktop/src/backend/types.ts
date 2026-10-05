@@ -414,6 +414,22 @@ export interface CalendarInfo {
    * none): its colour and visibility are this device's; it can't be renamed or deleted.
    */
   isLocal?: boolean;
+  /** Whether it can be shared with people of its UwUMail server (its owner, with the right to). */
+  mayShare?: boolean;
+  /** For a calendar someone else shared: who did. */
+  sharedBy?: { email: string; name: string } | null;
+  /** Person id → "read", "write" or "all", for a calendar shared with people of the server. */
+  sharedWith?: Record<string, ShareLevel> | null;
+}
+
+/** How much a person may do in a shared calendar. */
+export type ShareLevel = "read" | "write" | "all";
+
+/** Someone on the same UwUMail server, to share a calendar with. */
+export interface Person {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export type Weekday = "mo" | "tu" | "we" | "th" | "fr" | "sa" | "su";
@@ -600,8 +616,13 @@ export interface ContactRecord {
   /** Reminders of the birthday and anniversary (a UwUMail server rings them); none by default. */
   reminders?: BirthdayReminder[];
   note: string;
-  /** A picture to show (a data: or https: URL); pictures can't be changed here yet. */
+  /** A picture to show (a data: or https: URL). */
   photo: string | null;
+  /**
+   * Microsoft or Google keep a photo for this contact apart from it; `contactPhoto` fetches it
+   * when the contact opens.
+   */
+  remotePhoto?: boolean;
   /** A group rather than a person; groups are shown but not edited. */
   isGroup: boolean;
 }
@@ -625,6 +646,8 @@ export interface ContactInput {
   /** Left as they were when undefined. */
   reminders?: BirthdayReminder[];
   note: string;
+  /** A new picture (a data: URL), null to remove it, undefined to leave it as it is. */
+  photo?: string | null;
 }
 
 /** Where an account's address books come from (the app holds several mailboxes). */
@@ -1347,4 +1370,87 @@ export interface AssistUsageToday {
 export interface AssistUsage {
   days: AssistUsageDay[];
   today: AssistUsageToday[];
+}
+
+/**
+ * A masked address: a random address for one website that delivers to the account (Fastmail's
+ * MaskedEmail). `pending` ones wait for their first mail, `deleted` ones refuse mail for good.
+ */
+export type MaskedState = "pending" | "enabled" | "disabled" | "deleted";
+
+export interface MaskedAddress {
+  id: string;
+  email: string;
+  state: MaskedState;
+  /** The site it is for, as an origin like `https://shop.example`; empty when not given. */
+  forDomain: string;
+  description: string;
+  /** A link back to where it is used, e.g. a password manager's entry. */
+  url: string | null;
+  createdAt: string;
+  /** When the latest mail to it arrived; null before the first. */
+  lastMessageAt: string | null;
+  /** Who made it, as the server says (`JMAP`, `Portal`, …). */
+  createdBy: string;
+}
+
+/** What the server lets the account make masked addresses on. */
+export interface MaskedOptions {
+  /**
+   * The domains a new one may go on; null when the server doesn't say (older servers), which
+   * leaves the choice to it. Empty: nobody enabled masked addresses for the account.
+   */
+  domains: string[] | null;
+  /** The one taken when none is named; null leaves it to the server. */
+  defaultDomain: string | null;
+}
+
+/** A new masked address, made by hand and therefore `enabled` at once. */
+export interface MaskedAddressInput {
+  description: string;
+  forDomain: string;
+  url: string | null;
+  /** Put in front of the random part: `a-z`, `0-9` and `_`, up to 64. */
+  emailPrefix?: string;
+  /** One of `MaskedOptions.domains`; the server's default when left out. */
+  domain?: string;
+}
+
+export interface MaskedAddressPatch {
+  /** Never back to `pending`. */
+  state?: Exclude<MaskedState, "pending">;
+  description?: string;
+  forDomain?: string;
+  url?: string | null;
+}
+
+/** Who sees the own profile picture: nobody, people of the same server, or everyone. */
+export type PictureVisibility = "off" | "server" | "public";
+
+export interface ProfilePicture {
+  /** The stored picture as a data: URL; null without one. */
+  url: string | null;
+  visibility: PictureVisibility;
+  /** Whether sent mail carries it (a Face header). */
+  sendFace: boolean;
+  updated: string | null;
+}
+
+export interface ProfilePictureOptions {
+  /** Largest upload in bytes. */
+  maxSize: number;
+  /** False while an administrator switched public pictures off. */
+  mayBePublic: boolean;
+}
+
+export interface ProfilePicturePatch {
+  visibility?: PictureVisibility;
+  sendFace?: boolean;
+}
+
+/** What a mailbox's UwUMail server keeps for the person; mailboxes without any are left out. */
+export interface ServerAccountFeatures {
+  accountId: string;
+  masked: MaskedOptions | null;
+  profile: ProfilePictureOptions | null;
 }

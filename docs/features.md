@@ -84,6 +84,14 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   formatted, with pictures, several per address, with defaults for new mail
   and replies, and they go first on this device.
 - **Addresses** suggested from the address books and the mail history.
+- **Masked addresses** (UwUMail servers only, 0.10): Settings → Masked
+  addresses makes a random address for one website, with an optional prefix
+  and domain, a description and a link back. Switch one off when it starts to
+  spam, delete it (with undo), restore it, search and filter. The same list as
+  the webmail, the portal and password managers (JMAP MaskedEmail).
+- **Profile picture** (UwUMail servers only, 0.10): Settings → Profile picture
+  uploads a cropped square, chooses who sees it (nobody, people on the server,
+  everyone through Libravatar) and whether mail carries it as a Face header.
 
 ## Calendar, contacts and birthdays
 
@@ -99,6 +107,16 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   their own. Anniversaries, birthdays without a year, and birthday events from
   other calendars moved into the contacts; reminders per contact on UwUMail
   servers.
+- **Sharing calendars** (UwUMail servers, 0.10): "Share …" in a calendar's menu
+  gives people on the same server read, read and write, or full access; a
+  calendar someone shared shows who did and can be removed from your
+  calendars again (the owner keeps it).
+- **Contact photos** (0.10): choose a picture, drop or paste one, take a photo
+  on a phone, or take the company logo of the contact's address; every
+  picture is cropped to a square first. Stored in the card on UwUMail servers
+  and CardDAV, through Microsoft Graph's and Google People's own photo calls
+  for those sign-ins. Microsoft may refuse to remove a photo; Outlook on the
+  web can.
 
 ## Appointments in mail
 

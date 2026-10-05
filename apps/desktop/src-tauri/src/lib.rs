@@ -1,3 +1,4 @@
+mod account;
 #[cfg(desktop)]
 mod background;
 #[cfg(not(target_os = "android"))]
@@ -1207,6 +1208,16 @@ pub fn run() {
             create_contact_card,
             update_contact_card,
             delete_contact_card,
+            account::server_account_features,
+            account::masked_addresses,
+            account::create_masked_address,
+            account::update_masked_address,
+            account::profile_picture,
+            account::set_profile_picture,
+            account::update_profile_picture,
+            account::calendar_people,
+            account::share_calendar,
+            account::contact_photo,
             add_identity,
             rename_identity,
             remove_identity,

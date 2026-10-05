@@ -281,3 +281,77 @@ describe("writing cards", () => {
     expect(patchFromInput(card(), input({ addressBookId: "b2" }))).toEqual({ addressBookIds: { b2: true } });
   });
 });
+
+describe("contact photos", () => {
+  it("puts a new card's picture into its media", () => {
+    const photo = "data:image/jpeg;base64,/9j/4AAQ";
+    expect(cardFromInput(input({ photo })).media).toEqual({
+      p1: { kind: "photo", uri: photo, mediaType: "image/jpeg" },
+    });
+    expect(cardFromInput(input({ photo: null })).media).toBeUndefined();
+    expect(cardFromInput(input()).media).toBeUndefined();
+  });
+
+  it("replaces the shown photo and keeps the other media", () => {
+    const withMedia = card({
+      media: {
+        logo: { kind: "logo", uri: "https://nyu.example/logo.png" },
+        m1: { kind: "photo", uri: "data:image/png;base64,iVBORw0KGgo=", mediaType: "image/png", pref: 1 },
+        old: { kind: "photo", uri: "cid:photo@example.org" },
+      },
+    });
+    const photo = "data:image/jpeg;base64,/9j/4AAQ";
+    expect(patchFromInput(withMedia, input({ photo }))).toEqual({
+      "media/m1": { kind: "photo", uri: photo, mediaType: "image/jpeg", pref: 1 },
+      "media/old": null,
+    });
+  });
+
+  it("adds a photo next to other media, or as the first media", () => {
+    const photo = "data:image/jpeg;base64,/9j/4AAQ";
+    const withLogo = card({ media: { p1: { kind: "logo", uri: "https://nyu.example/logo.png" } } });
+    expect(patchFromInput(withLogo, input({ photo }))).toEqual({
+      "media/p2": { kind: "photo", uri: photo, mediaType: "image/jpeg" },
+    });
+    expect(patchFromInput(card(), input({ photo }))).toEqual({
+      media: { p1: { kind: "photo", uri: photo, mediaType: "image/jpeg" } },
+    });
+  });
+
+  it("replaces a linked photo with the cropped one", () => {
+    const linked = card({
+      media: { m1: { kind: "photo", uri: "https://photos.example/me.png", mediaType: "image/png" } },
+    });
+    const photo = "data:image/jpeg;base64,/9j/4AAQ";
+    expect(patchFromInput(linked, input({ photo }))).toEqual({
+      "media/m1": { kind: "photo", uri: photo, mediaType: "image/jpeg" },
+    });
+  });
+
+  it("removes every photo and nothing else when the picture goes", () => {
+    const withMedia = card({
+      media: {
+        s1: { kind: "sound", uri: "https://nyu.example/name.ogg" },
+        m1: { kind: "photo", uri: "data:image/png;base64,iVBORw0KGgo=" },
+        m2: { kind: "photo", uri: "cid:photo@example.org" },
+      },
+    });
+    expect(patchFromInput(withMedia, input({ photo: null }))).toEqual({ "media/m1": null, "media/m2": null });
+  });
+
+  it("leaves the picture alone when the editor didn't touch it", () => {
+    const inside = "data:image/png;base64,iVBORw0KGgo=";
+    const withPhoto = card({ media: { m1: { kind: "photo", uri: inside } } });
+    expect(patchFromInput(withPhoto, input())).toEqual({});
+    expect(patchFromInput(withPhoto, input({ photo: inside }))).toEqual({});
+  });
+
+  it("removes a Microsoft or Google photo, which lives apart from the card", () => {
+    const remote = card({ uwuRemotePhoto: true });
+    expect(toContactRecord(remote, "a").remotePhoto).toBe(true);
+    expect(toContactRecord(card(), "a").remotePhoto).toBeUndefined();
+    expect(patchFromInput(remote, input({ photo: null }))).toEqual({ media: null });
+    expect(patchFromInput(card(), input({ photo: null }))).toEqual({});
+    expect(patchFromInput(remote, input())).toEqual({});
+  });
+});

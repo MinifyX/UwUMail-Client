@@ -80,6 +80,14 @@ import type {
   ImageTextResult,
   RemoteImageSize,
   MailtoDraft,
+  MaskedAddress,
+  MaskedAddressInput,
+  MaskedAddressPatch,
+  Person,
+  ProfilePicture,
+  ProfilePicturePatch,
+  ServerAccountFeatures,
+  ShareLevel,
   MovedMessage,
   NewAccount,
   OutgoingMessage,
@@ -103,6 +111,7 @@ import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import type { DomainSignatureChange, SignatureText } from "@/lib/domainSignatures";
 import { foreignHtml } from "@/lib/safeHtml";
 import { overviewFrom } from "./jmap/domainSignatures";
+import { blobToDataUrl, companyLogoFrom } from "./pictureBlobs";
 
 /** Where the app hands out a mail's remote pictures (`uwuimg:` in Rust), spelled for this platform. */
 let picturesBase: string | null = null;
@@ -415,6 +424,14 @@ export class TauriBackend implements Backend {
     return call<void>("set_default_calendar", { calendarId: id });
   }
 
+  calendarPeople(accountId: string) {
+    return call<Person[]>("calendar_people", { accountId });
+  }
+
+  shareCalendar(calendarId: string, personId: string, level: ShareLevel | null) {
+    return call<void>("share_calendar", { calendarId, personId, level });
+  }
+
   calendarEvents(from: string, to: string, timeZone: string) {
     return call<CalendarOccurrence[]>("calendar_events", { from, to, timeZone });
   }
@@ -504,6 +521,43 @@ export class TauriBackend implements Backend {
 
   deleteContact(id: string) {
     return call<void>("delete_contact_card", { cardId: id });
+  }
+
+  contactPhoto(id: string) {
+    return call<string | null>("contact_photo", { cardId: id });
+  }
+
+  async companyLogo(email: string) {
+    return companyLogoFrom(await this.getSenderPicture(email));
+  }
+
+  serverAccountFeatures() {
+    return call<ServerAccountFeatures[]>("server_account_features");
+  }
+
+  maskedAddresses(accountId: string) {
+    return call<MaskedAddress[]>("masked_addresses", { accountId });
+  }
+
+  createMaskedAddress(accountId: string, input: MaskedAddressInput) {
+    return call<MaskedAddress>("create_masked_address", { accountId, input });
+  }
+
+  updateMaskedAddress(accountId: string, id: string, patch: MaskedAddressPatch) {
+    return call<void>("update_masked_address", { accountId, id, patch });
+  }
+
+  profilePicture(accountId: string) {
+    return call<ProfilePicture>("profile_picture", { accountId });
+  }
+
+  async setProfilePicture(accountId: string, picture: Blob | null) {
+    const data = picture ? await blobToDataUrl(picture) : null;
+    return call<ProfilePicture>("set_profile_picture", { accountId, picture: data });
+  }
+
+  updateProfilePicture(accountId: string, patch: ProfilePicturePatch) {
+    return call<void>("update_profile_picture", { accountId, patch });
   }
 
   createFolder(input: { accountId?: string; name: string; parentId: string | null }) {

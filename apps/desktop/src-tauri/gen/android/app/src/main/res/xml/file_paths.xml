@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only these cache folders are ever shared with other apps. -->
+<!-- Only these folders are ever shared with other apps. -->
 <paths>
     <cache-path name="open" path="open/" />
     <cache-path name="updates" path="updates/" />
+    <!-- "Take photo" for a contact or profile picture: the webview hands the camera app a file
+         here (wry's file chooser, ACTION_IMAGE_CAPTURE) and reads the photo back. No CAMERA
+         permission: the camera app takes the photo, not UwUMail. -->
+    <external-files-path name="camera" path="Pictures/" />
 </paths>

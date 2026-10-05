@@ -582,6 +582,41 @@ pub struct CalendarInfo {
     /// visibility are this device's; it can't be renamed, shared or deleted.
     #[serde(default)]
     pub is_local: bool,
+    /// Who it is shared with, and by whom (UwUMail servers only).
+    #[serde(flatten, default)]
+    pub sharing: CalendarSharing,
+}
+
+/// A calendar's sharing on a UwUMail server (its docs/jmap-calendars.md "Shared calendars").
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarSharing {
+    /// May share it with others: own calendars, or shared with everything, on a server that lists
+    /// its people.
+    #[serde(default)]
+    pub may_share: bool,
+    /// The owner of a calendar somebody shares with the account; leaving it only removes it here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_by: Option<CalendarOwner>,
+    /// Who else sees it: principal id → `read`, `write` or `all`; only where it may be shared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_with: Option<std::collections::BTreeMap<String, String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarOwner {
+    pub email: String,
+    pub name: String,
+}
+
+/// Somebody on the same server to share with (a JMAP Principal).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Person {
+    pub id: String,
+    pub name: String,
+    pub email: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

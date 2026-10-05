@@ -58,9 +58,15 @@ import type {
   ImageTextResult,
   LocalModelServer,
   MailtoDraft,
+  MaskedAddress,
+  MaskedAddressInput,
+  MaskedAddressPatch,
   MovedMessage,
   NewAccount,
   OutgoingMessage,
+  Person,
+  ProfilePicture,
+  ProfilePicturePatch,
   Protocol,
   QueuedSend,
   ScheduledReceipt,
@@ -68,6 +74,8 @@ import type {
   ScheduledSend,
   SendLaterInfo,
   SenderPicture,
+  ServerAccountFeatures,
+  ShareLevel,
   Signature,
   ThreadDetail,
   ThreadPage,
@@ -95,7 +103,9 @@ export type BackendErrorCode =
   /** This build carries no client id for the provider. */
   | "oauth_not_configured"
   /** The sign-in lacks a permission it needs now (calendars, contacts): signing in again asks for it. */
-  | "sign_in_again";
+  | "sign_in_again"
+  /** The server refused: the mailbox may not do this (e.g. public profile pictures switched off). */
+  | "forbidden";
 
 export class BackendError extends Error {
   readonly code: BackendErrorCode;
@@ -221,8 +231,12 @@ export interface Backend {
   setCalDavUrl(accountId: string, url: string | null): Promise<void>;
   createCalendar(input: { accountId?: string; name: string; color: string | null }): Promise<CalendarInfo>;
   updateCalendar(id: string, patch: { name?: string; color?: string | null; isVisible?: boolean }): Promise<void>;
-  /** Removes its events too. */
+  /** Removes its events too; for a calendar someone else shared, only this mailbox leaves it. */
   deleteCalendar(id: string): Promise<void>;
+  /** The people of a mailbox's UwUMail server a calendar can be shared with, not the mailbox itself. */
+  calendarPeople(accountId: string): Promise<Person[]>;
+  /** Shares a calendar (one with `mayShare`) with a person at a level; null stops sharing with them. */
+  shareCalendar(calendarId: string, personId: string, level: ShareLevel | null): Promise<void>;
   setDefaultCalendar(id: string): Promise<void>;
   /** Occurrences in [from, to): wall times ("YYYY-MM-DDTHH:mm:ss") in `timeZone`, the viewer's IANA zone. */
   calendarEvents(from: string, to: string, timeZone: string): Promise<CalendarOccurrence[]>;
@@ -274,6 +288,28 @@ export interface Backend {
   /** Changes what the editor shows and leaves the rest of the card as it is. */
   updateContact(id: string, input: ContactInput): Promise<void>;
   deleteContact(id: string): Promise<void>;
+  /**
+   * The photo Microsoft or Google keep for a contact with `remotePhoto`, as a data: URL; null
+   * without one. Cards of other address books carry theirs in `photo`.
+   */
+  contactPhoto(id: string): Promise<string | null>;
+  /** A company's logo for a contact's picture; null for people and mail providers. */
+  companyLogo(email: string): Promise<Blob | null>;
+
+  /**
+   * Per mailbox on a UwUMail server, whether it makes masked addresses and keeps a profile
+   * picture; other mailboxes and servers that can't be reached right now are left out.
+   */
+  serverAccountFeatures(): Promise<ServerAccountFeatures[]>;
+  /** Every masked address of the mailbox, deleted ones included, newest first. */
+  maskedAddresses(accountId: string): Promise<MaskedAddress[]>;
+  /** Makes one by hand; it is `enabled` at once. */
+  createMaskedAddress(accountId: string, input: MaskedAddressInput): Promise<MaskedAddress>;
+  updateMaskedAddress(accountId: string, id: string, patch: MaskedAddressPatch): Promise<void>;
+  profilePicture(accountId: string): Promise<ProfilePicture>;
+  /** Stores a new picture (already cropped) or removes it with null; returns it after the change. */
+  setProfilePicture(accountId: string, picture: Blob | null): Promise<ProfilePicture>;
+  updateProfilePicture(accountId: string, patch: ProfilePicturePatch): Promise<void>;
 
   listFolders(accountId?: string): Promise<Folder[]>;
   /** A new folder below `parentId`, or at the top of the mailbox (the only one when `accountId` is left out). Returns its id. */
