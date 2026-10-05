@@ -54,8 +54,8 @@ export type LinkRequest = "opened" | "asked" | "ignored";
  * Opens a link from a mail, or asks first (see needsConfirmation in lib/links). Anything but
  * web and mail links is ignored; in-page anchors quietly, everything else with a short note.
  */
-export function requestOpenLink(url: string, text: string): LinkRequest {
-  const check = checkLink(url, text);
+export function requestOpenLink(url: string, text: string, safeLink: string | null = null): LinkRequest {
+  const check = checkLink(url, text, safeLink);
   if (!check) {
     const trimmed = url.trim();
     if (trimmed && !trimmed.startsWith("#")) toast(translate("link.unsupported"), "info");

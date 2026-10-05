@@ -152,7 +152,12 @@
   "attachment": {
     "loading": "Ich pack den Anhang aus…",
     "dangerTitle": "Vorsicht! Die Datei könnte Programme starten (・_・;)",
-    "noPreview": "Da kann ich nicht reinschauen (・・ )?"
+    "noPreview": "Da kann ich nicht reinschauen (・・ )?",
+    "dangerous": {
+      "titleOpen": "Nyu schaut diese Datei schief an",
+      "titleSave": "Nyu schaut diese Datei schief an",
+      "body": "Dateien dieser Art können Programme auf deinem Rechner starten. Nimm sie nur, wenn du sie erwartet hast und der Absenderin oder dem Absender vertraust."
+    }
   },
   "update": {
     "readyTitle": "Nyu hat was Neues mitgebracht ✧"

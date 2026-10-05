@@ -186,13 +186,17 @@ export interface LinkCheck {
   rememberable: string | null;
 }
 
-export function checkLink(href: string, text: string): LinkCheck | null {
+/**
+ * `safeLink` names the Safe Links host the reader already took off the link (see lib/safeLinks); a
+ * link still wrapped in one is unwrapped here, so every check looks at the original address.
+ */
+export function checkLink(href: string, text: string, safeLink: string | null = null): LinkCheck | null {
   const written = href.trim();
   if (!isOpenableLink(written)) return null;
   // Every check below looks at the original address, not at Microsoft's wrapper around it.
   const safe = unwrapSafeLink(written);
   const trimmed = safe?.url ?? written;
-  const safeLink = safe?.wrapper ?? null;
+  safeLink = safe?.wrapper ?? safeLink;
   const misleading = misleadingLink(trimmed, text);
   if (/^mailto:/i.test(trimmed)) {
     const mailto = parseMailto(trimmed);

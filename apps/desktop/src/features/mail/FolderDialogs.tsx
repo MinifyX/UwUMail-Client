@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
-import { queryKeys } from "@/lib/queries";
+import { queryKeys, useAccounts, useFolders } from "@/lib/queries";
 import { useFolderEdit, type FolderRequest } from "@/state/folderEdit";
 import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
+import { folderNameProblem, folderNameRules, type FolderNameProblem } from "./folderName";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -66,14 +67,35 @@ function folderLabel(folder: Folder, t: (key: string) => string) {
 function NameForm({ request, onDone }: { request: FolderRequest & { kind: "create" | "rename" }; onDone: () => void }) {
   const { t } = useT();
   const refresh = useRefreshMail();
+  const { data: folders = [] } = useFolders();
+  const { data: accounts = [] } = useAccounts();
   const [name, setName] = useState(request.kind === "rename" ? request.folder.name : "");
+  const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const renaming = request.kind === "rename" ? request.folder : null;
+  const accountId = renaming?.accountId ?? (request.kind === "create" ? request.accountId : undefined);
+  const parentId = renaming ? renaming.parentId : request.kind === "create" ? (request.parent?.id ?? null) : null;
+  const mailbox = folders.filter((folder) => folder.accountId === accountId);
+  const siblings = mailbox
+    .filter((folder) => folder.parentId === parentId && folder.id !== renaming?.id)
+    .map((folder) => folder.name);
+  const protocol = accounts.find((account) => account.id === accountId)?.protocol ?? "imap";
+  const problem = folderNameProblem(name, siblings, folderNameRules(protocol, mailbox));
+  const unchanged = renaming !== null && name.trim() === renaming.name;
+  // "Empty" waits for a submit; the rest shows while typing.
+  const shownProblem = problem && (problem.kind !== "empty" || touched) ? problem : null;
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    setTouched(true);
+    if (problem) return;
+    if (unchanged) {
+      onDone();
+      return;
+    }
     const clean = name.trim();
-    if (!clean) return;
     setBusy(true);
     setError(null);
     try {
@@ -104,15 +126,19 @@ function NameForm({ request, onDone }: { request: FolderRequest & { kind: "creat
 
   return (
     <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-4 px-6 pt-2 pb-6">
-      <Field label={t("folders.name")} error={error}>
+      <Field label={t("folders.name")} error={shownProblem ? problemText(shownProblem, t) : error}>
         {(id) => (
           <TextInput
             id={id}
             value={name}
             autoFocus
-            maxLength={200}
+            maxLength={255}
+            aria-invalid={shownProblem !== null}
             placeholder={t("folders.namePlaceholder")}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => {
+              setName(event.target.value);
+              setError(null);
+            }}
           />
         )}
       </Field>
@@ -120,12 +146,18 @@ function NameForm({ request, onDone }: { request: FolderRequest & { kind: "creat
         <Button variant="ghost" onClick={onDone}>
           {t("common.cancel")}
         </Button>
-        <Button type="submit" variant="primary" busy={busy} disabled={!name.trim()}>
+        <Button type="submit" variant="primary" busy={busy} disabled={shownProblem !== null}>
           {request.kind === "create" ? t("folders.create") : t("folders.renameConfirm")}
         </Button>
       </div>
     </form>
   );
+}
+
+function problemText(problem: FolderNameProblem, t: (key: string, options?: Record<string, string>) => string) {
+  return problem.kind === "character"
+    ? t("folders.problem.character", { character: problem.character })
+    : t(`folders.problem.${problem.kind}`);
 }
 
 function DeleteQuestion({ folder, onDone }: { folder: Folder; onDone: () => void }) {

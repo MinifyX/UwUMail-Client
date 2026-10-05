@@ -137,6 +137,25 @@ describe("folder management", () => {
     expect(useFolderEdit.getState().request?.kind).toBe("rename");
   });
 
+  it("says what's wrong with a name before asking the mailbox", async () => {
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "More for Receipts" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const input = await screen.findByLabelText("Name");
+    // A JMAP (UwUMail) mailbox separates folder levels with "/".
+    fireEvent.change(input, { target: { value: "Bills/2026" } });
+    expect((await screen.findByRole("alert")).textContent).toBe("A folder name can't contain “/”.");
+    fireEvent.change(input, { target: { value: "trash" } });
+    expect(screen.getByRole("alert").textContent).toBe("There's already a folder with that name here.");
+    expect(screen.getByRole("button", { name: "Rename" })).toHaveProperty("disabled", true);
+    // "Empty" waits for the submit.
+    fireEvent.change(input, { target: { value: "  " } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.submit(input.closest("form")!);
+    expect((await screen.findByRole("alert")).textContent).toBe("Enter a name.");
+    expect(renameFolder).not.toHaveBeenCalled();
+  });
+
   it("system folders offer no rename or delete, the trash offers emptying with its count", async () => {
     setup();
     fireEvent.click(await screen.findByRole("button", { name: "More for Trash" }));

@@ -2,6 +2,7 @@ import { AssistError, BackendError, type Backend } from "./backend";
 import { DemoAssist } from "./demo-assist";
 import { DEVICE_ASSIST_SCOPE } from "./types";
 import { isDangerous } from "@/lib/attachments";
+import { confirmDangerousFile } from "@/state/dangerousFile";
 import { hasLabel, matchesLabels } from "@/lib/labelFilter";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
@@ -841,8 +842,10 @@ export class DemoBackend implements Backend {
     if (!clean) throw new BackendError("invalid_input", "Enter a name for the folder.");
     if ([...clean].length > 200)
       throw new BackendError("invalid_input", "Folder names can have at most 200 characters.");
+    if (new TextEncoder().encode(clean).length > 255)
+      throw new BackendError("invalid_input", "That folder name is too long.");
     // eslint-disable-next-line no-control-regex
-    if (/[\u0000-\u001f\u007f]/.test(clean)) {
+    if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(clean)) {
       throw new BackendError("invalid_input", "Folder names can't contain line breaks or control characters.");
     }
     if (clean.includes("/")) throw new BackendError("invalid_input", 'Folder names can\'t contain "/".');
@@ -1275,7 +1278,7 @@ export class DemoBackend implements Backend {
   async openAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
     // Stands in for the engine's native warning dialog.
-    if (file.dangerous && !window.confirm(`"${file.filename}" can run programs. Open anyway?`)) return false;
+    if (file.dangerous && !(await confirmDangerousFile(file.filename, "open"))) return false;
     window.open(file.url, "_blank", "noopener,noreferrer");
     return true;
   }
@@ -1302,7 +1305,7 @@ export class DemoBackend implements Backend {
   async saveAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
     // Stands in for the engine's native warning dialog, as when opening.
-    if (file.dangerous && !window.confirm(`"${file.filename}" can run programs. Save anyway?`)) return false;
+    if (file.dangerous && !(await confirmDangerousFile(file.filename, "save"))) return false;
     const link = document.createElement("a");
     link.href = file.url;
     link.download = file.filename;

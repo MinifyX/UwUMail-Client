@@ -132,7 +132,9 @@
     "hideAddresses": "Hide addresses",
     "replyTo": "Reply to",
     "copyAddress": "Copy {{email}}",
-    "addressCopied": "Address copied"
+    "addressCopied": "Address copied",
+    "teamsMeeting": "Teams meeting",
+    "teamsJoin": "Join"
   },
   "compose": {
     "new": "New message",
@@ -641,7 +643,14 @@
     "notPdf": "This file says it's a PDF but isn't one, so it isn't shown here. Save it or open it with an app if you trust it.",
     "dangerOpen": "Open anyway",
     "dangerCancel": "Don't open",
-    "packageBlocked": "UwUMail doesn't open app packages from mails. Save the file to Downloads if you expected it and trust the sender."
+    "packageBlocked": "UwUMail doesn't open app packages from mails. Save the file to Downloads if you expected it and trust the sender.",
+    "tnef": "Outlook packed this mail and it couldn't be unpacked. For a UwUMail account, updating the server helps.",
+    "dangerSave": "Save anyway",
+    "dangerous": {
+      "titleOpen": "Open this file?",
+      "titleSave": "Save this file?",
+      "body": "This kind of file can run programs on your computer. Only open or save it if you expected it and trust the sender."
+    }
   },
   "update": {
     "readyTitle": "A new version is ready",
@@ -839,7 +848,16 @@
     "emptyConfirm": "Delete for good",
     "emptied_one": "{{count}} message deleted for good",
     "emptied_other": "{{count}} messages deleted for good",
-    "alreadyEmpty": "Nothing to delete, the folder is already empty"
+    "alreadyEmpty": "Nothing to delete, the folder is already empty",
+    "problem": {
+      "empty": "Enter a name.",
+      "slash": "A folder name can't contain “/”.",
+      "character": "A folder name can't contain “{{character}}”.",
+      "control": "The name contains invisible control characters.",
+      "tooLong": "That name is too long.",
+      "dots": "“.” and “..” can't be folder names.",
+      "taken": "There's already a folder with that name here."
+    }
   },
   "calendar": {
     "title": "Calendar",

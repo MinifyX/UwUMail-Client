@@ -55,6 +55,25 @@ export function unwrapSafeLink(href: string): SafeLink | null {
   return { url: current.href, wrapper: outer.hostname.toLowerCase() };
 }
 
+/** Marks a link in the reader whose Safe Link was taken off; holds the wrapper's host. */
+export const SAFE_LINK_MARKER = "data-uwu-safelink";
+
+/**
+ * Shows and links the original address in an `<a>` or `<area>` of the reader, and marks it with the
+ * wrapper's host, so the link question can still tell that Microsoft wrapped it. Link text that
+ * spelled out the wrapped address spells out the original.
+ */
+export function unwrapSafeLinkElement(element: Element): void {
+  const href = element.getAttribute("href");
+  if (!href) return;
+  const safe = unwrapSafeLink(href);
+  if (!safe) return;
+  element.setAttribute("href", safe.url);
+  element.setAttribute(SAFE_LINK_MARKER, safe.wrapper);
+  const only = element.childNodes.length === 1 ? element.firstChild : null;
+  if (only && only.nodeType === 3 && only.textContent?.trim() === href.trim()) only.textContent = safe.url;
+}
+
 /**
  * What a link's visible text should read: the original address where the text is itself a Safe
  * Link (Outlook writes the wrapped address out in plain-text mail), else null to keep the text.

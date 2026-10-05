@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   FileText,
   FileVideo,
+  Package,
   Paperclip,
   ShieldAlert,
   UserRound,
@@ -18,6 +19,7 @@ import type { Address, Attachment } from "@/backend/types";
 import { useT } from "@/i18n";
 import { attachmentKind, isDangerous, type AttachmentKind } from "@/lib/attachments";
 import { formatSize } from "@/lib/format";
+import { isTnefAttachment } from "@/lib/outlook";
 import { useAttachment } from "@/lib/queries";
 import { AttachmentViewer } from "./AttachmentViewer";
 
@@ -67,11 +69,14 @@ function Tile({ attachment, onOpen }: { attachment: Attachment; onOpen: () => vo
   const { t, i18n } = useT();
   const kind = attachmentKind(attachment.filename, attachment.mimeType);
   const dangerous = isDangerous(attachment.filename);
-  const Icon = dangerous ? ShieldAlert : ICONS[kind];
+  // Outlook's packed winmail.dat that couldn't be unpacked (see lib/outlook).
+  const packed = !dangerous && isTnefAttachment(attachment);
+  const Icon = dangerous ? ShieldAlert : packed ? Package : ICONS[kind];
   return (
     <button
       type="button"
       onClick={onOpen}
+      title={packed ? t("attachment.tnef") : undefined}
       className={clsx(
         "flex max-w-[280px] items-center gap-2.5 rounded-xl border py-2 pr-3 pl-2.5 text-left",
         dangerous
@@ -90,7 +95,11 @@ function Tile({ attachment, onOpen }: { attachment: Attachment; onOpen: () => vo
       <span className="min-w-0">
         <span className="block truncate text-[13px] font-semibold">{attachment.filename}</span>
         <span className={clsx("block text-[11.5px]", dangerous ? "font-semibold text-danger" : "text-muted")}>
-          {dangerous ? t("attachment.dangerTag") : formatSize(attachment.size, i18n.language)}
+          {dangerous
+            ? t("attachment.dangerTag")
+            : packed
+              ? t("attachment.tnef")
+              : formatSize(attachment.size, i18n.language)}
         </span>
       </span>
     </button>

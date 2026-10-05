@@ -132,7 +132,9 @@
     "hideAddresses": "Adressen ausblenden",
     "replyTo": "Antwort an",
     "copyAddress": "{{email}} kopieren",
-    "addressCopied": "Adresse kopiert"
+    "addressCopied": "Adresse kopiert",
+    "teamsMeeting": "Teams-Besprechung",
+    "teamsJoin": "Teilnehmen"
   },
   "compose": {
     "new": "Neue Mail",
@@ -641,7 +643,14 @@
     "notPdf": "Diese Datei gibt sich als PDF aus, ist aber keins, deshalb wird sie hier nicht angezeigt. Speichere sie oder öffne sie mit einer App, wenn du ihr vertraust.",
     "dangerOpen": "Trotzdem öffnen",
     "dangerCancel": "Nicht öffnen",
-    "packageBlocked": "App-Pakete aus Mails öffnet UwUMail nicht. Speichere die Datei in Downloads, wenn du sie erwartet hast und dem Absender vertraust."
+    "packageBlocked": "App-Pakete aus Mails öffnet UwUMail nicht. Speichere die Datei in Downloads, wenn du sie erwartet hast und dem Absender vertraust.",
+    "tnef": "Outlook hat diese Mail verpackt, und sie ließ sich nicht auspacken. Bei einem UwUMail-Konto hilft ein Update des Servers.",
+    "dangerSave": "Trotzdem speichern",
+    "dangerous": {
+      "titleOpen": "Diese Datei öffnen?",
+      "titleSave": "Diese Datei speichern?",
+      "body": "Dateien dieser Art können Programme auf deinem Rechner starten. Öffne oder speichere sie nur, wenn du sie erwartet hast und der Absenderin oder dem Absender vertraust."
+    }
   },
   "update": {
     "readyTitle": "Neue Version bereit",
@@ -839,7 +848,16 @@
     "emptyConfirm": "Endgültig löschen",
     "emptied_one": "{{count}} Mail endgültig gelöscht",
     "emptied_other": "{{count}} Mails endgültig gelöscht",
-    "alreadyEmpty": "Nichts zu löschen, der Ordner ist schon leer"
+    "alreadyEmpty": "Nichts zu löschen, der Ordner ist schon leer",
+    "problem": {
+      "empty": "Gib einen Namen ein.",
+      "slash": "Ein Ordnername darf kein „/“ enthalten.",
+      "character": "Ein Ordnername darf kein „{{character}}“ enthalten.",
+      "control": "Der Name enthält unsichtbare Steuerzeichen.",
+      "tooLong": "Der Name ist zu lang.",
+      "dots": "„.“ und „..“ gehen als Ordnername nicht.",
+      "taken": "Hier gibt es schon einen Ordner mit diesem Namen."
+    }
   },
   "calendar": {
     "title": "Kalender",
