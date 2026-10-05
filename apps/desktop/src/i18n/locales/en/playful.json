@@ -185,8 +185,8 @@
     "hiddenTarget": "The link doesn't tell where it hops after that.",
     "otherTarget": "Different target than shown",
     "statusRedirect": "hops on to {{target}}",
-    "safeLinkRemoved": "Microsoft Safe Link unwrapped ✧",
-    "safeLinkBody": "Microsoft wrapped this link for its link scanner ({{host}}). I unwrapped it, so you see and open the real address.",
+    "safeLink": "Microsoft Safe Link unwrapped ✧",
+    "safeLinkBody": "Microsoft had wrapped this link in a scanner address. I unwrapped it, so you see and open the real address.",
     "unsupported": "I'd rather not open links like that (・_・;)",
     "sheetTitle": "Link"
   },
@@ -241,18 +241,18 @@
     "reload": "Reload"
   },
   "folders": {
-    "created": "New folder “{{name}}” is ready (ﾉ◕ヮ◕)ﾉ",
+    "created": "Folder “{{name}}” is ready to be filled ✿",
     "renamed": "Now it's called “{{name}}” ✿",
     "deleted": "Folder “{{name}}” is gone (｡•́︿•̀｡)",
-    "deleteTitle": "Tidy away “{{name}}”?",
+    "deleteTitle": "Say goodbye to “{{name}}”?",
     "deleteBody_one": "I'll carry its {{count}} message to the trash first.",
     "deleteBody_other": "I'll carry its {{count}} messages to the trash first.",
-    "emptyTrashTitle": "Take out the trash? (・_・;)",
-    "emptyJunkTitle": "Sweep out the junk? (・_・;)",
+    "emptyTrashTitle": "Take out the trash? (・ω・)",
+    "emptyJunkTitle": "Sweep out the spam? (｀・ω・´)",
     "emptyBody_one": "{{count}} message will be gone for good, from the server too. I can't fetch it back.",
     "emptyBody_other": "{{count}} messages will be gone for good, from the server too. I can't fetch them back.",
-    "emptied_one": "Poof, {{count}} message is gone for good ✧",
-    "emptied_other": "Poof, {{count}} messages are gone for good ✧",
+    "emptied_one": "Squeaky clean! {{count}} mail gone for good ✧",
+    "emptied_other": "Squeaky clean! {{count}} mails gone for good ✧",
     "alreadyEmpty": "Already spotless in here (˘ᵕ˘)"
   },
   "calendar": {

@@ -208,8 +208,9 @@
     "draftGone": "There is no draft left in this conversation.",
     "sending": "Sending mail …",
     "undo": "Undo",
-    "sendUndone": "Sending stopped. You can keep writing.",
+    "sendUndone": "Sending stopped. The mail is open again.",
     "undoTooLate": "Too late, the mail is already on its way.",
+    "undoFailed": "The mail couldn't be taken back. {{reason}}",
     "sendFailedKept": "The mail couldn't be sent: {{reason}} It's waiting in Drafts.",
     "open": "Open",
     "moved": "Moved to “{{folder}}”",
@@ -692,8 +693,8 @@
     "hiddenTarget": "Where it goes after that isn't in the link.",
     "otherTarget": "Different target than shown",
     "statusRedirect": "redirects to {{target}}",
-    "safeLinkRemoved": "Microsoft Safe Link removed",
-    "safeLinkBody": "Microsoft wrapped this link for its link scanner ({{host}}). UwUMail shows and opens the original address.",
+    "safeLink": "Microsoft Safe Link removed",
+    "safeLinkBody": "Microsoft had wrapped this link in a scanner address. You see and open the real address instead.",
     "unsupported": "UwUMail doesn't open this kind of link.",
     "sheetTitle": "Link"
   },
@@ -723,7 +724,7 @@
     "notesFrom": "From the mail “{{subject}}” by {{sender}}",
     "noSubject": "(no subject)",
     "findAppointment": "Find appointment",
-    "searching": "Looking for appointments in this mail…",
+    "searching": "The AI is looking for appointments…",
     "noneFound": "No upcoming appointment found in this mail."
   },
   "density": {
@@ -787,6 +788,8 @@
     "mailToFallback": "If that doesn't work directly, a mail goes from you to {{address}}.",
     "body": "UwUMail unsubscribes you with the sender directly. After that, no more mail should come from there.",
     "bodyPage": "The sender has its own page for this. UwUMail opens it for you, and you confirm there.",
+    "bodyOneClick": "UwUMail asks the sender's server to take you off the list, in one step. After that, no more mail should come from there.",
+    "orPage": "If it can't be done that way, the sender's own page opens.",
     "archive": "Archive earlier mail from there"
   },
   "deleteForever": {
@@ -841,9 +844,11 @@
     "renamed": "Renamed to “{{name}}”",
     "deleted": "Folder “{{name}}” deleted",
     "deleteTitle": "Delete “{{name}}”?",
-    "deleteBody_one": "Its {{count}} message goes to the trash first.",
-    "deleteBody_other": "Its {{count}} messages go to the trash first.",
-    "deleteBodyEmpty": "The folder is empty, nothing else goes with it.",
+    "deleteBody_one": "Its {{count}} message moves to the trash.",
+    "deleteBody_other": "Its {{count}} messages move to the trash.",
+    "deleteBodyEmpty": "The folder is empty.",
+    "hasChildrenTitle": "“{{name}}” still holds folders",
+    "hasChildrenBody": "Delete or move the folders inside it first, then the folder itself.",
     "emptyTrashTitle": "Empty the trash?",
     "emptyJunkTitle": "Empty the junk folder?",
     "emptyBody_one": "{{count}} message will be deleted for good, on the server too. This can't be undone.",
@@ -994,6 +999,16 @@
       "calendarCreated": "Calendar “{{name}}” created",
       "calendarDeleted": "Calendar “{{name}}” deleted"
     },
+    "participants": "Participants",
+    "organizer": "Organizer",
+    "answer": {
+      "needs-action": "No answer yet",
+      "accepted": "Accepted",
+      "tentative": "Maybe",
+      "declined": "Declined"
+    },
+    "moreParticipants_one": "and {{count}} more",
+    "moreParticipants_other": "and {{count}} more",
     "birthdays": {
       "turns_one": "turns {{count}}",
       "turns_other": "turns {{count}}",
