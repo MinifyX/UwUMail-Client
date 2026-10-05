@@ -48,6 +48,8 @@ pub fn plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
 
 pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>> {
     let data_dir = app.path().app_data_dir()?;
+    // Before anything can ring: how notifications read, as last chosen.
+    crate::notify_prefs::init(&data_dir);
     let opener = app.handle().clone();
     // Only ever sign-in pages; anything but a web address stays unopened.
     let open_url = Arc::new(move |url: &str| {
