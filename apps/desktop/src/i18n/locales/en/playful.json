@@ -127,6 +127,7 @@
     "unifiedPushGone": "Your push app is gone (・_・;) I stay connected myself again.",
     "senderAdded": "{{email}} is ready to go (｀・ω・´)ゞ",
     "signatureSaved": "Signature looks great ✧",
+    "signatureTooBig": "Oof, that much won't fit in a signature (・_・;) Try a smaller picture.",
     "signaturePlaceholder": "Kind regards ✿",
     "linkConfirm": "Ask before opening links",
     "linkConfirmDesc": "I'll show you where a link from a mail goes first. Disguised links always get a question.",
@@ -329,5 +330,10 @@
       "declined": "Declined. I told the organizer, nicely (˘ᵕ˘)"
     },
     "removed": "Gone from your calendar ✧"
+  },
+  "push": {
+    "notification": {
+      "newMail": "New mail for you! ✉"
+    }
   }
 }

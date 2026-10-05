@@ -400,6 +400,19 @@ export function useBackendEvents() {
     void backend().setRunInBackground(runInBackground);
   }, [runInBackground]);
 
+  const notifyShowContent = useSettings((s) => s.notifyShowContent);
+  const appLock = useSettings((s) => s.appLock);
+  useEffect(() => {
+    void backend()
+      .setNotificationPrefs({
+        showContent: notifyShowContent,
+        appLock,
+        newMail: t("push.notification.newMail"),
+        hidden: t("push.notification.hidden"),
+      })
+      .catch(() => {});
+  }, [notifyShowContent, appLock, t]);
+
   // Remote pictures wait for this before they go anywhere. A kept address was checked when it was
   // saved; should the app still turn it down, they stay away rather than leave without it.
   useEffect(() => {

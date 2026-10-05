@@ -263,8 +263,8 @@
       "name": "Profi",
       "desc": "Ordner immer sichtbar, drei Spalten, Tastenkürzel."
     },
-    "resizeNav": "Breite der Seitenleiste ändern",
-    "resizeList": "Breite der Mailliste ändern"
+    "resizeNav": "Breite der Seitenleiste",
+    "resizeList": "Breite der Mailliste"
   },
   "tone": {
     "playful": {
@@ -359,7 +359,7 @@
     "remoteAsk": "Jedes Mal fragen",
     "remoteAlways": "Immer laden",
     "trustedSenders": "Bilder immer laden von",
-    "trustedSendersDesc": "Eine Firma wie @shop.de schließt alle ihre Adressen ein, auch news@ oder noreply@.",
+    "trustedSendersDesc": "Eine Firma wie @shop.example schließt alle ihre Adressen ein, auch news@ oder noreply@.",
     "trustedSendersEmpty": "Noch niemand. Du fügst Absender direkt im Bilder-Hinweis einer Mail hinzu.",
     "trustedSendersInactive": "Wirkt erst mit „Jedes Mal fragen“. Gerade lädt UwUMail alle Bilder.",
     "untrustSender": "{{sender}} entfernen",
@@ -474,6 +474,7 @@
     "signatureDefaultNew": "Neue Mails",
     "signatureDefaultReplies": "Antworten",
     "signatureSaved": "Signatur gespeichert",
+    "signatureChangedElsewhere": "Die Signaturen wurden inzwischen woanders geändert. Sie sind neu geladen, bitte prüfe sie und speichere noch einmal.",
     "signatureUntitled": "Signatur",
     "blockedSenders": "Blockierte Absender",
     "blockedSendersDesc": "Neue Mails von diesen Absendern landen im Spam-Ordner. Bei Konten auf einem UwUMail-Server sortiert der Server selbst, auch wenn die App geschlossen ist. Blockieren kannst du über „Mehr“ in einer Mail.",
@@ -530,7 +531,7 @@
     "signatureOverride": "Eigene Signatur für diese Adresse",
     "signatureBackToDomain": "Domain-Signatur verwenden",
     "signatureDeviceFirst": "In dieser App haben diese Adressen eigene Signaturen. Sie gehen hier vor der Signatur vom Server. Lösch sie, wenn die vom Server gelten soll.",
-    "signatureTooBig": "Die Signatur ist zu groß. Nimm ein kleineres Bild.",
+    "signatureTooBig": "Die Signatur wird zu groß. Nimm ein kleineres Bild oder weniger Bilder.",
     "profile": "Profilbild",
     "masked": "Maskierte Adressen",
     "serverAccount": "Postfach"
@@ -1992,7 +1993,7 @@
   },
   "font": {
     "system": "Systemschrift",
-    "sample": "Hallo :3 – Termin um 10:30 <3"
+    "sample": "Hallo – Termin um 10:30"
   },
   "scheduled": {
     "title": "Geplante Mails",
@@ -2229,5 +2230,13 @@
       "declined": "abgesagt"
     },
     "localCalendar": "Einladungen"
+  },
+  "push": {
+    "showContent": "Absender und Betreff zeigen",
+    "showContentDesc": "Ist das aus, sagt eine Benachrichtigung nur, dass neue Post da ist. Mit der App-Sperre sagt sie nie mehr.",
+    "notification": {
+      "newMail": "Neue Mail",
+      "hidden": "Öffne UwUMail, um sie zu lesen."
+    }
   }
 }

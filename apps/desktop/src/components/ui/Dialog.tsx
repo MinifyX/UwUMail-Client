@@ -42,6 +42,8 @@ export function Dialog({
     <dialog
       ref={ref}
       onCancel={(event) => {
+        // React hands a nested dialog's Escape up to this one too; only its own counts here.
+        if (event.target !== event.currentTarget) return;
         event.preventDefault();
         onClose();
       }}

@@ -297,7 +297,12 @@ export class TauriBackend implements Backend {
       Object.fromEntries(Object.entries(entries ?? {}).map(([key, signature]) => [key, clean(signature)]));
     const saved = await call<{ accountId: string; overview: unknown }>("save_domain_signatures", {
       accountId,
-      change: { domains: mapped(change.domains), identities: mapped(change.identities) },
+      change: {
+        domains: mapped(change.domains),
+        identities: mapped(change.identities),
+        // Two devices must not overwrite each other unseen (webmail review WF-3).
+        ...(change.ifInState !== undefined ? { ifInState: change.ifInState } : {}),
+      },
     });
     return accountSignaturesFrom(saved);
   }
@@ -958,6 +963,10 @@ export class TauriBackend implements Backend {
 
   setRunInBackground(enabled: boolean) {
     return call<void>("set_run_in_background", { enabled });
+  }
+
+  setNotificationPrefs(prefs: { showContent: boolean; appLock: boolean; newMail: string; hidden: string }) {
+    return call<void>("set_notification_prefs", prefs);
   }
 
   takeMailto() {

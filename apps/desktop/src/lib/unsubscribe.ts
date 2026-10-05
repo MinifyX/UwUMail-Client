@@ -34,6 +34,9 @@ export function unsubscribeMail(mailto: string): UnsubscribeMail | null {
   }
   // One recipient, and nothing in it that could turn into a second one or into a header of its own.
   if (address.includes(",") || /[\s<>;"]/.test(address) || !isEmail(address)) return null;
+  // Nor anything invisible: the question names this address before the mail goes, and direction or
+  // zero-width characters would make it read as another one (webmail security audit W-30).
+  if (/[\p{Cf}\p{Cc}\p{Zl}\p{Zp}]/u.test(address)) return null;
   const subject = (target.searchParams.get("subject") ?? "unsubscribe").replace(/\s+/g, " ").trim().slice(0, 200);
   return { address, subject: subject || "unsubscribe" };
 }

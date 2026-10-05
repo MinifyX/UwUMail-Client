@@ -147,7 +147,10 @@ export function LabelNav() {
               {scopes.length > 1 && (
                 <p className="truncate px-3 pt-1 text-[11.5px] font-semibold text-faint">{placeName(scope)}</p>
               )}
-              <ul className="flex flex-col gap-0.5">
+              <ul
+                aria-label={scopes.length > 1 ? `${t("labels.title")}: ${placeName(scope)}` : t("labels.title")}
+                className="flex flex-col gap-0.5"
+              >
                 {entries.map((entry, index) =>
                   entry.scope === scope ? (
                     <LabelItem

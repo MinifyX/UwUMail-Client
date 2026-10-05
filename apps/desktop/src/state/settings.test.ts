@@ -57,3 +57,25 @@ describe("font settings", () => {
     expect(useSettings.getState()).toMatchObject({ font: "uwu", senderFonts: "replace" });
   });
 });
+
+describe("settings kept on this device", () => {
+  afterEach(() => useSettings.setState({ ...DEFAULT_SETTINGS }));
+
+  it("take only known settings of the right type", async () => {
+    const update = useSettings.getState().update;
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        state: { update: "not a function", trustedSenders: "everyone", linkConfirm: false, undoSendSeconds: "10" },
+        version: 1,
+      }),
+    );
+    await useSettings.persist.rehydrate();
+    const state = useSettings.getState();
+    expect(state.update).toBe(update);
+    expect(state.trustedSenders).toEqual([]);
+    expect(state.linkConfirm).toBe(false);
+    expect(state.undoSendSeconds).toBe(DEFAULT_SETTINGS.undoSendSeconds);
+    expect("unknown" in state).toBe(false);
+  });
+});

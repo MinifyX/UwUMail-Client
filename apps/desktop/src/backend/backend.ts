@@ -107,7 +107,9 @@ export type BackendErrorCode =
   /** The sign-in lacks a permission it needs now (calendars, contacts): signing in again asks for it. */
   | "sign_in_again"
   /** The server refused: the mailbox may not do this (e.g. public profile pictures switched off). */
-  | "forbidden";
+  | "forbidden"
+  /** Changed elsewhere since it was read (`ifInState` didn't match): read it again first. */
+  | "state_mismatch";
 
 export class BackendError extends Error {
   readonly code: BackendErrorCode;
@@ -525,6 +527,16 @@ export interface Backend {
 
   /** Whether closing the window keeps UwUMail running in the tray. */
   setRunInBackground(enabled: boolean): Promise<void>;
+  /**
+   * How new-mail notifications read: sender and subject, or only that new mail came (`newMail`
+   * and `hidden` are those texts in the page's language). The app lock hides them too.
+   */
+  setNotificationPrefs(prefs: {
+    showContent: boolean;
+    appLock: boolean;
+    newMail: string;
+    hidden: string;
+  }): Promise<void>;
   /** The mailto: link UwUMail was opened with, handed out once. */
   takeMailto(): Promise<MailtoDraft | null>;
 

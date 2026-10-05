@@ -13,9 +13,22 @@ export const resources = {
   de: { neutral: deNeutral, playful: dePlayful },
 } as const;
 
+const LANGUAGES: readonly Language[] = ["de", "en"];
+
+/** The first of the system's languages the app speaks, English when it speaks none of them. */
+export function systemLanguage(
+  preferred: readonly string[] = navigator.languages?.length ? navigator.languages : [navigator.language],
+): Language {
+  for (const tag of preferred) {
+    const base = tag.toLowerCase().split(/[-_]/)[0];
+    const found = LANGUAGES.find((language) => language === base);
+    if (found) return found;
+  }
+  return "en";
+}
+
 export function resolveLanguage(setting: LanguageSetting): Language {
-  if (setting !== "system") return setting;
-  return navigator.language.toLowerCase().startsWith("de") ? "de" : "en";
+  return setting === "de" || setting === "en" ? setting : systemLanguage();
 }
 
 void i18n.use(initReactI18next).init({

@@ -70,3 +70,25 @@ describe("links", () => {
     expect(misleadingLink("mailto:sales@bank.example?cc=help@bank.example", "bank.example")).toBeNull();
   });
 });
+
+describe("link text punctuation", () => {
+  it("drops the punctuation after an address in the text", () => {
+    expect(claimedHost("bank.example?!")).toBe("bank.example");
+    expect(claimedHost("bank.example.);")).toBe("bank.example");
+    expect(claimedHost("...")).toBeNull();
+  });
+
+  // Regression (webmail security audit WEBMAIL-1): link text ending in a long run of punctuation
+  // froze the page each time the pointer crossed the link, as `/[.,;:!?)]+$/` retried from every
+  // position of the run.
+  it("stays fast on link text with a long run of punctuation", () => {
+    const started = performance.now();
+    expect(claimedHost(`a${".".repeat(200_000)}x`)).toBeNull();
+    expect(claimedHost(`bank.example${":)".repeat(100_000)}`)).toBe("bank.example");
+    expect(misleadingLink("https://phish.example/", `bank.example${"!".repeat(200_000)}`)).toEqual({
+      shown: "bank.example",
+      actual: "phish.example",
+    });
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});

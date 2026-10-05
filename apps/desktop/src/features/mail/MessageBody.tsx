@@ -225,8 +225,7 @@ export function buildDocument(
   const variables = fontVariables(fonts.faces || fonts.font === "system" ? fonts.font : "system", fonts.senderFonts);
   const frame = `${fonts.faces ? `${fonts.faces}\n` : ""}:root{color-scheme:${dark ? "dark" : "light"};${variables}}
 html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:hidden!important}
-#${ROOT_ID}{display:flow-root;overflow-x:auto}
-pre,code,kbd,samp,tt{font-variant-ligatures:no-contextual}${dateMarks.length > 0 ? `\n${DATE_STYLE}` : ""}`;
+#${ROOT_ID}{display:flow-root;overflow-x:auto}${dateMarks.length > 0 ? `\n${DATE_STYLE}` : ""}`;
   // HTML mail brings its own design: keep the sender's sizes and weights and only give it paper,
   // some breathing room and a font where it names none (the engine's default would be Times).
   const html = `body{background:${dark ? "#1c171f" : "#ffffff"};color:${dark ? "#f8f2f6" : "#1c1420"};font-family:var(--uwu-font)}

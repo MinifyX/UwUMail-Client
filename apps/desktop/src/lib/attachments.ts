@@ -116,7 +116,7 @@ export function attachmentKind(filename: string, mimeType: string): AttachmentKi
 function effectiveExtension(filename: string): string {
   // Windows ignores trailing dots and spaces, so "tool.exe. " still runs as tool.exe. The engine
   // trims every kind of space before writing the file, so a no-break space counts as well.
-  return extensionOf(filename.replace(BIDI_CONTROLS, "").replace(/[.\s]+$/u, ""));
+  return extensionOf(withoutTrailingDotsAndSpaces(filename.replace(BIDI_CONTROLS, "")));
 }
 
 export function isDangerous(filename: string): boolean {
@@ -125,6 +125,17 @@ export function isDangerous(filename: string): boolean {
 
 export function isAppPackage(filename: string): boolean {
   return APP_PACKAGES.has(effectiveExtension(filename));
+}
+
+/**
+ * The name without the dots and spaces (of every kind) at its end. A loop from the back rather
+ * than `/[.\s]+$/`, which retries from every position of a long run and froze the page on a crafted
+ * attachment name (webmail security audit WEBMAIL-1).
+ */
+function withoutTrailingDotsAndSpaces(name: string): string {
+  let end = name.length;
+  while (end > 0 && (name[end - 1] === "." || /\s/u.test(name[end - 1]!))) end -= 1;
+  return name.slice(0, end);
 }
 
 export function isIosInstallable(filename: string): boolean {

@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { CircleAlert, CircleCheck, Mail, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { LogoSymbol } from "@/components/ui/Logo";
 import { useT } from "@/i18n";
 import { useToasts } from "@/state/toasts";
@@ -39,6 +40,7 @@ export function Toaster() {
               )}
             </span>
             <span className="flex-1">{item.message}</span>
+            {item.countdownTo && <Countdown to={item.countdownTo} />}
             {item.action && (
               <button
                 type="button"
@@ -64,4 +66,21 @@ export function Toaster() {
       })}
     </div>
   );
+}
+
+/** Whole seconds left until `to`, e.g. until a held-back mail goes out. */
+function Countdown({ to }: { to: string }) {
+  const { i18n } = useT();
+  const left = () => Math.max(0, Math.ceil((Date.parse(to) - Date.now()) / 1000));
+  const [seconds, setSeconds] = useState(left);
+  useEffect(() => {
+    const timer = window.setInterval(() => setSeconds(left()), 250);
+    return () => window.clearInterval(timer);
+    // `left` only reads `to`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [to]);
+  const text = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "second", unitDisplay: "narrow" }).format(
+    seconds,
+  );
+  return <span className="shrink-0 text-[12px] tabular-nums opacity-70">{text}</span>;
 }

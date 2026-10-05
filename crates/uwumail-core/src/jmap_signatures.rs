@@ -8,14 +8,14 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::error::{Error, Result};
+use crate::error::{Error, ErrorCode, Result};
 use crate::jmap::Client;
 
 /// What the server keeps per signature, text and HTML each (its `maxSize`).
 pub const MAX_BYTES: usize = 262_144;
 /// Signatures one change may carry (its `maxChanges`).
 pub const MAX_CHANGES: usize = 500;
-/// A domain name or a JMAP id is never longer.
+/// A domain name, a JMAP id or a state string is never longer.
 const MAX_KEY: usize = 255;
 
 /// Arguments of `SignatureSettings/get`.
@@ -24,15 +24,26 @@ pub fn get_arguments(account_id: &str) -> Value {
 }
 
 /// Arguments of `SignatureSettings/set` for a change the page made: `domains` and `identities`,
-/// each mapping a domain (or `*`) or an identity id to `{text, html}` or `null`. Anything else is
-/// refused here already, so the server never sees half a change.
+/// each mapping a domain (or `*`) or an identity id to `{text, html}` or `null`, and `ifInState`,
+/// the overview's state the change was made on, so two devices can't overwrite each other unseen
+/// (webmail review WF-3). Anything else is refused here already, so the server never sees half a
+/// change.
 pub fn set_arguments(account_id: &str, change: &Value) -> Result<Value> {
     let invalid = || Error::invalid("This signature change makes no sense.");
     let change = change.as_object().ok_or_else(invalid)?;
-    if change.keys().any(|key| key != "domains" && key != "identities") {
+    if change.keys().any(|key| key != "domains" && key != "identities" && key != "ifInState") {
         return Err(invalid());
     }
     let mut arguments = json!({ "accountId": account_id });
+    match change.get("ifInState") {
+        None | Some(Value::Null) => {}
+        Some(Value::String(state))
+            if !state.is_empty() && state.len() <= MAX_KEY && !state.chars().any(char::is_control) =>
+        {
+            arguments["ifInState"] = Value::String(state.clone());
+        }
+        Some(_) => return Err(invalid()),
+    }
     let mut count = 0;
     for part in ["domains", "identities"] {
         let entries = match change.get(part) {
@@ -104,8 +115,17 @@ pub async fn save(client: &Client, change: &Value) -> Result<Value> {
     let responses = client
         .call(vec![("SignatureSettings/set", arguments), ("SignatureSettings/get", get_arguments(account))])
         .await?;
-    responses.get(0, "SignatureSettings/set")?;
+    responses.get(0, "SignatureSettings/set").map_err(set_error)?;
     parse_get(responses.get(1, "SignatureSettings/get")?)
+}
+
+/// A refused change; `stateMismatch` means another device changed the signatures meanwhile.
+fn set_error(error: crate::jmap::MethodError) -> Error {
+    if error.kind == "stateMismatch" {
+        Error::new(ErrorCode::StateMismatch, "The signatures were changed elsewhere.")
+    } else {
+        error.into()
+    }
 }
 
 #[cfg(test)]
@@ -128,6 +148,19 @@ mod tests {
             })
         );
         assert_eq!(set_arguments("a1", &json!({})).unwrap(), json!({ "accountId": "a1" }));
+        assert_eq!(
+            set_arguments("a1", &json!({ "identities": { "i4": null }, "ifInState": "3" })).unwrap(),
+            json!({ "accountId": "a1", "identities": { "i4": null }, "ifInState": "3" })
+        );
+    }
+
+    #[test]
+    fn a_race_is_its_own_error() {
+        use crate::jmap::MethodError;
+        let raced = set_error(MethodError { kind: "stateMismatch".into(), description: String::new() });
+        assert_eq!(raced.code, ErrorCode::StateMismatch);
+        let other = set_error(MethodError { kind: "invalidArguments".into(), description: String::new() });
+        assert_eq!(other.code, ErrorCode::InvalidInput);
     }
 
     #[test]
@@ -144,6 +177,10 @@ mod tests {
             json!({ "domains": { "example.org": { "text": "", "css": "" } } }),
             json!({ "identities": { "i1": { "html": "x".repeat(MAX_BYTES + 1) } } }),
             json!({ "domains": { "x".repeat(256): null } }),
+            json!({ "ifInState": 3 }),
+            json!({ "ifInState": "" }),
+            json!({ "ifInState": "a\nb" }),
+            json!({ "ifInState": "x".repeat(256) }),
         ] {
             assert!(set_arguments("a1", &change).is_err(), "{change}");
         }

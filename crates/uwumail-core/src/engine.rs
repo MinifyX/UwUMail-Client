@@ -2350,8 +2350,11 @@ fn unsubscribe_mail(mailto: &str) -> Option<UnsubscribeMail> {
     }
     let address = percent_encoding::percent_decode_str(target.path()).decode_utf8().ok()?.trim().to_string();
     // One recipient, and nothing in it that could turn into a second one or into a header of its own.
-    if address.contains(|c: char| c == ',' || c.is_whitespace() || c.is_control() || "<>;\"".contains(c))
-        || address.parse::<lettre::Address>().is_err()
+    // Nor anything invisible: the dialog names this address before the mail goes, and direction or
+    // zero-width characters would make it read as another one (webmail security audit W-30).
+    if address.contains(|c: char| {
+        c == ',' || c.is_whitespace() || c.is_control() || "<>;\"".contains(c) || is_invisible_format(c)
+    }) || address.parse::<lettre::Address>().is_err()
     {
         return None;
     }
@@ -2369,6 +2372,22 @@ fn unsubscribe_mail(mailto: &str) -> Option<UnsubscribeMail> {
         .filter(|subject| !subject.is_empty())
         .unwrap_or_else(|| "unsubscribe".to_string());
     Some(UnsubscribeMail { address, subject })
+}
+
+/// Unicode format characters (direction marks, zero-width characters, soft hyphen, line and
+/// paragraph separators): shown as nothing, or turning the text around them.
+fn is_invisible_format(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{061C}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{2028}'..='\u{202E}'
+            | '\u{2060}'..='\u{206F}'
+            | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
+    )
 }
 
 /// A winmail.dat as a stored attachment: mail stored before winmail.dat was read.
@@ -2432,6 +2451,11 @@ mod tests {
             "https://list.example/leave",
             "javascript:alert(1)",
             "not a url at all",
+            // Invisible characters would make the dialog name another address (W-30).
+            "mailto:leave%E2%80%AE@list.example",
+            "mailto:le%E2%80%8Bave@list.example",
+            "mailto:leave@list%C2%AD.example",
+            "mailto:leave@list%E2%80%8D.example",
         ] {
             assert_eq!(unsubscribe_mail(mailto), None, "{mailto}");
         }

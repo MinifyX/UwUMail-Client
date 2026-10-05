@@ -56,6 +56,17 @@ describe("attachmentKind", () => {
     expect(isIosInstallable("wlan.MOBILECONFIG")).toBe(true);
     expect(isIosInstallable("urlaub.jpg")).toBe(false);
   });
+
+  // Regression (webmail security audit WEBMAIL-1): a long run of dots and spaces in an attachment
+  // name froze the page on every render, as `/[.\s]+$/` retried from every position of it.
+  it("stays fast on a long run of dots and spaces", () => {
+    const started = performance.now();
+    expect(isDangerous(`a${". ".repeat(100_000)}x`)).toBe(false);
+    expect(isDangerous(`tool.exe${". ".repeat(100_000)}`)).toBe(true);
+    expect(isDangerous(`tool.exe.\u00a0`)).toBe(true);
+    expect(isAppPackage(`spiel.apk${".".repeat(200_000)}\u202e`)).toBe(true);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
 });
 
 describe("parseCsv", () => {

@@ -66,9 +66,16 @@ function webUrl(value: string): URL | null {
   }
 }
 
+/** The value without its `=` padding. A loop, as `/=+$/` takes quadratic time on a long run (security-audit WEBMAIL-1). */
+function withoutPadding(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "=") end -= 1;
+  return value.slice(0, end);
+}
+
 function base64Text(value: string): string | null {
   try {
-    const normal = value.replace(/-/g, "+").replace(/_/g, "/").replace(/=+$/, "");
+    const normal = withoutPadding(value.replace(/-/g, "+").replace(/_/g, "/"));
     const padded = normal + "=".repeat((4 - (normal.length % 4)) % 4);
     const binary = atob(padded);
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -114,11 +121,37 @@ function proofpoint(url: URL): URL | null {
 
 const V3_RUN_LENGTHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
+const V3_ENCODED = /^[A-Za-z0-9+/=_-]$/;
+
+/**
+ * The parts of `/v3/__<wrapped>__;<encoded>!`, read like `/\/v3\/__(.+?)__;([A-Za-z0-9+/=_-]*)!/`
+ * would, in one pass. The regex tried every `/v3/__` and every `__;` after it again and again and
+ * froze the tab on a crafted link (security-audit WEBMAIL-1). A `href` never holds a line break,
+ * so the regex's `.` and any character are the same here.
+ */
+function v3Parts(href: string): { wrapped: string; encoded: string } | null {
+  // A later `/v3/__` sees only `__;` the first one already tried, so the first is the only one to read.
+  const start = href.indexOf("/v3/__");
+  if (start < 0) return null;
+  const wrappedStart = start + "/v3/__".length;
+  // How far the encoded characters after an earlier `__;` reached. A later `__;` inside that run
+  // ends at the same place, which is not a `!`, so it is not read again.
+  let reached = 0;
+  for (let end = href.indexOf("__;", wrappedStart + 1); end >= 0; end = href.indexOf("__;", end + 1)) {
+    const encodedStart = end + "__;".length;
+    let pos = Math.max(encodedStart, reached);
+    while (pos < href.length && V3_ENCODED.test(href[pos]!)) pos += 1;
+    if (href[pos] === "!") return { wrapped: href.slice(wrappedStart, end), encoded: href.slice(encodedStart, pos) };
+    reached = pos;
+  }
+  return null;
+}
+
 /** v3 swaps some characters for `*` (or `**X` for a run) and lists them, base64, after `__;`. */
 function proofpointV3(href: string): URL | null {
-  const match = /\/v3\/__(.+?)__;([A-Za-z0-9+/=_-]*)!/.exec(href);
-  if (!match) return null;
-  const [, wrapped = "", encoded = ""] = match;
+  const parts = v3Parts(href);
+  if (!parts) return null;
+  const { wrapped, encoded } = parts;
   const replacements = [...(encoded ? (base64Text(encoded) ?? "") : "")];
   let next = 0;
   const restored = wrapped.replace(/\*\*(.)|\*/g, (_, run?: string) => {

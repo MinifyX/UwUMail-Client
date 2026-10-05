@@ -10,6 +10,12 @@ import { foreignHtml, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { toast } from "@/state/toasts";
 import { insertDroppedHtml } from "@/features/compose/droppedHtml";
 
+/** What a whole signature may take (the server's and the settings sync's largest value). */
+const SIGNATURE_MAX_BYTES = 262_144;
+/** Room kept free next to a new picture, for the other fields and the markup around it. */
+const PICTURE_HEADROOM = 2048;
+const bytes = (text: string) => new TextEncoder().encode(text).length;
+
 /** The rich editor of one signature: bold, italic, links and pictures, cleaned like the composer. */
 export function SignatureEditor({
   signature,
@@ -38,6 +44,20 @@ export function SignatureEditor({
   const draggingInside = useRef(false);
   const picture = useRef<HTMLInputElement>(null);
 
+  /** Puts a picture in as an embedded data URL, shrunk until the whole signature still fits. */
+  const insertPicture = async (file: File) => {
+    const room = SIGNATURE_MAX_BYTES - bytes(editor.current?.innerHTML ?? "") - PICTURE_HEADROOM;
+    try {
+      if (room <= 0) throw new Error("too big");
+      const url = await pictureAsDataUrl(file, 480, room);
+      editor.current?.focus();
+      document.execCommand("insertImage", false, url);
+    } catch (reason) {
+      const tooBig = reason instanceof Error && reason.message === "too big";
+      toast(t(tooBig ? "settings.signatureTooBig" : "settings.signatureImageFailed"), "error");
+    }
+  };
+
   const format = (command: "bold" | "italic" | "createLink") => {
     editor.current?.focus();
     if (command === "createLink") {
@@ -55,6 +75,7 @@ export function SignatureEditor({
           aria-label={t("settings.signatureName")}
           placeholder={t("settings.signatureNamePlaceholder")}
           value={name}
+          maxLength={100}
           onChange={(event) => setName(event.target.value)}
           className="h-10"
         />
@@ -109,17 +130,10 @@ export function SignatureEditor({
             type="file"
             accept="image/png,image/jpeg,image/gif,image/webp"
             hidden
-            onChange={async (event) => {
+            onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = "";
-              if (!file) return;
-              try {
-                const url = await pictureAsDataUrl(file);
-                editor.current?.focus();
-                document.execCommand("insertImage", false, url);
-              } catch {
-                toast(t("settings.signatureImageFailed"), "error");
-              }
+              if (file) void insertPicture(file);
             }}
           />
         </div>
@@ -134,12 +148,26 @@ export function SignatureEditor({
           aria-label={t("settings.signatures")}
           data-placeholder={t("settings.signaturePlaceholder")}
           onPaste={(event) => {
-            // Pasted markup (e.g. copied out of a mail) is cleaned before it lands in the app page,
-            // so nothing remote in it loads while editing.
+            // A pasted picture file becomes a data URL like an inserted one; pasted markup (e.g.
+            // copied out of a mail) is cleaned before it lands in the app page, so nothing remote
+            // in it loads while editing. Plain text goes in as text, so WebKit can't paste a rich
+            // flavour of the clipboard behind the page's back.
+            const file = [...event.clipboardData.files].find((item) => item.type.startsWith("image/"));
             const html = event.clipboardData.getData("text/html");
-            if (!html) return;
+            const text = event.clipboardData.getData("text/plain");
+            if (file && !html) {
+              event.preventDefault();
+              void insertPicture(file);
+              return;
+            }
+            if (!html && !text) return;
             event.preventDefault();
-            document.execCommand("insertHTML", false, foreignHtml(html));
+            const cleaned = html
+              ? foreignHtml(html)
+              : text
+                  .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)
+                  .replace(/\r?\n/g, "<br>");
+            document.execCommand("insertHTML", false, cleaned);
           }}
           onDragStart={() => {
             draggingInside.current = true;

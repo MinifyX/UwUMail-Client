@@ -1753,6 +1753,8 @@ export class DemoBackend implements Backend {
 
   async setRunInBackground() {}
 
+  async setNotificationPrefs() {}
+
   async setUpdateChannel() {}
 
   async setUpdateChecks() {}

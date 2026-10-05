@@ -414,6 +414,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         // It goes out when the toast does; "sent" follows from the engine (send:done).
         toast(t("toast.sending"), "info", undefined, {
           duration: delay * 1000,
+          countdownTo: new Date(Date.now() + delay * 1000).toISOString(),
           action: { label: t("toast.undo"), run: () => void undoSend(queued.id) },
         });
       } else {
