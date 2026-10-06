@@ -12,11 +12,15 @@
 # Xcode project asks the surrounding `tauri ios build` process for its options
 # over a local socket, and without it the phase dies with "Abort trap: 6".
 #
-# Usage: scripts/ios-build.sh <version> [output folder]
+# Usage: scripts/ios-build.sh <version> [output folder] [simulator|iphone|both]
+#
+# CI builds the two on runners of their own, side by side (.github/workflows/ios.yml).
 set -euo pipefail
 
 version="$1"
 out="${2:-out}"
+what="${3:-both}"
+case "$what" in simulator | iphone | both) ;; *) echo "Unknown build '$what'" >&2; exit 2 ;; esac
 gen="apps/desktop/src-tauri/gen/apple"
 
 echo "--- tools ---"
@@ -72,13 +76,16 @@ show_rust_log() {
 }
 
 # The simulator build, which the smoke test starts afterwards.
-pnpm tauri ios build --ci --target aarch64-sim || { show_rust_log; exit 1; }
-sim=$(find "$gen/build" -type d -name '*.app' -path '*sim*' 2>/dev/null | head -n 1)
-test -n "$sim" || { echo "::error::The simulator build produced no app"; exit 1; }
-rm -rf "$out/simulator"
-mkdir -p "$out/simulator"
-cp -R "$sim" "$out/simulator/"
-echo "Simulator app: $sim"
+if [ "$what" != iphone ]; then
+  pnpm tauri ios build --ci --target aarch64-sim || { show_rust_log; exit 1; }
+  sim=$(find "$gen/build" -type d -name '*.app' -path '*sim*' 2>/dev/null | head -n 1)
+  test -n "$sim" || { echo "::error::The simulator build produced no app"; exit 1; }
+  rm -rf "$out/simulator"
+  mkdir -p "$out/simulator"
+  cp -R "$sim" "$out/simulator/"
+  echo "Simulator app: $sim"
+fi
+[ "$what" = simulator ] && { ls -la "$out"; exit 0; }
 
 # The iPhone itself. Exporting an .ipa is Xcode's job and needs a certificate,
 # so Tauri is expected to stop at that step — the app is finished by then.

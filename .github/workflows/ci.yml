@@ -1,9 +1,16 @@
 name: CI
 
+# The quick checks for every push to main and every pull request: format, types, lint, the UI and
+# engine tests, clippy over the whole workspace (the Tauri crates included, so a pull request finds
+# out it doesn't compile on Linux without building an installer) and the dependency audit. The
+# installers are built and tried by the desktop, Android and iOS workflows.
+
 on:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "brand/**", "README.md", "CONTRIBUTING.md", "release-notes/**"]
   pull_request:
+    paths-ignore: ["docs/**", "brand/**", "README.md", "CONTRIBUTING.md", "release-notes/**"]
   workflow_dispatch:
 
 concurrency:
@@ -61,17 +68,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           components: rustfmt, clippy
+      # Saved by main only: pull requests read it, and their own copies would push main's out of
+      # the repository's 10 GB. prefix-key: rust-cache's key doesn't cover the [profile] sections of
+      # Cargo.toml, so after changing those, count it up in every workflow (else every build restores
+      # and recompiles the old artifacts, and never saves new ones).
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          prefix-key: v2-rust
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # tauri::generate_context! needs a frontend build to exist at compile time.
       - run: |
           for app in desktop setup; do
             mkdir -p apps/$app/dist && echo '<!doctype html>' > apps/$app/dist/index.html
           done
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: JMAP test server (Stalwart)
         run: bash dev/stalwart.sh
-      - run: cargo test --workspace
+      - run: cargo test --workspace --locked
         env:
           UWUMAIL_TEST_MAILSERVER: 127.0.0.1
           UWUMAIL_TEST_JMAP: http://127.0.0.1:8080
@@ -85,6 +99,9 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          prefix-key: v2-rust
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Known vulnerabilities fail the job; "unmaintained" notices only show up in the log.
       - run: cargo audit --version || cargo install cargo-audit --locked
       - run: cargo audit
@@ -95,60 +112,3 @@ jobs:
           # Nothing is installed here, so there is no pnpm store to cache (the post step would fail).
           package-manager-cache: false
       - run: pnpm audit --prod
-
-  installers:
-    name: Installers (${{ matrix.name }})
-    if: github.event_name != 'pull_request'
-    needs: [ui, engine]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows
-            os: windows-latest
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          fetch-depth: 2
-          persist-credentials: false
-      - name: Skip for documentation-only changes
-        id: changes
-        shell: bash
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && git diff --name-only HEAD^ HEAD | grep -qvE '^(docs/|brand/|README|CONTRIBUTING|\.github/ISSUE)'; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-        if: steps.changes.outputs.build == 'true'
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
-        if: steps.changes.outputs.build == 'true'
-        with:
-          node-version: 24
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        if: steps.changes.outputs.build == 'true'
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        if: steps.changes.outputs.build == 'true'
-      - run: pnpm install --frozen-lockfile
-        if: steps.changes.outputs.build == 'true'
-      # macOS and Linux setups are built and tested by the desktop workflow.
-      - run: pnpm build:setup
-        if: steps.changes.outputs.build == 'true' && runner.os == 'Windows'
-        env:
-          UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
-          UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
-          UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
-          UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: steps.changes.outputs.build == 'true'
-        with:
-          name: UwUMail-${{ matrix.name }}-${{ github.sha }}
-          retention-days: 14
-          if-no-files-found: error
-          path: |
-            target/release/UwUMail-windows-*-setup.exe

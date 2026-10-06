@@ -154,6 +154,10 @@ pub async fn connect(settings: &ServerSettings) -> Result<Client<MailStream>> {
         .await
         .map_err(|_| Error::connection(format!("{host} didn't answer.")))?
         .map_err(|e| Error::connection(format!("Couldn't connect to {host}:{}: {e}", settings.port)))?;
+    // IMAP is one small command, then the answer. With Nagle's algorithm on, a command sent in two
+    // writes (APPEND and its literal, as for every saved draft) waits for the server's delayed ACK,
+    // some 40 ms each time: 400 APPENDs took 33 s against GreenMail, without Nagle 3 s.
+    let _ = tcp.set_nodelay(true);
     match settings.security {
         Security::Tls => {
             let mut client = Client::new(tls(tcp, host).await?);

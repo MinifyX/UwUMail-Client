@@ -12,6 +12,23 @@ mkdir -p "$out"
 failed=0
 
 shot() { adb exec-out screencap -p > "$out/$1.png"; }
+# Waits up to $1 seconds for a command to succeed, instead of sleeping for as long as it might take.
+wait_until() {
+  local deadline=$((SECONDS + $1))
+  shift
+  until "$@"; do
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    sleep 1
+  done
+}
+# grep reads everything (no -q): with pipefail, adb cut off by an early grep exit would count as failure.
+logged() { adb logcat -d 2>/dev/null | grep -E "$1" > /dev/null; }
+logged_count() { adb logcat -d 2>/dev/null | grep -Ec "$1"; }
+started() {
+  [ -n "$(adb shell pidof "$package" | tr -d '\r')" ] &&
+    logged "UwUMail : engine running" &&
+    adb shell dumpsys activity services "$package" | grep "MailWatchService" > /dev/null
+}
 fail() {
   echo "::error::$1"
   failed=1
@@ -31,7 +48,8 @@ adb install -r "$apk" || { fail "Install failed"; exit 1; }
 adb shell pm grant "$package" android.permission.POST_NOTIFICATIONS || true
 
 adb shell am start -W -n "$package/.MainActivity"
-sleep 25
+# Up: the process, the engine and the background service. A first start unpacks the web view.
+wait_until 60 started || echo "::warning::UwUMail didn't report a full start within 60 s"
 shot 1-start
 pid=$(adb shell pidof "$package" | tr -d '\r')
 [ -n "$pid" ] || fail "UwUMail isn't running after the start"
@@ -61,7 +79,7 @@ sleep 4
 # The link a browser opens after signing in with Microsoft or Google reaches the engine. Nothing is
 # waiting for it here, so the engine must ignore it (and never log the link itself).
 adb shell "am start -W -a android.intent.action.VIEW -d 'app.uwumail://oauth?code=smoke&state=smoke'"
-sleep 4
+wait_until 20 logged "UwUMail : sign-in link ignored"
 dump_log
 grep -q "UwUMail : sign-in link ignored" "$out/logcat.txt" || fail "The sign-in link didn't reach the engine"
 if grep -q "code=smoke" "$out/logcat.txt"; then fail "The sign-in link ended up in the log"; fi
@@ -81,15 +99,19 @@ fi
 sleep 5
 before=$(adb shell pidof "$package" | tr -d '\r')
 [ -n "$before" ] || fail "The mail service didn't keep UwUMail running without a window"
+engines=$(logged_count "UwUMail : engine running")
 adb shell am start -W -n "$package/.MainActivity"
-sleep 20
+# The fresh process starts its engine again (or, if it reused the old one, there is nothing to wait for).
+wait_until 30 test "$(logged_count "UwUMail : engine running")" -gt "$engines" || true
 shot 3-relaunch
 after=$(adb shell pidof "$package" | tr -d '\r')
 [ -n "$after" ] || fail "UwUMail isn't running after the relaunch"
 [ "$after" != "$before" ] || echo "::warning::Relaunch reused the old process"
 
 # An update check (20 s after each start, again 30 s after a failure) proves HTTPS certificate checks
-# work. The emulator's network sometimes comes up late, so one success is enough.
+# work. The emulator's network sometimes comes up late, so one success is enough: waited for, so a
+# late network gets its retry.
+wait_until 90 logged "UwUMail : update check: (nothing new|.* is ready)" || true
 dump_log
 grep -q "UwUMail : update check" "$out/logcat.txt" || fail "The update check didn't run"
 if ! grep -Eq "UwUMail : update check: (nothing new|.* is ready)" "$out/logcat.txt"; then

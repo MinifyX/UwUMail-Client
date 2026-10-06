@@ -70,3 +70,18 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+# Build scripts and proc macros optimised: release builds otherwise run them unoptimised, and two
+# of them do real work on every build: tauri's generate_context! compresses the web view's files
+# with brotli, and the setup's build.rs packs the whole app with zstd at level 19 (minutes at -O0
+# for the Linux AppImage folder). Their output is the same either way.
+[profile.release.build-override]
+opt-level = 3
+
+# Line numbers in backtraces are all tests and debugging need; full debug info for every
+# dependency only makes target/ huge and linking slow.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

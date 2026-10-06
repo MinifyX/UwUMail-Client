@@ -6,7 +6,7 @@
 //! `localhost` and `127.0.0.1` are two different sites here: the mailbox's mail server is
 //! `127.0.0.1`, everything on `localhost` is someone else.
 
-mod support;
+use crate::support;
 
 use support::{Request, Response, https_stub};
 use uwumail_core::calendar::dav::{self, CARDDAV_SERVICE, DavClient};

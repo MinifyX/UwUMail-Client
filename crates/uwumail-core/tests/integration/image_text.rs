@@ -3,7 +3,7 @@
 //! off, and any other JMAP server, whose mail this device reads with a fake recognizer. Runs
 //! everywhere.
 
-mod support;
+use crate::support;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};

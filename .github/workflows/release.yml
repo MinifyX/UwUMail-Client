@@ -7,10 +7,9 @@ name: Release
 # Publishes a GitHub release here, every file under a stable name without the
 # version (so https://github.com/<repo>/releases/latest/download/<file> always
 # works), with
-#   - the Windows setup (x64), built and smoke-tested here,
-#   - the Windows on ARM setup, the universal macOS setup, and for Linux x64 and
-#     arm64 the .deb, the .rpm and the portable folder, built and smoke-tested
-#     by the desktop workflow called from here,
+#   - the Windows setups (x64 and ARM), the universal macOS setup, and for Linux
+#     x64 and arm64 the .deb, the .rpm and the portable folder, built and
+#     smoke-tested by the desktop workflow called from here,
 #   - the files only the in-app updater downloads (UwUMail-update-…),
 #   - the Android APK the Android workflow built, signed and smoke-tested for
 #     the push of this tag with the release key,
@@ -30,7 +29,11 @@ name: Release
 # against the key the apps carry.
 #
 # Started by hand on a branch it builds the setups but publishes nothing (the
-# APK and IPA are only picked up for a tag). If GitHub can't run it,
+# APK and IPA are only picked up for a tag).
+#
+# The longest part is the desktop workflow (about as long as one push to main
+# takes there); the APK and the IPA come from the Android run of the tag and the
+# iOS run of the commit's push to main, which run at the same time. If GitHub can't run it,
 # `pnpm release` (scripts/release.mjs) publishes the Windows x64 setup from a PC.
 
 on:
@@ -70,58 +73,8 @@ jobs:
             || { echo "::error::release-notes/$version.json is missing or lacks de/en"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-  windows:
-    name: Release (Windows)
-    needs: check
-    runs-on: windows-latest
-    outputs:
-      digest: ${{ steps.digest.outputs.digest }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build:setup
-        env:
-          UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
-          UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
-          UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
-          UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
-      # The same install, start, update, refuse-older and uninstall as for the other systems.
-      - name: Smoke test
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.check.outputs.version }}
-        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-windows-x64-setup.exe" "$env:VERSION" x64 smoke
-      # The signing and publishing jobs compare the artifact with this (scripts/artifact-digest.mjs).
-      - name: Digest for the release
-        id: digest
-        shell: bash
-        run: |
-          digest=$(node scripts/artifact-digest.mjs target/release/UwUMail-windows-x64-setup.exe)
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: release-windows
-          if-no-files-found: error
-          path: target/release/UwUMail-windows-x64-setup.exe
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: smoke-windows-x64
-          retention-days: 7
-          if-no-files-found: ignore
-          path: smoke/
-
   desktop:
-    name: Release (macOS, Linux, Windows on ARM)
+    name: Release (Windows, macOS, Linux)
     needs: check
     uses: ./.github/workflows/desktop.yml
     secrets:
@@ -132,7 +85,7 @@ jobs:
 
   sign:
     name: Sign for the updater
-    needs: [check, windows, desktop]
+    needs: [check, desktop]
     # Only releases are signed, so no signed test build of an unreleased commit lies around.
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
@@ -156,8 +109,8 @@ jobs:
       # exactly the files each one is meant to hold, so no build can swap in another one's setup.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: release-windows
-          path: ${{ runner.temp }}/unpacked/release-windows
+          name: desktop-windows-x64
+          path: ${{ runner.temp }}/unpacked/desktop-windows-x64
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-windows-arm64
@@ -178,13 +131,13 @@ jobs:
       # change another job's outputs: each artifact must still be what the job that built it digested.
       - name: Check that no job replaced another one's artifact
         env:
-          RELEASE_WINDOWS: ${{ needs.windows.outputs.digest }}
+          WINDOWS_X64: ${{ needs.desktop.outputs.digest_windows_x64 }}
           WINDOWS_ARM64: ${{ needs.desktop.outputs.digest_windows_arm64 }}
           MACOS_UNIVERSAL: ${{ needs.desktop.outputs.digest_macos_universal }}
           LINUX_X64: ${{ needs.desktop.outputs.digest_linux_x64 }}
           LINUX_ARM64: ${{ needs.desktop.outputs.digest_linux_arm64 }}
         run: |
-          node scripts/artifact-digest.mjs --check "$RELEASE_WINDOWS" "$RUNNER_TEMP/unpacked/release-windows"
+          node scripts/artifact-digest.mjs --check "$WINDOWS_X64" "$RUNNER_TEMP/unpacked/desktop-windows-x64"
           node scripts/artifact-digest.mjs --check "$WINDOWS_ARM64" "$RUNNER_TEMP/unpacked/desktop-windows-arm64"
           node scripts/artifact-digest.mjs --check "$MACOS_UNIVERSAL" "$RUNNER_TEMP/desktop/desktop-macos-universal"
           node scripts/artifact-digest.mjs --check "$LINUX_X64" "$RUNNER_TEMP/desktop/desktop-linux-x64"
@@ -197,7 +150,7 @@ jobs:
           done
           mkdir files
           node scripts/release-files.mjs "$RUNNER_TEMP/unpacked" files "$VERSION" \
-            release-windows desktop-windows-arm64 desktop-macos-universal desktop-linux-x64 desktop-linux-arm64
+            desktop-windows-x64 desktop-windows-arm64 desktop-macos-universal desktop-linux-x64 desktop-linux-arm64
           ls -la files
       # Each update file as a copy under the versioned name installed apps expect in the signature
       # (the universal Mac program twice, once per name), which leaves <versioned name>.sig behind.
@@ -352,7 +305,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [check, windows, desktop, sign, android, ios]
+    needs: [check, desktop, sign, android, ios]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     concurrency:
@@ -375,8 +328,8 @@ jobs:
       # As in the signing job: every artifact by its exact name, each one's own files only.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: release-windows
-          path: ${{ runner.temp }}/unpacked/release-windows
+          name: desktop-windows-x64
+          path: ${{ runner.temp }}/unpacked/desktop-windows-x64
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-windows-arm64
@@ -409,7 +362,7 @@ jobs:
       # still be what the job that made it digested.
       - name: Check that no job replaced another one's artifact
         env:
-          RELEASE_WINDOWS: ${{ needs.windows.outputs.digest }}
+          WINDOWS_X64: ${{ needs.desktop.outputs.digest_windows_x64 }}
           WINDOWS_ARM64: ${{ needs.desktop.outputs.digest_windows_arm64 }}
           MACOS_UNIVERSAL: ${{ needs.desktop.outputs.digest_macos_universal }}
           LINUX_X64: ${{ needs.desktop.outputs.digest_linux_x64 }}
@@ -418,7 +371,7 @@ jobs:
           ANDROID: ${{ needs.android.outputs.digest }}
           IOS: ${{ needs.ios.outputs.digest }}
         run: |
-          node scripts/artifact-digest.mjs --check "$RELEASE_WINDOWS" "$RUNNER_TEMP/unpacked/release-windows"
+          node scripts/artifact-digest.mjs --check "$WINDOWS_X64" "$RUNNER_TEMP/unpacked/desktop-windows-x64"
           node scripts/artifact-digest.mjs --check "$WINDOWS_ARM64" "$RUNNER_TEMP/unpacked/desktop-windows-arm64"
           node scripts/artifact-digest.mjs --check "$MACOS_UNIVERSAL" "$RUNNER_TEMP/desktop/desktop-macos-universal"
           node scripts/artifact-digest.mjs --check "$LINUX_X64" "$RUNNER_TEMP/desktop/desktop-linux-x64"
@@ -434,7 +387,7 @@ jobs:
           done
           mkdir files
           node scripts/release-files.mjs "$RUNNER_TEMP/unpacked" files "$VERSION" \
-            release-windows desktop-windows-arm64 desktop-macos-universal desktop-linux-x64 desktop-linux-arm64 \
+            desktop-windows-x64 desktop-windows-arm64 desktop-macos-universal desktop-linux-x64 desktop-linux-arm64 \
             release-signatures release-android release-ios
           ls -la files
       # Once more right before publishing, on top of the digest: the certificate is what counts.

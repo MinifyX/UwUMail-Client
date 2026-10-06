@@ -8,6 +8,11 @@ name: iOS
 #
 # The Xcode project isn't in the repository; `tauri ios init` writes a fresh one
 # on the runner every time, so nothing generated has to be kept in sync by hand.
+#
+# The iPhone build and the simulator build (with its smoke test) run side by side
+# on runners of their own. The release takes the IPA of this workflow's run for
+# the commit's push to main (artifact UwUMail-iOS-<sha>), so it runs for every
+# push to main.
 
 on:
   push:
@@ -27,7 +32,13 @@ env:
 
 jobs:
   app:
-    name: App (iPhone + simulator)
+    name: App (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: iPhone, build: iphone }
+          - { name: simulator, build: simulator }
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -40,10 +51,12 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
-          targets: aarch64-apple-ios, aarch64-apple-ios-sim
+          targets: ${{ matrix.build == 'simulator' && 'aarch64-apple-ios-sim' || 'aarch64-apple-ios' }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: ios
+          prefix-key: v2-rust
+          key: ios-${{ matrix.build }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm install --frozen-lockfile
 
       - name: Version
@@ -83,18 +96,21 @@ jobs:
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
           BUILD_VERSION: ${{ steps.version.outputs.version }}-${{ steps.version.outputs.build }}
-        run: bash scripts/ios-build.sh "$BUILD_VERSION" out
+          WHAT: ${{ matrix.build }}
+        run: bash scripts/ios-build.sh "$BUILD_VERSION" out "$WHAT"
 
       - name: Smoke test (simulator)
+        if: matrix.build == 'simulator'
         run: bash scripts/ios-smoke.sh out/simulator/*.app smoke
 
       # The .app keeps its executable bit inside the tar; a plain artifact zip wouldn't.
       - name: Pack the simulator app
-        if: always()
+        if: always() && matrix.build == 'simulator'
         run: tar -czf "out/UwUMail-simulator.tar.gz" -C out simulator && rm -rf out/simulator
 
+      # The release takes the IPA from this artifact (only the IPA is in it).
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: always() && matrix.build == 'iphone'
         with:
           name: UwUMail-iOS-${{ github.sha }}
           retention-days: 14
@@ -102,7 +118,15 @@ jobs:
           path: out/*
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: always() && matrix.build == 'simulator'
+        with:
+          name: UwUMail-iOS-simulator-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: out/*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && matrix.build == 'simulator'
         with:
           name: UwUMail-iOS-smoke-${{ github.sha }}
           retention-days: 7
@@ -112,7 +136,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
-          name: UwUMail-iOS-project-${{ github.sha }}
+          name: UwUMail-iOS-project-${{ matrix.build }}-${{ github.sha }}
           retention-days: 7
           path: |
             apps/desktop/src-tauri/gen/apple

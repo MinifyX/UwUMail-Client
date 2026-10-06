@@ -1,7 +1,7 @@
 //! End-to-end test against a real IMAP/SMTP server.
 //!
 //!   docker compose -f dev/mailserver.compose.yml up -d
-//!   UWUMAIL_TEST_MAILSERVER=127.0.0.1 cargo test -p uwumail-core --test greenmail
+//!   UWUMAIL_TEST_MAILSERVER=127.0.0.1 cargo test -p uwumail-core --test integration greenmail::
 //!
 //! Skipped when `UWUMAIL_TEST_MAILSERVER` isn't set.
 
