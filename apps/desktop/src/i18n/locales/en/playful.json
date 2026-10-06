@@ -112,7 +112,6 @@
     "errorSmtpDisabled": "I’m not allowed to send from here (｡•́︿•̀｡) An administrator can turn it on with: Set-CASMailbox -Identity ADDRESS -SmtpClientAuthenticationDisabled $false"
   },
   "settings": {
-    "addonsEmptyTitle": "No addons yet, so much potential (✧ω✧)",
     "motionDesc": "Should Nyu blink, hop and fly around? With System, I follow your operating system.",
     "nyuAnimationsDesc": "Shall I wave your mail goodbye, close the box when you archive and ponder while the AI works? Reduced: I hold still like in a photo.",
     "senderPicturesCleared": "Pictures swept away ✧",

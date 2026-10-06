@@ -1,16 +1,5 @@
 import clsx from "clsx";
-import {
-  Button,
-  EmptyState,
-  Icon,
-  IconButton,
-  type IconProps,
-  ICONS,
-  Segmented,
-  Select,
-  Toggle,
-  Wordmark,
-} from "@uwusuite/design";
+import { Button, Icon, IconButton, type IconProps, ICONS, Segmented, Select, Toggle, Wordmark } from "@uwusuite/design";
 import { AssistantSettings } from "../assist/settings/AssistantSettings";
 import { LabelsSettings } from "../labels/LabelsSettings";
 import { useAssistScopes } from "../assist/useAssist";
@@ -23,7 +12,6 @@ import type { Account, Protocol } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
-import { NyuScene } from "@/components/nyu/scenes";
 import { LogoSymbol } from "@/components/ui/Logo";
 import { i18n, useT } from "@/i18n";
 import { useIsPhone } from "@/lib/device";
@@ -72,7 +60,6 @@ const SECTIONS: { id: SettingsSection; icon: IconProps["icon"]; phoneOnly?: bool
   { id: "assistant", icon: ICONS.ai },
   { id: "security", icon: ICONS.locked, phoneOnly: true },
   { id: "accounts", icon: ICONS.account },
-  { id: "addons", icon: ICONS.addons },
   { id: "about", icon: ICONS.info },
 ];
 
@@ -611,30 +598,6 @@ function SharedMailboxesOf({ account, shared }: { account: Account; shared: Acco
   );
 }
 
-function Addons() {
-  const { t } = useT();
-  return (
-    <div className="flex flex-col items-center gap-2 py-4">
-      <EmptyState
-        art={<NyuScene name="addons" />}
-        compact
-        title={t("settings.addonsEmptyTitle")}
-        body={t("settings.addonsEmptyBody")}
-        className="py-6"
-      />
-      <div className="flex flex-wrap justify-center gap-2">
-        <Button variant="primary" icon={ICONS.addons} disabled>
-          {t("settings.addonsCatalog")}
-        </Button>
-        <Button icon={ICONS.import} disabled>
-          {t("settings.addonsFromFile")}
-        </Button>
-      </div>
-      <p className="pt-2 text-[12.5px] text-muted">{t("settings.addonsSoon")}</p>
-    </div>
-  );
-}
-
 function UpdateSettings() {
   const { t } = useT();
   const channel = useSettings((s) => s.updateChannel);
@@ -798,7 +761,6 @@ export function SettingsDialog() {
             {section === "accounts" && <Accounts />}
             {section === "profile" && <ProfileSettings />}
             {section === "masked" && <MaskedSettings />}
-            {section === "addons" && <Addons />}
             {section === "about" && <About />}
           </div>
         </div>
