@@ -43,6 +43,8 @@ struct Server {
     /// Every PushSubscription/set call as it came, and the methods of every call.
     sets: Vec<Value>,
     methods: Vec<String>,
+    /// Answers every API call with an error, as a server that is down for a moment.
+    failing: bool,
 }
 
 type Shared = Arc<Mutex<Server>>;
@@ -156,6 +158,10 @@ fn answer(server: &Shared, request: &Request) -> Response {
     let mut server = server.lock().unwrap();
     if request.path.starts_with("/.well-known/jmap") {
         return Response::json(&session(server.web_push));
+    }
+    if server.failing {
+        server.methods.push("(failed)".into());
+        return Response::new(503, b"down".to_vec());
     }
     let body: Value = serde_json::from_slice(&request.body).unwrap_or_default();
     let calls = body["methodCalls"].as_array().cloned().unwrap_or_default();
@@ -437,4 +443,45 @@ async fn servers_without_web_push_keep_their_own_connection() {
     let overview = setup.engine.push_overview().unwrap();
     assert_eq!((overview.active, overview.waiting, overview.other), (0, 0, 1));
     assert!(!overview.covers_all());
+}
+
+/// iOS background refresh: one round per account, bounded, and over as soon as each is through.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_background_refresh_waits_for_one_round_of_each_account() {
+    let setup = setup(false).await;
+    let mut events = setup.engine.subscribe();
+    setup.synced(&mut events).await;
+    let before = setup.count("Email/changes") + setup.count("Email/query");
+
+    let outcome = setup.engine.refresh_all(std::time::Duration::from_secs(20)).await;
+    assert_eq!((outcome.accounts, outcome.finished, outcome.timed_out), (1, 1, false), "{outcome:?}");
+    assert!(setup.count("Email/changes") + setup.count("Email/query") > before, "no round went to the server");
+}
+
+/// A server that fails is tried once more at once (not after the back-off) and then given up on,
+/// well before the time is up.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_background_refresh_gives_up_on_a_failing_server() {
+    let setup = setup(false).await;
+    let mut events = setup.engine.subscribe();
+    setup.synced(&mut events).await;
+    setup.server.lock().unwrap().failing = true;
+
+    let outcome = setup.engine.refresh_all(std::time::Duration::from_secs(20)).await;
+    assert_eq!((outcome.accounts, outcome.finished, outcome.timed_out), (1, 0, false), "{outcome:?}");
+    assert!(setup.count("(failed)") >= 2, "not tried again: {}", setup.count("(failed)"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_background_refresh_without_accounts_is_over_at_once() {
+    let data = tempfile::tempdir().unwrap();
+    let engine = Engine::new(EngineOptions {
+        data_dir: data.path().to_path_buf(),
+        secrets: Arc::new(MemorySecrets::default()),
+        open_url: Arc::new(|_| {}),
+        recognizer: None,
+    })
+    .unwrap();
+    let outcome = engine.refresh_all(std::time::Duration::from_secs(20)).await;
+    assert_eq!(outcome, uwumail_core::engine::RefreshOutcome::default());
 }

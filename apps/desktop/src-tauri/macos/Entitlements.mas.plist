@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The Mac App Store build's entitlements (scripts/build-mas.mjs signs with them).
+  com.apple.application-identifier and com.apple.developer.team-identifier are added at signing
+  time; the provisioning profile allows all of it.
+
+  - app-sandbox: required for the store.
+  - network.client: the mail servers, Microsoft and Google, sender pictures, the AI provider.
+  - network.server: signing in with Microsoft or Google comes back to a listener on 127.0.0.1
+    for that one sign-in (OAuth loopback redirect, RFC 8252); nothing else listens.
+  - files.user-selected.read-write: attachments the user picks to send, and saving an
+    attachment where the user chose in the save panel.
+  The Keychain needs no entitlement: the passwords are the app's own items.
+
+  Deliberately absent: Downloads (every save goes through the save panel), and everything that runs or controls other programs — no updater, no setup,
+  no LaunchAgent in this build (docs/app-store.md).
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+</dict>
+</plist>

@@ -12,7 +12,7 @@
     "iOS": {
       "minimumSystemVersion": "17.0",
       "infoPlist": "Info.ios.plist",
-      "frameworks": ["SystemConfiguration", "Vision"]
+      "frameworks": ["BackgroundTasks", "SystemConfiguration", "Vision"]
     }
   }
 }

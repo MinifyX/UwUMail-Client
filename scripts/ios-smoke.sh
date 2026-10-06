@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Starts the simulator build and checks the basics: UwUMail comes up, the mail
-# engine starts, the web view draws its first screen and nothing crashes.
+# engine starts, the web view draws its first screen and nothing crashes. Then
+# once more for the background refresh: it is registered at launch (iOS ends an
+# app whose task identifier isn't declared) and a round of it runs through.
 # Screenshots and logs land in $2.
 #
 # Usage: scripts/ios-smoke.sh <UwUMail.app> [output folder]
@@ -96,6 +98,32 @@ fi
 xcrun simctl ui "$device" appearance dark > /dev/null 2>&1
 sleep 4
 xcrun simctl io "$device" screenshot "$out/2-dark.png" > /dev/null 2>&1
+
+# The background refresh. The simulator never starts background tasks itself, so the same round
+# is started at launch (UWUMAIL_REFRESH_NOW, src-tauri/src/ios_refresh.rs); it leaves
+# background-refresh.json behind. What the app prints goes to --stdout.
+find "$container" -name background-refresh.json -delete 2>/dev/null
+SIMCTL_CHILD_UWUMAIL_REFRESH_NOW=1 xcrun simctl launch --terminate-running-process \
+  --stdout="$PWD/$out/stdout.txt" --stderr="$PWD/$out/stderr.txt" "$device" "$bundle" > "$out/launch-refresh.txt" 2>&1 ||
+  fail "UwUMail didn't start again"
+refresh=""
+for _ in $(seq 1 30); do
+  sleep 1
+  refresh=$(find "$container" -name background-refresh.json 2>/dev/null | head -n 1)
+  [ -n "$refresh" ] && break
+done
+if [ -n "$refresh" ]; then
+  echo "Background refresh round: $(cat "$refresh")"
+else
+  fail "No background refresh round ran (no background-refresh.json)"
+fi
+if grep -q "background refresh registered" "$out/stdout.txt" 2>/dev/null; then
+  echo "The background refresh task is registered"
+else
+  # A warning: whether stdout reaches the file depends on the simulator runtime.
+  echo "::warning::'background refresh registered' not in the app's output (see stdout.txt)"
+fi
+grep "UwUMail:" "$out/stdout.txt" 2>/dev/null || true
 
 cp ~/Library/Logs/DiagnosticReports/*.ips "$out/" 2>/dev/null
 tail -n 200 "$out/console.txt" > "$out/uwumail-log.txt" 2>/dev/null

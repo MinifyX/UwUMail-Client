@@ -2,11 +2,11 @@
 # Builds UwUMail for the simulator and for the iPhone, and packs the iPhone app
 # into an .ipa.
 #
-# Nothing here is signed: UwUMail has no Apple developer account, and Xcode
-# refuses to build for a real iPhone without one ("requires a development
-# team"). So signing is switched off in the generated project before the build.
-# A sideloading tool signs the .ipa with your own Apple ID on the way to the
-# phone, see docs/ios.md.
+# Nothing here is signed, and the build holds no secret: signing is switched off
+# in the generated project before the build. A sideloading tool signs the .ipa
+# with your own Apple ID on the way to the phone (docs/ios.md); for TestFlight
+# scripts/ios-sign.sh signs the same .ipa afterwards on another runner
+# (docs/app-store.md).
 #
 # Both builds go through Tauri. They have to: the "Build Rust Code" phase in the
 # Xcode project asks the surrounding `tauri ios build` process for its options
@@ -80,6 +80,7 @@ if [ "$what" != iphone ]; then
   pnpm tauri ios build --ci --target aarch64-sim || { show_rust_log; exit 1; }
   sim=$(find "$gen/build" -type d -name '*.app' -path '*sim*' 2>/dev/null | head -n 1)
   test -n "$sim" || { echo "::error::The simulator build produced no app"; exit 1; }
+  cp apps/desktop/src-tauri/apple/PrivacyInfo.xcprivacy "$sim/"
   rm -rf "$out/simulator"
   mkdir -p "$out/simulator"
   cp -R "$sim" "$out/simulator/"
@@ -98,6 +99,8 @@ if [ -z "$app" ]; then
   exit 1
 fi
 echo "iPhone app: $app"
+# The privacy manifest at the app's top, where iOS and App Store Connect look for it.
+cp apps/desktop/src-tauri/apple/PrivacyInfo.xcprivacy "$app/"
 rm -rf "$RUNNER_TEMP/Payload"
 mkdir -p "$RUNNER_TEMP/Payload"
 cp -R "$app" "$RUNNER_TEMP/Payload/"
@@ -108,5 +111,6 @@ rm -rf "$RUNNER_TEMP/Payload"
 # What ended up inside, so a missing Info.plist key shows in the log.
 echo "--- Info.plist of $app ---"
 plutil -p "$app/Info.plist" |
-  grep -E "CFBundleIdentifier|CFBundleShortVersionString|CFBundleVersion|MinimumOSVersion|NSFaceIDUsageDescription|UIFileSharingEnabled|UIBackgroundModes" || true
+  grep -E "CFBundleIdentifier|CFBundleShortVersionString|CFBundleVersion|MinimumOSVersion|NSFaceIDUsageDescription|UIFileSharingEnabled|UIBackgroundModes|BGTaskScheduler|UIDeviceFamily" || true
+plutil -p "$app/Info.plist" | grep -A2 BGTaskSchedulerPermittedIdentifiers || { echo "::error::BGTaskSchedulerPermittedIdentifiers didn't reach the app"; exit 1; }
 ls -la "$out"

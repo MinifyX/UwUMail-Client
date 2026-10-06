@@ -1,7 +1,14 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { i18n } from "@/i18n";
-import { AssistError, BackendError, type Backend, type BackendErrorCode } from "./backend";
+import {
+  AssistError,
+  BackendError,
+  type Backend,
+  type BackendErrorCode,
+  type Distribution,
+  type MacIntegration,
+} from "./backend";
 import {
   answerOf,
   assistSettingsUpdate,
@@ -42,6 +49,10 @@ import type {
   Account,
   SharedSearchResult,
   AddressBookInfo,
+  AiConsent,
+  AiDestination,
+  AiDestinationState,
+  AssistFeature,
   AssistComposeRequest,
   AssistComposeResult,
   AssistEstimateMethod,
@@ -130,7 +141,17 @@ interface EngineError {
   code: BackendErrorCode;
   message: string;
   /** A refusal of the AI assistant, with the type its server (or this device) gave it. */
-  assist?: { type?: unknown; retryAfter?: unknown; properties?: unknown } | null;
+  assist?: { type?: unknown; retryAfter?: unknown; properties?: unknown; consent?: unknown } | null;
+}
+
+/** A destination of the assistant as the engine names it, checked field by field; null when it isn't one. */
+export function toAiDestination(raw: unknown): AiDestination | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  const { destination, kind, name, host } = value;
+  if (typeof destination !== "string" || typeof kind !== "string" || typeof name !== "string") return null;
+  if (typeof host !== "string") return null;
+  return { destination, kind, name, host };
 }
 
 function isEngineError(value: unknown): value is EngineError {
@@ -147,7 +168,8 @@ export function engineError(error: unknown): BackendError {
     const properties = Array.isArray(assist.properties)
       ? assist.properties.filter((property): property is string => typeof property === "string")
       : [];
-    return new AssistError(assist.type, error.message || null, { retryAfter, properties });
+    const consent = toAiDestination(assist.consent);
+    return new AssistError(assist.type, error.message || null, { retryAfter, properties, consent });
   }
   return new BackendError(error.code, error.message);
 }
@@ -955,6 +977,31 @@ export class TauriBackend implements Backend {
     return toSpamCheck(await call<unknown>("assist_spam_check", { messageId, language: language ?? null }), messageId);
   }
 
+  async assistDestination(scope: string, feature: AssistFeature): Promise<AiDestinationState | null> {
+    const raw = await call<unknown>("assist_destination", { scope, feature });
+    const destination = toAiDestination(raw);
+    if (!destination) return null;
+    return { ...destination, granted: (raw as { granted?: unknown }).granted === true };
+  }
+
+  async assistConsents(): Promise<AiConsent[]> {
+    const raw = await call<unknown>("assist_consents");
+    if (!Array.isArray(raw)) return [];
+    return raw.flatMap((entry: unknown) => {
+      const destination = toAiDestination(entry);
+      const grantedAt = (entry as { grantedAt?: unknown } | null)?.grantedAt;
+      return destination ? [{ ...destination, grantedAt: typeof grantedAt === "number" ? grantedAt : 0 }] : [];
+    });
+  }
+
+  async grantAssistConsent(destination: string, host: string) {
+    await call<void>("assist_grant_consent", { destination, host });
+  }
+
+  async revokeAssistConsent(destination: string) {
+    await call<void>("assist_revoke_consent", { destination });
+  }
+
   setKeywords(messageIds: string[], keywords: Record<string, boolean>) {
     return call<void>("set_keywords", { messageIds, keywords });
   }
@@ -1025,6 +1072,22 @@ export class TauriBackend implements Backend {
 
   installUpdate() {
     return call<void>("install_update");
+  }
+
+  distribution() {
+    return call<Distribution>("distribution");
+  }
+
+  macIntegration() {
+    return call<MacIntegration | null>("mac_integration");
+  }
+
+  macMakeDefaultMail() {
+    return call<MacIntegration | null>("mac_make_default_mail");
+  }
+
+  macSetLoginItem(enabled: boolean) {
+    return call<MacIntegration | null>("mac_set_login_item", { enabled });
   }
 
   subscribe(listener: (event: BackendEvent) => void) {

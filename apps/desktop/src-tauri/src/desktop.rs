@@ -1,5 +1,7 @@
 //! Windows, macOS and Linux: the engine starts with the window, the tray keeps
-//! it running, updates come as a signed setup.
+//! it running, updates come as a signed setup — except in the Mac App Store
+//! build, which has no updater compiled in (`self_update`, build.rs) and gets
+//! new versions from the store.
 
 use std::sync::Arc;
 
@@ -14,9 +16,29 @@ use uwumail_core::notify;
 use uwumail_core::secrets::KeyringSecrets;
 use uwumail_core::{Engine, EngineOptions, Error};
 
-use crate::{background, updates};
+use crate::background;
+#[cfg(self_update)]
+use crate::updates;
 
+#[cfg(self_update)]
 pub use updates::{Channel, ReadyUpdate};
+
+/// Without an updater (the App Store build) the types stay, so the same UI code works everywhere.
+#[cfg(not(self_update))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Channel {
+    Stable,
+    Beta,
+}
+
+#[cfg(not(self_update))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadyUpdate {
+    pub version: String,
+    pub notes: Option<String>,
+}
 
 pub fn before_start() {
     #[cfg(windows)]
@@ -45,13 +67,14 @@ pub fn plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
         builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| background::on_second_instance(app, args)));
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(background::single_instance::init());
+    let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_notification::init());
+    #[cfg(self_update)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
 }
 
 pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>> {
+    #[cfg(self_update)]
     if updates::apply_pending_on_start(app.handle()) {
         // The downloaded setup replaces this version and starts UwUMail again.
         std::process::exit(0);
@@ -81,6 +104,7 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
 
 pub fn after_start(app: &mut App) -> tauri::Result<()> {
     background::setup(app)?;
+    #[cfg(self_update)]
     updates::start(app.handle());
     // macOS ends an app on ⌘Q, from the Dock or the menu bar icon and when logging out without
     // asking the window. The guard asks the page first (`onMacQuit` in useMacShell.ts), which saves
@@ -242,24 +266,51 @@ pub fn set_unified_push(_enabled: bool, _distributor: Option<String>) -> Result<
     Ok(None)
 }
 
+#[cfg(self_update)]
 pub fn set_update_channel(app: &AppHandle, channel: Channel) {
     updates::set_channel(app, channel);
 }
 
+#[cfg(self_update)]
 pub fn set_update_checks(app: &AppHandle, enabled: bool) {
     updates::set_automatic(app, enabled);
 }
 
+#[cfg(self_update)]
 pub fn update_status(app: &AppHandle) -> Option<ReadyUpdate> {
     updates::ready(app)
 }
 
+#[cfg(self_update)]
 pub async fn check_for_updates(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
     updates::check(app).await
 }
 
+#[cfg(self_update)]
 pub async fn install_update(app: &AppHandle) -> Result<(), Error> {
     updates::install_now(app).await
+}
+
+// The App Store build: nothing to look for, nothing waiting.
+#[cfg(not(self_update))]
+pub fn set_update_channel(_app: &AppHandle, _channel: Channel) {}
+
+#[cfg(not(self_update))]
+pub fn set_update_checks(_app: &AppHandle, _enabled: bool) {}
+
+#[cfg(not(self_update))]
+pub fn update_status(_app: &AppHandle) -> Option<ReadyUpdate> {
+    None
+}
+
+#[cfg(not(self_update))]
+pub async fn check_for_updates(_app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
+    Ok(None)
+}
+
+#[cfg(not(self_update))]
+pub async fn install_update(_app: &AppHandle) -> Result<(), Error> {
+    Err(Error::invalid("This UwUMail gets new versions from the App Store."))
 }
 
 #[cfg(test)]

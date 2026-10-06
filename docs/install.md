@@ -19,6 +19,7 @@ date afterwards. On Linux UwUMail comes as a package for your distribution.
 | Linux portable | `UwUMail-linux-x64-portable.tar.gz` · ARM: `UwUMail-linux-arm64-portable.tar.gz` | wherever you unpack it |
 | Android | `UwUMail-android.apk` | see the Android section of the [roadmap](roadmap.md) |
 | iPhone | `UwUMail-ios.ipa` | sideload only (AltStore or Sideloadly), see [ios.md](ios.md) |
+| iPhone, iPad, Mac | TestFlight (App Store build) | invited testers for now, see [app-store.md](app-store.md) |
 
 The Mac setup is universal: the same file for Apple chips and Intel Macs.
 
@@ -143,6 +144,9 @@ On macOS and Linux only a UwUMail the setup or the package manager installed
 updates itself. A copy started from somewhere else (a folder you dragged it
 to, the portable folder, a build of your own) leaves updating to you, and so
 does the AUR package, which pacman updates.
+
+The App Store builds (TestFlight for now) have no updater at all and no update
+settings: the store updates them ([app-store.md](app-store.md)).
 
 The setup never replaces a newer UwUMail with an older one, even if an older
 setup carries a valid signature. UwUMail itself only takes an update whose

@@ -1,4 +1,8 @@
 import type {
+  AiConsent,
+  AiDestination,
+  AiDestinationState,
+  AssistFeature,
   AccountDomainSignatures,
   LabelCount,
   LabelRef,
@@ -112,7 +116,9 @@ export type BackendErrorCode =
   /** Changed elsewhere since it was read (`ifInState` didn't match): read it again first. */
   | "state_mismatch"
   /** Sending broke off after the server may have taken the mail; it may have gone out. */
-  | "maybe_sent";
+  | "maybe_sent"
+  /** The AI assistant would send mail somewhere the person hasn't agreed to yet; nothing was sent. */
+  | "consent_required";
 
 export class BackendError extends Error {
   readonly code: BackendErrorCode;
@@ -138,11 +144,18 @@ export class AssistError extends BackendError {
   readonly retryAfter: number | null;
   /** For `invalidProperties`: the fields it names. */
   readonly properties: string[];
+  /** For `consentRequired`: where the mail would go, for the question to the person. */
+  readonly consent: AiDestination | null;
 
   constructor(
     type: string,
     description: string | null = null,
-    extra: { retryAfter?: number | null; properties?: string[]; code?: BackendErrorCode } = {},
+    extra: {
+      retryAfter?: number | null;
+      properties?: string[];
+      code?: BackendErrorCode;
+      consent?: AiDestination | null;
+    } = {},
   ) {
     super(extra.code ?? assistErrorCode(type), description ?? type);
     this.name = "AssistError";
@@ -150,7 +163,13 @@ export class AssistError extends BackendError {
     this.description = description;
     this.retryAfter = extra.retryAfter ?? null;
     this.properties = extra.properties ?? [];
+    this.consent = extra.consent ?? null;
   }
+}
+
+/** The refusal of a call that would send mail somewhere the person hasn't agreed to yet. */
+export function consentRequired(error: unknown): AiDestination | null {
+  return error instanceof AssistError && error.type === "consentRequired" ? error.consent : null;
 }
 
 function assistErrorCode(type: string): BackendErrorCode {
@@ -169,6 +188,8 @@ function assistErrorCode(type: string): BackendErrorCode {
     case "invalidArguments":
     case "invalidProperties":
       return "invalid_input";
+    case "consentRequired":
+      return "consent_required";
     default:
       return "internal";
   }
@@ -525,6 +546,21 @@ export interface Backend {
   /** A second opinion on a mail, with what is known about it and its sender. */
   assistSpamCheck(messageId: string, language?: string): Promise<AssistSpamCheck>;
   /**
+   * Where `feature` would send mail for a scope (`"device"` or a UwUMail account id) and whether the
+   * person agreed already; null while it stays on this device. For asking before something that
+   * sends by itself is switched on.
+   */
+  assistDestination(scope: string, feature: AssistFeature): Promise<AiDestinationState | null>;
+  /** Every consent given to send mail to a provider or server, for the settings. */
+  assistConsents(): Promise<AiConsent[]>;
+  /**
+   * The person agreed to send mail to `destination` as the question showed it (`host`). Throws when
+   * it changed since; then ask again.
+   */
+  grantAssistConsent(destination: string, host: string): Promise<void>;
+  /** Takes a consent back; nothing more goes there from now on. */
+  revokeAssistConsent(destination: string): Promise<void>;
+  /**
    * Sets (true) or takes off (false) own keywords, e.g. labels by hand. IMAP servers that don't
    * keep own keywords refuse with `not_supported`.
    */
@@ -558,8 +594,23 @@ export interface Backend {
   checkForUpdates(): Promise<UpdateInfo | null>;
   /** Restarts into the waiting update. */
   installUpdate(): Promise<void>;
+  /** Where this copy came from: "store" gets new versions from the App Store, never from UwUMail. */
+  distribution(): Promise<Distribution>;
+  /** macOS: default mail app and opening at login; null elsewhere. */
+  macIntegration(): Promise<MacIntegration | null>;
+  macMakeDefaultMail(): Promise<MacIntegration | null>;
+  macSetLoginItem(enabled: boolean): Promise<MacIntegration | null>;
 
   subscribe(listener: (event: BackendEvent) => void): () => void;
+}
+
+export type Distribution = "store" | "direct";
+
+export interface MacIntegration {
+  /** UwUMail opens mailto: links. */
+  defaultMail: boolean;
+  /** Opening at login, where UwUMail manages it itself (the App Store build); null otherwise. */
+  loginItem: "on" | "off" | "approval" | null;
 }
 
 let instance: Backend | null = null;

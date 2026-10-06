@@ -20,15 +20,19 @@ sync. Only what Tauri needs to generate it lives here:
 
 After the build the workflow boots a simulator, installs UwUMail, starts it and
 checks that the engine comes up and the web view draws its first screen
-(`scripts/ios-smoke.sh`). Screenshots of that run are in the smoke artifact.
+(`scripts/ios-smoke.sh`), then starts it once more to check the background
+refresh (below). Screenshots of that run are in the smoke artifact. Pull
+requests that touch the app build and smoke-test the simulator app only.
+
+On a tag and when started by hand, the job `testflight` signs the same IPA for
+the App Store and uploads it to **TestFlight** — see [app-store.md](app-store.md).
 
 ## Why the IPA is unsigned
 
-Signing an app for a real iPhone needs an Apple certificate, and those come
-with the Apple Developer Program (99 $ a year). UwUMail doesn't have one, so
-the IPA leaves CI with no signature at all — iOS refuses to install it as it is.
-
-The way around it, for your own phone: a sideloading tool signs the app with
+The IPA on the releases page leaves CI with no signature at all — iOS refuses
+to install it as it is. The signed one goes to TestFlight only
+([app-store.md](app-store.md)); until UwUMail is in the App Store, the way onto
+your own phone without TestFlight is a sideloading tool that signs the app with
 your own free Apple ID right before it installs it.
 
 1. Download `UwUMail-ios.ipa` from the
@@ -57,12 +61,15 @@ keychain, attachments saved into UwUMail's folder in the Files app.
 
 Not there:
 
-- **No mail while the app is closed.** iOS gives no app a service that keeps
-  running, so there is nothing like the Android foreground service. Mail arrives
-  while UwUMail is open. The app asks iOS for background refresh
-  (`UIBackgroundModes: fetch`), but the Swift side that answers that wake-up is
-  not written yet, and iOS decides when — or whether — it happens at all. Real
-  push would need APNs, which needs a paid account and a server.
+- **New mail while the app rests comes when iOS says so.** iOS gives no app a
+  service that keeps running, so there is nothing like the Android foreground
+  service. UwUMail asks iOS for background refresh (`BGAppRefreshTask`
+  `app.uwumail.refresh`, `src-tauri/src/ios_refresh.rs`): whenever it goes into
+  the background it asks to be woken at the earliest 15 minutes later, and on a
+  wake-up every account looks for mail once (at most 25 seconds) and new mail
+  rings as a local notification. iOS decides when — it learns when you use the
+  app, and skips it in Low Power Mode or with Settings → General → Background App
+  Refresh off. Real push would need APNs and a server.
 - **Attachments only open inside UwUMail.** Pictures, PDFs and text show in the
   viewer; handing a file to another app needs iOS' share sheet, which isn't
   wired up yet. "Save" puts the file into UwUMail's folder in the Files app
@@ -101,6 +108,7 @@ One thing to know when a dependency is added: on iOS, Cargo builds a static
 library and Xcode does the linking, so `cargo:rustc-link-lib=framework=…` from a
 crate's build script never reaches the linker. The frameworks have to be listed
 in `tauri.ios.conf.json` under `bundle > iOS > frameworks` instead — that's why
-`SystemConfiguration` is in there, for the DNS resolver's system settings, and
-`Vision` for reading the text in pictures (`crates/uwumail-ocr`). A
+`SystemConfiguration` is in there, for the DNS resolver's system settings,
+`Vision` for reading the text in pictures (`crates/uwumail-ocr`) and
+`BackgroundTasks` for the background refresh. A
 missing one shows up as "Undefined symbols for architecture arm64".

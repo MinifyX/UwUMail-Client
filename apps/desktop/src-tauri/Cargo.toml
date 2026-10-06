@@ -11,6 +11,16 @@ rust-version.workspace = true
 name = "uwumail_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# What every download from GitHub is: a copy that looks for its own updates and installs them
+# (updates.rs). The Mac App Store build goes without — `--no-default-features --features store`
+# (scripts/build-mas.mjs): no updater plugin, no feed, no hand-over to the setup. docs/app-store.md.
+default = ["self-update"]
+self-update = ["dep:minisign-verify", "dep:semver", "dep:tauri-plugin-updater"]
+# A build for the App Store: the page says new versions come from there, and on the Mac UwUMail
+# opens at login through the system's login items instead of the setup's LaunchAgent.
+store = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -26,11 +36,11 @@ uwumail-core.workspace = true
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 base64.workspace = true
-minisign-verify = "0.2"
+minisign-verify = { version = "0.2", optional = true }
 # The "can run programs" question (desktop.rs `confirm`); the same rfd tauri-plugin-dialog uses.
 rfd = { version = "0.16", default-features = false, features = ["common-controls-v6", "gtk3"] }
-semver = "1"
-tauri-plugin-updater = "2"
+semver = { version = "1", optional = true }
+tauri-plugin-updater = { version = "2", optional = true }
 
 # macOS has its own single-instance check in a private folder (background.rs).
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
@@ -38,6 +48,9 @@ tauri-plugin-single-instance = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
+# Opening at login (SMAppService) in the App Store build, macos_system.rs.
+objc2.workspace = true
+objc2-foundation.workspace = true
 # ⌘Q, the Dock and logging out quit through the page, which saves first (lib.rs `finish_quit`).
 # The tag matches the @uwusuite/design version in package.json.
 uwu-macos = { git = "https://github.com/MinifyX/UwUSuite-Design", tag = "v1.6.2" }
@@ -52,6 +65,13 @@ uwumail-ocr.workspace = true
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-biometric = "2"
 tauri-plugin-haptics = "2"
+
+# Looking for new mail while UwUMail rests in the background (BGAppRefreshTask), ios_refresh.rs.
+[target.'cfg(target_os = "ios")'.dependencies]
+block2 = "0.6"
+objc2.workspace = true
+objc2-background-tasks = { version = "0.3", default-features = false, features = ["std", "block2", "dispatch2", "BGTask", "BGTaskRequest", "BGTaskScheduler"] }
+objc2-foundation = { workspace = true, features = ["block2", "NSDate", "NSNotification", "NSOperation"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 uwumail-android.workspace = true

@@ -1,7 +1,8 @@
 //! iPhone and iPad: one process, the engine starts with the window.
 //!
 //! iOS gives no app a service that keeps running, so mail arrives while
-//! UwUMail is open and whenever iOS wakes it up again. Notifications, Face ID
+//! UwUMail is open and whenever iOS wakes it up in the background for a
+//! moment to look (ios_refresh.rs). Notifications, Face ID
 //! and haptics come from Tauri's own plugins. Attachments are saved into
 //! UwUMail's folder in the Files app, because iOS has no "save as" of its own.
 
@@ -74,16 +75,18 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
     Ok(engine)
 }
 
-pub fn after_start(_app: &mut App) -> tauri::Result<()> {
+/// Runs inside `didFinishLaunching`, where iOS wants the background refresh registered.
+pub fn after_start(app: &mut App) -> tauri::Result<()> {
+    crate::ios_refresh::register(app.handle());
     Ok(())
 }
 
-/// Rings for new mail that arrived while UwUMail wasn't the app in front.
-/// iOS shows nothing while it is, so a banner never lands on top of the mail itself.
+/// Rings for new mail that arrived while UwUMail wasn't the app in front — also when iOS woke it
+/// up in the background to look (ios_refresh.rs). Nothing rings while it is in front, so a banner
+/// never lands on top of the mail itself.
 pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
     let EngineEvent::MailReceived { message_ids, .. } = event else { return };
-    let focused = app.get_webview_window("main").and_then(|window| window.is_focused().ok()).unwrap_or(false);
-    if focused {
+    if crate::ios_refresh::in_foreground() {
         return;
     }
     if let Ok(messages) = engine.messages(message_ids) {
@@ -187,8 +190,8 @@ pub fn remember_offline_days(_days: Option<u32>) -> Result<(), Error> {
     Ok(())
 }
 
-/// iOS decides by itself when a background app may look for mail; there is
-/// nothing to switch on. The setting stays hidden on the iPhone.
+/// iOS decides by itself when a resting app may look for mail (ios_refresh.rs, switched off under
+/// Settings → General → Background App Refresh); nothing to switch here. The setting stays hidden.
 pub fn set_run_in_background(_enabled: bool) -> Result<(), Error> {
     Ok(())
 }

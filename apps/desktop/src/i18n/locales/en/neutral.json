@@ -405,6 +405,17 @@
     "runInBackgroundDesc": "Closing the window leaves UwUMail next to the clock, so new mail still arrives. Quit it from its icon there.",
     "updates": "Updates",
     "updatesDesc": "UwUMail downloads new versions quietly and installs them the next time it starts.",
+    "privacyPolicy": "Privacy policy",
+    "mac": {
+      "defaultMail": "Default mail app",
+      "defaultMailDesc": "Mail links (mailto:) on your Mac open in the default mail app.",
+      "isDefaultMail": "UwUMail is your default mail app.",
+      "makeDefaultMail": "Make UwUMail the default",
+      "madeDefaultMail": "UwUMail now opens your mail links.",
+      "loginItem": "Open at login",
+      "loginItemDesc": "UwUMail starts when you log in to your Mac, so new mail arrives right away.",
+      "loginItemApproval": "Waiting for your OK: allow UwUMail under System Settings → General → Login Items."
+    },
     "channelStable": "Stable",
     "channelBeta": "Beta",
     "channelBetaDesc": "Beta gets new features earlier, and sometimes a rough edge.",
@@ -1375,7 +1386,8 @@
       "invalidWith": "The assistant didn't accept that: {{reason}}",
       "connection": "The mail server or the provider can't be reached. Check your connection and try again.",
       "signedOut": "Your session has ended. Sign in again to use the assistant.",
-      "generic": "Something went wrong with the assistant."
+      "generic": "Something went wrong with the assistant.",
+      "consent": "Nothing was sent: sending this mail to the AI provider isn't allowed yet."
     },
     "compose": {
       "button": "AI assistant",
@@ -1800,6 +1812,37 @@
       "menuLatest": "Label the latest mail again",
       "willAdd": "will be added",
       "willRemove": "will be removed"
+    },
+    "consent": {
+      "title": "Send this mail to {{name}}?",
+      "intro": "For this, the AI assistant sends personal data from your mail to {{name}} ({{host}}). Nothing has been sent yet.",
+      "introServer": "For this, the AI assistant sends personal data from your mail to the UwUMail server of {{name}} ({{host}}). That server passes it on to the AI provider its administrator chose. Nothing has been sent yet.",
+      "sentTitle": "What is sent",
+      "sent": {
+        "people": "Names and addresses of the sender and recipients",
+        "subject": "The subject",
+        "text": "The text of the mail",
+        "draft": "What you write in your draft, and the mail you reply to",
+        "headers": "Technical headers of the mail, such as its sign-in checks (SPF, DKIM, DMARC) and links",
+        "pictures": "Text read from the mail's pictures",
+        "labels": "The names and descriptions of your labels"
+      },
+      "purpose": "Used only to answer what you ask for: {{features}}.",
+      "terms": "The privacy policy and terms of {{name}} apply to what is sent there.",
+      "termsServer": "The privacy terms of that server and of its AI provider apply to what is sent there.",
+      "revoke": "You can take this back at any time in Settings → AI assistant.",
+      "allow": "Allow",
+      "notNow": "Not now",
+      "settings": {
+        "title": "Data sharing",
+        "description": "Where you allowed the assistant to send your mail. Once you take it back, nothing more goes there until you allow it again. A model on this computer needs no permission.",
+        "none": "You haven't allowed sending mail anywhere yet.",
+        "server": "UwUMail server of {{name}}",
+        "grantedAt": "{{host}} · allowed on {{date}}",
+        "revoke": "Revoke",
+        "revokeLabel": "Revoke for {{name}}",
+        "revoked": "Revoked. Nothing more goes to {{name}}."
+      }
     }
   },
   "labels": {

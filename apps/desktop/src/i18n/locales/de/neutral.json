@@ -405,6 +405,17 @@
     "runInBackgroundDesc": "Beim Schließen bleibt UwUMail neben der Uhr und meldet weiter neue Mails. Beenden über das Symbol dort.",
     "updates": "Updates",
     "updatesDesc": "UwUMail lädt neue Versionen still herunter und installiert sie beim nächsten Start.",
+    "privacyPolicy": "Datenschutzerklärung",
+    "mac": {
+      "defaultMail": "Standard-Mail-App",
+      "defaultMailDesc": "Mail-Links (mailto:) auf deinem Mac öffnen sich in der Standard-Mail-App.",
+      "isDefaultMail": "UwUMail ist deine Standard-Mail-App.",
+      "makeDefaultMail": "UwUMail als Standard festlegen",
+      "madeDefaultMail": "UwUMail öffnet jetzt deine Mail-Links.",
+      "loginItem": "Beim Anmelden öffnen",
+      "loginItemDesc": "UwUMail startet, wenn du dich am Mac anmeldest, damit neue Mails gleich ankommen.",
+      "loginItemApproval": "Wartet auf dein OK: Erlaube UwUMail unter Systemeinstellungen → Allgemein → Anmeldeobjekte."
+    },
     "channelStable": "Stabil",
     "channelBeta": "Beta",
     "channelBetaDesc": "Beta bekommt neue Funktionen früher, manchmal noch mit kleinen Ecken.",
@@ -1375,7 +1386,8 @@
       "invalidWith": "Der Assistent hat das nicht angenommen: {{reason}}",
       "connection": "Der Mailserver oder der Anbieter ist nicht erreichbar. Prüf deine Verbindung und versuch es noch einmal.",
       "signedOut": "Deine Sitzung ist abgelaufen. Melde dich neu an, um den Assistenten zu nutzen.",
-      "generic": "Beim Assistenten ist etwas schiefgegangen."
+      "generic": "Beim Assistenten ist etwas schiefgegangen.",
+      "consent": "Nichts wurde gesendet: Das Senden dieser Mail an den KI-Anbieter ist noch nicht erlaubt."
     },
     "compose": {
       "button": "KI-Assistent",
@@ -1800,6 +1812,37 @@
       "menuLatest": "Neueste Mail neu labeln",
       "willAdd": "wird gesetzt",
       "willRemove": "wird entfernt"
+    },
+    "consent": {
+      "title": "Diese Mail an {{name}} senden?",
+      "intro": "Dafür schickt der KI-Assistent personenbezogene Daten aus deiner Mail an {{name}} ({{host}}). Bisher wurde nichts gesendet.",
+      "introServer": "Dafür schickt der KI-Assistent personenbezogene Daten aus deiner Mail an den UwUMail-Server von {{name}} ({{host}}). Der Server gibt sie an den KI-Anbieter weiter, den seine Administration gewählt hat. Bisher wurde nichts gesendet.",
+      "sentTitle": "Was gesendet wird",
+      "sent": {
+        "people": "Namen und Adressen von Absender und Empfängern",
+        "subject": "Der Betreff",
+        "text": "Der Text der Mail",
+        "draft": "Was du in deinen Entwurf schreibst, und die Mail, auf die du antwortest",
+        "headers": "Technische Kopfzeilen der Mail, etwa ihre Absenderprüfungen (SPF, DKIM, DMARC), und Links",
+        "pictures": "Text, der aus den Bildern der Mail gelesen wurde",
+        "labels": "Die Namen und Beschreibungen deiner Labels"
+      },
+      "purpose": "Nur dafür genutzt, worum du bittest: {{features}}.",
+      "terms": "Für das Gesendete gelten die Datenschutzerklärung und die Bedingungen von {{name}}.",
+      "termsServer": "Für das Gesendete gelten die Datenschutzbedingungen dieses Servers und seines KI-Anbieters.",
+      "revoke": "Du kannst das jederzeit unter Einstellungen → KI-Assistent widerrufen.",
+      "allow": "Erlauben",
+      "notNow": "Jetzt nicht",
+      "settings": {
+        "title": "Datenweitergabe",
+        "description": "Wohin der Assistent deine Mails schicken darf. Nach einem Widerruf geht nichts mehr dorthin, bis du es wieder erlaubst. Ein Modell auf diesem Computer braucht keine Erlaubnis.",
+        "none": "Du hast noch nirgendwohin das Senden von Mails erlaubt.",
+        "server": "UwUMail-Server von {{name}}",
+        "grantedAt": "{{host}} · erlaubt am {{date}}",
+        "revoke": "Widerrufen",
+        "revokeLabel": "Für {{name}} widerrufen",
+        "revoked": "Widerrufen. Zu {{name}} geht nichts mehr."
+      }
     }
   },
   "labels": {
