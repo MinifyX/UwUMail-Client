@@ -16,6 +16,11 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      // Icons go through @uwusuite/design's Icon and ICONS, one meaning per glyph.
+      "no-restricted-imports": [
+        "error",
+        { paths: [{ name: "lucide-react", message: "Use Icon and ICONS from @uwusuite/design." }] },
+      ],
     },
   },
 );

@@ -1,41 +1,51 @@
+/*
+ * The installer, from @uwusuite/design: tokens, UwU Sans, the base layer, the keyframes and Nyu's
+ * CSS. It is always light (main.tsx), on the app tile's gradient with plum text, a translucent card
+ * and a striped pink bar (the package's docs/window.md, "Installers"). What is here is only what the
+ * installer adds: the card, the sparkles, the header buttons and Nyu's hop, toss and the stripes.
+ */
 @import "tailwindcss";
+@import "@uwusuite/design/tailwind.css";
 @import "../../desktop/src/components/nyu/nyu.css";
-@import "../../desktop/src/styles/fonts.css";
 
-/* Tailwind classes used inside the shared Nyu components. */
+/* The app's Nyu scenes it shows. */
 @source "../../desktop/src/components/nyu";
 
-@theme inline {
-  --font-sans: "UwU Sans", ui-sans-serif, system-ui, sans-serif;
-  --color-plum: #4b1d3f;
-  --color-plum-soft: #7a5670;
-  --color-pink: #ff4d8d;
-  --color-pink-solid: #e11d74;
-  --color-pink-solid-hover: #c8165f;
-  --color-blush: #ffe4ef;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
 body {
-  margin: 0;
   overflow: hidden;
   user-select: none;
   cursor: default;
-  font-family: var(--font-sans);
-  color: var(--color-plum);
-  background: linear-gradient(180deg, #fff3f8 0%, #ffd3e5 100%);
-  -webkit-font-smoothing: antialiased;
-  letter-spacing: -0.008em;
+  color: var(--uwu-plum);
+  background: linear-gradient(180deg, var(--uwu-tile-from) 0%, var(--uwu-tile-to) 100%);
 }
 
-:focus-visible {
-  outline: 3px solid rgb(255 77 141 / 0.45);
-  outline-offset: 2px;
+/* The header's round buttons, over the gradient. */
+.setup-control {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  color: var(--uwu-plum-soft);
+}
+
+.setup-control:hover {
+  background: rgb(255 255 255 / 0.8);
+  color: var(--uwu-plum);
+}
+
+.setup-control[data-kind="close"]:hover {
+  background: var(--uwu-pink-solid);
+  color: var(--uwu-on-pink);
+}
+
+/* The window controls' 10 px glyphs, as in the package's title bar. */
+.setup-control svg.glyph {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
 }
 
 .setup-card {
@@ -159,16 +169,11 @@ body {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .nyu-host,
-  .nyu-host *,
-  .setup-bar,
-  .setup-pop,
-  .setup-fade {
-    animation: none !important;
-  }
+/* Animations off (the system's reduced motion, through data-motion): Nyu and the bar hold still. */
+:root[data-motion="reduced"] :is(.setup-bar, .setup-pop, .setup-fade, .setup-hop) {
+  animation: none !important;
+}
 
-  .setup-toss {
-    display: none;
-  }
+:root[data-motion="reduced"] .setup-toss {
+  display: none;
 }
