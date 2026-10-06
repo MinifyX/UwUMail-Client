@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "icons": "uwu-icons --brand ../../brand --name uwumail --tray --mobile && node -e \"fs.rmSync('src-tauri/icons/android', { recursive: true, force: true })\"",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run"

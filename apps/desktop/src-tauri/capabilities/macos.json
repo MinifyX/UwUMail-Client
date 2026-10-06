@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "macos",
+  "description": "macOS only: the menu bar (setMacMenu) and ⌘W hiding the window instead of closing it (hideWindowOnClose). The window keeps the system's title bar there, so the page gets none of the title bar's window controls (desktop.json).",
+  "platforms": ["macOS"],
+  "windows": ["main"],
+  "permissions": ["core:menu:default", "core:window:allow-hide", "core:window:allow-show"]
+}

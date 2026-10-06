@@ -6107,6 +6107,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "uwu-macos"
+version = "1.6.0"
+source = "git+https://github.com/MinifyX/UwUSuite-Design?tag=v1.6.0#c848a01f9810007aa5880fa76ca5a2de5b24a2b6"
+dependencies = [
+ "objc2",
+]
+
+[[package]]
 name = "uwumail-android"
 version = "0.10.0-beta.1"
 dependencies = [
@@ -6188,6 +6196,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "tracing",
+ "uwu-macos",
  "uwumail-android",
  "uwumail-core",
  "uwumail-ocr",
