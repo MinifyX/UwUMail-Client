@@ -82,6 +82,17 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
 pub fn after_start(app: &mut App) -> tauri::Result<()> {
     background::setup(app)?;
     updates::start(app.handle());
+    // macOS ends an app on ⌘Q, from the Dock or the menu bar icon and when logging out without
+    // asking the window. The guard asks the page first (`onMacQuit` in useMacShell.ts), which saves
+    // the open draft and answers through `finish_quit`. Without it UwUMail still quits, as before.
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::Emitter;
+        let handle = app.handle().clone();
+        if let Err(error) = uwu_macos::install_quit_guard(move || handle.emit(uwu_macos::QUIT_EVENT, ()).is_ok()) {
+            tracing::warn!("No quit guard: {error}");
+        }
+    }
     Ok(())
 }
 
@@ -114,7 +125,7 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
 }
 
 /// macOS hands `mailto:` links over as an "open URL" event instead of on the
-/// command line, and clicking the Dock icon brings a hidden window back.
+/// command line, and clicking the Dock icon brings a hidden window back (⌘W only hides it).
 pub fn on_run_event(app: &AppHandle, event: RunEvent) {
     #[cfg(target_os = "macos")]
     {

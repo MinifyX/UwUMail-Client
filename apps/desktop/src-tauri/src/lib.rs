@@ -1184,6 +1184,16 @@ async fn install_update(app: AppHandle) -> CommandResult<()> {
     platform::install_update(&app).await
 }
 
+/// macOS: the page's answer to a quit from ⌘Q, the Dock, the menu bar icon or logging out, once it
+/// saved the open draft (`onMacQuit`): go ahead, or stay. Does nothing elsewhere.
+#[tauri::command]
+fn finish_quit(proceed: bool) {
+    #[cfg(target_os = "macos")]
+    uwu_macos::reply_quit(proceed);
+    #[cfg(not(target_os = "macos"))]
+    let _ = proceed;
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     platform::before_start();
@@ -1380,6 +1390,7 @@ pub fn run() {
             update_status,
             check_for_updates,
             install_update,
+            finish_quit,
         ])
         .build(tauri::generate_context!())
         .expect("error while building UwUMail");

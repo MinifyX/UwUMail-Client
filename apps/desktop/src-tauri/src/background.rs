@@ -183,12 +183,19 @@ pub fn setup(app: &mut tauri::App) -> tauri::Result<()> {
     let labels = labels();
     let open = MenuItem::with_id(app, "open", labels.open, true, None::<&str>)?;
     let sync = MenuItem::with_id(app, "sync", labels.sync, true, None::<&str>)?;
+    // On macOS this is AppKit's own Quit: it goes through `terminate:` like ⌘Q and the Dock, so the
+    // quit guard (desktop.rs) lets the page save the open draft first. `app.exit` would skip that.
+    #[cfg(target_os = "macos")]
+    let quit = PredefinedMenuItem::quit(app, Some(labels.quit))?;
+    #[cfg(not(target_os = "macos"))]
     let quit = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &sync, &PredefinedMenuItem::separator(app)?, &quit])?;
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("UwUMail")
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        // A menu bar icon opens its menu on a click, as every other one on the Mac does; on Windows
+        // and Linux a click brings the window and the right button opens the menu.
+        .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main_window(app),
             "sync" => app.state::<Engine>().sync_now(None),
@@ -196,19 +203,31 @@ pub fn setup(app: &mut tauri::App) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event
+                && !cfg!(target_os = "macos")
+            {
                 show_main_window(tray.app_handle());
             }
         });
-    // Drawn for 16–32 px (scripts/icons.mjs); the window icon would be scaled down from 256.
-    if let Ok(icon) = Image::from_bytes(include_bytes!("../icons/tray.png")) {
-        tray = tray.icon(icon);
+    // macOS: a template (black on transparent) that the menu bar tints for light, dark and the
+    // highlighted state. Elsewhere the colour symbol drawn for 16–32 px; the window icon would be
+    // scaled down from 256. Both come from `uwu-icons --tray` (docs/design.md).
+    #[cfg(target_os = "macos")]
+    let icon = Image::from_bytes(include_bytes!("../icons/tray-template.png"));
+    #[cfg(not(target_os = "macos"))]
+    let icon = Image::from_bytes(include_bytes!("../icons/tray.png"));
+    if let Ok(icon) = icon {
+        tray = tray.icon(icon).icon_as_template(cfg!(target_os = "macos"));
     } else if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
 
     if let Some(window) = app.get_webview_window("main") {
+        // Closing the window, whether with the system's button (macOS), the page's title bar
+        // (Windows, Linux: TitleBar calls `close()`, which arrives here the same way) or Alt+F4:
+        // with "keep running in the background" on, it only hides. On macOS the page hides it on
+        // ⌘W in any case (`hideWindowOnClose`), as Mac apps stay in the Dock.
         let hidden = window.clone();
         window.on_window_event(move |event| {
             if let WindowEvent::CloseRequested { api, .. } = event

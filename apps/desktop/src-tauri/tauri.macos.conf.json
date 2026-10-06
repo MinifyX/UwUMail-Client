@@ -1,5 +1,21 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "title": "UwUMail",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "visible": false,
+        "decorations": true,
+        "titleBarStyle": "Visible",
+        "shadow": true
+      }
+    ]
+  },
   "bundle": {
     "macOS": {
       "infoPlist": "Info.macos.plist"
