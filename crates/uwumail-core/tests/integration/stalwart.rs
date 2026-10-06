@@ -386,17 +386,24 @@ async fn jmap_drafts_are_saved_replaced_and_removed_on_send() {
     assert_eq!(on_server[0]["keywords"]["$draft"], true);
 
     let drafts = wait_for("Mini's drafts folder", async || role_folder(&engine, &mini.id, FolderRole::Drafts)).await;
-    let thread = wait_for("the draft in the drafts folder", async || {
-        engine
+    // Only the newest version: until the sync has caught up, the drafts folder can still hold the
+    // first one, which the server already destroyed.
+    let newest = second.message_id.clone().expect("an id for the draft");
+    let message_id = wait_for("only the newest draft in the drafts folder", async || {
+        let thread = engine
             .list_threads(&folder_query(&mini.id, &drafts.id))
             .unwrap()
             .threads
             .into_iter()
-            .find(|t| t.subject == subject)
+            .find(|t| t.subject == subject)?;
+        let detail = engine.get_thread(&thread.id, true).await.ok()?;
+        match detail.messages.as_slice() {
+            [only] if only.id == newest => Some(only.id.clone()),
+            _ => None,
+        }
     })
     .await;
-    let detail = engine.get_thread(&thread.id, true).await.unwrap();
-    let opened = engine.open_draft(&detail.messages[0].id).await.unwrap();
+    let opened = engine.open_draft(&message_id).await.unwrap();
     assert_eq!(opened.draft_key.as_deref(), Some(first.draft_key.as_str()));
     assert_eq!(opened.to[0].email, LENI.0);
 

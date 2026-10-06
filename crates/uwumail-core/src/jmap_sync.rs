@@ -887,6 +887,11 @@ pub async fn save_draft(
         .collect();
     if !older.is_empty() {
         destroy_emails(client, &older).await?;
+        // Gone here too, right away: until the next sync noticed, the drafts folder showed the
+        // older version (the thread lists one copy per Message-ID), and opening it failed.
+        let local: Vec<String> =
+            older.iter().filter_map(|remote| store.id_by_remote_id(account_id, remote).ok().flatten()).collect();
+        store.delete_messages(&local)?;
     }
     // JMAP ids are at most 255 characters (RFC 8620 §1.2); anything else isn't kept.
     if created.is_empty() || created.len() > 255 {
