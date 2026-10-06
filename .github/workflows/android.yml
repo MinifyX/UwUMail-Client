@@ -57,7 +57,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: android
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-speed') }}
       - run: pnpm install --frozen-lockfile
 
       - name: Version code
@@ -79,7 +79,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-provider: basic
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ (github.ref != 'refs/heads/main' && github.ref != 'refs/heads/ci-speed') }}
           validate-wrappers: false
           add-job-summary: on-failure
 

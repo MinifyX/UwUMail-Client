@@ -110,7 +110,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: setup-${{ matrix.id }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-speed') }}
       - run: pnpm install --frozen-lockfile
       - id: version
         run: echo "version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
@@ -263,7 +263,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: setup-${{ matrix.target }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-speed') }}
       - run: pnpm install --frozen-lockfile
       - id: version
         shell: bash
