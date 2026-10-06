@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { backend } from "@/backend/backend";
+import { withAiConsent } from "../assist/consent";
 import type { Message } from "@/backend/types";
 import { useT } from "@/i18n";
 import { deviceTimeZone, localWall, zonedWall } from "@/lib/calendarDates";
@@ -121,7 +122,11 @@ export function useMailEvents(message: Message, { open, allowRemote, inJunk }: M
   const includeImages = (remote || hasOwnPictures(message)) && reachable && (!message.hasRemoteContent || allowRemote);
   const assistant = useQuery({
     queryKey: ["extractEvents", message.id, includeImages],
-    queryFn: () => backend().extractEvents(message.id, includeImages),
+    // Read by itself on every opened mail (the setting), it asks for consent only once a session.
+    queryFn: () =>
+      withAiConsent(["extractEvents"], () => backend().extractEvents(message.id, includeImages), {
+        automatic: !asked,
+      }),
     enabled: canRefine && ((refineAlways && on) || asked),
     staleTime: Infinity,
     retry: false,

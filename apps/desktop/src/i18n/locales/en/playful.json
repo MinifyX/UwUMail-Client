@@ -118,6 +118,10 @@
     "trustedSendersEmpty": "Nobody on my list yet (・・ )? Add senders right in the image notice of a message.",
     "protocolSwitched": "{{email}} speaks {{protocol}} now ✧",
     "runInBackgroundDesc": "Closing the window lets Nyu nap next to the clock and keep watch for new mail. Quit from the icon there.",
+    "mac": {
+      "madeDefaultMail": "Yay! Nyu catches your mail links now.",
+      "loginItemDesc": "Nyu wakes up with your Mac, so new mail shows up right away."
+    },
     "upToDate": "All fresh, nothing to do ✧",
     "backgroundPushDesc": "Nyu stays awake and watches your mailbox. Android shows a quiet notification for that, which you can hide ♡",
     "unifiedPushDesc": "Your UnifiedPush app pokes Nyu when mail arrives in JMAP mailboxes, so she can nap in between. Other mailboxes keep her awake as before.",
@@ -296,6 +300,12 @@
         "sure": "totally sure ✿"
       },
       "modelVerdict": "The model thought “{{verdict}}”, but the facts say otherwise, so it stays within what they allow (｀・ω・´)"
+    },
+    "consent": {
+      "title": "May I send this mail to {{name}}? (・ω・)",
+      "settings": {
+        "revoked": "Okay! Nothing more goes to {{name}} ✿"
+      }
     }
   },
   "dates": {

@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { Button, Field, Icon, IconButton, ICONS, Select, Spinner, Switch, TextInput, Toggle } from "@uwusuite/design";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AssistError, backend } from "@/backend/backend";
+import { confirmAiDestination, withAiConsent } from "../consent";
 import {
   LABEL_BASES,
   LABEL_DETECTORS,
@@ -74,7 +75,7 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
     setApplying(true);
     try {
       const ids = await backend().recentInboxIds(scope, APPLY_COUNT);
-      const labeled = await backend().applyAssistLabels(ids);
+      const labeled = await withAiConsent(["autoLabels"], () => backend().applyAssistLabels(ids));
       const count = Object.values(labeled).filter((list) => list.length > 0).length;
       toast(count > 0 ? t("assist.labels.applied", { count }) : t("assist.labels.appliedNone"), "success");
     } catch (error) {
@@ -132,8 +133,9 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
           <Toggle
             checked={settings.autoLabels}
             onChange={(autoLabels) =>
-              void backend()
-                .updateAssistSettings(scope, { autoLabels })
+              // Switched on, it sends new mail by itself: only once the person agreed to where.
+              void (autoLabels ? confirmAiDestination(scope, ["autoLabels"]) : Promise.resolve(true))
+                .then((allowed) => (allowed ? backend().updateAssistSettings(scope, { autoLabels }) : undefined))
                 .catch((error: unknown) => toast(assistErrorText(error), "error"))
             }
             label={t("assist.labels.auto")}

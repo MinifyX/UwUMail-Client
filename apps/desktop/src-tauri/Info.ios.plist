@@ -18,11 +18,17 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 
-	<!-- Lets iOS wake UwUMail up now and then to look for mail. iOS decides when,
-	     and never while the phone is busy; there is no service that keeps running. -->
+	<!-- Lets iOS wake UwUMail up now and then to look for mail (BGAppRefreshTask,
+	     src/ios_refresh.rs). iOS decides when, and never while the phone is busy; there is
+	     no service that keeps running. The identifier must be listed here, or iOS ends the
+	     app the moment it registers the task. -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>app.uwumail.refresh</string>
 	</array>
 
 	<!-- Signing in with Microsoft comes back to the app through app.uwumail://oauth

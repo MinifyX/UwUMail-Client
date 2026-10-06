@@ -204,6 +204,8 @@ mod ocr_ops;
 mod photo_ops;
 mod price_ops;
 mod push_ops;
+mod refresh_ops;
+pub use refresh_ops::RefreshOutcome;
 mod send_later_ops;
 mod shared_ops;
 
@@ -2115,6 +2117,7 @@ impl Inner {
             self.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
         }
         self.set_status(account_id, AccountStatus::Idle);
+        self.emit(EngineEvent::SyncFinished { account_id: account_id.to_string() });
         self.check_push(client, account_id).await;
         Ok(())
     }
@@ -2201,6 +2204,7 @@ impl Inner {
             }
         }
         self.set_status(&account.id, AccountStatus::Idle);
+        self.emit(EngineEvent::SyncFinished { account_id: account.id.clone() });
         Ok(())
     }
 }

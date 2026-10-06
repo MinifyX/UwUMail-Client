@@ -1,11 +1,16 @@
 mod account;
 #[cfg(desktop)]
 mod background;
+#[cfg(target_os = "ios")]
+mod ios_refresh;
+#[cfg(target_os = "macos")]
+mod macos_system;
 #[cfg(not(target_os = "android"))]
 mod notify_prefs;
 #[cfg(not(target_os = "android"))]
 mod ocr;
-#[cfg(desktop)]
+/// The desktop's own updater; the Mac App Store build has none (build.rs, docs/app-store.md).
+#[cfg(self_update)]
 mod updates;
 
 /// What differs between desktop, Android and iOS, behind the same functions.
@@ -806,6 +811,27 @@ async fn assist_spam_check(
     engine.assist_spam_check(&message_id, language_tag(language.as_deref())?).await
 }
 
+/// Where a feature would send mail for a scope, and whether the person agreed (App Review 5.1.2(i)).
+#[tauri::command]
+async fn assist_destination(engine: State<'_, Engine>, scope: String, feature: String) -> CommandResult<Json> {
+    engine.assist_destination(&scope, &feature).await
+}
+
+#[tauri::command]
+fn assist_consents(engine: State<'_, Engine>) -> CommandResult<Json> {
+    engine.assist_consents()
+}
+
+#[tauri::command]
+async fn assist_grant_consent(engine: State<'_, Engine>, destination: String, host: String) -> CommandResult<()> {
+    engine.assist_grant_consent(&destination, &host).await
+}
+
+#[tauri::command]
+fn assist_revoke_consent(engine: State<'_, Engine>, destination: String) -> CommandResult<()> {
+    engine.assist_revoke_consent(&destination)
+}
+
 #[tauri::command]
 async fn assist_extract_events(
     engine: State<'_, Engine>,
@@ -1184,6 +1210,57 @@ async fn install_update(app: AppHandle) -> CommandResult<()> {
     platform::install_update(&app).await
 }
 
+/// Where this copy came from, for the page's words about updates: `"store"` for an App Store
+/// build (feature `store`), `"direct"` for everything else. The iPhone's IPA is one build for
+/// sideloading and TestFlight, so it says `"direct"`; the page has no update settings there anyway.
+#[tauri::command]
+fn distribution() -> &'static str {
+    if cfg!(feature = "store") { "store" } else { "direct" }
+}
+
+/// macOS: whether UwUMail is the default mail app, and whether it opens at login (only the App
+/// Store build manages that itself; the DMG's setup has its own LaunchAgent). `None` elsewhere.
+#[tauri::command]
+fn mac_integration() -> Option<serde_json::Value> {
+    #[cfg(target_os = "macos")]
+    {
+        Some(macos_system::status())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
+}
+
+/// macOS: makes UwUMail the app that opens `mailto:` links.
+#[tauri::command]
+fn mac_make_default_mail() -> CommandResult<Option<serde_json::Value>> {
+    #[cfg(target_os = "macos")]
+    {
+        macos_system::make_default_mail()?;
+        Ok(Some(macos_system::status()))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(Error::invalid("Only on the Mac."))
+    }
+}
+
+/// macOS App Store build: open at login (a login item of the system's own) or not.
+#[tauri::command]
+fn mac_set_login_item(enabled: bool) -> CommandResult<Option<serde_json::Value>> {
+    #[cfg(target_os = "macos")]
+    {
+        macos_system::set_login_item(enabled)?;
+        Ok(Some(macos_system::status()))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = enabled;
+        Err(Error::invalid("Only on the Mac."))
+    }
+}
+
 /// macOS: the page's answer to a quit from ⌘Q, the Dock, the menu bar icon or logging out, once it
 /// saved the open draft (`onMacQuit`): go ahead, or stay. Does nothing elsewhere.
 #[tauri::command]
@@ -1357,6 +1434,10 @@ pub fn run() {
             assist_summarize,
             assist_cancel,
             assist_spam_check,
+            assist_destination,
+            assist_consents,
+            assist_grant_consent,
+            assist_revoke_consent,
             assist_extract_events,
             assist_estimate,
             assist_local_models,
@@ -1390,6 +1471,10 @@ pub fn run() {
             update_status,
             check_for_updates,
             install_update,
+            distribution,
+            mac_integration,
+            mac_make_default_mail,
+            mac_set_login_item,
             finish_quit,
         ])
         .build(tauri::generate_context!())

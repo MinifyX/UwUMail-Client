@@ -9,6 +9,7 @@ use serde_json::{Map, Value, json};
 use tokio::sync::mpsc;
 
 use super::*;
+use crate::assist::consent::{self, Destination};
 use crate::assist::estimate::{self, Method};
 use crate::assist::local::{self, Device};
 use crate::assist::mail::{self, MailText};
@@ -214,6 +215,111 @@ impl Engine {
             Target::Server(client) => Ok(Target::Server(client)),
             _ => Err(Error::assist("assistUnavailable", "This mailbox's server has no assistant.")),
         }
+    }
+
+    // ----------------------------------------------------------- consent
+
+    /// Where a target sends a mailbox's mail for `feature`; `None` while it stays on this device
+    /// (a provider on this computer, or none at all).
+    fn destination(&self, account_id: &str, target: &Target, feature: Feature) -> Result<Option<Destination>> {
+        match target {
+            Target::Server(client) => self.server_destination(account_id, client).map(Some),
+            Target::Foreign(client) => {
+                let chosen = self.device().server_assist()?.unwrap_or_default();
+                self.server_destination(&chosen, client).map(Some)
+            }
+            Target::Device => Ok(self.device().effective(feature)?.and_then(|e| consent::for_provider(&e.provider))),
+        }
+    }
+
+    fn server_destination(&self, account_id: &str, client: &JmapClient) -> Result<Destination> {
+        let account = self.inner.store.account(account_id)?;
+        Ok(consent::for_server(account_id, &account.email, &client.session.api_url))
+    }
+
+    /// Ok when `target` may get the mail of `account_id` for `feature`; `consentRequired` otherwise.
+    fn check_consent(&self, account_id: &str, target: &Target, feature: Feature) -> Result<()> {
+        consent::require(&self.inner.store, self.destination(account_id, target, feature)?)
+    }
+
+    /// Who does the AI of a mailbox for `feature`, once the person agreed to send its mail there.
+    /// Every call that sends mail to a model starts here (or checks [`Self::check_consent`]).
+    async fn send_target(&self, account_id: &str, feature: Feature) -> Result<Target> {
+        let target = self.ai_target(account_id).await?;
+        self.check_consent(account_id, &target, feature)?;
+        Ok(target)
+    }
+
+    /// Where `feature` would send mail for a scope (this device's mailboxes, or the UwUMail account
+    /// with that id) and whether the person agreed already; `null` while it stays on this device.
+    /// For asking before something that sends by itself is switched on.
+    pub async fn assist_destination(&self, scope: &str, feature: &str) -> Result<Value> {
+        let feature = Feature::parse(feature).ok_or_else(|| Error::assist("invalidArguments", "Unknown feature."))?;
+        let (account_id, target) = if scope == DEVICE_SCOPE {
+            match self.foreign_server().await? {
+                Some(client) => (self.device().server_assist()?.unwrap_or_default(), Target::Foreign(client)),
+                None => (String::new(), Target::Device),
+            }
+        } else {
+            (scope.to_string(), self.ai_target(scope).await?)
+        };
+        let destination = match &target {
+            Target::Foreign(client) => Some(self.server_destination(&account_id, client)?),
+            _ => self.destination(&account_id, &target, feature)?,
+        };
+        Ok(match destination {
+            Some(destination) => {
+                let granted = consent::granted(&self.inner.store, &destination)?;
+                let mut value = serde_json::to_value(&destination)?;
+                value["granted"] = json!(granted);
+                value
+            }
+            None => Value::Null,
+        })
+    }
+
+    /// Every consent the person gave to send mail to a provider or server.
+    pub fn assist_consents(&self) -> Result<Value> {
+        consent::list(&self.inner.store)
+    }
+
+    /// The person agreed to send mail to `destination` (`provider:<id>` or `server:<account id>`),
+    /// as the question showed it at `host`. When it changed since, nothing is kept and the
+    /// question must be asked again.
+    pub async fn assist_grant_consent(&self, destination: &str, host: &str) -> Result<()> {
+        let current = if let Some(id) = destination.strip_prefix("provider:") {
+            let record = self
+                .device()
+                .providers()?
+                .into_iter()
+                .find(|p| p.id == id)
+                .ok_or_else(|| Error::assist("notFound", "This provider no longer exists."))?;
+            match consent::for_provider(&record) {
+                Some(found) => found,
+                // On this computer: nothing to agree to.
+                None => return Ok(()),
+            }
+        } else if let Some(account_id) = destination.strip_prefix("server:") {
+            match tokio::time::timeout(SERVER_WAIT, self.assist_target(account_id)).await {
+                Ok(Ok(Target::Server(client))) => self.server_destination(account_id, &client)?,
+                _ => return Err(Error::assist("assistUnavailable", "This mailbox's server has no assistant now.")),
+            }
+        } else {
+            return Err(Error::assist("invalidArguments", "Unknown destination."));
+        };
+        if current.host != host.trim() {
+            return Err(Error::assist("invalidArguments", "The destination changed. Please confirm again."));
+        }
+        consent::grant(&self.inner.store, &current, now_secs())?;
+        self.assist_changed(None);
+        Ok(())
+    }
+
+    /// Takes a consent back; nothing more goes there from now on.
+    pub fn assist_revoke_consent(&self, destination: &str) -> Result<()> {
+        consent::revoke(&self.inner.store, destination)?;
+        self.assist_changed(None);
+        Ok(())
     }
 
     fn assist_changed(&self, account_id: Option<&str>) {
@@ -656,7 +762,7 @@ impl Engine {
         }
         let mut out = Map::new();
         for (account_id, ids) in by_account {
-            match self.ai_target(&account_id).await? {
+            match self.send_target(&account_id, Feature::AutoLabels).await? {
                 Target::Server(client) => {
                     let pairs = self.remote_ids(&account_id, &ids)?;
                     let remote: Vec<String> = pairs.iter().map(|(_, r)| r.clone()).collect();
@@ -724,7 +830,7 @@ impl Engine {
         sink: Option<StreamSink>,
     ) -> Result<Value> {
         let work = async {
-            match self.ai_target(account_id).await? {
+            match self.send_target(account_id, Feature::Compose).await? {
                 Target::Foreign(client) => {
                     let arguments = self.foreign_compose_arguments(&request, true).await;
                     server::stream_or_call(&client, "Assist/compose", arguments, sink.clone()).await
@@ -865,7 +971,7 @@ impl Engine {
                 (None, None) => return Err(Error::assist("invalidArguments", "Nothing to summarize.")),
             };
             let last = messages.last().ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
-            let mut answer = match self.ai_target(&last.account_id).await? {
+            let mut answer = match self.send_target(&last.account_id, Feature::Summarize).await? {
                 Target::Foreign(client) => {
                     let arguments = json!({ "foreignMails": foreign_thread(&messages), "language": language });
                     server::stream_or_call(&client, "Assist/summarize", arguments, sink.clone()).await?
@@ -937,7 +1043,7 @@ impl Engine {
             .messages_by_ids(&[message_id.to_string()])?
             .pop()
             .ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
-        let mut answer = match self.ai_target(&message.account_id).await? {
+        let mut answer = match self.send_target(&message.account_id, Feature::SpamCheck).await? {
             Target::Server(client) => {
                 let (_, remote) = self.remote_id(message_id)?;
                 server::spam_check(&client, &remote, language).await?
@@ -1088,7 +1194,7 @@ impl Engine {
             .messages_by_ids(&[message_id.to_string()])?
             .pop()
             .ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
-        match self.ai_target(&message.account_id).await? {
+        match self.send_target(&message.account_id, Feature::ExtractEvents).await? {
             Target::Server(client) => {
                 let (_, remote) = self.remote_id(message_id)?;
                 Ok(server_events(server::extract_events(&client, &remote, include_images).await?))
@@ -1180,7 +1286,13 @@ impl Engine {
             None if method == Method::Compose => account_id.to_string(),
             None => return Err(Error::assist("notFound", "This mail no longer exists.")),
         };
-        let (client, remote) = match self.ai_target(&account).await? {
+        let target = self.ai_target(&account).await?;
+        // For another mailbox the estimate sends the mail along to the chosen server: without
+        // consent, no tooltip rather than that. A server's own mailbox sends only ids.
+        if matches!(target, Target::Foreign(_)) && self.check_consent(&account, &target, Feature::Compose).is_err() {
+            return Ok(None);
+        }
+        let (client, remote) = match target {
             Target::Device => {
                 return self.estimate_on_device(&account, method, &arguments, &messages, &currency).await.map(Some);
             }
@@ -1737,6 +1849,7 @@ impl Engine {
         let names: Vec<(i64, &str)> = asked_labels.iter().map(|(id, label)| (*id, label.name.as_str())).collect();
         match target {
             Target::Foreign(client) => {
+                self.check_consent(&message.account_id, target, Feature::AutoLabels)?;
                 self.count_server_auto_label()?;
                 let mail = MailText::from_stored(message, mail::MAX_MAIL_CHARS);
                 let owned: Vec<Label> = asked_labels.iter().map(|(_, label)| (*label).clone()).collect();
@@ -1923,6 +2036,13 @@ impl Engine {
             },
             false => None,
         };
+        // Without the person's consent to send mail there: labels without a model only, silently.
+        if let Some(target) = &ai
+            && let Err(error) = self.check_consent(account_id, target, Feature::AutoLabels)
+        {
+            tracing::debug!("Auto-labels ask no model: {error}");
+            ai = None;
+        }
         let Ok(account) = self.inner.store.account(account_id) else { return };
         let Ok(roles) = self.inner.store.message_roles(&message_ids) else { return };
         let mut run = LabelRun::new(non_ai);
@@ -1979,7 +2099,7 @@ impl Engine {
             .messages_by_ids(&[message_id.to_string()])?
             .pop()
             .ok_or_else(|| Error::assist("notFound", "This mail no longer exists."))?;
-        let mut answer = match self.ai_target(&message.account_id).await? {
+        let mut answer = match self.send_target(&message.account_id, Feature::AutoLabels).await? {
             Target::Server(client) => {
                 let (_, remote) = self.remote_id(message_id)?;
                 let arguments = json!({ "emailId": remote, "suggestNew": suggest_new, "language": language });
@@ -3504,6 +3624,25 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         engine.assist_update_settings(DEVICE_SCOPE, json!({ "serverAssist": "uwu" })).await.unwrap();
         assert_eq!(engine.assist_settings(DEVICE_SCOPE).await.unwrap()["serverAssist"], "uwu");
 
+        // Not one mail goes there before the person agreed (App Review 5.1.2(i)).
+        let refused = engine.assist_summarize(json!({ "emailId": id }), None, None).await.unwrap_err();
+        assert_eq!(refused.code, ErrorCode::ConsentRequired);
+        let asked = refused.assist.unwrap().consent.unwrap();
+        assert_eq!((asked.destination.as_str(), asked.name.as_str()), ("server:uwu", "mini@uwu.test"));
+        assert_eq!((asked.kind.as_str(), asked.host.is_empty()), (consent::SERVER_KIND, false));
+        let refused = engine.assist_suggest_labels(&id, None, None).await.unwrap_err();
+        assert_eq!(refused.code, ErrorCode::ConsentRequired);
+        let estimate = engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id }), None).await;
+        assert_eq!(estimate.unwrap(), None, "an estimate would send the mail too");
+        let destination = engine.assist_destination(DEVICE_SCOPE, "autoLabels").await.unwrap();
+        assert_eq!(
+            (destination["destination"].as_str(), destination["granted"].as_bool()),
+            (Some("server:uwu"), Some(false))
+        );
+        assert_eq!(foreign(&calls), 0);
+        engine.assist_grant_consent("server:uwu", &asked.host).await.unwrap();
+        assert_eq!(engine.assist_destination(DEVICE_SCOPE, "autoLabels").await.unwrap()["granted"], true);
+
         // Now the server does it, with the mail sent along.
         let summary = engine.assist_summarize(json!({ "emailId": id }), None, None).await.unwrap();
         assert_eq!(
@@ -3548,6 +3687,17 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nWir feiern am 12. September um 18
         assert_eq!((log[0]["source"].as_str(), log[0]["providerName"].as_str()), (Some("ai"), Some("Mistral")));
         assert_eq!(engine.server_auto_labels_today().unwrap(), 1);
         assert_eq!(engine.device().requests_today(Feature::AutoLabels).unwrap(), 0, "no device provider asked");
+
+        // Taken back in the settings: nothing more goes there, not even auto-labels in the background.
+        engine.assist_revoke_consent("server:uwu").unwrap();
+        let before = foreign(&calls);
+        let refused = engine.assist_summarize(json!({ "emailId": id }), None, None).await.unwrap_err();
+        assert_eq!(refused.code, ErrorCode::ConsentRequired);
+        let again = add_mail(&engine, 9, "Mia <mia@example.com>", "Feier", "Wir feiern am Samstag.", &[], None);
+        engine.auto_label("acc", vec![again]).await;
+        assert_eq!(foreign(&calls), before);
+        assert_eq!(engine.server_auto_labels_today().unwrap(), 1);
+        engine.assist_grant_consent("server:uwu", &asked.host).await.unwrap();
 
         // Switched off again, the device answers.
         engine.assist_update_settings(DEVICE_SCOPE, json!({ "serverAssist": null })).await.unwrap();
@@ -3668,5 +3818,111 @@ Message-ID: <geheim@example.com>\r\nContent-Type: text/plain\r\n\r\nNur fuer den
         let device = scopes.as_array().unwrap().iter().find(|s| s["id"] == DEVICE_SCOPE).unwrap().clone();
         assert_eq!(device["options"]["foreignServers"], json!([]));
         assert!(calls.lock().unwrap().iter().all(|(_, args)| !args.to_string().contains("foreignMails")));
+    }
+
+    /// A provider that isn't on this computer gets no mail, from no feature and not in the
+    /// background, until the person agreed; a changed address asks again; a revoked or deleted
+    /// one stops at once.
+    #[tokio::test]
+    async fn no_mail_reaches_a_provider_without_consent() {
+        use crate::store::ProviderRecord;
+        let (_dir, engine, id) = engine_with_mail();
+        let (base, seen) = fake_model(vec![json!("Ein Fest im Park."), json!("Noch ein Fest.")]).await;
+        let addr: std::net::SocketAddr = base.trim_start_matches("http://").parse().unwrap();
+        // `ai.test` is the fake model: an address that is not this computer.
+        let http = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .resolve("ai.test", addr)
+            .resolve("other-ai.test", addr)
+            .build()
+            .unwrap();
+        assert!(engine.inner.assist.http.set(http).is_ok());
+        let mut record = ProviderRecord {
+            id: "dlan".into(),
+            name: "Büro-KI".into(),
+            kind: "openaiCompatible".into(),
+            base_url: Some(format!("http://ai.test:{}/v1", addr.port())),
+            model: Some("llama3".into()),
+            fast_model: None,
+            key_hint: None,
+            created_at: 1,
+            input_price: None,
+            output_price: None,
+        };
+        engine.inner.store.save_assist_provider(&record).unwrap();
+        let host = format!("ai.test:{}", addr.port());
+
+        let refused = engine.assist_summarize(json!({ "emailId": id }), None, None).await.unwrap_err();
+        assert_eq!(refused.code, ErrorCode::ConsentRequired);
+        let asked = refused.assist.as_ref().unwrap().consent.clone().unwrap();
+        assert_eq!(
+            (asked.destination.as_str(), asked.name.as_str(), asked.kind.as_str(), asked.host.as_str()),
+            ("provider:dlan", "Büro-KI", "openaiCompatible", host.as_str())
+        );
+        for refused in [
+            engine.assist_spam_check(&id, None).await.unwrap_err(),
+            engine.assist_extract_events(&id, true).await.unwrap_err(),
+            engine.assist_suggest_labels(&id, None, None).await.unwrap_err(),
+            engine.assist_apply_labels(std::slice::from_ref(&id)).await.unwrap_err(),
+            engine
+                .assist_compose("acc", json!({ "mode": "write", "instruction": "Sag zu" }), None, None)
+                .await
+                .unwrap_err(),
+        ] {
+            assert_eq!(refused.code, ErrorCode::ConsentRequired, "{refused:?}");
+        }
+        // In the background: no model, no question, labels by rules only.
+        engine.assist_update_settings(DEVICE_SCOPE, json!({ "autoLabels": true })).await.unwrap();
+        engine.auto_label("acc", vec![id.clone()]).await;
+        // The local count of an estimate sends nothing and needs nothing.
+        assert!(
+            engine.assist_estimate("acc", "Assist/summarize", json!({ "emailId": id }), None).await.unwrap().is_some()
+        );
+        assert!(seen.lock().unwrap().is_empty(), "nothing left this device");
+        for feature in Feature::ALL {
+            assert_eq!(engine.device().requests_today(feature).unwrap(), 0);
+        }
+        let destination = engine.assist_destination(DEVICE_SCOPE, "summarize").await.unwrap();
+        assert_eq!(
+            (destination["destination"].as_str(), destination["granted"].as_bool()),
+            (Some("provider:dlan"), Some(false))
+        );
+
+        // Agreed to as shown, and only as shown.
+        let changed = engine.assist_grant_consent("provider:dlan", "elsewhere.test").await.unwrap_err();
+        assert_eq!(changed.assist_kind(), Some("invalidArguments"));
+        engine.assist_grant_consent("provider:dlan", &host).await.unwrap();
+        let summary = engine.assist_summarize(json!({ "emailId": id }), None, None).await.unwrap();
+        assert_eq!(summary["providerName"], "Büro-KI");
+        assert_eq!(seen.lock().unwrap().len(), 1);
+        assert_eq!(engine.assist_consents().unwrap()[0]["destination"], "provider:dlan");
+
+        // Another address under the same provider: asked again.
+        record.base_url = Some(format!("http://other-ai.test:{}/v1", addr.port()));
+        engine.inner.store.save_assist_provider(&record).unwrap();
+        let refused = engine.assist_summarize(json!({ "emailId": id }), None, None).await.unwrap_err();
+        assert_eq!(refused.code, ErrorCode::ConsentRequired);
+        record.base_url = Some(format!("http://ai.test:{}/v1", addr.port()));
+        engine.inner.store.save_assist_provider(&record).unwrap();
+
+        // Revoked: stops at once.
+        engine.assist_revoke_consent("provider:dlan").unwrap();
+        let refused = engine.assist_summarize(json!({ "emailId": id }), None, None).await.unwrap_err();
+        assert_eq!(refused.code, ErrorCode::ConsentRequired);
+        assert_eq!(seen.lock().unwrap().len(), 1);
+
+        // Deleting the provider deletes its consent with it.
+        engine.assist_grant_consent("provider:dlan", &host).await.unwrap();
+        engine.assist_delete_provider(DEVICE_SCOPE, "dlan").await.unwrap();
+        assert_eq!(engine.assist_consents().unwrap(), json!([]));
+
+        // A provider on this computer needs no consent at all.
+        engine
+            .device()
+            .create_provider(&json!({ "kind": "ollama", "name": "Ollama", "baseUrl": base, "model": "llama3" }))
+            .unwrap();
+        assert_eq!(engine.assist_destination(DEVICE_SCOPE, "summarize").await.unwrap(), Value::Null);
+        let summary = engine.assist_summarize(json!({ "emailId": id }), None, None).await.unwrap();
+        assert_eq!(summary["providerName"], "Ollama");
     }
 }

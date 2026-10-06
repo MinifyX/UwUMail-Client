@@ -20,6 +20,8 @@ import { useAccounts } from "@/lib/queries";
 import { isDomainEntry, sortEntries } from "@/lib/trustedSenders";
 import { workspaceOf } from "@/lib/workspaces";
 import { PrivacyProxy } from "./PrivacyProxy";
+import { MacIntegration } from "./MacIntegration";
+import { useUpdatesInApp } from "@/lib/distribution";
 import { confirmIdentity } from "@/state/lock";
 import {
   NYU_ANIMATIONS,
@@ -404,6 +406,7 @@ function Reading() {
           />
         </Row>
       )}
+      <MacIntegration />
       {/* iOS has nothing to switch here: it decides by itself when a resting app may look for mail. */}
       {!nativeIos && (
         <div className="flex flex-col gap-2 border-b border-hairline py-4">
@@ -648,9 +651,14 @@ function UpdateSettings() {
   );
 }
 
+/** PRIVACY.md, as published on the website. */
+const PRIVACY_POLICY = "https://uwu.minifyx.de/uwumail/privacy";
+
 function About() {
   const { t } = useT();
   const setShortcutsOpen = useUi((s) => s.setShortcutsOpen);
+  // Not in an App Store build (the store updates it) and not on the iPhone.
+  const updates = useUpdatesInApp();
   return (
     <div className="flex flex-col items-center gap-4 py-8 text-center">
       <LogoSymbol className="h-20 w-auto" title="UwUMail" />
@@ -666,10 +674,13 @@ function About() {
           {t("status.demo")}
         </p>
       )}
-      <UpdateSettings />
+      {updates && <UpdateSettings />}
       <div className="flex flex-wrap justify-center gap-2">
         <Button icon={ICONS.openExternal} onClick={() => void openLinkNow("https://github.com/MinifyX/UwUMail-Client")}>
           {t("settings.source")}
+        </Button>
+        <Button icon={ICONS.openExternal} onClick={() => void openLinkNow(PRIVACY_POLICY)}>
+          {t("settings.privacyPolicy")}
         </Button>
         <Button icon={ICONS.keyboard} onClick={() => setShortcutsOpen(true)}>
           {t("settings.shortcuts")}

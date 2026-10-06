@@ -290,8 +290,18 @@ describe("DemoBackend assistant", () => {
     const demo = new DemoBackend();
     const { threads } = await demo.listThreads(inbox("acc-private"));
     const { messages } = await demo.getThread(threads[0]!.id, false);
+    // The UwUMail account's server gets the mail only once the person agreed.
+    const refused = await demo.extractEvents(messages[0]!.id, false).catch((error: unknown) => error);
+    expect(refused).toMatchObject({ code: "consent_required", consent: { destination: "server:acc-private" } });
+    expect(await demo.assistDestination("acc-private", "extractEvents")).toMatchObject({ granted: false });
+    await demo.grantAssistConsent("server:acc-private", "uwumail.example");
     const result = await demo.extractEvents(messages[0]!.id, false);
     expect(Array.isArray(result.events)).toBe(true);
+    expect((await demo.assistConsents()).map((consent) => consent.destination)).toEqual(["server:acc-private"]);
+    await demo.revokeAssistConsent("server:acc-private");
+    await expect(demo.extractEvents(messages[0]!.id, false)).rejects.toMatchObject({ code: "consent_required" });
+    // This device's Ollama runs on this computer: nothing to agree to.
+    expect(await demo.assistDestination("device", "summarize")).toBeNull();
     await demo.deleteAssistProvider("device", "d1");
     expect(await demo.assistFeatures("acc-studio")).toBeNull();
   });

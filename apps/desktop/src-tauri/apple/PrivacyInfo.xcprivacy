@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  UwUMail's privacy manifest: in the iPhone/iPad app (scripts/ios-build.sh puts it at the app's
+  top) and in the Mac App Store build (Contents/Resources, tauri.mas.conf.json).
+
+  No tracking, no tracking domains, nothing collected: mail goes only between the device and the
+  servers the user signed in to, the AI assistant only to the provider the user set up and agreed
+  to, and nothing ever reaches the developer (PRIVACY.md). That isn't "collection" in Apple's sense
+  (data the developer or its partners receive).
+
+  The required-reason APIs it uses, and why:
+  - File timestamps: Rust's file functions and SQLite ask the file system (stat) about UwUMail's
+    own files — the database, cached attachments and pictures — in its own container (C617.1).
+  - System boot time: Rust's `Instant` is mach_absolute_time, for timeouts and sync intervals
+    (35F9.1).
+  - Disk space: SQLite looks at the file system (statfs) before it writes its database (E174.1).
+  - User defaults: the system's own frameworks (UIKit/AppKit, WebKit) keep the app's own state
+    there (CA92.1).
+  Nothing asks for the active keyboards.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

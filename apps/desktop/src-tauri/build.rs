@@ -6,5 +6,12 @@ fn main() {
     {
         println!("cargo:rustc-link-arg-bins=/DEPENDENTLOADFLAG:0x800");
     }
+    // `self_update`: a computer's copy with its own updater (feature `self-update`, the default).
+    // Phones and the Mac App Store build have none (Cargo.toml, docs/app-store.md).
+    println!("cargo::rustc-check-cfg=cfg(self_update)");
+    let target = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if std::env::var_os("CARGO_FEATURE_SELF_UPDATE").is_some() && !matches!(target.as_str(), "android" | "ios") {
+        println!("cargo:rustc-cfg=self_update");
+    }
     tauri_build::build()
 }

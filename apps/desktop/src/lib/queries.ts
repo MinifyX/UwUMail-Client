@@ -49,6 +49,8 @@ export const queryKeys = {
   assistLabels: ["assistLabels"] as const,
   assistLabelLog: ["assistLabelLog"] as const,
   assistUsage: ["assistUsage"] as const,
+  /** Where the person allowed the assistant to send mail (App Review 5.1.2(i)). */
+  assistConsents: ["assistConsents"] as const,
   /** What a call would take, per call and arguments (features/assist/estimate.tsx). */
   assistEstimate: ["assistEstimate"] as const,
   /** Ollama and LM Studio found on this computer. */
@@ -580,6 +582,7 @@ export function useBackendEvents() {
             queryKeys.assistLabels,
             queryKeys.assistLabelLog,
             queryKeys.assistUsage,
+            queryKeys.assistConsents,
             // Another provider or model changes what a call would take.
             queryKeys.assistEstimate,
             queryKeys.assistLocalModels,

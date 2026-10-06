@@ -3308,6 +3308,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-background-tasks"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ddeb0eb84c1714d4f50e5dc29cca57628c12cc40445a099c0cf05f4ee538473"
+dependencies = [
+ "bitflags 2.13.2",
+ "block2",
+ "dispatch2",
+ "objc2",
+ "objc2-foundation",
+]
+
+[[package]]
 name = "objc2-cloud-kit"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5597,7 +5610,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -6178,8 +6191,12 @@ name = "uwumail-desktop"
 version = "0.10.0-beta.2"
 dependencies = [
  "base64 0.23.1",
+ "block2",
  "libc",
  "minisign-verify",
+ "objc2",
+ "objc2-background-tasks",
+ "objc2-foundation",
  "rfd",
  "semver",
  "serde",

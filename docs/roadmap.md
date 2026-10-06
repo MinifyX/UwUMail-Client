@@ -74,7 +74,10 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Notifications for mail that arrives while UwUMail runs
 - [x] Attachments saved into UwUMail's folder in the Files app; profiles and apps from mail refused
 - [ ] Share sheet: hand attachments to other apps, print, share a mail
-- [ ] Background refresh: answer iOS' wake-up and look for mail
+- [x] Background refresh: answer iOS' wake-up (`BGAppRefreshTask`), look for mail, notify
+- [x] TestFlight for iPhone, iPad and Mac (signed in CI, [app-store.md](app-store.md)); Mac App Store build in the sandbox, no updater
+- [x] Privacy policy ([PRIVACY.md](../PRIVACY.md)) and explicit consent before the AI assistant sends mail to a provider
+- [ ] App Store release: store page, screenshots, review with a demo mailbox
 - [x] Redirect back from Microsoft sign-in (`app.uwumail://oauth`)
 - [ ] `mailto:` links and Google sign-in
 

@@ -1,4 +1,4 @@
-import { AssistError, BackendError, type Backend } from "./backend";
+import { AssistError, BackendError, type Backend, type Distribution, type MacIntegration } from "./backend";
 import { DemoAssist } from "./demo-assist";
 import { DEVICE_ASSIST_SCOPE } from "./types";
 import { isDangerous } from "@/lib/attachments";
@@ -18,6 +18,10 @@ import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMes
 import { DEMO_PROFILE_PICTURES, DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
+  AiConsent,
+  AiDestination,
+  AiDestinationState,
+  AssistFeature,
   MaskedAddressInput,
   MaskedAddressPatch,
   ProfilePicture,
@@ -1533,6 +1537,63 @@ export class DemoBackend implements Backend {
     return this.assistFor(message.accountId);
   }
 
+  /** The consents to send mail somewhere, in memory (the engine keeps them in its database). */
+  private consents = new Map<string, AiConsent>();
+
+  /**
+   * Where a demo assistant sends mail: the "server" of the UwUMail account. This device's Ollama
+   * runs on this computer, so its mail stays here and needs no consent.
+   */
+  private destinationOf(assist: DemoAssist): AiDestination | null {
+    if (assist !== this.assistServer) return null;
+    const account = DEMO_ACCOUNTS[0]!;
+    return { destination: `server:${account.id}`, kind: "uwumailServer", name: account.email, host: "uwumail.example" };
+  }
+
+  /** Like the engine: nothing goes to a destination the person hasn't agreed to. */
+  private requireConsent(assist: DemoAssist): DemoAssist {
+    const consent = this.destinationOf(assist);
+    if (consent && !this.consents.has(consent.destination)) {
+      throw new AssistError("consentRequired", `Allow sending mail to ${consent.name} (${consent.host}) first.`, {
+        consent,
+      });
+    }
+    return assist;
+  }
+
+  async assistDestination(scope: string, _feature: AssistFeature): Promise<AiDestinationState | null> {
+    await wait(30);
+    const assist =
+      scope === DEVICE_ASSIST_SCOPE
+        ? this.serverForOthers()
+          ? this.assistServer
+          : this.assistDevice
+        : this.assistFor(scope);
+    const destination = this.destinationOf(assist);
+    return destination ? { ...destination, granted: this.consents.has(destination.destination) } : null;
+  }
+
+  async assistConsents(): Promise<AiConsent[]> {
+    await wait(30);
+    return [...this.consents.values()];
+  }
+
+  async grantAssistConsent(destination: string, host: string) {
+    await wait(30);
+    const known = this.destinationOf(this.assistServer)!;
+    if (destination !== known.destination || host !== known.host) {
+      throw new AssistError("invalidArguments", "The destination changed. Please confirm again.");
+    }
+    this.consents.set(destination, { ...known, grantedAt: Math.floor(Date.now() / 1000) });
+    this.emit({ type: "assist:changed", accountId: null });
+  }
+
+  async revokeAssistConsent(destination: string) {
+    await wait(30);
+    this.consents.delete(destination);
+    this.emit({ type: "assist:changed", accountId: null });
+  }
+
   async assistScopes(): Promise<AssistScope[]> {
     const server = DEMO_ACCOUNTS[0]!.id;
     const others = this.accounts.filter((account) => account.id !== server).map((account) => account.id);
@@ -1558,7 +1619,7 @@ export class DemoBackend implements Backend {
 
   async extractEvents(messageId: string, _includeImages: boolean): Promise<AssistEventsResult> {
     // The demo assistant reads only the text; the poster mail's picture text is found by the rules.
-    return this.assistForMessage(messageId).extractEvents(messageId);
+    return this.requireConsent(this.assistForMessage(messageId)).extractEvents(messageId);
   }
 
   async assistProviders(scope: string) {
@@ -1620,6 +1681,9 @@ export class DemoBackend implements Backend {
     await wait(60);
     const emailId = typeof args.emailId === "string" ? args.emailId : null;
     const assist = method === "Assist/compose" || !emailId ? this.assistFor(accountId) : this.assistForMessage(emailId);
+    // Another mailbox's estimate would send its mail to the server: not before the person agreed.
+    const destination = this.destinationOf(assist);
+    if (accountId !== DEMO_ACCOUNTS[0]!.id && destination && !this.consents.has(destination.destination)) return null;
     return assist.estimate(method, args, currency);
   }
 
@@ -1693,7 +1757,7 @@ export class DemoBackend implements Backend {
     if (!message) throw new AssistError("notFound", "That mail is gone.");
     // Labels are the mailbox's own; the model may be its server's.
     const labels = message.accountId === DEMO_ACCOUNTS[0]!.id ? this.assistServer : this.assistDevice;
-    return labels.suggest(messageId, suggestNew, this.assistFor(message.accountId));
+    return labels.suggest(messageId, suggestNew, this.requireConsent(this.assistFor(message.accountId)));
   }
 
   async applyAssistLabels(messageIds: string[]) {
@@ -1701,6 +1765,7 @@ export class DemoBackend implements Backend {
       (id) => this.messages.find((m) => m.id === id)?.accountId === DEMO_ACCOUNTS[0]!.id,
     );
     const device = messageIds.filter((id) => !server.includes(id));
+    if (server.length > 0 || (device.length > 0 && this.serverForOthers())) this.requireConsent(this.assistServer);
     return {
       ...(server.length > 0 ? await this.assistServer.apply(server) : {}),
       ...(device.length > 0 ? await this.assistDevice.apply(device) : {}),
@@ -1718,17 +1783,17 @@ export class DemoBackend implements Backend {
   }
 
   async assistCompose(accountId: string, request: AssistComposeRequest, handlers?: AssistStreamHandlers) {
-    return this.assistFor(accountId).compose(request, handlers);
+    return this.requireConsent(this.assistFor(accountId)).compose(request, handlers);
   }
 
   async assistSummarize(request: AssistSummarizeRequest, handlers?: AssistStreamHandlers) {
     const messageId =
       request.emailId ?? this.messages.find((message) => message.threadId === request.threadId)?.id ?? "";
-    return this.assistForMessage(messageId).summarize(request, handlers);
+    return this.requireConsent(this.assistForMessage(messageId)).summarize(request, handlers);
   }
 
   async assistSpamCheck(messageId: string) {
-    return this.assistForMessage(messageId).spamCheck(messageId);
+    return this.requireConsent(this.assistForMessage(messageId)).spamCheck(messageId);
   }
 
   async labelCounts(labels: LabelRef[]): Promise<LabelCount[]> {
@@ -1821,6 +1886,22 @@ export class DemoBackend implements Backend {
   async setPrivacyProxy() {}
 
   async updateStatus(): Promise<UpdateInfo | null> {
+    return null;
+  }
+
+  async distribution(): Promise<Distribution> {
+    return "direct";
+  }
+
+  async macIntegration(): Promise<MacIntegration | null> {
+    return null;
+  }
+
+  async macMakeDefaultMail(): Promise<MacIntegration | null> {
+    return null;
+  }
+
+  async macSetLoginItem(): Promise<MacIntegration | null> {
     return null;
   }
 

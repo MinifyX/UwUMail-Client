@@ -3,6 +3,7 @@ import { Button, Icon, IconButton, type IconProps, ICONS, Menu } from "@uwusuite
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { NyuThinking } from "@/components/nyu/NyuThinking";
 import { backend } from "@/backend/backend";
+import { withAiConsent } from "./consent";
 import { ASSIST_PRESETS, type AssistComposeRequest, type AssistPreset } from "@/backend/types";
 import { useT } from "@/i18n";
 import { EstimateLabel, EstimateTip, type EstimateRequest, useSettled } from "./estimate";
@@ -211,7 +212,7 @@ export function ComposeAssistPanel({
     setAsking(false);
     setSubjectTaken(false);
     void run(
-      (handlers) => backend().assistCompose(accountId ?? "", request, handlers),
+      (handlers) => withAiConsent(["compose"], () => backend().assistCompose(accountId ?? "", request, handlers)),
       (answer) => ({ text: answer.text, subject: answer.subject }),
     );
   };

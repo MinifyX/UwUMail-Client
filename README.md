@@ -103,7 +103,9 @@ portable folder doesn't update at all. The Mac build isn't signed by Apple, so
 macOS wants one extra click the first time. That, the Linux details and how to
 uninstall are in [docs/install.md](docs/install.md). The iPhone build is
 unsigned and has to be sideloaded; how that works, and what iOS doesn't allow,
-is in [docs/ios.md](docs/ios.md).
+is in [docs/ios.md](docs/ios.md). Signed builds for iPhone, iPad and the Mac App
+Store go to TestFlight for now ([docs/app-store.md](docs/app-store.md)). What
+UwUMail does with your data: [PRIVACY.md](PRIVACY.md).
 
 ## AI assistant
 
@@ -194,6 +196,8 @@ data.
 - [Vision](docs/vision.md) — what I want UwUMail to be and what it will never do
 - [Installing](docs/install.md) — the setup on each system, first start on a Mac, updates, uninstalling
 - [iPhone](docs/ios.md) — sideloading and what iOS doesn't allow
+- [App Store and TestFlight](docs/app-store.md) — the store builds, signing in CI, what's left to click
+- [Privacy](PRIVACY.md) — what UwUMail does with your data (English and German)
 - [Microsoft and Google sign-in](docs/oauth.md) — client ids, redirects, Microsoft 365
 - [Architecture](docs/architecture.md) — how the pieces fit together
 - [Design](docs/design.md) — colors, type, tone of voice, and [Nyu's animations](docs/nyu-animations.md)

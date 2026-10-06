@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { Button, Icon, IconButton, ICONS } from "@uwusuite/design";
 import { useEffect, useId, useState } from "react";
 import { backend } from "@/backend/backend";
+import { withAiConsent } from "./consent";
 import { useT } from "@/i18n";
 import { Caret, Thinking } from "./ComposeAssist";
 import { mailKey, summaryParts, threadKey, useAssistReader } from "./readerState";
@@ -33,9 +34,11 @@ export function SummaryCard({ kind, id, count }: SummaryCardProps) {
   const summarize = () =>
     void run(
       (handlers) =>
-        backend().assistSummarize(
-          kind === "mail" ? { emailId: id, language: i18n.language } : { threadId: id, language: i18n.language },
-          handlers,
+        withAiConsent(["summarize"], () =>
+          backend().assistSummarize(
+            kind === "mail" ? { emailId: id, language: i18n.language } : { threadId: id, language: i18n.language },
+            handlers,
+          ),
         ),
       (answer) => {
         remember(key, answer.summary, answer);

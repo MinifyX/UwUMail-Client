@@ -870,6 +870,32 @@ export interface AssistScope {
   options: AssistOptions;
 }
 
+/**
+ * Where the AI assistant would send a mail's content (App Review 5.1.2(i)): a provider set up on
+ * this device or a UwUMail server's assistant. A provider on this computer is none.
+ */
+export interface AiDestination {
+  /** `provider:<id>` or `server:<account id>`. */
+  destination: string;
+  /** The provider's kind (`openai`, `ollama`, …) or `uwumailServer`. */
+  kind: string;
+  /** The provider's name, or the UwUMail mailbox whose server it is. */
+  name: string;
+  /** Where it goes (host, and port when not the default). */
+  host: string;
+}
+
+/** A destination with whether the person agreed to it already. */
+export interface AiDestinationState extends AiDestination {
+  granted: boolean;
+}
+
+/** A consent the person gave, for the settings. */
+export interface AiConsent extends AiDestination {
+  /** Unix seconds. */
+  grantedAt: number;
+}
+
 /** A piece of a streamed answer, as the engine hands it to the page. */
 export type AssistStreamEvent = { kind: "subject"; subject: string } | { kind: "delta"; text: string };
 

@@ -1,4 +1,5 @@
-import { Field, Icon, ICONS, Select, Toggle } from "@uwusuite/design";
+import { useQuery } from "@tanstack/react-query";
+import { Button, Field, Icon, ICONS, Select, Toggle } from "@uwusuite/design";
 import { backend } from "@/backend/backend";
 import {
   ASSIST_FEATURES,
@@ -11,9 +12,10 @@ import {
   type AssistSettingsPatch,
 } from "@/backend/types";
 import { useT } from "@/i18n";
-import { useAccounts } from "@/lib/queries";
+import { queryKeys, useAccounts } from "@/lib/queries";
 import { CURRENCY_CHOICES, useSettings, type CurrencyChoice } from "@/state/settings";
 import { toast } from "@/state/toasts";
+import { confirmAiDestination } from "../consent";
 import { mayChooseCurrency } from "../cost";
 import { nextChoice, providersFor } from "../providerForm";
 import {
@@ -44,7 +46,7 @@ export function AssistantSettings() {
     scope.kind === "device"
       ? t("assist.settings.device")
       : (accounts.find((account) => account.id === scope.accountId)?.email ?? scope.accountId ?? scope.id);
-  const events = scopes.some((scope) => scope.options.features.extractEvents);
+  const eventScopes = scopes.filter((scope) => scope.options.features.extractEvents).map((scope) => scope.id);
   return (
     <div className="flex flex-col gap-5 py-4">
       <div className="flex gap-3">
@@ -61,7 +63,8 @@ export function AssistantSettings() {
           <ScopeSettings scope={scope} name={nameOf(scope)} />
         </AssistScopeProvider>
       ))}
-      <EventSettings enabled={events} />
+      <EventSettings scopes={eventScopes} />
+      <ConsentSettings />
       <CurrencySetting />
     </div>
   );
@@ -119,11 +122,16 @@ export function ServerAssistSetting({ servers }: { servers: string[] }) {
   if (!settings) return null;
   const nameOf = (accountId: string) => accounts.find((account) => account.id === accountId)?.email ?? accountId;
   const chosen = settings.serverAssist;
+  // The other mailboxes' mail then goes to that server: only once the person agreed to it.
+  const choose = (server: string | null) =>
+    void (server ? confirmAiDestination(server, [...ASSIST_FEATURES]) : Promise.resolve(true))
+      .then((allowed) => (allowed ? saveSettings({ serverAssist: server }) : undefined))
+      .catch((error: unknown) => toast(assistErrorText(error), "error"));
   return (
     <Section title={t("assist.settings.serverAssist.title")}>
       <Toggle
         checked={chosen !== null}
-        onChange={(on) => void saveSettings({ serverAssist: on ? (servers[0] ?? null) : null })}
+        onChange={(on) => choose(on ? (servers[0] ?? null) : null)}
         label={
           servers.length === 1
             ? t("assist.settings.serverAssist.useOne", { server: nameOf(servers[0]!) })
@@ -134,11 +142,7 @@ export function ServerAssistSetting({ servers }: { servers: string[] }) {
       {chosen !== null && servers.length > 1 && (
         <Field label={t("assist.settings.serverAssist.which")}>
           {(id) => (
-            <Select
-              id={id}
-              value={chosen}
-              onChange={(event) => void saveSettings({ serverAssist: event.target.value })}
-            >
+            <Select id={id} value={chosen} onChange={(event) => choose(event.target.value)}>
               {!servers.includes(chosen) && <option value={chosen}>{nameOf(chosen)}</option>}
               {servers.map((server) => (
                 <option key={server} value={server}>
@@ -297,20 +301,84 @@ function FeatureChoice({
   );
 }
 
-/** Appointments: whether the webmail asks the model by itself whenever a mail opens. */
-function EventSettings({ enabled }: { enabled: boolean }) {
+/**
+ * Appointments: whether the webmail asks the model by itself whenever a mail opens. Switched on
+ * only once the person agreed to every place the mail would go for it (`scopes`).
+ */
+function EventSettings({ scopes }: { scopes: string[] }) {
   const { t } = useT();
   const refine = useSettings((s) => s.assistRefineEvents);
   const update = useSettings((s) => s.update);
-  if (!enabled) return null;
+  if (scopes.length === 0) return null;
+  const change = async (assistRefineEvents: boolean) => {
+    if (assistRefineEvents) {
+      for (const scope of scopes) {
+        if (!(await confirmAiDestination(scope, ["extractEvents"]))) return;
+      }
+    }
+    update({ assistRefineEvents });
+  };
   return (
     <Section title={t("assist.settings.eventsTitle")}>
       <Toggle
         checked={refine}
-        onChange={(assistRefineEvents) => update({ assistRefineEvents })}
+        onChange={(on) => void change(on).catch((error: unknown) => toast(assistErrorText(error), "error"))}
         label={t("assist.settings.refineEvents")}
         description={t("assist.settings.refineEventsDesc")}
       />
+    </Section>
+  );
+}
+
+/**
+ * Where the person allowed the assistant to send mail (App Review 5.1.2(i)), each with a way to
+ * take it back: from then on nothing goes there until they allow it again.
+ */
+export function ConsentSettings() {
+  const { t, i18n } = useT();
+  const { data: consents = [] } = useQuery({
+    queryKey: queryKeys.assistConsents,
+    queryFn: () => backend().assistConsents(),
+  });
+  const nameOf = (consent: { kind: string; name: string }) =>
+    consent.kind === "uwumailServer" ? t("assist.consent.settings.server", { name: consent.name }) : consent.name;
+  const revoke = (destination: string, name: string) =>
+    void backend()
+      .revokeAssistConsent(destination)
+      .then(() => toast(t("assist.consent.settings.revoked", { name }), "success"))
+      .catch((error: unknown) => toast(assistErrorText(error), "error"));
+  return (
+    <Section title={t("assist.consent.settings.title")} description={t("assist.consent.settings.description")}>
+      {consents.length === 0 ? (
+        <p className="text-[12.5px] text-muted">{t("assist.consent.settings.none")}</p>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {consents.map((consent) => (
+            <li
+              key={consent.destination}
+              className="flex flex-wrap items-center gap-2 rounded-xl bg-canvas px-3 py-2.5"
+            >
+              <div className="min-w-[min(100%,12rem)] flex-1">
+                <p className="truncate text-[13.5px] font-semibold">{nameOf(consent)}</p>
+                <p className="truncate text-[12px] text-muted">
+                  {t("assist.consent.settings.grantedAt", {
+                    host: consent.host,
+                    date: new Date(consent.grantedAt * 1000).toLocaleDateString(i18n.language),
+                  })}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={t("assist.consent.settings.revokeLabel", { name: nameOf(consent) })}
+                onClick={() => revoke(consent.destination, nameOf(consent))}
+              >
+                {t("assist.consent.settings.revoke")}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Section>
   );
 }

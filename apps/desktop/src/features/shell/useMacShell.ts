@@ -17,6 +17,7 @@ import type { MacMenuEntry, MacMenuOptions } from "@uwusuite/design/tauri";
 import { useEffect, useRef } from "react";
 import { backend } from "@/backend/backend";
 import { resolveLanguage, useT } from "@/i18n";
+import { useUpdatesInApp } from "@/lib/distribution";
 import { desktopPlatform, openExternal } from "@/lib/platform";
 import { flushBeforeQuit, onQuit } from "@/lib/quit";
 import { flushAccountSync } from "@/state/accountSync";
@@ -39,13 +40,22 @@ export interface MailMenuState {
   hasThread: boolean;
   /** Runs a command or another action from the menu, see `guard`. */
   run: (action: () => void | Promise<void>, always?: boolean) => void;
+  /** UwUMail updates itself (not in the App Store build), so the app menu offers a check. */
+  updates?: boolean;
 }
 
 /**
  * The menu bar's content for `setMacMenu`, as plain data, so it can be tested without Tauri. The
  * same commands as the keys and the command palette, so all three run one code path.
  */
-export function mailMenu({ t, commands, section, hasThread, run }: MailMenuState): Omit<MacMenuOptions, "appName"> {
+export function mailMenu({
+  t,
+  commands,
+  section,
+  hasThread,
+  run,
+  updates = true,
+}: MailMenuState): Omit<MacMenuOptions, "appName"> {
   if (!commands) {
     return {
       help: [{ id: "help.website", text: t("macMenu.website"), action: () => void openExternal(REPOSITORY) }],
@@ -115,13 +125,15 @@ export function mailMenu({ t, commands, section, hasThread, run }: MailMenuState
 
   return {
     onSettings: () => run(() => useUi.getState().openSettings(), true),
-    app: [
-      {
-        id: "app.updates",
-        text: t("macMenu.checkUpdates"),
-        action: () => run(() => useUi.getState().openSettings("about"), true),
-      },
-    ],
+    app: updates
+      ? [
+          {
+            id: "app.updates",
+            text: t("macMenu.checkUpdates"),
+            action: () => run(() => useUi.getState().openSettings("about"), true),
+          },
+        ]
+      : [],
     file: [
       ...entry("compose", { text: t("macMenu.newMail"), accelerator: "CmdOrCtrl+N" }),
       ...entry("newEvent", { text: t("macMenu.newEvent") }),
@@ -210,6 +222,7 @@ export function useMacMenu(commands: Command[] | null, enabled = true) {
   const language = useSettings((s) => s.language);
   const section = useUi((s) => s.section);
   const hasThread = useUi((s) => s.selectedThreadId !== null);
+  const updates = useUpdatesInApp();
   const shown = useRef<{ key: string; menu: { close(): Promise<void> } | null } | null>(null);
 
   useEffect(() => {
@@ -219,7 +232,7 @@ export function useMacMenu(commands: Command[] | null, enabled = true) {
       shown.current = null;
       return;
     }
-    const options = mailMenu({ t, commands, section, hasThread, run: guard });
+    const options = mailMenu({ t, commands, section, hasThread, run: guard, updates });
     const lang = resolveLanguage(language);
     const key = `${lang}${fingerprint(options)}`;
     if (shown.current?.key === key) return;
@@ -235,7 +248,7 @@ export function useMacMenu(commands: Command[] | null, enabled = true) {
         .catch(() => undefined);
     }, 120);
     return () => clearTimeout(timer);
-  }, [t, commands, section, hasThread, language, enabled]);
+  }, [t, commands, section, hasThread, language, enabled, updates]);
 }
 
 /**

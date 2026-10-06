@@ -36,6 +36,12 @@ describe("the macOS menu bar", () => {
     }
   });
 
+  it("offers an update check only where UwUMail updates itself, not in the App Store build", () => {
+    const ids = (state: Partial<MailMenuState>) => items(menu(state)).map((item) => item.id);
+    expect(ids({})).toContain("app.updates");
+    expect(ids({ updates: false })).not.toContain("app.updates");
+  });
+
   it("offers replying and the like only with a conversation open in the mail", () => {
     const reply = (state: Partial<MailMenuState>) => items(menu(state)).find((item) => item.id === "command.reply");
     expect(reply({})?.enabled).toBe(true);
