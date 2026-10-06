@@ -1,8 +1,7 @@
 import clsx from "clsx";
-import { Cake, Search, X } from "lucide-react";
+import { Button, EmptyState, Icon, IconButton, ICONS } from "@uwusuite/design";
 import { Fragment, useMemo, type ReactNode } from "react";
 import type { ContactRecord } from "@/backend/types";
-import { Button, EmptyState, IconButton } from "@uwusuite/design";
 import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { ageOn, nextTime, parseDay } from "@/lib/birthdays";
@@ -47,9 +46,9 @@ export function ContactList({ className, header }: { className?: string; header?
       <div className="flex flex-col gap-3 px-4 pt-3 pb-3">
         {header}
         <div className="relative">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted"
-            aria-hidden
+          <Icon
+            icon={ICONS.search}
+            className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted"
           />
           <input
             id={CONTACT_SEARCH_ID}
@@ -68,7 +67,7 @@ export function ContactList({ className, header }: { className?: string; header?
           />
           {search && (
             <IconButton
-              icon={X}
+              icon={ICONS.close}
               size="sm"
               label={t("list.clearSearch")}
               onClick={() => setSearch("")}
@@ -150,7 +149,7 @@ export function ContactList({ className, header }: { className?: string; header?
                           )}
                           title={age !== null ? t("contacts.yearsOld", { count: age }) : t("contacts.isToday")}
                         >
-                          {birthdayToday && <Cake className="size-3" aria-hidden />}
+                          {birthdayToday && <Icon icon={ICONS.birthday} size="xs" />}
                           {age !== null && <span aria-label={t("contacts.yearsOld", { count: age })}>{age}</span>}
                         </span>
                       )}

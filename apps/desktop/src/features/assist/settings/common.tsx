@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ChevronDown, Info, TriangleAlert } from "lucide-react";
+import { Icon, IconButton, ICONS, TextInput } from "@uwusuite/design";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
 import type { AssistProbeInput } from "@/backend/types";
-import { IconButton, TextInput } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useAssistScope } from "../useAssist";
 
@@ -36,15 +35,15 @@ export function Section({
 
 /** A quiet note, or a warning. */
 export function Note({ tone = "info", children }: { tone?: "info" | "warning"; children: ReactNode }) {
-  const Icon = tone === "warning" ? TriangleAlert : Info;
+  const Glyph = tone === "warning" ? ICONS.warning : ICONS.info;
   return (
     <div
       className={clsx(
         "flex gap-2 rounded-2xl px-3.5 py-2.5 text-[12.5px]",
-        tone === "warning" ? "bg-warning-tint text-warning" : "bg-canvas text-muted",
+        tone === "warning" ? "bg-warning-tint text-warning-ink" : "bg-canvas text-muted",
       )}
     >
-      <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <Icon icon={Glyph} className="mt-0.5 shrink-0" />
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -155,7 +154,7 @@ export function ModelInput({
       </datalist>
       {canList && (
         <IconButton
-          icon={ChevronDown}
+          icon={ICONS.expand}
           size="sm"
           label={t("assist.providers.pickModel", { field: label })}
           aria-haspopup="listbox"

@@ -1,7 +1,6 @@
-import { Clock, Server, Smartphone } from "lucide-react";
+import { Button, Field, Icon, ICONS, TextInput } from "@uwusuite/design";
 import { useState } from "react";
 import type { SendLaterInfo } from "@/backend/types";
-import { Button, Field, TextInput } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { isIos } from "@/lib/device";
@@ -64,7 +63,7 @@ function SendLaterForm({ info, initial, confirmLabel, onClose, onPick }: Omit<Se
               onClick={() => onPick(at.toISOString())}
               className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[13.5px] hover:bg-pink-tint/60"
             >
-              <Clock className="size-4 shrink-0 text-muted" aria-hidden />
+              <Icon icon={ICONS.time} className="shrink-0 text-muted" />
               <span className="min-w-0 flex-1 truncate font-semibold">{t(`compose.later.${preset}`)}</span>
               <span className="shrink-0 text-[12.5px] text-muted">{format(at)}</span>
             </button>
@@ -94,9 +93,9 @@ function SendLaterForm({ info, initial, confirmLabel, onClose, onPick }: Omit<Se
         data-testid="later-where"
       >
         {local ? (
-          <Smartphone className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <Icon icon={ICONS.device} className="mt-0.5 shrink-0" />
         ) : (
-          <Server className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <Icon icon={ICONS.server} className="mt-0.5 shrink-0" />
         )}
         <span>{t(local ? (isIos ? "compose.later.localIos" : "compose.later.local") : "compose.later.server")}</span>
       </p>

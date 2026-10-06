@@ -1,7 +1,6 @@
 import clsx from "clsx";
-import { CalendarDays, ChevronLeft, ChevronRight, List, Menu, Plus } from "lucide-react";
+import { Button, Icon, IconButton, ICONS, Segmented } from "@uwusuite/design";
 import { useMemo } from "react";
-import { Button, IconButton, Segmented } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useBackLayer } from "@/lib/backStack";
 import { monthWeeks } from "@/lib/calendarDates";
@@ -142,14 +141,19 @@ function DesktopCalendar() {
       >
         <header className="flex flex-wrap items-center gap-2 px-4 pt-3 pb-3">
           {!room && (
-            <IconButton icon={Menu} label={t("calendar.menu")} onClick={() => setDrawerOpen(true)} className="-ml-1" />
+            <IconButton
+              icon={ICONS.menu}
+              label={t("calendar.menu")}
+              onClick={() => setDrawerOpen(true)}
+              className="-ml-1"
+            />
           )}
           <Button size="sm" onClick={goToday}>
             {t("calendar.today")}
           </Button>
           <span className="flex">
-            <IconButton icon={ChevronLeft} label={t(`calendar.previous.${view}`)} onClick={() => step(-1)} />
-            <IconButton icon={ChevronRight} label={t(`calendar.next.${view}`)} onClick={() => step(1)} />
+            <IconButton icon={ICONS.previous} label={t(`calendar.previous.${view}`)} onClick={() => step(-1)} />
+            <IconButton icon={ICONS.next} label={t(`calendar.next.${view}`)} onClick={() => step(1)} />
           </span>
           <h1
             className="min-w-0 flex-1 truncate text-[20px] leading-tight font-extrabold tracking-[-0.01em]"
@@ -163,7 +167,7 @@ function DesktopCalendar() {
             onChange={setView}
             options={GRID_VIEWS.map((option) => ({ value: option, label: t(`calendar.views.${option}`) }))}
           />
-          {!room && <IconButton icon={Plus} label={t("calendar.newEvent")} onClick={startNewEvent} />}
+          {!room && <IconButton icon={ICONS.add} label={t("calendar.newEvent")} onClick={startNewEvent} />}
         </header>
         <CalendarBody view={view} />
       </section>
@@ -174,7 +178,7 @@ function DesktopCalendar() {
             type="button"
             aria-label={t("common.close")}
             onClick={() => setDrawerOpen(false)}
-            className="absolute inset-0 animate-fade bg-[#1c1420]/30"
+            className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
           />
           <CalendarSidebar
             className="relative w-[280px] animate-slide-up rounded-r-[22px] bg-surface shadow-float"
@@ -204,19 +208,19 @@ function PhoneCalendar() {
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-surface">
       <header className="flex h-14 shrink-0 items-center gap-1 px-2">
-        <IconButton icon={Menu} label={t("calendar.menu")} onClick={() => setDrawerOpen(true)} />
+        <IconButton icon={ICONS.menu} label={t("calendar.menu")} onClick={() => setDrawerOpen(true)} />
         {view === "day" && (
-          <IconButton icon={ChevronLeft} label={t("calendar.previous.day")} onClick={() => step(-1)} />
+          <IconButton icon={ICONS.previous} label={t("calendar.previous.day")} onClick={() => step(-1)} />
         )}
         <h1 className="min-w-0 flex-1 truncate px-1 text-[18px] leading-tight font-extrabold">
           {view === "day" ? formatDayLong(date) : formatMonthTitle(date)}
         </h1>
-        {view === "day" && <IconButton icon={ChevronRight} label={t("calendar.next.day")} onClick={() => step(1)} />}
+        {view === "day" && <IconButton icon={ICONS.next} label={t("calendar.next.day")} onClick={() => step(1)} />}
         <Button size="sm" variant="ghost" onClick={goToday}>
           {t("calendar.today")}
         </Button>
         <IconButton
-          icon={view === "day" ? List : CalendarDays}
+          icon={view === "day" ? ICONS.agenda : ICONS.calendar}
           label={view === "day" ? t("calendar.views.agenda") : t("calendar.views.day")}
           onClick={() => setView(view === "day" ? "agenda" : "day")}
           active={view === "day"}
@@ -229,7 +233,7 @@ function PhoneCalendar() {
         aria-label={t("calendar.newEvent")}
         className="fixed right-4 bottom-4 z-20 grid size-14 place-items-center rounded-2xl bg-pink-solid text-on-pink shadow-[0_6px_20px_rgb(225_29_116/0.35)] active:scale-95"
       >
-        <Plus className="size-6" strokeWidth={2.4} aria-hidden />
+        <Icon icon={ICONS.add} size="xl" />
       </button>
       {drawerOpen && (
         <div className="fixed inset-0 z-30" role="presentation">
@@ -237,7 +241,7 @@ function PhoneCalendar() {
             type="button"
             aria-label={t("common.close")}
             onClick={() => setDrawerOpen(false)}
-            className="absolute inset-0 animate-fade bg-[#1c1420]/40"
+            className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
           />
           <div className="absolute inset-y-0 left-0 w-[300px] max-w-[85vw] animate-[uwu-drawer_220ms_cubic-bezier(0.2,0.9,0.3,1)] overflow-hidden rounded-r-[24px] bg-surface shadow-float">
             <CalendarSidebar className="h-full pt-3" onNavigate={() => setDrawerOpen(false)} />

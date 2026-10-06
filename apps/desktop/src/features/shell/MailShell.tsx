@@ -253,7 +253,7 @@ export function MailShell() {
                 type="button"
                 aria-label={t("common.close")}
                 onClick={() => setDrawerOpen(false)}
-                className="absolute inset-0 animate-fade bg-[#1c1420]/30"
+                className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
               />
               <MailboxNav className="relative w-[280px] animate-slide-up rounded-r-[22px] bg-surface shadow-float" />
             </div>

@@ -1,9 +1,8 @@
 import clsx from "clsx";
-import { Check, Plus, RotateCcw, Tags, X } from "lucide-react";
+import { Button, Icon, IconButton, ICONS } from "@uwusuite/design";
 import { useEffect, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { AssistLabelSuggestion, AssistNewLabel, Message } from "@/backend/types";
-import { Button, IconButton } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { hasLabel, labelRef, type LabelEntry } from "@/lib/labelFilter";
 import { toast } from "@/state/toasts";
@@ -129,15 +128,22 @@ export function LabelSuggestCard({ message }: { message: Message }) {
       className="flex animate-fade flex-col gap-3 rounded-[18px] border border-line bg-canvas px-4 py-3"
     >
       <header className="flex items-center gap-2">
-        <Tags className="size-4 shrink-0 text-pink" aria-hidden />
+        <Icon icon={ICONS.labels} className="shrink-0 text-pink" />
         <h3 className="min-w-0 flex-1 truncate text-[13.5px] font-bold">{t("assist.labelAgain.title")}</h3>
         {result && (
           <span className="hidden min-w-0 truncate text-[11.5px] font-semibold text-muted sm:inline">
             {providerLabel(result)}
           </span>
         )}
-        {!state.working && <IconButton icon={RotateCcw} size="sm" label={t("assist.labelAgain.again")} onClick={ask} />}
-        <IconButton icon={X} size="sm" label={t("assist.labelAgain.close")} onClick={() => hide(message.id)} />
+        {!state.working && (
+          <IconButton icon={ICONS.refresh} size="sm" label={t("assist.labelAgain.again")} onClick={ask} />
+        )}
+        <IconButton
+          icon={ICONS.close}
+          size="sm"
+          label={t("assist.labelAgain.close")}
+          onClick={() => hide(message.id)}
+        />
       </header>
 
       {state.working && (
@@ -146,14 +152,14 @@ export function LabelSuggestCard({ message }: { message: Message }) {
         </div>
       )}
       {!state.working && state.error !== null && (
-        <div role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-danger">
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-danger-ink">
           <span className="min-w-0 flex-1">
             {assistErrorText(state.error)}
             {assistErrorDetail(state.error) && (
               <span className="block text-[12px] opacity-80">{assistErrorDetail(state.error)}</span>
             )}
           </span>
-          <Button size="sm" variant="ghost" icon={RotateCcw} onClick={ask}>
+          <Button size="sm" variant="ghost" icon={ICONS.refresh} onClick={ask}>
             {t("assist.retry")}
           </Button>
         </div>
@@ -190,7 +196,7 @@ export function LabelSuggestCard({ message }: { message: Message }) {
                           <span
                             className={clsx(
                               "text-[11px] font-bold tracking-wide uppercase",
-                              verdict.fits ? "text-success" : "text-muted",
+                              verdict.fits ? "text-success-ink" : "text-muted",
                             )}
                           >
                             {verdict.fits ? t("assist.labelAgain.fits") : t("assist.labelAgain.fitsNot")}
@@ -233,7 +239,7 @@ export function LabelSuggestCard({ message }: { message: Message }) {
                       </span>
                       <Button
                         size="sm"
-                        icon={done ? Check : Plus}
+                        icon={done ? ICONS.done : ICONS.add}
                         disabled={done || !scope || (busy !== null && busy !== `new:${index}`)}
                         busy={busy === `new:${index}`}
                         onClick={() => void create(proposal, index)}
@@ -252,7 +258,7 @@ export function LabelSuggestCard({ message }: { message: Message }) {
             <Button
               size="sm"
               variant="primary"
-              icon={Check}
+              icon={ICONS.done}
               disabled={changeCount === 0 || (busy !== null && busy !== "apply")}
               busy={busy === "apply"}
               onClick={() => void apply()}

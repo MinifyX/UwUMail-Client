@@ -7,7 +7,7 @@
  * chosen one is handed in as a `data:` @font-face (loaded on demand, once; see `mailFontFaces`).
  */
 
-import { SYSTEM_STACK, type FontChoice } from "@uwusuite/design";
+import { type FontChoice, SYSTEM_STACK } from "@uwusuite/design";
 
 export { applyUiFont, FONT_CHOICES, FONT_NAMES, FONT_STACKS, FONT_TRACKING, isFontChoice } from "@uwusuite/design";
 export type { FontChoice } from "@uwusuite/design";

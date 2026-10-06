@@ -1,19 +1,5 @@
 import clsx from "clsx";
-import {
-  CalendarDays,
-  File,
-  FileAudio,
-  FileCode,
-  FileImage,
-  FileSpreadsheet,
-  FileText,
-  FileVideo,
-  Package,
-  Paperclip,
-  ShieldAlert,
-  UserRound,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Icon, type IconProps, ICONS } from "@uwusuite/design";
 import { useState } from "react";
 import type { Address, Attachment } from "@/backend/types";
 import { useT } from "@/i18n";
@@ -23,17 +9,17 @@ import { isTnefAttachment } from "@/lib/outlook";
 import { useAttachment } from "@/lib/queries";
 import { AttachmentViewer } from "./AttachmentViewer";
 
-const ICONS: Record<AttachmentKind, LucideIcon> = {
-  image: FileImage,
-  pdf: FileText,
-  text: FileCode,
-  json: FileCode,
-  csv: FileSpreadsheet,
-  audio: FileAudio,
-  video: FileVideo,
-  calendar: CalendarDays,
-  contact: UserRound,
-  other: File,
+const KIND_ICONS: Record<AttachmentKind, IconProps["icon"]> = {
+  image: ICONS.imageFile,
+  pdf: ICONS.document,
+  text: ICONS.codeFile,
+  json: ICONS.codeFile,
+  csv: ICONS.spreadsheet,
+  audio: ICONS.audioFile,
+  video: ICONS.videoFile,
+  calendar: ICONS.calendar,
+  contact: ICONS.contact,
+  other: ICONS.file,
 };
 
 /** Images up to this size get a thumbnail right away; bigger ones load when opened. */
@@ -56,7 +42,7 @@ function Thumbnail({ attachment, onOpen }: { attachment: Attachment; onOpen: () 
           className="size-full object-cover transition-transform group-hover:scale-105"
         />
       ) : (
-        <FileImage className="absolute inset-0 m-auto size-6 text-muted" aria-hidden />
+        <Icon icon={ICONS.imageFile} size="xl" className="absolute inset-0 m-auto text-muted" />
       )}
       <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/60 to-transparent px-2 pt-4 pb-1 text-left text-[11px] font-semibold text-white">
         {formatSize(attachment.size, i18n.language)}
@@ -71,7 +57,7 @@ function Tile({ attachment, onOpen }: { attachment: Attachment; onOpen: () => vo
   const dangerous = isDangerous(attachment.filename);
   // Outlook's packed winmail.dat that couldn't be unpacked (see lib/outlook).
   const packed = !dangerous && isTnefAttachment(attachment);
-  const Icon = dangerous ? ShieldAlert : packed ? Package : ICONS[kind];
+  const Glyph = dangerous ? ICONS.warning : packed ? ICONS.archiveFile : KIND_ICONS[kind];
   return (
     <button
       type="button"
@@ -87,14 +73,14 @@ function Tile({ attachment, onOpen }: { attachment: Attachment; onOpen: () => vo
       <span
         className={clsx(
           "grid size-8 shrink-0 place-items-center rounded-lg",
-          dangerous ? "bg-danger/15 text-danger" : "bg-pink-tint text-pink-ink",
+          dangerous ? "bg-danger/15 text-danger-ink" : "bg-pink-tint text-pink-ink",
         )}
       >
-        <Icon className="size-4" aria-hidden />
+        <Icon icon={Glyph} />
       </span>
       <span className="min-w-0">
         <span className="block truncate text-[13px] font-semibold">{attachment.filename}</span>
-        <span className={clsx("block text-[11.5px]", dangerous ? "font-semibold text-danger" : "text-muted")}>
+        <span className={clsx("block text-[11.5px]", dangerous ? "font-semibold text-danger-ink" : "text-muted")}>
           {dangerous
             ? t("attachment.dangerTag")
             : packed
@@ -121,7 +107,7 @@ export function AttachmentTiles({ attachments, sender }: { attachments: Attachme
   return (
     <footer className="flex flex-col gap-2 border-t border-hairline pt-4">
       <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-muted">
-        <Paperclip className="size-3.5" aria-hidden />
+        <Icon icon={ICONS.attachment} size="xs" />
         {t("reader.attachments", { count: visible.length })}
       </p>
       <ul className="flex flex-wrap items-end gap-2">

@@ -1,7 +1,6 @@
-import { Bold, ImagePlus, Italic, Link } from "lucide-react";
+import { Button, IconButton, ICONS, TextInput, Toggle } from "@uwusuite/design";
 import { useRef, useState } from "react";
 import type { Signature } from "@/backend/types";
-import { Button, IconButton, TextInput, Toggle } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { PLACEHOLDERS } from "@/lib/domainSignatures";
 import { pictureAsDataUrl } from "@/lib/images";
@@ -82,28 +81,28 @@ export function SignatureEditor({
       <div className="overflow-hidden rounded-xl border border-line">
         <div className="flex flex-wrap items-center gap-1 border-b border-hairline bg-canvas px-1.5 py-1">
           <IconButton
-            icon={Bold}
+            icon={ICONS.bold}
             size="sm"
             label={t("compose.bold")}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => format("bold")}
           />
           <IconButton
-            icon={Italic}
+            icon={ICONS.italic}
             size="sm"
             label={t("compose.italic")}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => format("italic")}
           />
           <IconButton
-            icon={Link}
+            icon={ICONS.link}
             size="sm"
             label={t("compose.link")}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => format("createLink")}
           />
           <IconButton
-            icon={ImagePlus}
+            icon={ICONS.addImage}
             size="sm"
             label={t("settings.signatureImage")}
             onMouseDown={(e) => e.preventDefault()}

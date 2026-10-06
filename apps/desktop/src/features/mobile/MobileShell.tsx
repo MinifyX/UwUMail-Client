@@ -30,7 +30,7 @@ function Drawer() {
         type="button"
         aria-label={t("common.close")}
         onClick={() => setOpen(false)}
-        className="absolute inset-0 animate-fade bg-[#1c1420]/40"
+        className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
       />
       <div
         className={clsx(

@@ -1,26 +1,16 @@
 import clsx from "clsx";
 import {
-  BellOff,
-  CircleUserRound,
-  ExternalLink,
-  ImageIcon,
-  Info,
-  Keyboard,
-  ListFilter,
-  Lock,
-  Mail,
-  Palette,
-  PenLine,
-  Plus,
-  Puzzle,
-  Sparkles,
-  Tags,
-  Upload,
-  Users,
-  VenetianMask,
-  X,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+  Button,
+  EmptyState,
+  Icon,
+  IconButton,
+  type IconProps,
+  ICONS,
+  Segmented,
+  Select,
+  Toggle,
+  Wordmark,
+} from "@uwusuite/design";
 import { AssistantSettings } from "../assist/settings/AssistantSettings";
 import { LabelsSettings } from "../labels/LabelsSettings";
 import { useAssistScopes } from "../assist/useAssist";
@@ -31,7 +21,6 @@ import { backend } from "@/backend/backend";
 import { mobile, nativeAndroid, nativeIos, nativeMobile } from "@/backend/mobile";
 import type { Account, Protocol } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
-import { Button, EmptyState, IconButton, Segmented, Select, Toggle, Wordmark } from "@uwusuite/design";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { NyuScene } from "@/components/nyu/scenes";
@@ -72,19 +61,19 @@ import { WorkspacePicker, WorkspaceSettings } from "../workspaces/WorkspaceSetti
 
 const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
 
-const SECTIONS: { id: SettingsSection; icon: LucideIcon; phoneOnly?: boolean }[] = [
-  { id: "appearance", icon: Palette },
-  { id: "mail", icon: Mail },
-  { id: "compose", icon: PenLine },
-  { id: "profile", icon: CircleUserRound },
-  { id: "rules", icon: ListFilter },
-  { id: "masked", icon: VenetianMask },
-  { id: "labels", icon: Tags },
-  { id: "assistant", icon: Sparkles },
-  { id: "security", icon: Lock, phoneOnly: true },
-  { id: "accounts", icon: Users },
-  { id: "addons", icon: Puzzle },
-  { id: "about", icon: Info },
+const SECTIONS: { id: SettingsSection; icon: IconProps["icon"]; phoneOnly?: boolean }[] = [
+  { id: "appearance", icon: ICONS.appearance },
+  { id: "mail", icon: ICONS.mail },
+  { id: "compose", icon: ICONS.compose },
+  { id: "profile", icon: ICONS.profile },
+  { id: "rules", icon: ICONS.rules },
+  { id: "masked", icon: ICONS.maskedAddress },
+  { id: "labels", icon: ICONS.labels },
+  { id: "assistant", icon: ICONS.ai },
+  { id: "security", icon: ICONS.locked, phoneOnly: true },
+  { id: "accounts", icon: ICONS.account },
+  { id: "addons", icon: ICONS.addons },
+  { id: "about", icon: ICONS.info },
 ];
 
 // The rules editor loads when the section is first opened.
@@ -202,7 +191,7 @@ function TrustedSenders() {
   return (
     <Row label={t("settings.trustedSenders")} description={t("settings.trustedSendersDesc")}>
       {remoteImages === "always" && entries.length > 0 && (
-        <p className="text-[12.5px] text-warning">{t("settings.trustedSendersInactive")}</p>
+        <p className="text-[12.5px] text-warning-ink">{t("settings.trustedSendersInactive")}</p>
       )}
       {entries.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-line px-4 py-3 text-[13px] text-muted">
@@ -217,7 +206,7 @@ function TrustedSenders() {
         >
           {entries.map((entry) => (
             <li key={entry} className="flex items-center gap-3 rounded-xl py-1 pr-1 pl-3 hover:bg-elevated">
-              <ImageIcon className="size-4 shrink-0 text-faint" aria-hidden />
+              <Icon icon={ICONS.image} className="shrink-0 text-faint" />
               <span className="selectable min-w-0 flex-1 truncate text-[13.5px]">
                 {isDomainEntry(entry) ? (
                   <>
@@ -229,7 +218,7 @@ function TrustedSenders() {
                 )}
               </span>
               <IconButton
-                icon={X}
+                icon={ICONS.close}
                 size="sm"
                 label={t("settings.untrustSender", { sender: entry })}
                 onClick={() => untrustSenders([entry])}
@@ -442,7 +431,7 @@ function Reading() {
             <Button
               size="sm"
               variant="ghost"
-              icon={BellOff}
+              icon={ICONS.notificationsOff}
               className="self-start"
               onClick={() => void mobile.openWatchSettings()}
             >
@@ -544,7 +533,7 @@ function Accounts() {
           );
         })}
       </ul>
-      <Button icon={Plus} onClick={() => setAddAccountOpen(true)} className="self-start">
+      <Button icon={ICONS.add} onClick={() => setAddAccountOpen(true)} className="self-start">
         {t("nav.addAccount")}
       </Button>
     </div>
@@ -571,7 +560,7 @@ function SharedMailboxesOf({ account, shared }: { account: Account; shared: Acco
   return (
     <div className="flex basis-full flex-col gap-2 border-t border-hairline pt-2.5">
       <span className="flex items-center gap-1.5 text-[13px] font-semibold text-muted">
-        <Users className="size-3.5" aria-hidden />
+        <Icon icon={ICONS.people} size="xs" />
         {t("shared.title")}
       </span>
       {shared.length > 0 && (
@@ -590,7 +579,7 @@ function SharedMailboxesOf({ account, shared }: { account: Account; shared: Acco
         </ul>
       )}
       {state && (
-        <p className={clsx("text-[12.5px]", state === "needsSignIn" ? "text-warning" : "text-muted")}>
+        <p className={clsx("text-[12.5px]", state === "needsSignIn" ? "text-warning-ink" : "text-muted")}>
           {t(
             state === "needsSignIn"
               ? "shared.stateNeedsSignIn"
@@ -604,7 +593,7 @@ function SharedMailboxesOf({ account, shared }: { account: Account; shared: Acco
       )}
       {takesSharedMailboxes(account) && (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" icon={Plus} onClick={() => openShared({ kind: "add", parent: account })}>
+          <Button size="sm" icon={ICONS.add} onClick={() => openShared({ kind: "add", parent: account })}>
             {t("shared.add")}
           </Button>
           {state === "needsSignIn" ? (
@@ -634,10 +623,10 @@ function Addons() {
         className="py-6"
       />
       <div className="flex flex-wrap justify-center gap-2">
-        <Button variant="primary" icon={Puzzle} disabled>
+        <Button variant="primary" icon={ICONS.addons} disabled>
           {t("settings.addonsCatalog")}
         </Button>
-        <Button icon={Upload} disabled>
+        <Button icon={ICONS.import} disabled>
           {t("settings.addonsFromFile")}
         </Button>
       </div>
@@ -716,10 +705,10 @@ function About() {
       )}
       <UpdateSettings />
       <div className="flex flex-wrap justify-center gap-2">
-        <Button icon={ExternalLink} onClick={() => void openLinkNow("https://github.com/MinifyX/UwUMail-Client")}>
+        <Button icon={ICONS.openExternal} onClick={() => void openLinkNow("https://github.com/MinifyX/UwUMail-Client")}>
           {t("settings.source")}
         </Button>
-        <Button icon={Keyboard} onClick={() => setShortcutsOpen(true)}>
+        <Button icon={ICONS.keyboard} onClick={() => setShortcutsOpen(true)}>
           {t("settings.shortcuts")}
         </Button>
       </div>
@@ -778,7 +767,7 @@ export function SettingsDialog() {
       >
         <div className="flex min-h-[460px] flex-col gap-2 px-4 pb-5 sm:flex-row sm:gap-6 sm:px-6">
           <nav className="flex shrink-0 gap-1 overflow-x-auto sm:w-48 sm:flex-col" aria-label={t("settings.title")}>
-            {sections.map(({ id, icon: Icon }) => (
+            {sections.map(({ id, icon: Glyph }) => (
               <button
                 key={id}
                 type="button"
@@ -789,7 +778,7 @@ export function SettingsDialog() {
                   section === id ? "bg-pink-tint text-pink-ink" : "text-muted hover:bg-pink-tint/50 hover:text-ink",
                 )}
               >
-                <Icon className="size-[17px]" aria-hidden />
+                <Icon icon={Glyph} size="md" />
                 {t(`settings.${id}`)}
               </button>
             ))}

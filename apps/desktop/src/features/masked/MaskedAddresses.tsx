@@ -1,10 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Copy, ExternalLink, Info, Pencil, Plus, RotateCcw, Search, Trash, X } from "lucide-react";
+import { Button, Field, Icon, IconButton, ICONS, Segmented, Select, Switch, TextInput } from "@uwusuite/design";
 import { createContext, useContext, useEffect, useState, type FormEvent } from "react";
 import { backend } from "@/backend/backend";
 import type { MaskedAddress, MaskedAddressPatch, MaskedOptions } from "@/backend/types";
-import { Button, Field, IconButton, Segmented, Select, Switch, TextInput } from "@uwusuite/design";
 import { translate, useT } from "@/i18n";
 import {
   countByFilter,
@@ -56,7 +55,7 @@ export function MaskedAddresses({ accountId, options }: { accountId: string; opt
         </div>
         {closed ? (
           <div className="flex gap-2 rounded-2xl bg-canvas px-4 py-3 text-[13px]">
-            <Info className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+            <Icon icon={ICONS.info} className="mt-0.5 shrink-0 text-muted" />
             <div>
               <p className="font-semibold">{t("masked.closedTitle")}</p>
               <p className="text-muted">{t("masked.closedBody")}</p>
@@ -81,7 +80,9 @@ function copyAddress(email: string) {
 
 function CopyButton({ email }: { email: string }) {
   const { t } = useT();
-  return <IconButton icon={Copy} size="sm" label={t("masked.copy", { email })} onClick={() => copyAddress(email)} />;
+  return (
+    <IconButton icon={ICONS.copy} size="sm" label={t("masked.copy", { email })} onClick={() => copyAddress(email)} />
+  );
 }
 
 /** The button for a new one, its form, and the address it made. */
@@ -106,7 +107,7 @@ function NewMasked({ options, onDirty }: { options: MaskedOptions; onDirty: (dir
   }
   if (!open) {
     return (
-      <Button icon={Plus} className="self-start" onClick={() => setOpen(true)}>
+      <Button icon={ICONS.add} className="self-start" onClick={() => setOpen(true)}>
         {t("masked.new")}
       </Button>
     );
@@ -286,7 +287,7 @@ function CreateForm({
         <p className="text-[12.5px] text-muted">{t("masked.onDomain", { domain: domains[0] })}</p>
       )}
       {error && (
-        <p role="alert" className="text-[13px] text-danger">
+        <p role="alert" className="text-[13px] text-danger-ink">
           {error}
         </p>
       )}
@@ -316,7 +317,9 @@ function MaskedList({ onDirty }: { onDirty: (dirty: boolean) => void }) {
   if (query.isError) {
     return (
       <div className="flex flex-col items-start gap-2">
-        <p className="text-[13px] text-danger">{t("masked.loadFailed", { reason: maskedErrorText(query.error) })}</p>
+        <p className="text-[13px] text-danger-ink">
+          {t("masked.loadFailed", { reason: maskedErrorText(query.error) })}
+        </p>
         <Button size="sm" onClick={() => void query.refetch()}>
           {t("common.retry")}
         </Button>
@@ -385,9 +388,9 @@ function MaskedList({ onDirty }: { onDirty: (dirty: boolean) => void }) {
           }))}
         />
         <div className="relative min-w-0 flex-1">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted"
-            aria-hidden
+          <Icon
+            icon={ICONS.search}
+            className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted"
           />
           <input
             type="search"
@@ -406,7 +409,7 @@ function MaskedList({ onDirty }: { onDirty: (dirty: boolean) => void }) {
           />
           {search && (
             <IconButton
-              icon={X}
+              icon={ICONS.close}
               size="sm"
               label={t("list.clearSearch")}
               onClick={() => setSearch("")}
@@ -503,27 +506,32 @@ function MaskedRow({
             {t("masked.createdAt", { date: date(item.createdAt) })} ·{" "}
             {item.lastMessageAt ? t("masked.lastMessage", { date: date(item.lastMessageAt) }) : t("masked.noMessage")}
           </span>
-          {item.state === "pending" && <span className="text-[12px] text-warning">{t("masked.pending")}</span>}
+          {item.state === "pending" && <span className="text-[12px] text-warning-ink">{t("masked.pending")}</span>}
         </div>
         <div className="-ml-2 flex shrink-0 flex-wrap items-center sm:ml-0 sm:justify-end">
           <CopyButton email={item.email} />
           {link && (
             <IconButton
-              icon={ExternalLink}
+              icon={ICONS.openExternal}
               size="sm"
               label={t("masked.openUrl", { email: item.email })}
               onClick={() => void openLinkNow(link)}
             />
           )}
           {deleted ? (
-            <Button size="sm" variant="ghost" icon={RotateCcw} busy={busy} onClick={onRestore}>
+            <Button size="sm" variant="ghost" icon={ICONS.restore} busy={busy} onClick={onRestore}>
               {t("masked.restore")}
             </Button>
           ) : (
             <>
-              <IconButton icon={Pencil} size="sm" label={t("masked.edit", { email: item.email })} onClick={onEdit} />
               <IconButton
-                icon={Trash}
+                icon={ICONS.edit}
+                size="sm"
+                label={t("masked.edit", { email: item.email })}
+                onClick={onEdit}
+              />
+              <IconButton
+                icon={ICONS.delete}
                 size="sm"
                 label={t("masked.delete", { email: item.email })}
                 disabled={busy}

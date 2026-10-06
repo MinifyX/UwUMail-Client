@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { NYU, Sticker, type NyuMood } from "@uwusuite/design";
+import { NYU, type NyuMood, Sticker } from "@uwusuite/design";
 
 /**
  * UwUMail's Nyu as a building block for its scenes and cameos: the envelope cat on the mail 512

@@ -1,8 +1,7 @@
 import clsx from "clsx";
-import { ChevronDown, RotateCcw, Sparkles, Square, X } from "lucide-react";
+import { Button, Icon, IconButton, ICONS } from "@uwusuite/design";
 import { useEffect, useId, useState } from "react";
 import { backend } from "@/backend/backend";
-import { Button, IconButton } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { Caret, Thinking } from "./ComposeAssist";
 import { mailKey, summaryParts, threadKey, useAssistReader } from "./readerState";
@@ -73,13 +72,13 @@ export function SummaryCard({ kind, id, count }: SummaryCardProps) {
           onClick={() => setOpen(!open)}
           className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left focus-visible:shadow-focus focus-visible:outline-none"
         >
-          <Sparkles className="size-4 shrink-0 text-pink" aria-hidden />
+          <Icon icon={ICONS.ai} className="shrink-0 text-pink" />
           <span className="truncate text-[13.5px] font-bold">
             {kind === "mail" ? t("assist.summary.mail") : t("assist.summary.threadCount", { count: count ?? 0 })}
           </span>
-          <ChevronDown
-            className={clsx("size-4 shrink-0 text-muted transition-transform", !open && "-rotate-90")}
-            aria-hidden
+          <Icon
+            icon={ICONS.expand}
+            className={clsx("shrink-0 text-muted transition-transform", !open && "-rotate-90")}
           />
         </button>
         {used && (
@@ -88,11 +87,11 @@ export function SummaryCard({ kind, id, count }: SummaryCardProps) {
           </span>
         )}
         {working ? (
-          <IconButton icon={Square} size="sm" label={t("assist.stop")} onClick={stop} />
+          <IconButton icon={ICONS.stop} size="sm" label={t("assist.stop")} onClick={stop} />
         ) : (
-          <IconButton icon={RotateCcw} size="sm" label={t("assist.summary.again")} onClick={summarize} />
+          <IconButton icon={ICONS.refresh} size="sm" label={t("assist.summary.again")} onClick={summarize} />
         )}
-        <IconButton icon={X} size="sm" label={t("assist.summary.close")} onClick={() => hide(key)} />
+        <IconButton icon={ICONS.close} size="sm" label={t("assist.summary.close")} onClick={() => hide(key)} />
       </header>
       {open && (
         <div id={bodyId} role="status" aria-live="polite" aria-busy={working} className="selectable pt-2 text-[13.5px]">
@@ -110,14 +109,14 @@ export function SummaryCard({ kind, id, count }: SummaryCardProps) {
           )}
           {working && text && <Caret />}
           {state.status === "error" && (
-            <div role="alert" className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-danger">
+            <div role="alert" className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-danger-ink">
               <span className="min-w-0 flex-1">
                 {assistErrorText(state.error)}
                 {assistErrorDetail(state.error) && (
                   <span className="block text-[12px] opacity-80">{assistErrorDetail(state.error)}</span>
                 )}
               </span>
-              <Button size="sm" variant="ghost" icon={RotateCcw} onClick={summarize}>
+              <Button size="sm" variant="ghost" icon={ICONS.refresh} onClick={summarize}>
                 {t("assist.retry")}
               </Button>
             </div>

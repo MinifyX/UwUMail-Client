@@ -1,14 +1,14 @@
 import clsx from "clsx";
-import { CalendarDays, Mail, UsersRound } from "lucide-react";
+import { Icon, type IconProps, ICONS } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useUi, type AppSection } from "@/state/ui";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { useContactsAvailable } from "../contacts/useContactsData";
 
-const SECTIONS: { id: AppSection; icon: typeof Mail }[] = [
-  { id: "mail", icon: Mail },
-  { id: "calendar", icon: CalendarDays },
-  { id: "contacts", icon: UsersRound },
+const SECTIONS: { id: AppSection; icon: IconProps["icon"] }[] = [
+  { id: "mail", icon: ICONS.mail },
+  { id: "calendar", icon: ICONS.calendar },
+  { id: "contacts", icon: ICONS.contacts },
 ];
 
 /** The sections some account offers besides mail. */
@@ -41,7 +41,7 @@ export function AppSwitch({ onCanvas = false }: { onCanvas?: boolean }) {
         onCanvas ? "bg-hairline" : "bg-canvas",
       )}
     >
-      {SECTIONS.filter(({ id }) => available.includes(id)).map(({ id, icon: Icon }) => (
+      {SECTIONS.filter(({ id }) => available.includes(id)).map(({ id, icon: Glyph }) => (
         <button
           key={id}
           type="button"
@@ -56,7 +56,7 @@ export function AppSwitch({ onCanvas = false }: { onCanvas?: boolean }) {
             section === id ? "bg-surface text-pink-ink shadow-sm" : "text-muted hover:text-ink",
           )}
         >
-          <Icon className="size-4 shrink-0" strokeWidth={2.2} aria-hidden />
+          <Icon icon={Glyph} className="shrink-0" />
           <span className="max-w-full truncate">{t(`nav.section.${id}`)}</span>
         </button>
       ))}

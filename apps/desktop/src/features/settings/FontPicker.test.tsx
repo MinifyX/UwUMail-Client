@@ -20,11 +20,13 @@ describe("font picker", () => {
     const options = screen.getAllByRole("radio");
     expect(options.map((option) => option.querySelector("span")!.textContent)).toEqual([
       "UwU Sans",
+      "Manrope",
       "Rubik",
       "DM Sans",
       "Systemschrift",
     ]);
-    expect(options[1]!.style.fontFamily).toContain("Rubik Variable");
+    expect(options[1]!.style.fontFamily).toContain("Manrope Variable");
+    expect(options[2]!.style.fontFamily).toContain("Rubik Variable");
     expect(options[0]!.getAttribute("aria-checked")).toBe("true");
   });
 

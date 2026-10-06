@@ -1,7 +1,5 @@
 import clsx from "clsx";
-import { Plus, Settings } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { Button, Wordmark } from "@uwusuite/design";
+import { Button, Icon, type IconProps, ICONS, Wordmark } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { addMinutes, localWall, withClock } from "@/lib/calendarDates";
 import { useUi } from "@/state/ui";
@@ -21,14 +19,14 @@ export function startNewEvent() {
   openEditor({ occurrence: null, draft: { start, end: addMinutes(start, 60), allDay: false } });
 }
 
-function SidebarLink({ icon: Icon, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
+function SidebarLink({ icon: Glyph, label, onClick }: { icon: IconProps["icon"]; label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className="flex h-9 w-full items-center gap-3 rounded-xl px-3 text-left text-[13.5px] text-ink/85 transition-colors hover:bg-pink-tint/50"
     >
-      <Icon className="size-[17px] shrink-0 text-muted" strokeWidth={2} aria-hidden />
+      <Icon icon={Glyph} size="md" className="shrink-0 text-muted" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>
   );
@@ -47,7 +45,7 @@ export function CalendarSidebar({ className, onNavigate }: { className?: string;
       <Button
         variant="primary"
         size="lg"
-        icon={Plus}
+        icon={ICONS.add}
         onClick={() => {
           onNavigate?.();
           startNewEvent();
@@ -61,7 +59,7 @@ export function CalendarSidebar({ className, onNavigate }: { className?: string;
         <CalendarList />
       </div>
       <div className="flex flex-col gap-0.5 border-t border-hairline pt-3">
-        <SidebarLink icon={Settings} label={t("nav.settings")} onClick={() => openSettings()} />
+        <SidebarLink icon={ICONS.settings} label={t("nav.settings")} onClick={() => openSettings()} />
       </div>
     </nav>
   );

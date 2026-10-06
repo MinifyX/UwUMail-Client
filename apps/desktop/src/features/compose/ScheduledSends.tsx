@@ -1,9 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Clock, PenLine, Send, Server, Smartphone, TriangleAlert, Undo2, WifiOff } from "lucide-react";
+import { Badge, Button, Icon, ICONS } from "@uwusuite/design";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { ScheduledSend, SendLaterInfo } from "@/backend/types";
-import { Badge, Button } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { displayName } from "@/lib/format";
@@ -25,7 +24,7 @@ export function ScheduledNavItem() {
         onClick={() => setOpen(true)}
         className="group flex h-9 w-full items-center gap-3 rounded-xl px-3 text-left text-[13.5px] text-ink/85 transition-colors hover:bg-pink-tint/50"
       >
-        <Clock className="size-[17px] shrink-0 text-muted" strokeWidth={2} aria-hidden />
+        <Icon icon={ICONS.sendLater} size="md" className="shrink-0 text-muted" />
         <span className="min-w-0 flex-1 truncate">{t("nav.scheduled")}</span>
         <Badge count={later.length} />
       </button>
@@ -140,21 +139,21 @@ export function ScheduledList({ sends, busy, onEdit, onStop, onSendNow, onChange
                   {t("scheduled.to", { names: entry.to.map(displayName).join(", ") })}
                 </p>
                 <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-pink-ink">
-                  <Clock className="size-3.5 shrink-0" aria-hidden />
+                  <Icon icon={ICONS.time} size="xs" className="shrink-0" />
                   {new Date(entry.sendAt).toLocaleString(i18n.language, { dateStyle: "full", timeStyle: "short" })}
                 </p>
                 <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted">
                   {local ? (
-                    <Smartphone className="size-3.5 shrink-0" aria-hidden />
+                    <Icon icon={ICONS.device} size="xs" className="shrink-0" />
                   ) : (
-                    <Server className="size-3.5 shrink-0" aria-hidden />
+                    <Icon icon={ICONS.server} size="xs" className="shrink-0" />
                   )}
                   <span>{t(local ? "scheduled.onDevice" : "scheduled.onServer")}</span>
                   {several && account && <span className="truncate">· {account.email}</span>}
                 </p>
                 {entry.held && (
-                  <p className="mt-1 flex items-start gap-1.5 text-[12px] text-danger">
-                    <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
+                  <p className="mt-1 flex items-start gap-1.5 text-[12px] text-danger-ink">
+                    <Icon icon={ICONS.warning} size="xs" className="mt-px shrink-0" />
                     <span>
                       {t(entry.held === "unsure" ? "scheduled.heldUnsure" : "scheduled.heldFailed", {
                         reason: entry.heldReason ?? "",
@@ -163,26 +162,26 @@ export function ScheduledList({ sends, busy, onEdit, onStop, onSendNow, onChange
                   </p>
                 )}
                 {entry.retrying && (
-                  <p className="mt-1 flex items-center gap-1.5 text-[12px] text-danger">
-                    <WifiOff className="size-3.5 shrink-0" aria-hidden />
+                  <p className="mt-1 flex items-center gap-1.5 text-[12px] text-danger-ink">
+                    <Icon icon={ICONS.offline} size="xs" className="shrink-0" />
                     {t("scheduled.retrying", { time: formatSendTime(entry.sendAt) })}
                   </p>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" icon={PenLine} disabled={busy !== null} onClick={() => onEdit(entry)}>
+                <Button size="sm" icon={ICONS.edit} disabled={busy !== null} onClick={() => onEdit(entry)}>
                   {t("scheduled.edit")}
                 </Button>
-                <Button size="sm" icon={CalendarClock} disabled={busy !== null} onClick={() => onChangeTime(entry)}>
+                <Button size="sm" icon={ICONS.sendLater} disabled={busy !== null} onClick={() => onChangeTime(entry)}>
                   {t("scheduled.reschedule")}
                 </Button>
-                <Button size="sm" icon={Send} disabled={busy !== null} onClick={() => onSendNow(entry)}>
+                <Button size="sm" icon={ICONS.send} disabled={busy !== null} onClick={() => onSendNow(entry)}>
                   {t("scheduled.sendNow")}
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
-                  icon={Undo2}
+                  icon={ICONS.undo}
                   busy={busy === entry.id}
                   disabled={busy !== null}
                   onClick={() => onStop(entry)}

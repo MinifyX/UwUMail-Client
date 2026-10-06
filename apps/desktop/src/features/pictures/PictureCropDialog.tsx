@@ -1,6 +1,5 @@
-import { Minus, Plus } from "lucide-react";
+import { Button, IconButton, ICONS } from "@uwusuite/design";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { Button, IconButton } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { translate, useT } from "@/i18n";
 import {
@@ -275,7 +274,12 @@ function Cropper({
         {t("picture.crop.hint")}
       </p>
       <div className="flex w-full max-w-[280px] items-center gap-2">
-        <IconButton icon={Minus} size="sm" label={t("picture.crop.zoomOut")} onClick={() => zoomTo(zoom / ZOOM_STEP)} />
+        <IconButton
+          icon={ICONS.zoomOut}
+          size="sm"
+          label={t("picture.crop.zoomOut")}
+          onClick={() => zoomTo(zoom / ZOOM_STEP)}
+        />
         <input
           type="range"
           min={1}
@@ -286,7 +290,12 @@ function Cropper({
           onChange={(event) => zoomTo(Number(event.target.value))}
           className="min-w-0 flex-1 accent-pink"
         />
-        <IconButton icon={Plus} size="sm" label={t("picture.crop.zoomIn")} onClick={() => zoomTo(zoom * ZOOM_STEP)} />
+        <IconButton
+          icon={ICONS.zoomIn}
+          size="sm"
+          label={t("picture.crop.zoomIn")}
+          onClick={() => zoomTo(zoom * ZOOM_STEP)}
+        />
       </div>
       <div className="flex gap-2">
         <Button variant="ghost" onClick={onCancel}>

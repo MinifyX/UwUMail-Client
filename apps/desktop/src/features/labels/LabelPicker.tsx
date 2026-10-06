@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Check, Minus, Plus, Search } from "lucide-react";
+import { Icon, ICONS } from "@uwusuite/design";
 import { useEffect, useId, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { Message } from "@/backend/types";
@@ -15,8 +15,8 @@ import { LabelDot } from "./LabelNav";
 import { useLabelDirectory } from "./useLabels";
 
 function PresenceMark({ state }: { state: LabelState }) {
-  if (state === "all") return <Check className="size-3.5 shrink-0 text-pink" strokeWidth={3} aria-hidden />;
-  if (state === "some") return <Minus className="size-3.5 shrink-0 text-muted" strokeWidth={3} aria-hidden />;
+  if (state === "all") return <Icon icon={ICONS.done} size="xs" className="shrink-0 text-pink" />;
+  if (state === "some") return <Icon icon={ICONS.mixed} size="xs" className="shrink-0 text-muted" />;
   return <span className="size-3.5 shrink-0" aria-hidden />;
 }
 
@@ -137,10 +137,7 @@ function PickerBody({ request }: { request: LabelRequest }) {
     <div className="flex flex-col gap-2 px-5 pt-1 pb-5">
       <p className="text-[12.5px] text-muted">{t("labels.quick.for", { count: request.threadIds.length })}</p>
       <div className="relative">
-        <Search
-          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
-          aria-hidden
-        />
+        <Icon icon={ICONS.search} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
         <input
           ref={input}
           role="combobox"
@@ -217,7 +214,7 @@ function PickerBody({ request }: { request: LabelRequest }) {
               busy && "opacity-60",
             )}
           >
-            <Plus className="size-3.5 shrink-0" aria-hidden />
+            <Icon icon={ICONS.add} size="xs" className="shrink-0" />
             <span className="min-w-0 flex-1 truncate">{t("labels.quick.create", { name })}</span>
           </li>
         )}

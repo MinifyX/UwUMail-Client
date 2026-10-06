@@ -1,8 +1,7 @@
 import clsx from "clsx";
-import { CalendarPlus, CalendarSearch, ChevronDown, ImageIcon, MapPin, Sparkles, TriangleAlert, X } from "lucide-react";
+import { Button, Icon, IconButton, ICONS, Spinner } from "@uwusuite/design";
 import { useId, useState } from "react";
 import { NyuThinking } from "@/components/nyu/NyuThinking";
-import { Button, IconButton, Spinner } from "@uwusuite/design";
 import { armedActivation } from "@/components/ui/armed";
 import { useT } from "@/i18n";
 import type { DetectedEvent } from "@/lib/dates";
@@ -19,10 +18,10 @@ function SourceBadge({ event }: { event: DetectedEvent }) {
   const { t } = useT();
   if (event.source === "text" && !event.refined) return null;
   const ai = event.source === "ai" || event.refined;
-  const Icon = ai ? Sparkles : ImageIcon;
+  const Glyph = ai ? ICONS.ai : ICONS.image;
   return (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-pink-tint px-2 py-0.5 align-middle text-[11.5px] font-semibold text-pink-ink">
-      <Icon className="size-3" aria-hidden />
+      <Icon icon={Glyph} size="xs" />
       {ai ? t("dates.fromAssistant") : t("dates.fromPicture")}
     </span>
   );
@@ -34,8 +33,8 @@ function Doubts({ event, locale }: { event: DetectedEvent; locale: string }) {
   const swapped = event.ambiguous ? swappedDay(event, locale) : null;
   if (!swapped && !event.weekdayMismatch) return null;
   return (
-    <span className="flex items-start gap-1 text-[12px] text-warning">
-      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+    <span className="flex items-start gap-1 text-[12px] text-warning-ink">
+      <Icon icon={ICONS.warning} size="xs" className="mt-0.5 shrink-0" />
       <span>
         {swapped ? t("dates.ambiguous", { other: swapped }) : null}
         {swapped && event.weekdayMismatch ? " " : null}
@@ -95,7 +94,7 @@ export function EventsBar({ messageId, accountId, found, onAdd }: EventsBarProps
       <Button
         size="sm"
         variant="ghost"
-        icon={Sparkles}
+        icon={ICONS.ai}
         busy={found.refining}
         busyIndicator={<NyuThinking size="sm" fallback={<Spinner />} />}
         onClick={found.refine}
@@ -111,7 +110,7 @@ export function EventsBar({ messageId, accountId, found, onAdd }: EventsBarProps
       className="flex flex-col gap-2 rounded-2xl border border-hairline bg-canvas px-4 py-2.5 text-[13px]"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <CalendarPlus className="size-4 shrink-0 text-pink" aria-hidden />
+        <Icon icon={ICONS.addEvent} className="shrink-0 text-pink" />
         {single ? (
           <p className="flex min-w-[min(100%,14rem)] flex-1 flex-col gap-0.5">
             <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
@@ -133,11 +132,7 @@ export function EventsBar({ messageId, accountId, found, onAdd }: EventsBarProps
             className="flex min-w-[min(100%,12rem)] flex-1 items-center gap-1.5 rounded-lg text-left font-bold hover:text-pink-ink focus-visible:shadow-focus focus-visible:outline-none"
           >
             {t("dates.found", { count: events.length })}
-            <ChevronDown
-              className={clsx("size-3.5 transition-transform", expanded && "rotate-180")}
-              strokeWidth={2.4}
-              aria-hidden
-            />
+            <Icon icon={ICONS.expand} size="xs" className={clsx("transition-transform", expanded && "rotate-180")} />
           </button>
         )}
         <span className="ml-auto flex items-center gap-1.5">
@@ -152,7 +147,13 @@ export function EventsBar({ messageId, accountId, found, onAdd }: EventsBarProps
               {t("dates.add")}
             </Button>
           )}
-          <IconButton icon={X} size="sm" label={t("dates.dismiss")} title={t("dates.dismiss")} onClick={dismiss} />
+          <IconButton
+            icon={ICONS.close}
+            size="sm"
+            label={t("dates.dismiss")}
+            title={t("dates.dismiss")}
+            onClick={dismiss}
+          />
         </span>
       </div>
       {!single && expanded && (
@@ -207,7 +208,7 @@ function SearchStatus({
       aria-label={t("dates.barLabel")}
       className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-hairline bg-canvas px-4 py-2.5 text-[13px]"
     >
-      <CalendarSearch className="size-4 shrink-0 text-pink" aria-hidden />
+      <Icon icon={ICONS.findEvent} className="shrink-0 text-pink" />
       <p role="status" aria-live="polite" className="min-w-[min(100%,14rem)] flex-1 text-muted">
         {found.refining ? (
           <span className="inline-flex items-center gap-2">
@@ -218,7 +219,7 @@ function SearchStatus({
             {t("dates.searching")}
           </span>
         ) : found.refineFailed ? (
-          <span className="text-danger">{t("dates.refineFailed")}</span>
+          <span className="text-danger-ink">{t("dates.refineFailed")}</span>
         ) : (
           t("dates.noneFound")
         )}
@@ -226,12 +227,18 @@ function SearchStatus({
       <span className="ml-auto flex items-center gap-1.5">
         {found.refineFailed && !found.refining && (
           <EstimateTip request={estimate}>
-            <Button size="sm" variant="ghost" icon={Sparkles} onClick={found.refine}>
+            <Button size="sm" variant="ghost" icon={ICONS.ai} onClick={found.refine}>
               {t("dates.refineAgain")}
             </Button>
           </EstimateTip>
         )}
-        <IconButton icon={X} size="sm" label={t("dates.dismiss")} title={t("dates.dismiss")} onClick={dismiss} />
+        <IconButton
+          icon={ICONS.close}
+          size="sm"
+          label={t("dates.dismiss")}
+          title={t("dates.dismiss")}
+          onClick={dismiss}
+        />
       </span>
     </section>
   );
@@ -256,7 +263,7 @@ export function DatePopover({ event, anchor, onAdd, onClose }: DatePopoverProps)
     <Popover anchor={anchor} label={t("dates.popoverLabel", { title })} onClose={onClose}>
       <div className="relative flex flex-col gap-3 p-5">
         <div className="flex items-start gap-3 pr-8">
-          <CalendarPlus className="mt-0.5 size-5 shrink-0 text-pink" aria-hidden />
+          <Icon icon={ICONS.addEvent} size="lg" className="mt-0.5 shrink-0 text-pink" />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <p className="text-[12px] font-bold tracking-wide text-muted uppercase">{t("dates.popoverHeading")}</p>
             <p className="text-[15px] font-bold break-words">
@@ -265,7 +272,7 @@ export function DatePopover({ event, anchor, onAdd, onClose }: DatePopoverProps)
             <p className="text-[13.5px]">{whenLabel(event, locale)}</p>
             {event.location && (
               <p className="flex items-start gap-1.5 text-[13px] text-muted">
-                <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <Icon icon={ICONS.location} size="xs" className="mt-0.5 shrink-0" />
                 <span className="min-w-0 break-words">{event.location}</span>
               </p>
             )}
@@ -273,11 +280,22 @@ export function DatePopover({ event, anchor, onAdd, onClose }: DatePopoverProps)
             {!isUpcoming(event) && <p className="text-[12.5px] text-muted">{t("dates.over")}</p>}
           </div>
         </div>
-        <Button variant="primary" icon={CalendarPlus} data-autofocus {...armedActivation(shownAt, () => onAdd(event))}>
+        <Button
+          variant="primary"
+          icon={ICONS.addEvent}
+          data-autofocus
+          {...armedActivation(shownAt, () => onAdd(event))}
+        >
           {t("dates.addLong")}
         </Button>
         {/* After the main button, so that one takes the focus first. */}
-        <IconButton icon={X} size="sm" label={t("common.close")} onClick={onClose} className="absolute top-3 right-3" />
+        <IconButton
+          icon={ICONS.close}
+          size="sm"
+          label={t("common.close")}
+          onClick={onClose}
+          className="absolute top-3 right-3"
+        />
       </div>
     </Popover>
   );

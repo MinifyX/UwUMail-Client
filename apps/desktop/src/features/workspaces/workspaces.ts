@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { BriefcaseBusiness, House, type LucideIcon } from "lucide-react";
+import { type IconProps, ICONS } from "@uwusuite/design";
 import { useEffect } from "react";
 import { backend } from "@/backend/backend";
 import { useT } from "@/i18n";
@@ -8,7 +8,7 @@ import { workspaceOf } from "@/lib/workspaces";
 import { useSettings, type Workspace } from "@/state/settings";
 import { useUi } from "@/state/ui";
 
-export const WORKSPACE_ICONS: Record<Workspace, LucideIcon> = { private: House, business: BriefcaseBusiness };
+export const WORKSPACE_ICONS: Record<Workspace, IconProps["icon"]> = { private: ICONS.home, business: ICONS.work };
 
 /** "g p" and "g b", next to "g i" for the inbox. */
 export const WORKSPACE_KEYS: Record<Workspace, string> = { private: "g p", business: "g b" };

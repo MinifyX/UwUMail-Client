@@ -1,17 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import {
-  CalendarCheck,
-  CalendarX,
-  Check,
-  CircleHelp,
-  MapPin,
-  MessageSquarePlus,
-  Repeat,
-  ShieldAlert,
-  Users,
-  X,
-} from "lucide-react";
+import { Icon, type IconProps, ICONS } from "@uwusuite/design";
 import { useId, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { MailScheduling, Message, ParticipationStatus } from "@/backend/types";
@@ -23,10 +12,10 @@ import { toast } from "@/state/toasts";
 
 type Answer = Exclude<ParticipationStatus, "needs-action">;
 
-const ANSWERS: { status: Answer; icon: typeof Check }[] = [
-  { status: "accepted", icon: Check },
-  { status: "tentative", icon: CircleHelp },
-  { status: "declined", icon: X },
+const ANSWERS: { status: Answer; icon: IconProps["icon"] }[] = [
+  { status: "accepted", icon: ICONS.done },
+  { status: "tentative", icon: ICONS.maybe },
+  { status: "declined", icon: ICONS.close },
 ];
 
 /** The most characters a comment for the organizer takes (the core cuts there too). */
@@ -123,7 +112,7 @@ function InvitationAnswer({ messageId, found }: { messageId: string; found: Mail
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-1.5">
         <div role="group" aria-label={t("invitation.answer")} className="flex flex-wrap gap-1.5">
-          {ANSWERS.map(({ status, icon: Icon }) => {
+          {ANSWERS.map(({ status, icon: Glyph }) => {
             const chosen = found.status === status;
             return (
               <button
@@ -139,7 +128,7 @@ function InvitationAnswer({ messageId, found }: { messageId: string; found: Mail
                     : "border-line bg-surface text-ink hover:bg-pink-tint/60",
                 )}
               >
-                <Icon className="size-3.5" aria-hidden />
+                <Icon icon={Glyph} size="xs" />
                 {t(`invitation.${status}`)}
               </button>
             );
@@ -151,7 +140,7 @@ function InvitationAnswer({ messageId, found }: { messageId: string; found: Mail
             onClick={() => setCommenting(true)}
             className="inline-flex h-9 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-semibold text-muted hover:bg-pink-tint/60 hover:text-ink"
           >
-            <MessageSquarePlus className="size-3.5" aria-hidden />
+            <Icon icon={ICONS.comment} size="xs" />
             {t("invitation.commentAdd")}
           </button>
         )}
@@ -205,7 +194,7 @@ function RemoveCancelled({ messageId, found }: { messageId: string; found: MailS
       onClick={() => void remove()}
       className="inline-flex h-9 w-fit items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold text-ink transition-colors hover:bg-pink-tint/60 disabled:opacity-55"
     >
-      <CalendarX className="size-3.5" aria-hidden />
+      <Icon icon={ICONS.removeEvent} size="xs" />
       {found.occurrence ? t("invitation.removeDate") : t("invitation.remove")}
     </button>
   );
@@ -223,26 +212,26 @@ function Details({ found }: { found: MailScheduling }) {
     <div className="flex flex-col gap-1.5 text-[13px]">
       {found.location && (
         <p className="flex items-start gap-2">
-          <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted" aria-label={t("invitation.where")} />
+          <Icon icon={ICONS.location} size="xs" className="mt-0.5 shrink-0 text-muted" label={t("invitation.where")} />
           <span className="min-w-0 break-words">{found.location}</span>
         </p>
       )}
       {found.repeats && !occurrence && (
         <p className="flex items-center gap-2 text-muted">
-          <Repeat className="size-3.5 shrink-0" aria-hidden />
+          <Icon icon={ICONS.repeat} size="xs" className="shrink-0" />
           {t("invitation.repeats")}
         </p>
       )}
       {occurrence && (
         <p className="flex items-start gap-2 text-muted">
-          <Repeat className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <Icon icon={ICONS.repeat} size="xs" className="mt-0.5 shrink-0" />
           <span>{t("invitation.occurrence", { date: occurrence })}</span>
         </p>
       )}
       {people > 0 && (
         <details className="group">
           <summary className="flex cursor-pointer list-none items-center gap-2 text-muted select-none hover:text-ink">
-            <Users className="size-3.5 shrink-0" aria-hidden />
+            <Icon icon={ICONS.people} size="xs" className="shrink-0" />
             <span>
               {t("invitation.attendees")} · {people}
             </span>
@@ -314,7 +303,7 @@ export function MailInvitationCard({ message }: { message: Message }) {
         {person ? (
           <Avatar address={person} size="sm" />
         ) : (
-          <CalendarCheck className="mt-0.5 size-5 shrink-0 text-pink" aria-hidden />
+          <Icon icon={ICONS.invitation} size="lg" className="mt-0.5 shrink-0 text-pink" />
         )}
         <div className="min-w-0">
           <p className="text-[12px] font-bold tracking-wide text-muted uppercase">{heading}</p>
@@ -331,7 +320,7 @@ export function MailInvitationCard({ message }: { message: Message }) {
         </p>
       ) : found.cancelled ? (
         <>
-          <p className="text-[13px] font-semibold text-danger">
+          <p className="text-[13px] font-semibold text-danger-ink">
             {singleDate ? t("invitation.cancelledDate") : t("invitation.cancelled")}
           </p>
           {!found.senderConfirmed && found.canRemove && <SenderUnconfirmed />}
@@ -361,8 +350,8 @@ export function MailInvitationCard({ message }: { message: Message }) {
 function SenderUnconfirmed() {
   const { t } = useT();
   return (
-    <p role="note" className="flex gap-2 rounded-xl bg-warning-tint px-3 py-2 text-[12.5px] text-warning">
-      <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+    <p role="note" className="flex gap-2 rounded-xl bg-warning-tint px-3 py-2 text-[12.5px] text-warning-ink">
+      <Icon icon={ICONS.warning} size="xs" className="mt-0.5 shrink-0" />
       <span>{t("invitation.senderUnconfirmed")}</span>
     </p>
   );
@@ -381,8 +370,8 @@ function Unverified({ found }: { found: MailScheduling }) {
   // This line tells who wrote the mail from who may; direction marks and invisible characters in
   // either would let one read as the other, so they are shown, not obeyed (security-audit W-34).
   return (
-    <div role="note" className="flex gap-2.5 rounded-xl bg-warning-tint px-3 py-2.5 text-[13px] text-warning">
-      <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+    <div role="note" className="flex gap-2.5 rounded-xl bg-warning-tint px-3 py-2.5 text-[13px] text-warning-ink">
+      <Icon icon={ICONS.warning} className="mt-0.5 shrink-0" />
       <div className="flex min-w-0 flex-col gap-1">
         <p className="font-semibold">{text}</p>
         <p className="break-words">

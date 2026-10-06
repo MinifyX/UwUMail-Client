@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { X } from "lucide-react";
+import { Icon, ICONS } from "@uwusuite/design";
 import { useEffect, useId, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { Address, Contact } from "@/backend/types";
@@ -89,7 +89,7 @@ export function RecipientInput({ label, value, onChange, autoFocus }: RecipientI
               onClick={() => onChange(value.filter((a) => a !== address))}
               className="grid size-5 place-items-center rounded-full hover:bg-pink-tint-strong"
             >
-              <X className="size-3" aria-hidden />
+              <Icon icon={ICONS.close} size="xs" />
             </button>
           </span>
         ))}

@@ -1,8 +1,7 @@
-import { Tags, Undo2 } from "lucide-react";
+import { Button, Icon, ICONS } from "@uwusuite/design";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { AssistLabelLogEntry, AssistScope } from "@/backend/types";
-import { Button } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { formatLongDate } from "@/lib/format";
 import { useAccounts } from "@/lib/queries";
@@ -37,7 +36,7 @@ export function LabelsSettings() {
     <div className="flex flex-col gap-5 py-4">
       <div className="flex gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pink-tint text-pink">
-          <Tags className="size-5" aria-hidden />
+          <Icon icon={ICONS.labels} size="lg" />
         </span>
         <div>
           <p className="text-sm font-semibold">{t("labels.settings.title")}</p>
@@ -133,7 +132,7 @@ function LabelLog() {
                     {t("labels.log.open")}
                   </Button>
                   {!entry.undone && (
-                    <Button size="sm" icon={Undo2} busy={busy === entry.id} onClick={() => undo(entry)}>
+                    <Button size="sm" icon={ICONS.undo} busy={busy === entry.id} onClick={() => undo(entry)}>
                       {t("assist.labels.undo")}
                     </Button>
                   )}

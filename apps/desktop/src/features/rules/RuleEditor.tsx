@@ -1,7 +1,6 @@
 import clsx from "clsx";
-import { FolderInput, Plus, X } from "lucide-react";
+import { Button, Field, IconButton, ICONS, Menu, Segmented, Select, TextInput, Toggle } from "@uwusuite/design";
 import { useState } from "react";
-import { Button, Field, IconButton, Menu, Segmented, Select, TextInput, Toggle } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useFolders } from "@/lib/queries";
 import {
@@ -187,14 +186,14 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
                   />
                 )}
                 <IconButton
-                  icon={X}
+                  icon={ICONS.close}
                   size="sm"
                   label={t("rules.removeCondition")}
                   onClick={() => setDraft({ ...draft, conditions: draft.conditions.filter((_, i) => i !== index) })}
                 />
               </div>
               {empty && (
-                <p role="alert" className="text-[13px] text-danger">
+                <p role="alert" className="text-[13px] text-danger-ink">
                   {t("rules.problem.emptyValue")}
                 </p>
               )}
@@ -204,7 +203,7 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
         <Button
           size="sm"
           variant="ghost"
-          icon={Plus}
+          icon={ICONS.add}
           className="self-start"
           onClick={() =>
             setDraft({ ...draft, conditions: [...draft.conditions, { field: "subject", op: "contains", value: "" }] })
@@ -230,12 +229,12 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
           />
         ))}
         {has((p) => p.kind === "noActions") && (
-          <p role="alert" className="text-[13px] text-danger">
+          <p role="alert" className="text-[13px] text-danger-ink">
             {t("rules.problem.noActions")}
           </p>
         )}
         {has((p) => p.kind === "tooManyForwards" || p.kind === "tooManyFolders") && (
-          <p role="alert" className="text-[13px] text-danger">
+          <p role="alert" className="text-[13px] text-danger-ink">
             {t("rules.problem.tooMany")}
           </p>
         )}
@@ -253,7 +252,7 @@ export function RuleEditor({ accountId, rule, isNew, busy, onSave, onCancel, onD
               <Button
                 size="sm"
                 variant="ghost"
-                icon={Plus}
+                icon={ICONS.add}
                 onClick={menu.toggle}
                 aria-haspopup={menu["aria-haspopup"]}
                 aria-expanded={menu["aria-expanded"]}
@@ -323,7 +322,7 @@ function ActionRow({
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[13.5px] font-semibold">{t(`rules.action.${action.type}`)}</span>
         {action.type === "move" && (
-          <Button size="sm" icon={FolderInput} onClick={onPickFolder} className="max-w-full min-w-0">
+          <Button size="sm" icon={ICONS.move} onClick={onPickFolder} className="max-w-full min-w-0">
             <span className="truncate">
               {action.mailboxId ? folderLabel(action.mailboxId, action.mailboxName) : t("rules.chooseFolder")}
             </span>
@@ -340,7 +339,7 @@ function ActionRow({
           />
         )}
         <span className="flex-1" />
-        <IconButton icon={X} size="sm" label={t("rules.removeAction")} onClick={onRemove} />
+        <IconButton icon={ICONS.close} size="sm" label={t("rules.removeAction")} onClick={onRemove} />
       </div>
       {action.type === "forward" && (
         <div className="flex flex-col gap-2">
@@ -367,7 +366,7 @@ function ActionRow({
         </div>
       )}
       {problem && (
-        <p role="alert" className={clsx("text-[13px] text-danger")}>
+        <p role="alert" className={clsx("text-[13px] text-danger-ink")}>
           {problem.kind === "badAddress"
             ? t("rules.problem.badAddress")
             : problem.kind === "noLabel"

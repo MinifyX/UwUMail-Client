@@ -1,8 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, X } from "lucide-react";
+import { Icon, IconButton, ICONS } from "@uwusuite/design";
 import { backend } from "@/backend/backend";
 import type { BlockedSender } from "@/backend/types";
-import { IconButton } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";
@@ -39,13 +38,13 @@ export function BlockedSenders() {
         <ul className="flex max-h-56 flex-col overflow-y-auto rounded-2xl border border-hairline p-1">
           {blocked.map((sender) => (
             <li key={keyOf(sender)} className="flex items-center gap-3 rounded-xl py-1 pr-1 pl-3 hover:bg-elevated">
-              <Ban className="size-4 shrink-0 text-faint" aria-hidden />
+              <Icon icon={ICONS.block} className="shrink-0 text-faint" />
               <span className="min-w-0 flex-1">
                 <span className="selectable block truncate text-[13.5px]">{sender.entry}</span>
                 <span className="block truncate text-[12px] text-muted">{where(sender)}</span>
               </span>
               <IconButton
-                icon={X}
+                icon={ICONS.close}
                 size="sm"
                 label={t("settings.unblockSender", { entry: sender.entry })}
                 onClick={() => unblock(sender)}

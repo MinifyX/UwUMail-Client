@@ -1,27 +1,10 @@
 import clsx from "clsx";
-import {
-  Archive,
-  Check,
-  CloudDownload,
-  FolderInput,
-  MailCheck,
-  Menu,
-  PenLine,
-  Plus,
-  RefreshCw,
-  Search,
-  Star,
-  Trash,
-  Trash2,
-  Users,
-  X,
-} from "lucide-react";
+import { Button, EmptyState, Icon, IconButton, ICONS, Pill } from "@uwusuite/design";
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@/backend/backend";
 import { searchServer } from "@/backend/mobile";
 import type { ListFilter, ThreadSummary } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
-import { Button, EmptyState, IconButton, Pill } from "@uwusuite/design";
 import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { useBackLayer } from "@/lib/backStack";
@@ -144,7 +127,7 @@ export function MobileList() {
     }
   };
   const serverButton = search && isTauri() && !fromServer && (
-    <Button icon={CloudDownload} busy={searchingServer} onClick={() => void askServer()}>
+    <Button icon={ICONS.server} busy={searchingServer} onClick={() => void askServer()}>
       {searchingServer ? t("mobile.serverSearch.searching") : t("mobile.serverSearch.button")}
     </Button>
   );
@@ -196,37 +179,37 @@ export function MobileList() {
       <header className="flex flex-col gap-2.5 px-3 pt-2 pb-2">
         {selecting ? (
           <div className="flex h-12 items-center gap-1 rounded-2xl bg-pink-tint px-1 text-pink-ink">
-            <IconButton icon={X} label={t("mobile.selection.clear")} onClick={() => setSelected(new Set())} />
+            <IconButton icon={ICONS.close} label={t("mobile.selection.clear")} onClick={() => setSelected(new Set())} />
             <p className="min-w-0 flex-1 truncate text-[15px] font-bold">
               {t("mobile.selected", { count: selected.size })}
             </p>
-            <IconButton icon={MailCheck} label={t("mobile.swipe.read")} onClick={() => runOnSelection("read")} />
-            <IconButton icon={Star} label={t("reader.flag")} onClick={() => runOnSelection("flag")} />
-            <IconButton icon={Archive} label={t("reader.archive")} onClick={() => runOnSelection("archive")} />
+            <IconButton icon={ICONS.unread} label={t("mobile.swipe.read")} onClick={() => runOnSelection("read")} />
+            <IconButton icon={ICONS.favorite} label={t("reader.flag")} onClick={() => runOnSelection("flag")} />
+            <IconButton icon={ICONS.archive} label={t("reader.archive")} onClick={() => runOnSelection("archive")} />
             <IconButton
-              icon={Trash}
+              icon={ICONS.delete}
               label={info.isTrash ? t("reader.deleteForever") : t("reader.trash")}
               onClick={() => runOnSelection("trash")}
             />
-            <IconButton icon={FolderInput} label={t("reader.move")} onClick={moveSelection} />
+            <IconButton icon={ICONS.move} label={t("reader.move")} onClick={moveSelection} />
           </div>
         ) : (
           <div className="flex h-12 items-center gap-1">
-            <IconButton icon={Menu} label={t("nav.menu")} onClick={() => setFolderDrawerOpen(true)} />
+            <IconButton icon={ICONS.menu} label={t("nav.menu")} onClick={() => setFolderDrawerOpen(true)} />
             <div className="min-w-0 flex-1 px-1">
               <h1 className="truncate text-[20px] leading-tight font-extrabold tracking-[-0.01em]">{info.title}</h1>
               {info.subtitle && <p className="truncate text-[12px] text-muted">{info.subtitle}</p>}
             </div>
             {emptiable && (
               <IconButton
-                icon={Trash2}
+                icon={ICONS.delete}
                 label={emptiable.role === "junk" ? t("folders.emptyJunk") : t("folders.emptyTrash")}
                 disabled={emptiable.total === 0}
                 onClick={() => useFolderEdit.getState().open({ kind: "empty", folder: emptiable })}
               />
             )}
             <IconButton
-              icon={RefreshCw}
+              icon={ICONS.refresh}
               label={t("list.refresh")}
               className={clsx(query.isFetching && "[&>svg]:animate-spin")}
               onClick={() => void refresh()}
@@ -237,9 +220,9 @@ export function MobileList() {
         <WorkspaceSwitch size="lg" />
 
         <div className="relative">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted"
-            aria-hidden
+          <Icon
+            icon={ICONS.search}
+            className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted"
           />
           <input
             type="search"
@@ -251,7 +234,7 @@ export function MobileList() {
           />
           {draftSearch && (
             <IconButton
-              icon={X}
+              icon={ICONS.close}
               label={t("list.clearSearch")}
               onClick={() => setDraftSearch("")}
               className="absolute top-1/2 right-1 -translate-y-1/2"
@@ -295,11 +278,11 @@ export function MobileList() {
               body={t(`list.empty.${empty}.body`)}
               action={
                 empty === "noAccount" ? (
-                  <Button variant="primary" icon={Plus} onClick={() => setAddAccountOpen(true)}>
+                  <Button variant="primary" icon={ICONS.add} onClick={() => setAddAccountOpen(true)}>
                     {t("nav.addAccount")}
                   </Button>
                 ) : empty === "workspace" ? (
-                  <Button variant="primary" icon={Users} onClick={() => openSettings("accounts")}>
+                  <Button variant="primary" icon={ICONS.account} onClick={() => openSettings("accounts")}>
                     {t("workspace.assign")}
                   </Button>
                 ) : (
@@ -353,7 +336,7 @@ export function MobileList() {
                                 : clsx("top-3 left-[26px]", layout === "pro" ? "size-9" : "size-10"),
                             )}
                           >
-                            <Check className={density === "compact" ? "size-4" : "size-5"} strokeWidth={3} />
+                            <Icon icon={ICONS.done} size={density === "compact" ? "sm" : "lg"} />
                           </span>
                         )}
                       </div>
@@ -380,7 +363,7 @@ export function MobileList() {
             compact ? "w-14" : "px-5",
           )}
         >
-          <PenLine className="size-5 shrink-0" strokeWidth={2.4} aria-hidden />
+          <Icon icon={ICONS.compose} size="lg" className="shrink-0" />
           {!compact && <span className="text-[15px]">{t("nav.compose")}</span>}
         </button>
       )}

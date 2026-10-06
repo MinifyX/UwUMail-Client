@@ -1,8 +1,7 @@
-import { Fingerprint } from "lucide-react";
+import { Button, ICONS } from "@uwusuite/design";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { nativeMobile } from "@/backend/mobile";
 import { NyuScene } from "@/components/nyu/scenes";
-import { Button } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { confirmIdentity, noteVisibility, useAppLock, useLocked } from "@/state/lock";
 import { useSettings } from "@/state/settings";
@@ -61,7 +60,7 @@ export function AppLock() {
       <NyuScene name="inbox" className="h-auto w-[260px] animate-pop" />
       <p className="text-[18px] font-extrabold">{t("mobile.lock.title")}</p>
       <p className="max-w-[300px] text-[14px] text-muted">{t("mobile.lock.body")}</p>
-      <Button variant="primary" size="lg" icon={Fingerprint} busy={asking} onClick={() => void unlock()}>
+      <Button variant="primary" size="lg" icon={ICONS.unlocked} busy={asking} onClick={() => void unlock()}>
         {t("mobile.lock.unlock")}
       </Button>
     </div>

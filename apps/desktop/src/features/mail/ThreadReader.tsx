@@ -1,21 +1,7 @@
 import clsx from "clsx";
-import {
-  Archive,
-  ArrowLeft,
-  FolderInput,
-  Forward,
-  MailOpen,
-  RefreshCw,
-  Reply,
-  ReplyAll,
-  ShieldAlert,
-  ShieldCheck,
-  Star,
-  Trash,
-} from "lucide-react";
+import { Button, EmptyState, IconButton, ICONS } from "@uwusuite/design";
 import { useEffect, useMemo, useState } from "react";
 import type { Message } from "@/backend/types";
-import { Button, EmptyState, IconButton } from "@uwusuite/design";
 import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { inTrash, useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
@@ -94,7 +80,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
           title={t("reader.error.title")}
           body={t("reader.error.body")}
           action={
-            <Button icon={RefreshCw} busy={isRefetching} onClick={() => void refetch()}>
+            <Button icon={ICONS.refresh} busy={isRefetching} onClick={() => void refetch()}>
               {t("reader.error.retry")}
             </Button>
           }
@@ -127,52 +113,52 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
     >
       <header className="flex items-center gap-1 border-b border-hairline bg-surface px-3 py-2">
         {variant === "simple" && (
-          <IconButton icon={ArrowLeft} label={t("reader.back")} onClick={() => selectThread(null)} className="mr-1" />
+          <IconButton icon={ICONS.back} label={t("reader.back")} onClick={() => selectThread(null)} className="mr-1" />
         )}
         <IconButton
-          icon={Reply}
+          icon={ICONS.reply}
           label={t("reader.reply")}
           onClick={() => openCompose({ mode: "reply", source: latest })}
         />
         <IconButton
-          icon={ReplyAll}
+          icon={ICONS.replyAll}
           label={t("reader.replyAll")}
           onClick={() => openCompose({ mode: "replyAll", source: latest })}
         />
         <IconButton
-          icon={Forward}
+          icon={ICONS.forward}
           label={t("reader.forward")}
           onClick={() => openCompose({ mode: "forward", source: latest })}
         />
         <span className="mx-1.5 h-5 w-px bg-line" aria-hidden />
         <IconButton
-          icon={Archive}
+          icon={ICONS.archive}
           label={t("reader.archive")}
           onClick={() => void actions.archive(ids).then(() => selectThread(null))}
         />
         <IconButton
-          icon={Trash}
+          icon={ICONS.delete}
           label={trashed ? t("reader.deleteForever") : t("reader.trash")}
           onClick={() => void actions.trash(all).then((gone) => gone && selectThread(null))}
         />
         <IconButton
-          icon={FolderInput}
+          icon={ICONS.move}
           label={t("reader.move")}
           onClick={() => requestMove(all, () => selectThread(null))}
         />
         <IconButton
-          icon={inJunk ? ShieldCheck : ShieldAlert}
+          icon={inJunk ? ICONS.notSpam : ICONS.spam}
           label={inJunk ? t("reader.notSpam") : t("reader.spam")}
           onClick={() => void actions.spam(ids, !inJunk).then(() => selectThread(null))}
         />
         <IconButton
-          icon={Star}
+          icon={ICONS.favorite}
           label={flagged ? t("reader.unflag") : t("reader.flag")}
           active={flagged}
           onClick={() => void actions.setFlags(flagged ? ids : [latest.id], { flagged: !flagged })}
         />
         <IconButton
-          icon={MailOpen}
+          icon={ICONS.unread}
           label={t("reader.markUnread")}
           onClick={() => void actions.setFlags([latest.id], { seen: false }).then(() => selectThread(null))}
         />

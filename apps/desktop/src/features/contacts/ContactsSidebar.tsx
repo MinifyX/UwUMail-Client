@@ -1,13 +1,23 @@
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { BookUser, Ellipsis, Plus, Settings, Star, UsersRound, UserPlus } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import {
+  Button,
+  Field,
+  Icon,
+  IconButton,
+  type IconProps,
+  ICONS,
+  Menu,
+  type MenuItem,
+  Select,
+  TextInput,
+  Wordmark,
+} from "@uwusuite/design";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { AddressBookInfo } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { ArmedButton } from "@/components/ui/ArmedButton";
-import { Button, Field, IconButton, Menu, type MenuItem, Select, TextInput, Wordmark } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { queryKeys, useAccounts } from "@/lib/queries";
@@ -20,14 +30,14 @@ import { useAddressBooks, useContacts, useContactsAccounts } from "./useContacts
 
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-function SidebarLink({ icon: Icon, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
+function SidebarLink({ icon: Glyph, label, onClick }: { icon: IconProps["icon"]; label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className="flex h-9 w-full items-center gap-3 rounded-xl px-3 text-left text-[13.5px] text-ink/85 transition-colors hover:bg-pink-tint/50"
     >
-      <Icon className="size-[17px] shrink-0 text-muted" strokeWidth={2} aria-hidden />
+      <Icon icon={Glyph} size="md" className="shrink-0 text-muted" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>
   );
@@ -46,7 +56,7 @@ export function ContactsSidebar({ className, onNavigate }: { className?: string;
       <Button
         variant="primary"
         size="lg"
-        icon={UserPlus}
+        icon={ICONS.addContact}
         onClick={() => {
           onNavigate?.();
           startNewContact();
@@ -59,7 +69,7 @@ export function ContactsSidebar({ className, onNavigate }: { className?: string;
         <AddressBookList onNavigate={onNavigate} />
       </div>
       <div className="flex flex-col gap-0.5 border-t border-hairline pt-3">
-        <SidebarLink icon={Settings} label={t("nav.settings")} onClick={() => openSettings()} />
+        <SidebarLink icon={ICONS.settings} label={t("nav.settings")} onClick={() => openSettings()} />
       </div>
     </nav>
   );
@@ -134,7 +144,7 @@ function AddressBookList({ onNavigate }: { onNavigate?: () => void }) {
     list.map((book) => (
       <BookRow
         key={book.id}
-        icon={BookUser}
+        icon={ICONS.contacts}
         name={book.name}
         count={count(book.id)}
         selected={bookId === book.id}
@@ -162,7 +172,7 @@ function AddressBookList({ onNavigate }: { onNavigate?: () => void }) {
         })}
       <ul className="flex flex-col gap-0.5">
         <BookRow
-          icon={UsersRound}
+          icon={ICONS.contacts}
           name={t("contacts.all")}
           count={count(null)}
           selected={bookId === null}
@@ -175,7 +185,7 @@ function AddressBookList({ onNavigate }: { onNavigate?: () => void }) {
           {t("contacts.addressBooks")}
         </h2>
         {creatable.length > 0 && (
-          <IconButton icon={Plus} size="sm" label={t("contacts.newBook")} onClick={() => setEditing("new")} />
+          <IconButton icon={ICONS.add} size="sm" label={t("contacts.newBook")} onClick={() => setEditing("new")} />
         )}
       </div>
       {groups.length > 1 ? (
@@ -260,7 +270,7 @@ function AddressBookList({ onNavigate }: { onNavigate?: () => void }) {
 
 /** One line of the list: an address book (or all contacts) with its count, and its "…" menu. */
 function BookRow({
-  icon: Icon,
+  icon: Glyph,
   name,
   count,
   selected,
@@ -269,7 +279,7 @@ function BookRow({
   menuLabel,
   onPick,
 }: {
-  icon: LucideIcon;
+  icon: IconProps["icon"];
   name: string;
   count: number;
   selected: boolean;
@@ -298,11 +308,11 @@ function BookRow({
         onClick={onPick}
         className="flex min-w-0 flex-1 items-center gap-3 text-left text-[13.5px]"
       >
-        <Icon className="size-[17px] shrink-0 opacity-80" strokeWidth={2} aria-hidden />
+        <Icon icon={Glyph} size="md" className="shrink-0 opacity-80" />
         <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
         {isDefault && (
           <span className="shrink-0 text-muted" title={t("contacts.default")}>
-            <Star className="size-3.5" strokeWidth={2.2} aria-hidden />
+            <Icon icon={ICONS.favorite} size="xs" />
             <span className="sr-only">{t("contacts.default")}</span>
           </span>
         )}
@@ -316,7 +326,7 @@ function BookRow({
           items={items}
           trigger={({ toggle, ...aria }) => (
             <IconButton
-              icon={Ellipsis}
+              icon={ICONS.more}
               size="sm"
               label={menuLabel ?? name}
               onClick={toggle}

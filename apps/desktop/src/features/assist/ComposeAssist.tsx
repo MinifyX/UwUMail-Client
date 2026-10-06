@@ -1,23 +1,9 @@
 import clsx from "clsx";
-import {
-  ArrowDownToLine,
-  Check,
-  Info,
-  Languages,
-  PencilLine,
-  Replace,
-  RotateCcw,
-  SlidersHorizontal,
-  Sparkles,
-  Square,
-  Wand2,
-  X,
-} from "lucide-react";
+import { Button, Icon, IconButton, type IconProps, ICONS, Menu } from "@uwusuite/design";
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { NyuThinking } from "@/components/nyu/NyuThinking";
 import { backend } from "@/backend/backend";
 import { ASSIST_PRESETS, type AssistComposeRequest, type AssistPreset } from "@/backend/types";
-import { Button, IconButton, Menu } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { EstimateLabel, EstimateTip, type EstimateRequest, useSettled } from "./estimate";
 import {
@@ -103,7 +89,7 @@ export function ComposeAssistButton({
   estimate?: (start: ComposeAssistStart) => EstimateRequest | null;
 }) {
   const { t } = useT();
-  const label = (start: ComposeAssistStart, icon: typeof Sparkles, text: string) => {
+  const label = (start: ComposeAssistStart, icon: IconProps["icon"], text: string) => {
     const content = <MenuLabel icon={icon} text={text} />;
     return estimate ? <EstimateLabel request={() => estimate(start)}>{content}</EstimateLabel> : content;
   };
@@ -113,27 +99,27 @@ export function ComposeAssistButton({
       align="end"
       items={[
         {
-          label: label({ kind: "write" }, Sparkles, t("assist.compose.write")),
+          label: label({ kind: "write" }, ICONS.ai, t("assist.compose.write")),
           onSelect: () => onPick({ kind: "write" }),
         },
         "separator",
         ...ASSIST_PRESETS.map((preset) => ({
           label: label(
             { kind: "rewrite", preset },
-            preset === "translate" ? Languages : preset === "proofread" ? Check : Wand2,
+            preset === "translate" ? ICONS.language : preset === "proofread" ? ICONS.proofread : ICONS.rewrite,
             t(`assist.preset.${preset}`),
           ),
           onSelect: () => onPick({ kind: "rewrite", preset }),
         })),
         "separator",
         {
-          label: label({ kind: "adjust" }, SlidersHorizontal, t("assist.compose.adjust")),
+          label: label({ kind: "adjust" }, ICONS.adjust, t("assist.compose.adjust")),
           onSelect: () => onPick({ kind: "adjust" }),
         },
       ]}
       trigger={(menu) => (
         <IconButton
-          icon={Sparkles}
+          icon={ICONS.ai}
           size="sm"
           label={t("assist.compose.button")}
           // The cursor and the marked text in the draft stay where they are.
@@ -148,10 +134,10 @@ export function ComposeAssistButton({
   );
 }
 
-function MenuLabel({ icon: Icon, text }: { icon: typeof Sparkles; text: string }) {
+function MenuLabel({ icon: Glyph, text }: { icon: IconProps["icon"]; text: string }) {
   return (
     <span className="flex items-center gap-2.5">
-      <Icon className="size-4 shrink-0 text-muted" aria-hidden />
+      <Icon icon={Glyph} className="shrink-0 text-muted" />
       {text}
     </span>
   );
@@ -292,7 +278,7 @@ export function ComposeAssistPanel({
       className="mx-3 mb-2 flex max-h-[48%] min-h-0 shrink-0 animate-fade flex-col overflow-hidden rounded-2xl border border-pink/30 bg-pink-tint/35 shadow-[0_4px_18px_rgb(225_29_116/0.08)]"
     >
       <header className="flex items-center gap-2 px-3.5 pt-2.5 pb-1.5">
-        <Sparkles className="size-4 shrink-0 text-pink" aria-hidden />
+        <Icon icon={ICONS.ai} className="shrink-0 text-pink" />
         <h3 className="min-w-0 truncate text-[13.5px] font-bold">{title}</h3>
         {used && (
           <span
@@ -303,7 +289,7 @@ export function ComposeAssistPanel({
           </span>
         )}
         <IconButton
-          icon={X}
+          icon={ICONS.close}
           size="sm"
           label={t("assist.compose.discard")}
           onClick={onClose}
@@ -313,7 +299,7 @@ export function ComposeAssistPanel({
 
       <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto px-3.5 pb-3">
         <p className="flex items-start gap-1.5 text-[12px] text-muted">
-          <Info className="mt-px size-3.5 shrink-0" aria-hidden />
+          <Icon icon={ICONS.info} size="xs" className="mt-px shrink-0" />
           <span>
             {ask.mode === "write"
               ? context.replyToEmailId
@@ -392,7 +378,7 @@ export function ComposeAssistPanel({
                   type="submit"
                   size="sm"
                   variant="primary"
-                  icon={Sparkles}
+                  icon={ICONS.ai}
                   disabled={ask.preset !== "translate" && !instruction.trim()}
                 >
                   {ask.mode === "write"
@@ -416,7 +402,7 @@ export function ComposeAssistPanel({
                   <Button
                     size="sm"
                     variant="ghost"
-                    icon={subjectTaken ? Check : undefined}
+                    icon={subjectTaken ? ICONS.done : undefined}
                     disabled={subjectTaken}
                     onClick={() => {
                       onSubject(state.subject!);
@@ -447,7 +433,7 @@ export function ComposeAssistPanel({
             )}
             <div className="flex flex-wrap items-center gap-1.5">
               {working ? (
-                <Button size="sm" icon={Square} onClick={stop}>
+                <Button size="sm" icon={ICONS.stop} onClick={stop}>
                   {t("assist.stop")}
                 </Button>
               ) : (
@@ -457,7 +443,7 @@ export function ComposeAssistPanel({
                       <Button
                         size="sm"
                         variant={ask.mode === "write" ? "primary" : "secondary"}
-                        icon={ArrowDownToLine}
+                        icon={ICONS.insert}
                         onClick={() => onInsert(state.text)}
                       >
                         {t("assist.compose.insert")}
@@ -465,7 +451,7 @@ export function ComposeAssistPanel({
                       <Button
                         size="sm"
                         variant={ask.mode === "write" ? "secondary" : "primary"}
-                        icon={Replace}
+                        icon={ICONS.replace}
                         onClick={() => onReplace(state.text)}
                         title={
                           fromSelection ? t("assist.compose.replaceSelectionHint") : t("assist.compose.replaceOwnHint")
@@ -476,12 +462,12 @@ export function ComposeAssistPanel({
                     </>
                   )}
                   {lastRequest && (
-                    <Button size="sm" variant="ghost" icon={RotateCcw} onClick={() => send(lastRequest)}>
+                    <Button size="sm" variant="ghost" icon={ICONS.refresh} onClick={() => send(lastRequest)}>
                       {t("assist.retry")}
                     </Button>
                   )}
                   {hasText && (
-                    <Button size="sm" variant="ghost" icon={PencilLine} onClick={adjustFurther}>
+                    <Button size="sm" variant="ghost" icon={ICONS.adjust} onClick={adjustFurther}>
                       {t("assist.compose.adjustFurther")}
                     </Button>
                   )}
@@ -502,7 +488,7 @@ function Note({ tone, children }: { tone: "warning" | "danger"; children: ReactN
       role={tone === "danger" ? "alert" : undefined}
       className={clsx(
         "rounded-xl px-3 py-2 text-[13px] font-medium",
-        tone === "danger" ? "bg-danger-tint text-danger" : "bg-warning-tint text-warning",
+        tone === "danger" ? "bg-danger-tint text-danger-ink" : "bg-warning-tint text-warning-ink",
       )}
     >
       {children}

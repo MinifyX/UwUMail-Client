@@ -1,12 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Cake, Check, Ellipsis, Plus, Users } from "lucide-react";
+import { Button, Field, Icon, IconButton, ICONS, Menu, type MenuItem, Select, TextInput } from "@uwusuite/design";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { CalendarInfo } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { ArmedButton } from "@/components/ui/ArmedButton";
-import { Button, Field, IconButton, Menu, type MenuItem, Select, TextInput } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { queryKeys, useAccounts } from "@/lib/queries";
@@ -122,7 +121,7 @@ export function CalendarList() {
           {t("calendar.calendars")}
         </h2>
         {creatable.length > 0 && (
-          <IconButton icon={Plus} size="sm" label={t("calendar.newCalendar")} onClick={() => setEditing("new")} />
+          <IconButton icon={ICONS.add} size="sm" label={t("calendar.newCalendar")} onClick={() => setEditing("new")} />
         )}
       </div>
       {sources
@@ -275,9 +274,9 @@ function CalendarRow({
           style={{ borderColor: color, background: calendar.isVisible ? color : "transparent" }}
           aria-hidden
         >
-          {calendar.isVisible && <Check className="size-3 text-white" strokeWidth={3.5} />}
+          {calendar.isVisible && <Icon icon={ICONS.done} size="xs" className="text-white" />}
         </span>
-        {calendar.isBirthdays && <Cake className="size-3.5 shrink-0 text-muted" aria-hidden />}
+        {calendar.isBirthdays && <Icon icon={ICONS.birthday} size="xs" className="shrink-0 text-muted" />}
         <span className={clsx("min-w-0 flex-1 truncate", !calendar.isVisible && "text-muted")}>
           {calendar.name}
           {calendar.sharedBy && (
@@ -287,9 +286,11 @@ function CalendarRow({
           )}
         </span>
         {Object.keys(calendar.sharedWith ?? {}).length > 0 && (
-          <Users
-            className="size-3.5 shrink-0 text-muted"
-            aria-label={t("sharing.sharedWithCount", { count: Object.keys(calendar.sharedWith ?? {}).length })}
+          <Icon
+            icon={ICONS.people}
+            size="xs"
+            className="shrink-0 text-muted"
+            label={t("sharing.sharedWithCount", { count: Object.keys(calendar.sharedWith ?? {}).length })}
           />
         )}
         {calendar.isDefault && (
@@ -304,7 +305,7 @@ function CalendarRow({
           items={items}
           trigger={({ toggle, ...aria }) => (
             <IconButton
-              icon={Ellipsis}
+              icon={ICONS.more}
               size="sm"
               label={t("calendar.calendarActions", { name: calendar.name })}
               onClick={toggle}
@@ -395,7 +396,7 @@ function CalendarForm({
             )}
             style={{ background: swatch }}
           >
-            {color === swatch && <Check className="size-4 text-white" strokeWidth={3} aria-hidden />}
+            {color === swatch && <Icon icon={ICONS.done} className="text-white" />}
           </button>
         ))}
       </div>

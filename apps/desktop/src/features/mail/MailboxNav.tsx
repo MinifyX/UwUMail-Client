@@ -1,25 +1,20 @@
 import clsx from "clsx";
 import {
-  ChevronDown,
-  ChevronRight,
-  CircleAlert,
-  FolderOpen,
-  FolderPlus,
-  LoaderCircle,
-  MoreHorizontal,
-  PenLine,
-  Plus,
-  Settings,
-  Users,
-  WifiOff,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+  Badge,
+  Button,
+  Icon,
+  IconButton,
+  type IconProps,
+  ICONS,
+  Menu,
+  type MenuItem,
+  Wordmark,
+} from "@uwusuite/design";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type CSSProperties } from "react";
 import { backend } from "@/backend/backend";
 import type { Account, Folder, MailboxView } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
-import { Badge, Button, IconButton, Menu, type MenuItem, Wordmark } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useFolders, useMessageActions, useVisibleAccounts } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
@@ -41,14 +36,14 @@ import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
 const UNIFIED_ROLES = ["inbox", "unread", "flagged", "drafts", "sent"] as const;
 
 interface NavItemProps {
-  icon: LucideIcon;
+  icon: IconProps["icon"];
   label: string;
   count?: number;
   active: boolean;
   onClick: () => void;
 }
 
-function NavItem({ icon: Icon, label, count, active, onClick }: NavItemProps) {
+function NavItem({ icon: Glyph, label, count, active, onClick }: NavItemProps) {
   return (
     <button
       type="button"
@@ -59,7 +54,7 @@ function NavItem({ icon: Icon, label, count, active, onClick }: NavItemProps) {
         active ? "bg-pink-tint font-semibold text-pink-ink" : "text-ink/85 hover:bg-pink-tint/50",
       )}
     >
-      <Icon className={clsx("size-[17px] shrink-0", active ? "text-pink" : "text-muted")} strokeWidth={2} aria-hidden />
+      <Icon icon={Glyph} size="md" className={clsx("shrink-0", active ? "text-pink" : "text-muted")} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {count !== undefined && count > 0 && <Badge count={count} />}
     </button>
@@ -96,10 +91,8 @@ function folderMenuItems(folder: Folder, t: (key: string) => string): MenuItem[]
   return items;
 }
 
-function Glyph({ icon: Icon, active }: { icon: LucideIcon; active: boolean }) {
-  return (
-    <Icon className={clsx("size-[17px] shrink-0", active ? "text-pink" : "text-muted")} strokeWidth={2} aria-hidden />
-  );
+function NavGlyph({ icon, active }: { icon: IconProps["icon"]; active: boolean }) {
+  return <Icon icon={icon} size="md" className={clsx("shrink-0", active ? "text-pink" : "text-muted")} />;
 }
 
 function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
@@ -112,7 +105,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   const hasChildren = children.length > 0;
   const target: MailboxView = { kind: "folder", accountId: account.id, folderId: folder.id };
   const active = sameView(view, target);
-  const icon = folder.selectable ? folderIcon(folder) : FolderOpen;
+  const icon = folder.selectable ? folderIcon(folder) : ICONS.folderOpen;
   // A collapsed folder also shows what's unread inside it.
   const count = hasChildren && collapsed ? node.unreadInside : countsUnread(folder) ? folder.unread : 0;
   const label = folder.role ? t(`folder.${folder.role}`) : folder.name;
@@ -170,11 +163,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
             title={t("nav.toggleFolder", { name: label })}
             className="grid size-5 shrink-0 place-items-center rounded-md text-muted hover:bg-pink-tint-strong hover:text-ink"
           >
-            {collapsed ? (
-              <ChevronRight className="size-3.5" aria-hidden />
-            ) : (
-              <ChevronDown className="size-3.5" aria-hidden />
-            )}
+            <Icon icon={ICONS.expand} size="xs" className={clsx("transition-transform", collapsed && "-rotate-90")} />
           </button>
         ) : (
           <span className="size-5 shrink-0" aria-hidden />
@@ -185,7 +174,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
           aria-current={active ? "page" : undefined}
           className="flex h-full min-w-0 flex-1 items-center gap-2.5 pr-3 pl-1 text-left text-[13.5px]"
         >
-          <Glyph icon={icon} active={active} />
+          <NavGlyph icon={icon} active={active} />
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {count > 0 && <Badge count={count} />}
         </button>
@@ -197,7 +186,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
           items={folderMenuItems(folder, t)}
           trigger={({ toggle, ...aria }) => (
             <IconButton
-              icon={MoreHorizontal}
+              icon={ICONS.more}
               size="sm"
               label={t("folders.more", { name: label })}
               onClick={toggle}
@@ -290,20 +279,24 @@ function AccountSection({
             !nested && "uppercase",
           )}
         >
-          {nested ? <Users className="size-3.5 shrink-0" aria-hidden /> : <AccountDot color={account.color} />}
+          {nested ? <Icon icon={ICONS.people} size="xs" className="shrink-0" /> : <AccountDot color={account.color} />}
           <span className="min-w-0 flex-1 truncate text-left tracking-normal normal-case">
             {nested ? account.displayName || account.email : account.email}
           </span>
           {status.state === "syncing" && (
-            <LoaderCircle className="size-3.5 animate-spin text-pink" aria-label={statusLabel} />
+            <Icon icon={ICONS.loading} size="xs" className="animate-spin text-pink" label={statusLabel} />
           )}
-          {status.state === "offline" && <WifiOff className="size-3.5 text-warning" aria-label={statusLabel} />}
-          {status.state === "error" && <CircleAlert className="size-3.5 text-danger" aria-label={statusLabel} />}
+          {status.state === "offline" && (
+            <Icon icon={ICONS.offline} size="xs" className="text-warning-ink" label={statusLabel} />
+          )}
+          {status.state === "error" && (
+            <Icon icon={ICONS.error} size="xs" className="text-danger-ink" label={statusLabel} />
+          )}
           {!open && sharedUnread > 0 && <Badge count={sharedUnread} />}
-          <ChevronDown className={clsx("size-3.5 transition-transform", !open && "-rotate-90")} aria-hidden />
+          <Icon icon={ICONS.expand} size="xs" className={clsx("transition-transform", !open && "-rotate-90")} />
         </button>
         <IconButton
-          icon={FolderPlus}
+          icon={ICONS.newFolder}
           size="sm"
           label={t("folders.new")}
           onClick={() => useFolderEdit.getState().open({ kind: "create", accountId: account.id, parent: null })}
@@ -317,7 +310,7 @@ function AccountSection({
           items={accountMenuItems(account, t, client)}
           trigger={({ toggle, ...aria }) => (
             <IconButton
-              icon={MoreHorizontal}
+              icon={ICONS.more}
               size="sm"
               label={t("shared.accountMenu", { email: account.email })}
               onClick={toggle}
@@ -398,7 +391,7 @@ export function MailboxNav({
       <Button
         variant="primary"
         size="lg"
-        icon={PenLine}
+        icon={ICONS.compose}
         onClick={() => openCompose({ mode: "new" })}
         className="w-full"
       >
@@ -437,8 +430,8 @@ export function MailboxNav({
       </div>
 
       <div className="flex flex-col gap-0.5 border-t border-hairline pt-3">
-        <NavItem icon={Plus} label={t("nav.addAccount")} active={false} onClick={() => setAddAccountOpen(true)} />
-        <NavItem icon={Settings} label={t("nav.settings")} active={false} onClick={() => openSettings()} />
+        <NavItem icon={ICONS.add} label={t("nav.addAccount")} active={false} onClick={() => setAddAccountOpen(true)} />
+        <NavItem icon={ICONS.settings} label={t("nav.settings")} active={false} onClick={() => openSettings()} />
       </div>
     </nav>
   );

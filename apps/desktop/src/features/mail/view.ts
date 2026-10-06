@@ -1,16 +1,4 @@
-import {
-  FileText,
-  Folder as FolderIcon,
-  Inbox,
-  Mailbox,
-  Send,
-  ShieldAlert,
-  Archive,
-  Trash,
-  Star,
-  MailOpen,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { type IconProps, ICONS } from "@uwusuite/design";
 import type { Account, Folder, FolderRole, MailboxView } from "@/backend/types";
 import { useT } from "@/i18n";
 import { useAccounts, useFolders } from "@/lib/queries";
@@ -18,25 +6,25 @@ import { useSettings } from "@/state/settings";
 import { useLabelDirectory } from "../labels/useLabels";
 import { useWorkspaceName } from "../workspaces/workspaces";
 
-export const ROLE_ICONS: Record<FolderRole, LucideIcon> = {
-  inbox: Inbox,
-  drafts: FileText,
-  sent: Send,
-  archive: Archive,
-  junk: ShieldAlert,
-  trash: Trash,
+export const ROLE_ICONS: Record<FolderRole, IconProps["icon"]> = {
+  inbox: ICONS.inbox,
+  drafts: ICONS.drafts,
+  sent: ICONS.send,
+  archive: ICONS.archive,
+  junk: ICONS.spam,
+  trash: ICONS.delete,
 };
 
 export const UNIFIED_ICONS = {
-  inbox: Mailbox,
-  unread: MailOpen,
-  flagged: Star,
-  drafts: FileText,
-  sent: Send,
+  inbox: ICONS.allMailboxes,
+  unread: ICONS.unread,
+  flagged: ICONS.favorite,
+  drafts: ICONS.drafts,
+  sent: ICONS.send,
 } as const;
 
-export function folderIcon(folder: Folder): LucideIcon {
-  return folder.role ? ROLE_ICONS[folder.role] : FolderIcon;
+export function folderIcon(folder: Folder): IconProps["icon"] {
+  return folder.role ? ROLE_ICONS[folder.role] : ICONS.folder;
 }
 
 export function sameView(a: MailboxView, b: MailboxView): boolean {

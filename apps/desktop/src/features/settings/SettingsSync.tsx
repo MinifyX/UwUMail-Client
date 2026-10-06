@@ -1,6 +1,5 @@
-import { RefreshCw } from "lucide-react";
+import { Icon, ICONS, Select } from "@uwusuite/design";
 import { useEffect, useState } from "react";
-import { Select } from "@uwusuite/design";
 import { i18n, useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
 import type { SyncStatus } from "@/lib/settingsSyncQueue";
@@ -54,11 +53,11 @@ function StatusLine({ status, email }: { status: SyncStatus | null; email: strin
         role="status"
         className={
           failed
-            ? "flex items-center gap-1.5 text-[13px] text-danger"
+            ? "flex items-center gap-1.5 text-[13px] text-danger-ink"
             : "flex items-center gap-1.5 text-[13px] text-muted"
         }
       >
-        <RefreshCw className={status?.phase === "syncing" ? "size-3.5 animate-spin" : "size-3.5"} aria-hidden />
+        <Icon icon={ICONS.refresh} size="xs" className={status?.phase === "syncing" ? "animate-spin" : ""} />
         {text}
       </p>
       {status && status.refused > 0 && (

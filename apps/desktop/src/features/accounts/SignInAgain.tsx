@@ -1,8 +1,7 @@
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { KeyRound } from "lucide-react";
+import { Button, Icon, ICONS } from "@uwusuite/design";
 import { useState } from "react";
 import { backend, BackendError } from "@/backend/backend";
-import { Button } from "@uwusuite/design";
 import { translate, useT } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
 import { toast } from "@/state/toasts";
@@ -83,7 +82,7 @@ export function SignInAgainHint({
       }
     >
       <p className="flex items-start gap-2 text-[12.5px] break-words text-muted">
-        <KeyRound className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <Icon icon={ICONS.signIn} size="xs" className="mt-0.5 shrink-0" />
         {name ? t("cloudSignIn.hintFor", { name }) : t("cloudSignIn.hint")}
       </p>
       <Button size="sm" variant="primary" busy={busy} onClick={() => void signIn()} className="self-start">

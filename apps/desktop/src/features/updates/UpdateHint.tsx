@@ -1,9 +1,8 @@
-import { ChevronDown } from "lucide-react";
+import { Button, Icon, ICONS } from "@uwusuite/design";
 import clsx from "clsx";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import { nativeAndroid } from "@/backend/mobile";
-import { Button } from "@uwusuite/design";
 import { LogoSymbol } from "@/components/ui/Logo";
 import { useT } from "@/i18n";
 import { toast } from "@/state/toasts";
@@ -21,7 +20,7 @@ export function UpdateHint() {
   return (
     <aside
       aria-live="polite"
-      className="fixed right-5 bottom-5 z-40 w-[min(340px,calc(100vw-32px))] animate-slide-up rounded-[20px] border border-hairline bg-elevated p-4 shadow-float max-[699px]:right-3 max-[699px]:bottom-24"
+      className="fixed right-5 bottom-5 z-40 w-[min(340px,calc(100vw-32px))] animate-slide-up rounded-[20px] border border-hairline bg-elevated p-4 shadow-float phone:right-3 phone:bottom-24"
     >
       <div className="flex gap-3">
         <LogoSymbol mood="sparkle" hop={1} className="h-11 w-auto shrink-0" />
@@ -39,9 +38,10 @@ export function UpdateHint() {
                   className="inline-flex items-center gap-0.5 font-semibold text-pink-ink hover:underline"
                 >
                   {t("update.whatsNew")}
-                  <ChevronDown
-                    className={clsx("size-3.5 transition-transform", showNotes && "rotate-180")}
-                    aria-hidden
+                  <Icon
+                    icon={ICONS.expand}
+                    size="xs"
+                    className={clsx("transition-transform", showNotes && "rotate-180")}
                   />
                 </button>
               </>

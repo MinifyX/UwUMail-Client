@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { QUERIES, useAppearance, type ResolvedAppearance } from "@uwusuite/design";
+import { QUERIES, type ResolvedAppearance, useAppearance } from "@uwusuite/design";
 import { useSettings } from "@/state/settings";
 
 /**
