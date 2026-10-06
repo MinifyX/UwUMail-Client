@@ -18,7 +18,7 @@ the runner for every build, so there is no generated Xcode folder to keep in
 sync. Only what Tauri needs to generate it lives here:
 `apps/desktop/src-tauri/tauri.ios.conf.json` and `Info.ios.plist`.
 
-The simulator boots while the simulator build runs; afterwards the workflow installs UwUMail, starts it and
+After the build the workflow boots a simulator, installs UwUMail, starts it and
 checks that the engine comes up and the web view draws its first screen
 (`scripts/ios-smoke.sh`). Screenshots of that run are in the smoke artifact.
 

@@ -87,11 +87,6 @@ jobs:
           pnpm tauri ios init --ci --skip-targets-install --config "$config"
           find apps/desktop/src-tauri/gen/apple -maxdepth 2 -not -path '*/build/*' | sort
 
-      # The simulator takes minutes to come up; it boots while the app builds
-      # (not earlier: booting slows everything else on the runner down, the installs too).
-      - name: Boot the simulator
-        if: matrix.build == 'simulator'
-        run: bash scripts/ios-smoke.sh --boot
       - name: Build
         env:
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
