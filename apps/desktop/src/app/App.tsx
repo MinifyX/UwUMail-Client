@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { UwuLabels } from "@uwusuite/design";
 import { useApplyNyuLevel } from "@/components/nyu/level";
 import { NyuStage } from "@/components/nyu/NyuStage";
 import { Toaster } from "@/components/ui/Toaster";
@@ -33,7 +34,8 @@ export function App() {
   }, [language]);
 
   return (
-    <>
+    // The words the package's components say themselves (the dialogs' close button).
+    <UwuLabels labels={resolveLanguage(language)}>
       <BehindLock>
         {onboarded ? <MailShell /> : <Onboarding />}
         <UpdateHint />
@@ -48,6 +50,6 @@ export function App() {
         <Toaster />
       </BehindLock>
       <AppLock />
-    </>
+    </UwuLabels>
   );
 }

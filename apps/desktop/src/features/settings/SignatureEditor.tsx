@@ -1,8 +1,7 @@
 import { Bold, ImagePlus, Italic, Link } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Signature } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { TextInput, Toggle } from "@/components/ui/Field";
+import { Button, IconButton, TextInput, Toggle } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { PLACEHOLDERS } from "@/lib/domainSignatures";
 import { pictureAsDataUrl } from "@/lib/images";

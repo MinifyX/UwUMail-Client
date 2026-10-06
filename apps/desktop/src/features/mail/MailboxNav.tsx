@@ -19,10 +19,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { backend } from "@/backend/backend";
 import type { Account, Folder, MailboxView } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Menu, type MenuItem } from "@/components/ui/Menu";
-import { Wordmark } from "@/components/ui/Logo";
-import { Badge } from "@/components/ui/Pill";
+import { Badge, Button, IconButton, Menu, type MenuItem, Wordmark } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useFolders, useMessageActions, useVisibleAccounts } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
@@ -391,7 +388,7 @@ export function MailboxNav({
   return (
     <nav className={clsx("flex h-full flex-col gap-4 px-3 pt-4 pb-3", className)} style={style}>
       <div className="flex items-center justify-between px-2">
-        <Wordmark className="text-[19px]" hop={hops} />
+        <Wordmark product="Mail" shell="mail" className="text-[19px]" hop={hops} />
       </div>
 
       {workspaceSwitch && <WorkspaceSwitch onCanvas className="-mt-1" />}

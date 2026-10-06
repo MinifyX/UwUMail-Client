@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { Camera, ImagePlus, Trash } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useMediaQuery } from "@/lib/device";
 import { firstPictureFile, type Crop, type Picture } from "@/lib/pictures";

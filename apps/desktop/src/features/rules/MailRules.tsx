@@ -3,9 +3,7 @@ import { ArrowDown, ArrowUp, CircleAlert, Pencil, Plus, Trash } from "lucide-rea
 import { useEffect, useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
 import { ArmedButton } from "@/components/ui/ArmedButton";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Field";
-import { Switch } from "@/components/ui/Switch";
+import { Button, IconButton, Select, Switch } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { emptyRuleSet, newRule, type MailRule, type RuleSet } from "@/lib/sieveRules";
 import { useFolders } from "@/lib/queries";
@@ -163,6 +161,7 @@ function AccountRules({ accountId }: { accountId: string }) {
           {set.rules.map((rule, index) => (
             <li key={rule.id} className={clsx("flex items-center gap-2 rounded-xl py-1.5 pr-1 pl-3 hover:bg-elevated")}>
               <Switch
+                size="sm"
                 checked={rule.enabled}
                 disabled={saving || locked}
                 label={t("rules.enabled", { name: rule.name })}

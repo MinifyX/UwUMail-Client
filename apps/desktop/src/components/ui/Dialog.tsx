@@ -1,81 +1,23 @@
-import clsx from "clsx";
-import { X } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
-import { useT } from "@/i18n";
+import type { HTMLAttributes, SyntheticEvent } from "react";
+import { Dialog as SuiteDialog, type DialogProps } from "@uwusuite/design";
 import { useAppLock } from "@/state/lock";
-import { IconButton } from "./Button";
 
-interface DialogProps {
-  open: boolean;
-  onClose: () => void;
-  title?: ReactNode;
-  children: ReactNode;
-  width?: "sm" | "md" | "lg" | "viewer";
-  className?: string;
-  /** False while a form inside has unsaved input: a click beside the window leaves it open instead of closing it. Escape still counts as closing on purpose, like the X. Defaults to true. */
-  closeOnOutsideClick?: boolean;
-}
+// React types onCancel for <dialog> only, but hands it to every element on the way up.
+const keepCancel = {
+  onCancel: (event: SyntheticEvent) => event.stopPropagation(),
+} as HTMLAttributes<HTMLDivElement>;
 
-/** Modal built on <dialog>: focus trapping, Escape and backdrop come from the browser. */
-export function Dialog({
-  open,
-  onClose,
-  title,
-  children,
-  width = "md",
-  className,
-  closeOnOutsideClick = true,
-}: DialogProps) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const { t } = useT();
-  // A modal <dialog> sits above everything, the app lock included, so it waits until UwUMail is unlocked.
-  const shown = useAppLock((s) => open && !s.locked);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (shown && !dialog.open) dialog.showModal();
-    if (!shown && dialog.open) dialog.close();
-  }, [shown]);
-
+/**
+ * The package's Dialog with UwUMail's two additions:
+ * - it waits while the app lock covers the window (a modal <dialog> would sit above the lock);
+ * - Escape in a dialog opened from another dialog closes only that one: React hands the nested
+ *   dialog's `cancel` up the component tree, so it stops here, at the dialog it belongs to.
+ */
+export function Dialog(props: Omit<DialogProps, "held">) {
+  const locked = useAppLock((s) => s.locked);
   return (
-    <dialog
-      ref={ref}
-      onCancel={(event) => {
-        // React hands a nested dialog's Escape up to this one too; only its own counts here.
-        if (event.target !== event.currentTarget) return;
-        event.preventDefault();
-        onClose();
-      }}
-      onClick={(event) => {
-        if (closeOnOutsideClick && event.target === ref.current) onClose();
-      }}
-      className={clsx(
-        "m-auto max-h-[min(720px,calc(100vh-48px))] w-[calc(100vw-48px)] overflow-hidden rounded-[22px] border border-line bg-surface p-0 text-ink shadow-float backdrop:bg-[#1c1420]/35 backdrop:backdrop-blur-[2px] open:flex open:animate-pop open:flex-col",
-        width === "sm" && "max-w-[420px]",
-        width === "md" && "max-w-[560px]",
-        width === "lg" && "max-w-[860px]",
-        width === "viewer" && "h-[calc(100vh-48px)] max-h-none max-w-[1200px]",
-        // Phones: everything but small confirmations fills the screen.
-        width !== "sm" &&
-          "max-[699px]:h-full max-[699px]:max-h-none max-[699px]:w-full max-[699px]:max-w-none max-[699px]:rounded-none max-[699px]:border-0",
-        className,
-      )}
-    >
-      {/* Safari sizes a <dialog> as fit-content, and in WebKit that is 0 for a column whose items have flex-basis 0
-          (flex-1) or a percentage height: only the border showed, as a line. So the dialog is the column and its items
-          start from their content (flex-auto) and shrink from there (min-h-0). Never flex-1 or h-full in here. */}
-      {open && (
-        <div className="flex min-h-0 flex-auto flex-col">
-          {title !== undefined && (
-            <header className="flex items-center justify-between gap-4 px-6 pt-5 pb-2">
-              <h2 className="text-lg font-bold">{title}</h2>
-              <IconButton icon={X} label={t("common.close")} onClick={onClose} />
-            </header>
-          )}
-          <div className="min-h-0 flex-auto overflow-y-auto">{children}</div>
-        </div>
-      )}
-    </dialog>
+    <div className="contents" {...keepCancel}>
+      <SuiteDialog {...props} held={locked} />
+    </div>
   );
 }

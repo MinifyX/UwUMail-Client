@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { Account, ServerAccountFeatures } from "@/backend/types";
-import { Select } from "@/components/ui/Field";
+import { Select } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
 import { MaskedAddresses } from "../masked/MaskedAddresses";

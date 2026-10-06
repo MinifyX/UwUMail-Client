@@ -2,8 +2,8 @@ import clsx from "clsx";
 import { Cake, Search, X } from "lucide-react";
 import { Fragment, useMemo, type ReactNode } from "react";
 import type { ContactRecord } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { Button, EmptyState, IconButton } from "@uwusuite/design";
+import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { ageOn, nextTime, parseDay } from "@/lib/birthdays";
 import { todayKey } from "@/lib/calendarDates";
@@ -92,11 +92,11 @@ export function ContactList({ className, header }: { className?: string; header?
           </p>
         ) : contacts.length === 0 ? (
           search ? (
-            <EmptyState compact scene="search" title={t("contacts.noMatches")} />
+            <EmptyState compact art={<NyuScene name="search" />} title={t("contacts.noMatches")} />
           ) : (
             <EmptyState
               compact
-              scene="welcome"
+              art={<NyuScene name="welcome" />}
               title={t("contacts.empty.title")}
               body={t("contacts.empty.body")}
               action={

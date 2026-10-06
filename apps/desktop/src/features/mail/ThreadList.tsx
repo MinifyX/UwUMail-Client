@@ -20,10 +20,8 @@ import {
 import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { LabelRef, ListFilter, ThreadSummary } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
-import { Button, IconButton } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Menu as PopupMenu, type MenuItem } from "@/components/ui/Menu";
-import { Pill } from "@/components/ui/Pill";
+import { Button, EmptyState, IconButton, Menu as PopupMenu, type MenuItem, Pill } from "@uwusuite/design";
+import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import {
   flattenThreads,
@@ -408,7 +406,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
           <p className="px-6 py-10 text-center text-[13px] text-muted">{t("list.loading")}</p>
         ) : threads.length === 0 ? (
           <EmptyState
-            scene={EMPTY_SCENES[empty]}
+            art={<NyuScene name={EMPTY_SCENES[empty]} />}
             compact={variant === "pro"}
             title={t(`list.empty.${empty}.title`, { name: workspaceName(activeWorkspace) })}
             body={t(`list.empty.${empty}.body`)}

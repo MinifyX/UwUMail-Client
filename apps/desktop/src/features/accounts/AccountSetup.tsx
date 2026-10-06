@@ -13,8 +13,7 @@ import {
   type ServerSettings,
 } from "@/backend/types";
 import { COLOR_CLASSES } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
-import { Field, Segmented, Select, TextInput } from "@/components/ui/Field";
+import { Button, Field, Segmented, Select, TextInput } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { isEmail } from "@/lib/format";
 import { queryKeys } from "@/lib/queries";

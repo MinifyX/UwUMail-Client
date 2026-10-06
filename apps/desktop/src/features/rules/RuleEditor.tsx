@@ -1,9 +1,7 @@
 import clsx from "clsx";
 import { FolderInput, Plus, X } from "lucide-react";
 import { useState } from "react";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Field, Segmented, Select, TextInput, Toggle } from "@/components/ui/Field";
-import { Menu } from "@/components/ui/Menu";
+import { Button, Field, IconButton, Menu, Segmented, Select, TextInput, Toggle } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useFolders } from "@/lib/queries";
 import {

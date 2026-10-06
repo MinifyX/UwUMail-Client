@@ -14,7 +14,7 @@ import type {
   LocalModelServer,
   Message,
 } from "@/backend/types";
-import { Menu } from "@/components/ui/Menu";
+import { Menu } from "@uwusuite/design";
 import { i18n } from "@/i18n";
 import { useSettings } from "@/state/settings";
 import { composeEstimate } from "./ComposeAssist";

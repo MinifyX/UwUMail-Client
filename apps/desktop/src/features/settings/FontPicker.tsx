@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { useT } from "@/i18n";
 import { FONT_CHOICES, FONT_NAMES, FONT_STACKS, SENDER_FONT_CHOICES, type FontChoice } from "@/lib/fonts";
-import { Segmented } from "@/components/ui/Field";
+import { Segmented } from "@uwusuite/design";
 import { useSettings } from "@/state/settings";
 import { Row } from "./Row";
 

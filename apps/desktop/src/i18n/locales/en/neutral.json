@@ -348,6 +348,8 @@
     "listDensity": "Mail list",
     "listDensityDesc": "Compact fits more mail on screen, with a small picture and two lines.",
     "theme": "Theme",
+    "contrast": "Contrast",
+    "contrastDesc": "High makes text and outlines stronger. With System, UwUMail follows your operating system.",
     "motion": "Animations",
     "motionDesc": "With System, UwUMail follows the reduced motion setting of your operating system.",
     "nyuAnimations": "Nyu animations",
@@ -542,6 +544,11 @@
     "system": "System",
     "light": "Light",
     "dark": "Dark"
+  },
+  "contrast": {
+    "system": "System",
+    "normal": "Normal",
+    "high": "High"
   },
   "motion": {
     "system": "System",
@@ -1340,7 +1347,6 @@
     "stop": "Stop",
     "retry": "Try again",
     "usedProvider": "Answered by {{provider}}",
-    "menuGroup": "AI assistant",
     "feature": {
       "compose": "Writing",
       "summarize": "Summaries",
@@ -1373,8 +1379,6 @@
     "compose": {
       "button": "AI assistant",
       "write": "Write it for me",
-      "rewriteGroup": "Rewrite",
-      "moreGroup": "More",
       "adjust": "Adjust…",
       "rewriteTitle": "Rewrite: {{preset}}",
       "scopeNew": "Describe what the mail should say. Nothing goes into your draft until you insert it.",

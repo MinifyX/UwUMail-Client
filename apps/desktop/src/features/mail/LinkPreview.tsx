@@ -1,5 +1,5 @@
 import { AlertTriangle, Route, ShieldOff } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { urlParts, visibleText, type LinkCheck } from "@/lib/links";

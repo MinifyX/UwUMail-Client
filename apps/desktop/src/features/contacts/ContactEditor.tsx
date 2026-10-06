@@ -8,10 +8,9 @@ import type {
   ContactPostal,
   ContactRecord,
 } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
+import { Button, Field, IconButton, Select, TextInput } from "@uwusuite/design";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
-import { Field, Select, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
 import { useBirthdayFeatures } from "../calendar/BirthdayImport";

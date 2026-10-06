@@ -23,7 +23,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
 import type { AssistSpamCheck, AssistSpamFacts, AssistVerdict, Message } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
+import { Button, IconButton } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { formatLongDate } from "@/lib/format";
 import { useMessageActions } from "@/lib/queries";

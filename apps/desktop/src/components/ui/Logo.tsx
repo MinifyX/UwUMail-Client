@@ -1,7 +1,8 @@
 import clsx from "clsx";
-import { Nyu, type NyuMood } from "@/components/nyu/Nyu";
+import { Nyu, type NyuMood } from "@uwusuite/design";
 
 interface LogoSymbolProps {
+  /** Sets the height (`h-11`); the width follows. */
   className?: string;
   title?: string;
   mood?: NyuMood;
@@ -9,29 +10,14 @@ interface LogoSymbolProps {
   hop?: number;
 }
 
-/** The UwUMail symbol: Nyu, the envelope cat, without the app icon's tile. */
+/**
+ * UwUMail's Nyu, the envelope cat, on her own: the update hint, the About page, the swipe and pull
+ * gestures, the flying Nyu of the "sent" toast. The wordmark is the package's `Wordmark`.
+ */
 export function LogoSymbol({ className, title, mood, hop = 0 }: LogoSymbolProps) {
   return (
-    <svg
-      key={hop}
-      viewBox="56 40 400 388"
-      className={clsx("nyu-host overflow-visible", hop > 0 && "origin-bottom animate-nyu-hop", className)}
-      role={title ? "img" : undefined}
-      aria-hidden={!title}
-    >
-      {title && <title>{title}</title>}
-      <Nyu mood={mood} tilt={-6} />
-    </svg>
-  );
-}
-
-export function Wordmark({ className, hop }: { className?: string; hop?: number }) {
-  return (
-    <span className={clsx("inline-flex items-center gap-2 font-extrabold tracking-[-0.02em]", className)}>
-      <LogoSymbol className="h-[1.3em] w-auto" hop={hop} />
-      <span>
-        <span className="text-pink">UwU</span>Mail
-      </span>
+    <span key={hop} className={clsx("inline-flex", hop > 0 && "nyu-logo-hop", className)}>
+      <Nyu shell="mail" mood={mood} size="100%" blink={false} title={title ?? ""} />
     </span>
   );
 }

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, X } from "lucide-react";
 import { backend } from "@/backend/backend";
 import type { BlockedSender } from "@/backend/types";
-import { IconButton } from "@/components/ui/Button";
+import { IconButton } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";

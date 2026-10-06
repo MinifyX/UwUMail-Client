@@ -10,7 +10,7 @@ import {
   type AssistSettings,
   type AssistSettingsPatch,
 } from "@/backend/types";
-import { Field, Select, Toggle } from "@/components/ui/Field";
+import { Field, Select, Toggle } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
 import { CURRENCY_CHOICES, useSettings, type CurrencyChoice } from "@/state/settings";

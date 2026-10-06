@@ -18,9 +18,7 @@ import {
 import { Fragment, useId, useMemo, useState } from "react";
 import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Menu } from "@/components/ui/Menu";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { Button, IconButton, Menu, Tooltip } from "@uwusuite/design";
 import { translate, useT } from "@/i18n";
 import { addressRows, fullAddress, type AddressRole } from "@/lib/addresses";
 import { visibleText } from "@/lib/links";

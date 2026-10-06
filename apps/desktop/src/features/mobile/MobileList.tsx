@@ -21,9 +21,8 @@ import { isTauri } from "@/backend/backend";
 import { searchServer } from "@/backend/mobile";
 import type { ListFilter, ThreadSummary } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
-import { Button, IconButton } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Pill } from "@/components/ui/Pill";
+import { Button, EmptyState, IconButton, Pill } from "@uwusuite/design";
+import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { useBackLayer } from "@/lib/backStack";
 import {
@@ -291,7 +290,7 @@ export function MobileList() {
             <p className="px-6 py-10 text-center text-[13px] text-muted">{t("list.loading")}</p>
           ) : threads.length === 0 ? (
             <EmptyState
-              scene={EMPTY_SCENES[empty]}
+              art={<NyuScene name={EMPTY_SCENES[empty]} />}
               title={t(`list.empty.${empty}.title`, { name: workspaceName(activeWorkspace) })}
               body={t(`list.empty.${empty}.body`)}
               action={

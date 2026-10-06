@@ -3,8 +3,7 @@ import { Info, Pencil, Plus, Trash } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BackendError, backend } from "@/backend/backend";
 import type { AccountDomainSignatures, Identity, Signature } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Field";
+import { Button, IconButton, Select } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import {
   ALL_DOMAINS,

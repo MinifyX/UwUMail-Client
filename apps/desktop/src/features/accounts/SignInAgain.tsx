@@ -2,7 +2,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import { backend, BackendError } from "@/backend/backend";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { translate, useT } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
 import { toast } from "@/state/toasts";

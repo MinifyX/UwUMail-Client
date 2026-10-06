@@ -17,8 +17,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { Button, EmptyState, IconButton } from "@uwusuite/design";
+import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
 import { useUi } from "@/state/ui";
@@ -93,7 +93,7 @@ export function MobileReader({ threadId }: { threadId: string }) {
           <IconButton icon={ArrowLeft} label={t("reader.back")} onClick={back} />
         </header>
         <EmptyState
-          scene="loadError"
+          art={<NyuScene name="loadError" />}
           title={t("reader.error.title")}
           body={t("reader.error.body")}
           action={

@@ -17,8 +17,7 @@ import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } f
 import { NyuThinking } from "@/components/nyu/NyuThinking";
 import { backend } from "@/backend/backend";
 import { ASSIST_PRESETS, type AssistComposeRequest, type AssistPreset } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Menu } from "@/components/ui/Menu";
+import { Button, IconButton, Menu } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { EstimateLabel, EstimateTip, type EstimateRequest, useSettled } from "./estimate";
 import {
@@ -104,7 +103,6 @@ export function ComposeAssistButton({
   estimate?: (start: ComposeAssistStart) => EstimateRequest | null;
 }) {
   const { t } = useT();
-  const rewrite = t("assist.compose.rewriteGroup");
   const label = (start: ComposeAssistStart, icon: typeof Sparkles, text: string) => {
     const content = <MenuLabel icon={icon} text={text} />;
     return estimate ? <EstimateLabel request={() => estimate(start)}>{content}</EstimateLabel> : content;
@@ -118,8 +116,8 @@ export function ComposeAssistButton({
           label: label({ kind: "write" }, Sparkles, t("assist.compose.write")),
           onSelect: () => onPick({ kind: "write" }),
         },
+        "separator",
         ...ASSIST_PRESETS.map((preset) => ({
-          group: rewrite,
           label: label(
             { kind: "rewrite", preset },
             preset === "translate" ? Languages : preset === "proofread" ? Check : Wand2,
@@ -127,8 +125,8 @@ export function ComposeAssistButton({
           ),
           onSelect: () => onPick({ kind: "rewrite", preset }),
         })),
+        "separator",
         {
-          group: t("assist.compose.moreGroup"),
           label: label({ kind: "adjust" }, SlidersHorizontal, t("assist.compose.adjust")),
           onSelect: () => onPick({ kind: "adjust" }),
         },

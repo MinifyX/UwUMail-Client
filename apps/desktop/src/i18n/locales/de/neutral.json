@@ -348,6 +348,8 @@
     "listDensity": "Mail-Liste",
     "listDensityDesc": "Kompakt zeigt mehr Mails auf einmal, mit kleinem Bild und zwei Zeilen.",
     "theme": "Design",
+    "contrast": "Kontrast",
+    "contrastDesc": "„Hoch“ zeigt Schrift und Ränder kräftiger. „System“ richtet sich nach deinem Betriebssystem.",
     "motion": "Animationen",
     "motionDesc": "„Wie System“ richtet sich nach der Einstellung für reduzierte Bewegung in deinem Betriebssystem.",
     "nyuAnimations": "Nyu-Animationen",
@@ -542,6 +544,11 @@
     "system": "System",
     "light": "Hell",
     "dark": "Dunkel"
+  },
+  "contrast": {
+    "system": "System",
+    "normal": "Normal",
+    "high": "Hoch"
   },
   "motion": {
     "system": "Wie System",
@@ -1340,7 +1347,6 @@
     "stop": "Stopp",
     "retry": "Nochmal versuchen",
     "usedProvider": "Antwort von {{provider}}",
-    "menuGroup": "KI-Assistent",
     "feature": {
       "compose": "Schreiben",
       "summarize": "Zusammenfassungen",
@@ -1373,8 +1379,6 @@
     "compose": {
       "button": "KI-Assistent",
       "write": "Schreiben lassen",
-      "rewriteGroup": "Umschreiben",
-      "moreGroup": "Mehr",
       "adjust": "Anpassen …",
       "rewriteTitle": "Umschreiben: {{preset}}",
       "scopeNew": "Beschreib, was in der Mail stehen soll. In deinen Entwurf kommt erst etwas, wenn du es einfügst.",

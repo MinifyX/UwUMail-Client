@@ -3,7 +3,7 @@ import { CalendarDays, Mail, MapPin, Phone, User, UserPlus } from "lucide-react"
 import { useEffect, useState } from "react";
 import type { AttachmentContent } from "@/backend/types";
 import { useT } from "@/i18n";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { parseCsv, parseIcs, parseVcf, type AttachmentKind } from "@/lib/attachments";
 import { draftFromCard } from "../contacts/format";
 import { startNewContact } from "../contacts/state";

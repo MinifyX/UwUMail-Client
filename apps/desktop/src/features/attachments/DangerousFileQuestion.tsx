@@ -1,5 +1,5 @@
 import { NyuScene } from "@/components/nyu/scenes";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { answerDangerousFile, useDangerousFile } from "@/state/dangerousFile";

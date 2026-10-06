@@ -1,8 +1,7 @@
 import clsx from "clsx";
 import { Plus, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Wordmark } from "@/components/ui/Logo";
+import { Button, Wordmark } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { addMinutes, localWall, withClock } from "@/lib/calendarDates";
 import { useUi } from "@/state/ui";
@@ -42,7 +41,7 @@ export function CalendarSidebar({ className, onNavigate }: { className?: string;
   return (
     <nav className={clsx("flex h-full flex-col gap-4 px-3 pt-4 pb-3", className)} aria-label={t("calendar.title")}>
       <div className="flex items-center justify-between px-2">
-        <Wordmark className="text-[19px]" />
+        <Wordmark product="Mail" shell="mail" className="text-[19px]" />
       </div>
       <AppSwitch />
       <Button

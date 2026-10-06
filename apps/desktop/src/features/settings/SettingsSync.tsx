@@ -1,6 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Select } from "@/components/ui/Field";
+import { Select } from "@uwusuite/design";
 import { i18n, useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
 import type { SyncStatus } from "@/lib/settingsSyncQueue";

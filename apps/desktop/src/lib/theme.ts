@@ -1,40 +1,34 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
+import { QUERIES, useAppearance, type ResolvedAppearance } from "@uwusuite/design";
 import { useSettings } from "@/state/settings";
 
-const darkQuery = "(prefers-color-scheme: dark)";
-const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
+/**
+ * Settings → Darstellung → Design, Kontrast and Animationen, resolved against the system by
+ * @uwusuite/design and mirrored onto <html data-theme data-contrast data-motion>, where the styles
+ * switch. public/boot.js does the same before the first paint. Call it once, in App.
+ */
+export function useApplyTheme(): ResolvedAppearance {
+  const theme = useSettings((s) => s.theme);
+  const contrast = useSettings((s) => s.contrast);
+  const motion = useSettings((s) => s.motion);
+  return useAppearance({ theme, contrast, motion });
+}
 
-function useMediaQuery(query: string) {
+function useSystemDark() {
   return useSyncExternalStore(
     (callback) => {
-      const media = window.matchMedia(query);
+      const media = window.matchMedia(QUERIES.dark);
       media.addEventListener("change", callback);
       return () => media.removeEventListener("change", callback);
     },
-    () => window.matchMedia(query).matches,
+    () => window.matchMedia(QUERIES.dark).matches,
   );
 }
 
+/** The theme the app shows right now: the setting, or the system's while it is followed. */
 export function useResolvedTheme(): "light" | "dark" {
   const setting = useSettings((s) => s.theme);
-  const systemDark = useMediaQuery(darkQuery);
+  const systemDark = useSystemDark();
   if (setting === "system") return systemDark ? "dark" : "light";
   return setting;
-}
-
-export function useResolvedMotion(): "full" | "reduced" {
-  const setting = useSettings((s) => s.motion);
-  const systemReduced = useMediaQuery(reducedMotionQuery);
-  if (setting === "system") return systemReduced ? "reduced" : "full";
-  return setting === "on" ? "full" : "reduced";
-}
-
-/** Mirrors the resolved theme and motion onto <html data-theme data-motion>, where the styles switch. */
-export function useApplyTheme() {
-  const theme = useResolvedTheme();
-  const motion = useResolvedMotion();
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.dataset.motion = motion;
-  }, [theme, motion]);
 }

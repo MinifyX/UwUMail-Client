@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { ChevronDown, RotateCcw, Sparkles, Square, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { backend } from "@/backend/backend";
-import { Button, IconButton } from "@/components/ui/Button";
+import { Button, IconButton } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { Caret, Thinking } from "./ComposeAssist";
 import { mailKey, summaryParts, threadKey, useAssistReader } from "./readerState";

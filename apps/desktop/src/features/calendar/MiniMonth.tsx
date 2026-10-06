@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { IconButton } from "@/components/ui/Button";
+import { IconButton } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { addMonths, monthWeeks, startOfWeek, todayKey, type DateKey } from "@/lib/calendarDates";
 import { formatDayLong, formatMonthTitle, formatWeekdayNarrow, weekStart } from "./format";

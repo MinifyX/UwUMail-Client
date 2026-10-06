@@ -4,9 +4,7 @@ import { Copy, ExternalLink, Info, Pencil, Plus, RotateCcw, Search, Trash, X } f
 import { createContext, useContext, useEffect, useState, type FormEvent } from "react";
 import { backend } from "@/backend/backend";
 import type { MaskedAddress, MaskedAddressPatch, MaskedOptions } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Field, Segmented, Select, TextInput } from "@/components/ui/Field";
-import { Switch } from "@/components/ui/Switch";
+import { Button, Field, IconButton, Segmented, Select, Switch, TextInput } from "@uwusuite/design";
 import { translate, useT } from "@/i18n";
 import {
   countByFilter,
@@ -487,7 +485,13 @@ function MaskedRow({
     <li className="flex items-start gap-2 rounded-xl py-2 pr-1 pl-3 hover:bg-elevated" aria-label={item.email}>
       {!deleted && (
         <span className="pt-1">
-          <Switch checked={on} disabled={busy} label={t("masked.onOff", { email: item.email })} onChange={onToggle} />
+          <Switch
+            size="sm"
+            checked={on}
+            disabled={busy}
+            label={t("masked.onOff", { email: item.email })}
+            onChange={onToggle}
+          />
         </span>
       )}
       {/* On a phone the buttons go under the text, which keeps the whole width. */}

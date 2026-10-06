@@ -1,7 +1,7 @@
 import { Building2 } from "lucide-react";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { CONTACT_PHOTO, renderPicture, type Crop, type Picture } from "@/lib/pictures";
 import { toast } from "@/state/toasts";

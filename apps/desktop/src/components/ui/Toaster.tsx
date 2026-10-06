@@ -33,10 +33,7 @@ export function Toaster() {
                 aria-hidden
               />
               {item.effect === "sent" && (
-                <LogoSymbol
-                  mood="happy"
-                  className="nyu-flyer pointer-events-none absolute -top-2 -left-2 h-8 w-auto animate-nyu-fly"
-                />
+                <LogoSymbol mood="happy" className="nyu-flyer pointer-events-none absolute -top-2 -left-2 h-8 w-auto" />
               )}
             </span>
             <span className="flex-1">{item.message}</span>

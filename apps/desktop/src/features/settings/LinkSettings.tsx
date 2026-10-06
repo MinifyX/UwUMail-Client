@@ -1,7 +1,6 @@
 import clsx from "clsx";
 import { Link2, X } from "lucide-react";
-import { IconButton } from "@/components/ui/Button";
-import { Toggle } from "@/components/ui/Field";
+import { IconButton, Toggle } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useSettings } from "@/state/settings";
 import { Row } from "./Row";

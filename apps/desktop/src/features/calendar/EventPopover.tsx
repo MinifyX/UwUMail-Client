@@ -1,8 +1,7 @@
 import { AlignLeft, CalendarDays, Clock, MapPin, Pencil, Repeat, Trash, UserRound, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
-import { Button, IconButton } from "@/components/ui/Button";
-import { TextInput } from "@/components/ui/Field";
+import { Button, IconButton, TextInput } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { deviceTimeZone } from "@/lib/calendarDates";
 import { showContact } from "../contacts/state";

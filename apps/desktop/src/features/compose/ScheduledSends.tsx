@@ -3,9 +3,8 @@ import { CalendarClock, Clock, PenLine, Send, Server, Smartphone, TriangleAlert,
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { ScheduledSend, SendLaterInfo } from "@/backend/types";
-import { Button } from "@/components/ui/Button";
+import { Badge, Button } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
-import { Badge } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
 import { displayName } from "@/lib/format";
 import { useAccounts } from "@/lib/queries";

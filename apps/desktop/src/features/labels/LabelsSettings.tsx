@@ -2,7 +2,7 @@ import { Tags, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import type { AssistLabelLogEntry, AssistScope } from "@/backend/types";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { formatLongDate } from "@/lib/format";
 import { useAccounts } from "@/lib/queries";

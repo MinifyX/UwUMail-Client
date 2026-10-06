@@ -1,8 +1,7 @@
 import { X } from "lucide-react";
 import { useId, useState } from "react";
 import type { BirthdayReminder } from "@/backend/types";
-import { IconButton } from "@/components/ui/Button";
-import { Select, TextInput } from "@/components/ui/Field";
+import { IconButton, Select, TextInput } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import {
   ageOn,

@@ -1,6 +1,6 @@
 import { Minus, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { Button, IconButton } from "@/components/ui/Button";
+import { Button, IconButton } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { translate, useT } from "@/i18n";
 import {

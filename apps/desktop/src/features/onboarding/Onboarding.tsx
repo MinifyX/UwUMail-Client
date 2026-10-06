@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { ArrowLeft, Check } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { NyuScene } from "@/components/nyu/scenes";
 import { i18n, useT } from "@/i18n";
 import { toast } from "@/state/toasts";

@@ -1,8 +1,6 @@
 import { CalendarSearch, FileText, ShieldQuestion, Sparkles, Tags, type LucideIcon } from "lucide-react";
 import type { Message } from "@/backend/types";
-import { IconButton } from "@/components/ui/Button";
-import type { MenuItem } from "@/components/ui/Menu";
-import { Menu } from "@/components/ui/Menu";
+import { IconButton, Menu, type MenuItem } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { useEventSearch } from "../dates/search";
@@ -77,20 +75,17 @@ function findEvents(message: Message) {
 }
 
 /** "Summarize" and "Check for spam" for one mail, for its "more" menu. */
-export function useMessageAssistItems(message: Message, own: boolean, fromMe: boolean): MenuItem[] {
+export function useMessageAssistItems(message: Message, own: boolean, fromMe: boolean): (MenuItem | "separator")[] {
   const { t, i18n } = useT();
   const can = useReaderAssist(own);
   const showSummary = useAssistReader((s) => s.showSummary);
   const showSpamCheck = useAssistReader((s) => s.showSpamCheck);
   const showLabelCheck = useAssistReader((s) => s.showLabelCheck);
   if (message.flags.draft) return [];
-  // Under their own heading in the mail's "more" menu.
-  const group = t("assist.menuGroup");
-  return [
+  const items: MenuItem[] = [
     ...(can.summarize
       ? [
           {
-            group,
             label: (
               <ItemLabel
                 icon={FileText}
@@ -105,7 +100,6 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
     ...(can.events
       ? [
           {
-            group,
             label: (
               <ItemLabel icon={CalendarSearch} text={t("dates.findAppointment")} estimate={eventsEstimate(message)} />
             ),
@@ -116,7 +110,6 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
     ...(can.spamCheck && !fromMe
       ? [
           {
-            group,
             label: (
               <ItemLabel
                 icon={ShieldQuestion}
@@ -131,7 +124,6 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
     ...(can.labels
       ? [
           {
-            group,
             label: (
               <ItemLabel
                 icon={Tags}
@@ -144,6 +136,8 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
         ]
       : []),
   ];
+  // Apart from the mail's own actions in its "more" menu.
+  return items.length > 0 ? ["separator", ...items] : [];
 }
 
 interface ThreadAssistButtonProps {

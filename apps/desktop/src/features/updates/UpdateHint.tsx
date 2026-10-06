@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { useState } from "react";
 import { backend } from "@/backend/backend";
 import { nativeAndroid } from "@/backend/mobile";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { LogoSymbol } from "@/components/ui/Logo";
 import { useT } from "@/i18n";
 import { toast } from "@/state/toasts";

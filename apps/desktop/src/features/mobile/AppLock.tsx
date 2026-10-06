@@ -2,7 +2,7 @@ import { Fingerprint } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { nativeMobile } from "@/backend/mobile";
 import { NyuScene } from "@/components/nyu/scenes";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { confirmIdentity, noteVisibility, useAppLock, useLocked } from "@/state/lock";
 import { useSettings } from "@/state/settings";

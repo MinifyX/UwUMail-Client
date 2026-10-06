@@ -27,8 +27,7 @@ import {
   DEVICE_ASSIST_SCOPE,
   type LocalModelServer,
 } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Field, Select, TextInput } from "@/components/ui/Field";
+import { Button, Field, IconButton, Select, TextInput } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { ASSIST_KINDS, assistKind } from "@/lib/assistKinds";
 import { queryKeys } from "@/lib/queries";

@@ -1,9 +1,8 @@
 import { Clock, Server, Smartphone } from "lucide-react";
 import { useState } from "react";
 import type { SendLaterInfo } from "@/backend/types";
-import { Button } from "@/components/ui/Button";
+import { Button, Field, TextInput } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
-import { Field, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { isIos } from "@/lib/device";
 import { fromLocalInput, sendLaterPresets, sendLaterProblem, toLocalInput } from "@/lib/sendLater";

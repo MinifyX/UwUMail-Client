@@ -3,7 +3,7 @@ import { Check, Plus, RotateCcw, Tags, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { AssistLabelSuggestion, AssistNewLabel, Message } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
+import { Button, IconButton } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { hasLabel, labelRef, type LabelEntry } from "@/lib/labelFilter";
 import { toast } from "@/state/toasts";

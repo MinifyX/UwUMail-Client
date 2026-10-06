@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { CalendarPlus, CalendarSearch, ChevronDown, ImageIcon, MapPin, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useId, useState } from "react";
 import { NyuThinking } from "@/components/nyu/NyuThinking";
-import { Button, IconButton, Spinner } from "@/components/ui/Button";
+import { Button, IconButton, Spinner } from "@uwusuite/design";
 import { armedActivation } from "@/components/ui/armed";
 import { useT } from "@/i18n";
 import type { DetectedEvent } from "@/lib/dates";

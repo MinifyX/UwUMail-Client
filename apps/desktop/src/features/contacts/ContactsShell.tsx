@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { Menu, UserPlus } from "lucide-react";
 import { useMemo } from "react";
 import type { ContactRecord } from "@/backend/types";
-import { IconButton } from "@/components/ui/Button";
+import { IconButton } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useBackLayer } from "@/lib/backStack";
 import { useIsPhone, useMediaQuery } from "@/lib/device";

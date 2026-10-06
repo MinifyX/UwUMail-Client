@@ -1,8 +1,7 @@
 import clsx from "clsx";
 import { CalendarDays, ChevronLeft, ChevronRight, List, Menu, Plus } from "lucide-react";
 import { useMemo } from "react";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Segmented } from "@/components/ui/Field";
+import { Button, IconButton, Segmented } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useBackLayer } from "@/lib/backStack";
 import { monthWeeks } from "@/lib/calendarDates";

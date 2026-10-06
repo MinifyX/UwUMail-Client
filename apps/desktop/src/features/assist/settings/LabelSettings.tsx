@@ -15,8 +15,7 @@ import {
   type LabelRules,
 } from "@/backend/types";
 import { NyuThinking } from "@/components/nyu/NyuThinking";
-import { Button, IconButton, Spinner } from "@/components/ui/Button";
-import { Field, Select, TextInput, Toggle } from "@/components/ui/Field";
+import { Button, Field, IconButton, Select, Spinner, TextInput, Toggle } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";

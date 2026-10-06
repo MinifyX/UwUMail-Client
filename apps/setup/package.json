@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
+    "@uwusuite/design": "https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.0/uwusuite-design-1.6.0.tgz",
     "clsx": "^2.1.1",
+    "lucide-react": "^1.45.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

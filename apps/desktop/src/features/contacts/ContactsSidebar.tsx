@@ -7,11 +7,8 @@ import { backend } from "@/backend/backend";
 import type { AddressBookInfo } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { ArmedButton } from "@/components/ui/ArmedButton";
-import { Button, IconButton } from "@/components/ui/Button";
+import { Button, Field, IconButton, Menu, type MenuItem, Select, TextInput, Wordmark } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
-import { Field, Select, TextInput } from "@/components/ui/Field";
-import { Wordmark } from "@/components/ui/Logo";
-import { Menu, type MenuItem } from "@/components/ui/Menu";
 import { useT } from "@/i18n";
 import { queryKeys, useAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";
@@ -43,7 +40,7 @@ export function ContactsSidebar({ className, onNavigate }: { className?: string;
   return (
     <nav className={clsx("flex h-full flex-col gap-4 px-3 pt-4 pb-3", className)} aria-label={t("contacts.title")}>
       <div className="flex items-center justify-between px-2">
-        <Wordmark className="text-[19px]" />
+        <Wordmark product="Mail" shell="mail" className="text-[19px]" />
       </div>
       <AppSwitch />
       <Button

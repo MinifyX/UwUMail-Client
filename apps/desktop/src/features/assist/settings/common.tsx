@@ -4,8 +4,7 @@ import { ChevronDown, Info, TriangleAlert } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
 import type { AssistProbeInput } from "@/backend/types";
-import { IconButton } from "@/components/ui/Button";
-import { TextInput } from "@/components/ui/Field";
+import { IconButton, TextInput } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useAssistScope } from "../useAssist";
 
