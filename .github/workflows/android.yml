@@ -56,7 +56,7 @@ jobs:
       # Saved by main only; the tag's run and runs started by hand read main's.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          prefix-key: v1-rust
+          prefix-key: v2-rust
           key: android
           save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-speed') }}
       - run: pnpm install --frozen-lockfile

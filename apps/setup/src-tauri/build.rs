@@ -44,7 +44,13 @@ fn main() {
             let path = Path::new(&path);
             println!("cargo:rerun-if-changed={}", path.display());
             let app = pack(path);
-            let packed = zstd::encode_all(app.as_slice(), 19).expect("compressing the app");
+            // On every core: level 19 on one is minutes for the Linux app folder. zstd's output
+            // doesn't depend on the number of workers.
+            let mut encoder = zstd::Encoder::new(Vec::new(), 19).expect("starting the compression");
+            let workers = std::thread::available_parallelism().map_or(1, |n| n.get() as u32);
+            encoder.multithread(workers).expect("compressing on every core");
+            std::io::Write::write_all(&mut encoder, &app).expect("compressing the app");
+            let packed = encoder.finish().expect("compressing the app");
             std::fs::write(&out, packed).expect("writing the payload");
             println!("cargo:rustc-env=UWUMAIL_SETUP_PAYLOAD_SIZE={}", app.len());
         }

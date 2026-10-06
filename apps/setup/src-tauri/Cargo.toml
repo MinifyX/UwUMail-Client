@@ -10,7 +10,8 @@ rust-version.workspace = true
 [build-dependencies]
 tar = { version = "0.4", default-features = false }
 tauri-build = { version = "2", features = [] }
-zstd = "0.13"
+# Multithreaded compression of the app (build.rs); the setup itself only decompresses.
+zstd = { version = "0.13", features = ["zstdmt"] }
 
 [dependencies]
 semver = "1"

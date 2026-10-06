@@ -74,7 +74,7 @@ jobs:
       # and recompiles the old artifacts, and never saves new ones).
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          prefix-key: v1-rust
+          prefix-key: v2-rust
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # tauri::generate_context! needs a frontend build to exist at compile time.
       - run: |
@@ -100,7 +100,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          prefix-key: v1-rust
+          prefix-key: v2-rust
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # Known vulnerabilities fail the job; "unmaintained" notices only show up in the log.
       - run: cargo audit --version || cargo install cargo-audit --locked
