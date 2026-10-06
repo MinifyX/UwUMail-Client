@@ -34,6 +34,9 @@ pub enum ErrorCode {
     /// after the message was handed over, or the answer to the submission never came). It may
     /// have gone out, so it is never sent again on its own.
     MaybeSent,
+    /// The AI assistant would send personal data (a mail's content) to a provider or server the
+    /// person hasn't agreed to yet. Nothing was sent; `assist.consent` names the destination.
+    ConsentRequired,
 }
 
 /// Error type crossing the boundary to the UI. The message is shown to users,
@@ -62,6 +65,9 @@ pub struct AssistFailure {
     /// For `invalidProperties`: the fields it names.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub properties: Vec<String>,
+    /// For `consentRequired`: where the mail would go, for the question to the person.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consent: Option<crate::assist::consent::Destination>,
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -85,7 +91,27 @@ impl Error {
         Self {
             code,
             message: message.into(),
-            assist: Some(Box::new(AssistFailure { kind: kind.to_string(), retry_after: None, properties: Vec::new() })),
+            assist: Some(Box::new(AssistFailure {
+                kind: kind.to_string(),
+                retry_after: None,
+                properties: Vec::new(),
+                consent: None,
+            })),
+        }
+    }
+
+    /// Nothing was sent: the person hasn't agreed to send mail to `destination` yet.
+    pub fn consent_required(destination: crate::assist::consent::Destination) -> Self {
+        let message = format!("Allow sending mail to {} ({}) first.", destination.name, destination.host);
+        Self {
+            code: ErrorCode::ConsentRequired,
+            message,
+            assist: Some(Box::new(AssistFailure {
+                kind: "consentRequired".into(),
+                retry_after: None,
+                properties: Vec::new(),
+                consent: Some(destination),
+            })),
         }
     }
 

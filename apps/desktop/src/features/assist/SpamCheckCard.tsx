@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { Button, Icon, IconButton, type IconProps, ICONS } from "@uwusuite/design";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
+import { withAiConsent } from "./consent";
 import type { AssistSpamCheck, AssistSpamFacts, AssistVerdict, Message } from "@/backend/types";
 import { useT } from "@/i18n";
 import { formatLongDate } from "@/lib/format";
@@ -50,8 +51,7 @@ export function SpamCheckCard({ message, inJunk }: SpamCheckCardProps) {
     const own = new AbortController();
     controller.current = own;
     setState({ working: true, error: null });
-    backend()
-      .assistSpamCheck(message.id, i18n.language)
+    withAiConsent(["spamCheck"], () => backend().assistSpamCheck(message.id, i18n.language))
       .then((result) => {
         if (own.signal.aborted) return;
         remember(result);

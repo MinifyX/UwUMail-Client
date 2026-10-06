@@ -190,6 +190,8 @@ export function assistErrorText(error: unknown): string {
         return translate("assist.error.notFound");
       case "forbidden":
         return translate("assist.error.forbidden");
+      case "consentRequired":
+        return translate("assist.error.consent");
       case "invalidArguments":
       case "invalidProperties":
         return error.description

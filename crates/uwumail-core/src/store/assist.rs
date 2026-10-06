@@ -597,6 +597,15 @@ impl Store {
         Ok(())
     }
 
+    /// Every setting whose key starts with `prefix`, by key.
+    pub fn assist_settings_with_prefix(&self, prefix: &str) -> Result<Vec<(String, String)>> {
+        let conn = self.conn();
+        let mut stmt =
+            conn.prepare("SELECT key, value FROM assist_settings WHERE substr(key, 1, length(?1)) = ?1 ORDER BY key")?;
+        let rows = stmt.query_map([prefix], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     // -------------------------------------------------------------- labels
 
     pub fn assist_labels(&self) -> Result<Vec<Label>> {

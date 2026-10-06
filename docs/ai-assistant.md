@@ -129,6 +129,28 @@ The pictures themselves never go to the model.
 
 ## Privacy
 
+- Nothing goes anywhere before you agree. The first time a feature would send
+  mail to a provider or to a UwUMail server's assistant, a dialog names it (name
+  and host), lists what is sent for that feature (names and addresses, subject,
+  text; for the spam check also the mail's technical headers, for appointments
+  the text read from its pictures, for labels their names and descriptions) and
+  what for. *Allow* keeps the consent and runs the call; *Not now* sends
+  nothing. A model on this computer (localhost, 127.0.0.0/8, ::1) needs no
+  consent; one in the local network does.
+- Switching on what sends by itself (auto-labels, appointments on every mail,
+  a UwUMail server's AI for the other mailboxes) asks first too. Auto-labels in
+  the background never ask: without consent they use the labels' rules only.
+- The consent is kept per destination (`provider:<id>` or `server:<account>`)
+  with the host and kind it was given for: a provider whose address or kind
+  changes asks again. *Settings → AI assistant → Data sharing* lists every
+  consent with *Revoke*; from then on nothing more goes there. Deleting the
+  provider or the mailbox deletes its consent.
+- The engine enforces it, not only the page: every call that sends mail checks
+  the consent before it reads the mail (and, for this device's providers, once
+  more right before the request) and otherwise refuses with `consent_required`,
+  naming the destination. An
+  estimate for another mailbox, which would send the mail to the chosen
+  server, shows no tooltip without consent.
 - Only what a feature needs goes to the provider: the mail's text (HTML turned
   into text), subject, date, names and addresses; for labels only their names
   and descriptions and the start of the mail. No attachments, no pictures, no

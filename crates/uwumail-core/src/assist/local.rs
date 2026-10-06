@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 
+use super::consent;
 use super::estimate::{self, Call, Estimate, Sample};
 use super::prices::{self, Price, PriceTable};
 use super::prompts::Prompt;
@@ -324,12 +325,13 @@ impl Device<'_> {
         self.store.save_assist_provider(&record)
     }
 
-    /// Deletes a provider, its key and every choice that names it.
+    /// Deletes a provider, its key, the consent to send to it and every choice that names it.
     pub fn delete_provider(&self, id: &str) -> Result<()> {
         self.provider(id)?;
         self.store.delete_assist_provider(id)?;
         self.store.forget_assist_calibration(id)?;
         self.secrets.delete(&secret_id(id))?;
+        consent::revoke(self.store, &format!("provider:{id}"))?;
         for key in std::iter::once("default".to_string())
             .chain(Feature::ALL.iter().map(|f| format!("features/{}", f.as_str())))
         {
@@ -926,6 +928,8 @@ impl Device<'_> {
         let effective = self
             .effective(feature)?
             .ok_or_else(|| Error::assist("assistUnavailable", "No provider set up on this device can do this."))?;
+        // The last check before mail leaves: whoever called, nothing goes without consent.
+        consent::require(self.store, consent::for_provider(&effective.provider))?;
         let endpoint = self.endpoint(&effective.provider)?;
         let request = ChatRequest {
             model: effective.model.clone(),

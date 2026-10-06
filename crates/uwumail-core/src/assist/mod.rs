@@ -8,6 +8,7 @@
 //! fixed, checked shape, and nothing reaches a draft or a mail without a click, except the person's
 //! own labels when they switched auto-labels on.
 
+pub mod consent;
 pub mod discover;
 pub mod estimate;
 pub mod foreign;

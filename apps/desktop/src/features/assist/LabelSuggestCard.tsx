@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { Button, Icon, IconButton, ICONS } from "@uwusuite/design";
 import { useEffect, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
+import { withAiConsent } from "./consent";
 import type { AssistLabelSuggestion, AssistNewLabel, Message } from "@/backend/types";
 import { useT } from "@/i18n";
 import { hasLabel, labelRef, type LabelEntry } from "@/lib/labelFilter";
@@ -58,8 +59,7 @@ export function LabelSuggestCard({ message }: { message: Message }) {
     const own = new AbortController();
     controller.current = own;
     setState({ working: true, error: null });
-    backend()
-      .suggestLabels(message.id, i18n.language, true)
+    withAiConsent(["autoLabels"], () => backend().suggestLabels(message.id, i18n.language, true))
       .then((result) => {
         if (own.signal.aborted) return;
         remember(result);

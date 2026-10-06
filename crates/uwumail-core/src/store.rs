@@ -719,6 +719,8 @@ impl Store {
         // Its hand corrections (subject and start of the text, sent to the model as examples).
         conn.execute("DELETE FROM label_shots WHERE message_id NOT IN (SELECT id FROM messages)", [])?;
         conn.execute("DELETE FROM assist_settings WHERE key = 'serverAssist' AND value = ?1", [id])?;
+        // The consent to send mail to its server's AI (assist::consent) goes too.
+        conn.execute("DELETE FROM assist_settings WHERE key = ?1", [format!("consent/server:{id}")])?;
         Ok(())
     }
 

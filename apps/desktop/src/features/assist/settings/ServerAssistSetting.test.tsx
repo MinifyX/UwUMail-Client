@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistOptions } from "@/backend/types";
 import { i18n } from "@/i18n";
+import { AiConsentQuestion } from "../AiConsentQuestion";
 import { AssistScopeProvider } from "../useAssist";
 import { ServerAssistSetting } from "./AssistantSettings";
 
@@ -22,6 +23,8 @@ const OPTIONS: AssistOptions = {
 };
 
 let serverAssist: string | null = null;
+let granted = false;
+const SERVER = { destination: "server:uwu", kind: "uwumailServer", name: "mini@uwu.example", host: "mail.uwu.example" };
 
 const fake = {
   listAccounts: vi.fn(async () => [{ id: "uwu", email: "mini@uwu.example" }]),
@@ -39,6 +42,10 @@ const fake = {
   updateAssistSettings: vi.fn(async (_scope: string, patch: { serverAssist?: string | null }) => {
     serverAssist = patch.serverAssist ?? null;
   }),
+  assistDestination: vi.fn(async () => ({ ...SERVER, granted })),
+  grantAssistConsent: vi.fn(async () => {
+    granted = true;
+  }),
 };
 
 vi.mock("@/backend/backend", async (original) => ({
@@ -53,6 +60,7 @@ function renderSetting() {
       <AssistScopeProvider scope="device">
         <ServerAssistSetting servers={["uwu"]} />
       </AssistScopeProvider>
+      <AiConsentQuestion />
     </QueryClientProvider>,
   );
 }
@@ -63,6 +71,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   serverAssist = null;
+  granted = false;
 });
 afterEach(cleanup);
 
@@ -73,8 +82,20 @@ describe("the server's AI for other mailboxes", () => {
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(screen.getByText(/The mail's content \(sender, subject and text\) is sent to that server/)).toBeTruthy();
     expect(screen.queryByText(/goes to mini@uwu\.example/)).toBeNull();
+
+    // Switching it on asks first; "Not now" leaves it off and sends nothing.
     fireEvent.click(toggle);
+    expect(await screen.findByText(/UwUMail server of mini@uwu\.example \(mail\.uwu\.example\)/)).toBeTruthy();
+    expect(fake.assistDestination).toHaveBeenCalledWith("uwu", "compose");
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Allow" })).toBeNull());
+    expect(fake.grantAssistConsent).not.toHaveBeenCalled();
+    expect(fake.updateAssistSettings).not.toHaveBeenCalled();
+
+    fireEvent.click(toggle);
+    fireEvent.click(await screen.findByRole("button", { name: "Allow" }));
     await waitFor(() => expect(fake.updateAssistSettings).toHaveBeenCalledWith("device", { serverAssist: "uwu" }));
+    expect(fake.grantAssistConsent).toHaveBeenCalledWith("server:uwu", "mail.uwu.example");
   });
 
   it("warns while it is on and turns off again", async () => {
