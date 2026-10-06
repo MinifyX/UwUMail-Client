@@ -71,7 +71,7 @@ export function RecipientInput({ label, value, onChange, autoFocus }: RecipientI
 
   return (
     <div className="relative flex min-h-11 items-start gap-2 border-b border-hairline px-4 py-1.5">
-      <label htmlFor={id} className="w-12 shrink-0 pt-2 text-[13px] font-semibold text-muted">
+      <label htmlFor={id} className="w-14 shrink-0 pt-2 text-[13px] font-semibold text-muted">
         {label}
       </label>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">

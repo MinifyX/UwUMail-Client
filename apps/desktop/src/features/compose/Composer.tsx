@@ -531,7 +531,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
 
       {senders.length > 1 && (
         <div className="flex h-11 items-center gap-2 border-b border-hairline px-4">
-          <label htmlFor="compose-from" className="w-12 shrink-0 text-[13px] font-semibold text-muted">
+          <label htmlFor="compose-from" className="w-14 shrink-0 text-[13px] font-semibold text-muted">
             {t("compose.from")}
           </label>
           {account && <AccountDot color={account.color} />}
@@ -591,7 +591,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         </>
       )}
       <div className="flex h-11 items-center gap-2 border-b border-hairline px-4">
-        <label htmlFor="compose-subject" className="w-12 shrink-0 text-[13px] font-semibold text-muted">
+        <label htmlFor="compose-subject" className="w-14 shrink-0 text-[13px] font-semibold text-muted">
           {t("compose.subject")}
         </label>
         <input

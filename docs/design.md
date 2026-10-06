@@ -5,8 +5,11 @@ filters, generous whitespace, and one confident bubblegum pink.
 
 ## Color
 
-All colors are CSS custom properties in
-`apps/desktop/src/styles/tokens.css`. Components never use raw hex values.
+UwUMail uses the shared UwUSuite design package (`@uwusuite/design`): tokens,
+fonts, base styles, components (Button, Menu, Dialog, Switch …), icons (`Icon`
+with `ICONS`, never `lucide-react` directly) and the Nyu basics. All colors are
+its CSS custom properties; components never use raw hex values. The table shows
+the main ones; the package's docs hold the full set, including high contrast.
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
@@ -34,11 +37,11 @@ pink, violet, sky, mint, amber, coral.
 ## Type
 
 - **UwU Sans** (variable, bundled, no network) for everything: Atkinson
-  Hyperlegible Next with Nyu (U+E000), a heart and arrows added, see
-  `brand/fonts/uwu-sans`. No ligatures: `:3` and `<3` stay as typed, Nyu and
+  Hyperlegible Next with Nyu (U+E000), a heart and arrows added, shipped by
+  `@uwusuite/design`. No ligatures: `:3` and `<3` stay as typed, Nyu and
   the heart only show where U+E000 or U+2665 is written.
-- Settings → Appearance → Font: UwU Sans (default), Rubik, DM Sans or the
-  system font, on this device only. It applies through `--font-ui` and to
+- Settings → Appearance → Font: UwU Sans (default), Manrope, Rubik, DM Sans
+  or the system font, on this device only. It applies through `--font-ui` and to
   mails (as a `data:` font inside the mail frame, see `lib/fonts.ts`).
 - Interface tracking is set in CSS (`--tracking-ui`, -0.008em for UwU Sans),
   never baked into the font. Counts, dates and times in lists use tabular
