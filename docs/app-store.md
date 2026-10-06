@@ -157,7 +157,7 @@ Both pipelines run through to the upload: the iPhone/iPad IPA (iPhone and iPad, 
 background task declared) and the universal Mac `.pkg` are built, get their App Store profiles
 from the API, are signed and packaged. The upload itself stops at
 `Cannot determine the Apple ID from Bundle ID 'app.uwumail' and platform 'IOS'` (and `'MAC_OS'`):
-App Store Connect has no app record for `app.uwumail` yet — step 1 below. After creating it,
+App Store Connect has no app record for `app.uwumail` yet (step 1 under "What is left to click"). After creating it,
 start Actions → iOS and Actions → Mac App Store → Run workflow → `main`.
 
 ## Not tried yet
