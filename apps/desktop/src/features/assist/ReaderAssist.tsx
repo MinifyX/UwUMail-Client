@@ -1,4 +1,4 @@
-import { Icon, IconButton, type IconProps, ICONS, Menu, type MenuItem } from "@uwusuite/design";
+import { Icon, IconButton, type IconProps, ICONS, Menu, type MenuEntry, type MenuItem } from "@uwusuite/design";
 import type { Message } from "@/backend/types";
 import { useT } from "@/i18n";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
@@ -74,7 +74,7 @@ function findEvents(message: Message) {
 }
 
 /** "Summarize" and "Check for spam" for one mail, for its "more" menu. */
-export function useMessageAssistItems(message: Message, own: boolean, fromMe: boolean): (MenuItem | "separator")[] {
+export function useMessageAssistItems(message: Message, own: boolean, fromMe: boolean): MenuEntry[] {
   const { t, i18n } = useT();
   const can = useReaderAssist(own);
   const showSummary = useAssistReader((s) => s.showSummary);
@@ -135,8 +135,8 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
         ]
       : []),
   ];
-  // Apart from the mail's own actions in its "more" menu.
-  return items.length > 0 ? ["separator", ...items] : [];
+  // Under their own heading in the mail's "more" menu.
+  return items.length > 0 ? [{ heading: t("assist.menuGroup") }, ...items] : [];
 }
 
 interface ThreadAssistButtonProps {

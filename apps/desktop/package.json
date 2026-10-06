@@ -25,7 +25,7 @@
     "@tauri-apps/plugin-haptics": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.5",
     "@uwumail/addon-sdk": "workspace:*",
-    "@uwusuite/design": "https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.0/uwusuite-design-1.6.0.tgz",
+    "@uwusuite/design": "https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.16",
     "i18next": "^26.4.2",

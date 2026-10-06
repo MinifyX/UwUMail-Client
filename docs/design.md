@@ -139,7 +139,8 @@ mono symbol) and `apps/desktop/src/components/nyu/` (React).
   and in the tray, a simplified cut takes over with thicker outlines and no
   blush or inner ears (`uwumail-taskbar-icon-small.svg`).
 - **Menu bar icon (macOS).** The mono symbol, black on transparent, outlines
-  1.5 times as thick, on a square canvas (`brand/uwumail-tray-template.svg`).
+  1.5 times as thick, derived by `uwu-icons` from `brand/uwumail-symbol-mono.svg`
+  (the tool centres the not quite square symbol in a square canvas).
 - **Generating the icons.** `pnpm --filter @uwumail/desktop icons` runs the
   package's `uwu-icons --tray --mobile` and writes everything into
   `src-tauri/icons`: `icon.ico`, the desktop PNGs, `tray.png`,

@@ -7,11 +7,3 @@
 @import "@uwusuite/design/tailwind.css";
 @import "@uwusuite/design/font-picker.css";
 @import "../components/nyu/nyu.css";
-
-@layer components {
-  /* Long menus (a mail's ⋯ on a phone) scroll instead of running off the screen. */
-  [role="menu"] {
-    max-height: min(75vh, 520px);
-    overflow-y: auto;
-  }
-}

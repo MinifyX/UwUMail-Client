@@ -102,7 +102,7 @@ export function ComposeAssistButton({
           label: label({ kind: "write" }, ICONS.ai, t("assist.compose.write")),
           onSelect: () => onPick({ kind: "write" }),
         },
-        "separator",
+        { heading: t("assist.compose.rewriteGroup") },
         ...ASSIST_PRESETS.map((preset) => ({
           label: label(
             { kind: "rewrite", preset },
@@ -111,7 +111,7 @@ export function ComposeAssistButton({
           ),
           onSelect: () => onPick({ kind: "rewrite", preset }),
         })),
-        "separator",
+        { heading: t("assist.compose.moreGroup") },
         {
           label: label({ kind: "adjust" }, ICONS.adjust, t("assist.compose.adjust")),
           onSelect: () => onPick({ kind: "adjust" }),

@@ -1347,6 +1347,7 @@
     "stop": "Stopp",
     "retry": "Nochmal versuchen",
     "usedProvider": "Antwort von {{provider}}",
+    "menuGroup": "KI-Assistent",
     "feature": {
       "compose": "Schreiben",
       "summarize": "Zusammenfassungen",
@@ -1379,6 +1380,8 @@
     "compose": {
       "button": "KI-Assistent",
       "write": "Schreiben lassen",
+      "rewriteGroup": "Umschreiben",
+      "moreGroup": "Mehr",
       "adjust": "Anpassen …",
       "rewriteTitle": "Umschreiben: {{preset}}",
       "scopeNew": "Beschreib, was in der Mail stehen soll. In deinen Entwurf kommt erst etwas, wenn du es einfügst.",

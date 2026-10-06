@@ -48,8 +48,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/addon-sdk
       '@uwusuite/design':
-        specifier: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.0/uwusuite-design-1.6.0.tgz
-        version: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.0/uwusuite-design-1.6.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
+        specifier: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz
+        version: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -133,8 +133,8 @@ importers:
         specifier: ^2.11.1
         version: 2.11.1
       '@uwusuite/design':
-        specifier: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.0/uwusuite-design-1.6.0.tgz
-        version: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.0/uwusuite-design-1.6.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
+        specifier: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz
+        version: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -837,9 +837,9 @@ packages:
     resolution: {integrity: sha512-BoC8PiO4Hkdo0TVJh9Ntxr5MxPDI7/oFsrygN5ADelFSeXG/qgNuucIGA+L5Z6JpPTE/uRfcTWtscjbUaufepQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.0/uwusuite-design-1.6.0.tgz':
-    resolution: {tarball: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.0/uwusuite-design-1.6.0.tgz}
-    version: 1.6.0
+  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz':
+    resolution: {integrity: sha512-/EA/yKADFOklO6966yDRC4xWSymu0Lykxy1bXZUEV6d2/Hx4myEO+mbA95bW4+N+Ok/Dq/7C26C7os9De9OwUw==, tarball: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz}
+    version: 1.6.2
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -2418,7 +2418,7 @@ snapshots:
       '@typescript-eslint/types': 8.70.0
       eslint-visitor-keys: 5.0.1
 
-  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.0/uwusuite-design-1.6.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)':
+  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)':
     dependencies:
       '@fontsource-variable/dm-sans': 5.3.0
       '@fontsource-variable/jetbrains-mono': 5.3.0
