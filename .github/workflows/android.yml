@@ -58,7 +58,7 @@ jobs:
         with:
           prefix-key: v2-rust
           key: android
-          save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-speed') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm install --frozen-lockfile
 
       - name: Version code
@@ -80,7 +80,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-provider: basic
-          cache-read-only: ${{ (github.ref != 'refs/heads/main' && github.ref != 'refs/heads/ci-speed') }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
           validate-wrappers: false
           add-job-summary: on-failure
 

@@ -112,7 +112,7 @@ jobs:
         with:
           prefix-key: v2-rust
           key: setup-${{ matrix.id }}
-          save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-speed') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm install --frozen-lockfile
       - id: version
         run: echo "version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
@@ -266,7 +266,7 @@ jobs:
         with:
           prefix-key: v2-rust
           key: setup-${{ matrix.target }}
-          save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-speed') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm install --frozen-lockfile
       - id: version
         shell: bash
