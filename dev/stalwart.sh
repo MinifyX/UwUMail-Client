@@ -6,7 +6,7 @@
 #   leni@uwumail.test  Seifenblase-Wanderweg-17!
 #
 #   dev/stalwart.sh
-#   UWUMAIL_TEST_JMAP=http://127.0.0.1:8080 cargo test -p uwumail-core --test stalwart
+#   UWUMAIL_TEST_JMAP=http://127.0.0.1:8080 cargo test -p uwumail-core --test integration stalwart::
 #
 # Stalwart announces https://mail.uwumail.test as its public address; the
 # client falls back to the address it was given when that isn't reachable.

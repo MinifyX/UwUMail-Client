@@ -1,14 +1,21 @@
 name: Desktop setups
 
-# Builds UwUMail for macOS (one universal setup for Apple chip and Intel) and
-# Linux (x64 and arm64: .deb, .rpm, portable folder, and on x64 the per-user
+# Builds UwUMail for macOS (one universal setup for Apple chip and Intel),
+# Windows (x64 and ARM, each natively on its own runner) and Linux (x64 and
+# arm64, natively too: .deb, .rpm, portable folder, and on x64 the per-user
 # setup AppImage that older installs update through), then tries each on a real
-# runner. scripts/desktop-smoke.sh puts the setups through their paces in a
+# runner. Every push to main builds all of them; the release workflow runs this
+# one for a tag and publishes what it built. scripts/desktop-smoke.sh puts the setups through their paces in a
 # throwaway home folder: install, start UwUMail, update over the running app,
 # refuse an older version, uninstall; the universal Mac setup on both an Apple
 # chip and an Intel Mac. scripts/linux-packages-smoke.sh installs the .deb,
 # starts UwUMail from it and from the portable folder, and checks the .rpm. The
-# Windows on ARM setup goes through the same with scripts/windows-smoke.ps1.
+# Windows setups go through the same with scripts/windows-smoke.ps1.
+#
+# Caches: each build restores the Rust cache main saved last; only pushes to main
+# save one (pull requests and tags only read), so the repository's 10 GB hold one
+# warm cache per build instead of evicting each other. prefix-key counts up when
+# the Cargo profiles change (see ci.yml).
 #
 # Nothing here is signed for the updater: the release workflow signs what it
 # publishes in a job of its own, on a runner that never built anything.
@@ -37,8 +44,10 @@ on:
         value: ${{ jobs.build.outputs.digest_linux_x64 }}
       digest_linux_arm64:
         value: ${{ jobs.build.outputs.digest_linux_arm64 }}
+      digest_windows_x64:
+        value: ${{ jobs.windows.outputs.digest_windows_x64 }}
       digest_windows_arm64:
-        value: ${{ jobs.windows-arm64.outputs.digest }}
+        value: ${{ jobs.windows.outputs.digest_windows_arm64 }}
 
 concurrency:
   # github.workflow is the caller's name when the release workflow runs this one, so a release
@@ -101,7 +110,9 @@ jobs:
           targets: ${{ matrix.targets }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          prefix-key: v2-rust
           key: setup-${{ matrix.id }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm install --frozen-lockfile
       - id: version
         run: echo "version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
@@ -225,13 +236,20 @@ jobs:
           if-no-files-found: ignore
           path: smoke/
 
-  # Windows on ARM, built natively on GitHub's ARM runner. The x64 setup is built and tried by the
-  # release workflow, which this one runs for a release as well.
-  windows-arm64:
-    name: Build and smoke test (Windows on ARM)
-    runs-on: windows-11-arm
+  # Windows x64 and Windows on ARM, each built natively on its own runner and tried there.
+  windows:
+    name: Build and smoke test (Windows ${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: x64, id: x64, os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { name: on ARM, id: arm64, os: windows-11-arm, target: aarch64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
     outputs:
-      digest: ${{ steps.digest.outputs.digest }}
+      # Keyed by matrix.id, as for the other builds.
+      digest_windows_x64: ${{ matrix.id == 'x64' && steps.digest.outputs.digest || '' }}
+      digest_windows_arm64: ${{ matrix.id == 'arm64' && steps.digest.outputs.digest || '' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -243,46 +261,56 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
-          targets: aarch64-pc-windows-msvc
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: setup-aarch64-pc-windows-msvc
+          prefix-key: v2-rust
+          key: setup-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm install --frozen-lockfile
       - id: version
         shell: bash
         run: echo "version=$(node -p 'require("./apps/desktop/src-tauri/tauri.conf.json").version')" >> "$GITHUB_OUTPUT"
 
+      # With an explicit --target the build lands in target/<target>/release, and the setup in
+      # target/release under its release name either way.
       - name: Build the setup
-        run: node scripts/build-setup.mjs --target aarch64-pc-windows-msvc
+        shell: bash
+        run: node scripts/build-setup.mjs --target "$TARGET"
         env:
+          TARGET: ${{ matrix.target }}
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
 
+      # The same install, start, update, refuse-older and uninstall as for the other systems.
       - name: Smoke test
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-windows-arm64-setup.exe" "$env:VERSION" arm64 smoke
+          ARCH: ${{ matrix.id }}
+        run: ./scripts/windows-smoke.ps1 "target/release/UwUMail-windows-$env:ARCH-setup.exe" "$env:VERSION" "$env:ARCH" smoke
 
       - name: Digest for the release
         id: digest
         shell: bash
+        env:
+          ARCH: ${{ matrix.id }}
         run: |
-          digest=$(node scripts/artifact-digest.mjs target/release/UwUMail-windows-arm64-setup.exe)
+          digest=$(node scripts/artifact-digest.mjs "target/release/UwUMail-windows-$ARCH-setup.exe")
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: desktop-windows-arm64
+          name: desktop-windows-${{ matrix.id }}
           retention-days: 14
           if-no-files-found: error
-          path: target/release/UwUMail-windows-arm64-setup.exe
+          path: target/release/UwUMail-windows-${{ matrix.id }}-setup.exe
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: desktop-smoke-windows-arm64
+          name: desktop-smoke-windows-${{ matrix.id }}
           retention-days: 7
           if-no-files-found: ignore
           path: smoke/

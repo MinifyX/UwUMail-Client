@@ -4,7 +4,7 @@
 //! Docker", `UWUMAIL_LISTEN__PROXY=127.0.0.1:18080`), create an account, then:
 //!
 //!   UWUMAIL_TEST_SERVER=http://127.0.0.1:18080 UWUMAIL_TEST_LOGIN=mini@a.test \
-//!   UWUMAIL_TEST_PASSWORD=… cargo test -p uwumail-core --test uwumail_server_calendar -- --test-threads=1
+//!   UWUMAIL_TEST_PASSWORD=… cargo test -p uwumail-core --test integration uwumail_server_calendar:: -- --test-threads=1
 //!
 //! Skipped when `UWUMAIL_TEST_SERVER` isn't set, or when the server doesn't offer the extension.
 //! The rules test puts back the script it found; the calendar test works in a calendar of its own

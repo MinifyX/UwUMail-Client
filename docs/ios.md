@@ -6,12 +6,12 @@ build is, how it gets onto a phone, and what iOS doesn't let UwUMail do.
 
 ## What CI builds
 
-Every run on `main` produces two things:
+Every run on `main` produces two things, built side by side on two Mac runners:
 
-| Artifact | What it is |
-| --- | --- |
-| `UwUMail-<version>-unsigned.ipa` | The app for a real iPhone, **without any signature** (released as `UwUMail-ios.ipa`) |
-| `UwUMail-simulator.tar.gz` | The same app for the iOS simulator, used by the smoke test |
+| Artifact | File | What it is |
+| --- | --- | --- |
+| `UwUMail-iOS-<commit>` | `UwUMail-<version>-unsigned.ipa` | The app for a real iPhone, **without any signature** (released as `UwUMail-ios.ipa`) |
+| `UwUMail-iOS-simulator-<commit>` | `UwUMail-simulator.tar.gz` | The same app for the iOS simulator, used by the smoke test |
 
 The Xcode project is not in this repository. `tauri ios init` generates it on
 the runner for every build, so there is no generated Xcode folder to keep in
