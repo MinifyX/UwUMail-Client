@@ -16,7 +16,7 @@ interface LogoSymbolProps {
  */
 export function LogoSymbol({ className, title, mood, hop = 0 }: LogoSymbolProps) {
   return (
-    <span key={hop} className={clsx("inline-flex", hop > 0 && "nyu-logo-hop", className)}>
+    <span key={hop} className={clsx("nyu-logo inline-flex", hop > 0 && "nyu-logo-hop", className)}>
       <Nyu shell="mail" mood={mood} size="100%" blink={false} title={title ?? ""} />
     </span>
   );

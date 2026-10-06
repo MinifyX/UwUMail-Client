@@ -352,13 +352,15 @@ function LabelRow({
             <span className="hidden text-[11.5px] text-muted sm:inline">
               {isAuto ? t("labels.base.autoOn") : t("labels.base.autoOff")}
             </span>
-            <Switch
-              size="sm"
-              checked={isAuto}
-              label={t("labels.base.auto", { name: label.name })}
-              disabled={auto !== null}
-              onChange={switchAuto}
-            />
+            <span className="flex" title={t("labels.base.auto", { name: label.name })}>
+              <Switch
+                size="sm"
+                checked={isAuto}
+                label={t("labels.base.auto", { name: label.name })}
+                disabled={auto !== null}
+                onChange={switchAuto}
+              />
+            </span>
           </div>
         )}
         <IconButton
@@ -534,7 +536,12 @@ function LabelEditor({
               style={color ? { backgroundColor: color } : undefined}
             >
               {form.color === color && (
-                <Icon icon={ICONS.done} size="xs" className={clsx(color ? "text-white" : "text-muted")} />
+                <Icon
+                  icon={ICONS.done}
+                  size="xs"
+                  strokeWidth={3}
+                  className={clsx(color ? "text-white" : "text-muted")}
+                />
               )}
             </button>
           ))}

@@ -75,6 +75,13 @@
   animation: none !important;
 }
 
+/* Her hops sit on a wrapper outside the svg: LogoSymbol (nyu-logo, also the pull-to-refresh hop)
+   and the package's Wordmark (nyu-logo-hop). */
+[data-nyu="reduced"] :is(.nyu-logo, .nyu-logo-hop),
+[data-nyu="off"] :is(.nyu-logo, .nyu-logo-hop) {
+  animation: none !important;
+}
+
 [data-nyu="reduced"] .nyu-flyer,
 [data-nyu="off"] .nyu-flyer {
   display: none;

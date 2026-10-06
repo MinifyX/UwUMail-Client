@@ -487,7 +487,7 @@ function MaskedRow({
   return (
     <li className="flex items-start gap-2 rounded-xl py-2 pr-1 pl-3 hover:bg-elevated" aria-label={item.email}>
       {!deleted && (
-        <span className="pt-1">
+        <span className="pt-1" title={t("masked.onOff", { email: item.email })}>
           <Switch
             size="sm"
             checked={on}

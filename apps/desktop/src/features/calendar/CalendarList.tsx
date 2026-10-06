@@ -274,7 +274,7 @@ function CalendarRow({
           style={{ borderColor: color, background: calendar.isVisible ? color : "transparent" }}
           aria-hidden
         >
-          {calendar.isVisible && <Icon icon={ICONS.done} size="xs" className="text-white" />}
+          {calendar.isVisible && <Icon icon={ICONS.done} size="xs" strokeWidth={3.5} className="size-3 text-white" />}
         </span>
         {calendar.isBirthdays && <Icon icon={ICONS.birthday} size="xs" className="shrink-0 text-muted" />}
         <span className={clsx("min-w-0 flex-1 truncate", !calendar.isVisible && "text-muted")}>
@@ -396,7 +396,7 @@ function CalendarForm({
             )}
             style={{ background: swatch }}
           >
-            {color === swatch && <Icon icon={ICONS.done} className="text-white" />}
+            {color === swatch && <Icon icon={ICONS.done} strokeWidth={3} className="text-white" />}
           </button>
         ))}
       </div>

@@ -359,7 +359,7 @@ export function MobileList() {
           onClick={() => openCompose({ mode: "new" })}
           aria-label={t("nav.compose")}
           className={clsx(
-            "fixed right-4 bottom-4 z-20 flex h-14 items-center justify-center gap-2 rounded-2xl bg-pink-solid font-bold text-on-pink shadow-[0_6px_20px_rgb(225_29_116/0.35)] transition-[width,padding] duration-200 active:scale-95",
+            "fixed right-4 bottom-4 z-20 flex h-14 items-center justify-center gap-2 rounded-2xl bg-pink-solid font-bold text-on-pink shadow-primary transition-[width,padding] duration-200 active:scale-95",
             compact ? "w-14" : "px-5",
           )}
         >

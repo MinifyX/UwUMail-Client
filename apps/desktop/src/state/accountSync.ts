@@ -213,12 +213,12 @@ function stop(): void {
   unsubscribers = [];
 }
 
-/** (Re)starts the settings sync, e.g. at start and when the chosen account changes. */
 /** Sends the settings changed here right away, e.g. before UwUMail quits. */
 export function flushAccountSync(): Promise<void> {
   return queue?.flush() ?? Promise.resolve();
 }
 
+/** (Re)starts the settings sync, e.g. at start and when the chosen account changes. */
 export async function startAccountSync(): Promise<void> {
   const run = ++generation;
   stop();

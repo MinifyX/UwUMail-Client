@@ -159,13 +159,16 @@ function AccountRules({ accountId }: { accountId: string }) {
         <ol className="flex flex-col gap-1 rounded-2xl border border-hairline p-1" aria-label={t("rules.title")}>
           {set.rules.map((rule, index) => (
             <li key={rule.id} className={clsx("flex items-center gap-2 rounded-xl py-1.5 pr-1 pl-3 hover:bg-elevated")}>
-              <Switch
-                size="sm"
-                checked={rule.enabled}
-                disabled={saving || locked}
-                label={t("rules.enabled", { name: rule.name })}
-                onChange={(enabled) => change(set.rules.map((r, i) => (i === index ? { ...r, enabled } : r)))}
-              />
+              {/* The package's Switch names itself for screen readers only; the title is for the mouse. */}
+              <span className="flex" title={t("rules.enabled", { name: rule.name })}>
+                <Switch
+                  size="sm"
+                  checked={rule.enabled}
+                  disabled={saving || locked}
+                  label={t("rules.enabled", { name: rule.name })}
+                  onChange={(enabled) => change(set.rules.map((r, i) => (i === index ? { ...r, enabled } : r)))}
+                />
+              </span>
               <button
                 type="button"
                 disabled={locked}

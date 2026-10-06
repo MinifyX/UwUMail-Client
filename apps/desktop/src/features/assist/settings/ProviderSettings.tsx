@@ -324,7 +324,7 @@ function OwnProvider({
                 provider.connected ? "text-success-ink" : "text-warning-ink",
               )}
             >
-              {provider.connected ? <Icon icon={ICONS.success} size="xs" /> : <Icon icon={ICONS.warning} size="xs" />}
+              {provider.connected ? <Icon icon={ICONS.success} size="xs" /> : <Icon icon={ICONS.maybe} size="xs" />}
               {status}
             </span>
             {kind.key !== "none" && (

@@ -445,7 +445,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           onClick={discard}
           aria-label={t("compose.discard")}
           title={t("compose.discard")}
-          className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-white/10"
+          className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-current/10"
         >
           <Icon icon={ICONS.close} />
         </button>
@@ -503,7 +503,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             onClick={() => setMinimized(true)}
             aria-label={t("compose.minimize")}
             title={t("compose.minimize")}
-            className="grid size-10 place-items-center rounded-full hover:bg-white/10"
+            className="grid size-10 place-items-center rounded-full hover:bg-current/10"
           >
             <Icon icon={ICONS.back} size="lg" />
           </button>
@@ -516,7 +516,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
               onClick={() => setMinimized(true)}
               aria-label={t("compose.minimize")}
               title={t("compose.minimize")}
-              className="grid size-8 place-items-center rounded-full hover:bg-white/10"
+              className="grid size-8 place-items-center rounded-full hover:bg-current/10"
             >
               <Icon icon={ICONS.expand} />
             </button>
@@ -525,7 +525,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
               onClick={() => setLarge(!large)}
               aria-label={t(large ? "compose.minimize" : "compose.expand")}
               title={t(large ? "compose.minimize" : "compose.expand")}
-              className="grid size-8 place-items-center rounded-full hover:bg-white/10"
+              className="grid size-8 place-items-center rounded-full hover:bg-current/10"
             >
               {large ? <Icon icon={ICONS.exitFullscreen} /> : <Icon icon={ICONS.fullscreen} />}
             </button>
@@ -536,7 +536,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           onClick={close}
           aria-label={t("compose.close")}
           title={t("compose.close")}
-          className="grid size-8 place-items-center rounded-full hover:bg-white/10"
+          className="grid size-8 place-items-center rounded-full hover:bg-current/10"
         >
           <Icon icon={ICONS.close} />
         </button>
