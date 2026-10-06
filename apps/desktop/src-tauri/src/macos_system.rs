@@ -13,7 +13,7 @@ use std::ffi::c_void;
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject};
-use objc2_foundation::NSString;
+use objc2_foundation::NSError;
 use serde_json::json;
 use uwumail_core::Error;
 
@@ -121,7 +121,7 @@ fn login_item() -> Option<&'static str> {
 
 pub fn set_login_item(enabled: bool) -> Result<(), Error> {
     let service = main_app_service().ok_or_else(|| Error::invalid("Opening at login needs macOS 13 or later."))?;
-    let result: Result<(), Retained<AnyObject>> = unsafe {
+    let result: Result<(), Retained<NSError>> = unsafe {
         if enabled {
             msg_send![&*service, registerAndReturnError: _]
         } else {
@@ -129,8 +129,7 @@ pub fn set_login_item(enabled: bool) -> Result<(), Error> {
         }
     };
     let Err(error) = result else { return Ok(()) };
-    let description: Option<Retained<NSString>> = unsafe { msg_send![&*error, localizedDescription] };
-    let reason = description.map(|text| text.to_string()).unwrap_or_default();
+    let reason = error.localizedDescription().to_string();
     Err(Error::internal(format!("macOS didn't change the login item: {reason}")))
 }
 
