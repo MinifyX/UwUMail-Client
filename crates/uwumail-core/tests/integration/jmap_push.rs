@@ -3,7 +3,7 @@
 //! (docs/jmap-push.md there): the VAPID key in the session, a PushVerification for every new
 //! subscription, at most seven days, `invalidProperties` for a wrong code. Runs everywhere.
 
-mod support;
+use crate::support;
 
 use std::sync::{Arc, Mutex};
 

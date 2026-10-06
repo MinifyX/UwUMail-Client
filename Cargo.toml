@@ -64,9 +64,21 @@ uuid = { version = "1", features = ["v4"] }
 webpki-roots = "1"
 windows = { version = "0.61", features = ["Foundation", "Graphics_Imaging", "Media_Ocr", "Storage_Streams"] }
 
+# Thin LTO over 16 codegen units, as UwUMail Server builds: nearly what one unit with full LTO
+# gives, but the final link of each app runs in parallel instead of on one core for minutes. Every
+# setup, the APK and the IPA link three to five times per CI run (app, setup, packages, two Mac
+# targets), so this decides how long a release takes.
 [profile.release]
-codegen-units = 1
-lto = true
+codegen-units = 16
+lto = "thin"
 opt-level = "s"
 panic = "abort"
 strip = true
+
+# Line numbers in backtraces are all tests and debugging need; full debug info for every
+# dependency only makes target/ huge and linking slow.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

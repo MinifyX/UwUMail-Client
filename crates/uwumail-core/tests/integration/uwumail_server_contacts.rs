@@ -4,7 +4,7 @@
 //! Docker", `UWUMAIL_LISTEN__PROXY=127.0.0.1:18080`), create an account with CardDAV on, then:
 //!
 //!   UWUMAIL_TEST_SERVER=http://127.0.0.1:18080 UWUMAIL_TEST_LOGIN=mini@a.test \
-//!   UWUMAIL_TEST_PASSWORD=… cargo test -p uwumail-core --test uwumail_server_contacts -- --test-threads=1
+//!   UWUMAIL_TEST_PASSWORD=… cargo test -p uwumail-core --test integration uwumail_server_contacts:: -- --test-threads=1
 //!
 //! Skipped when `UWUMAIL_TEST_SERVER` isn't set, or when the server doesn't offer JMAP Contacts.
 //! The test works in an address book of its own and deletes it again.

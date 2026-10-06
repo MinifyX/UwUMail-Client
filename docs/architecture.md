@@ -113,7 +113,7 @@ travel. `tests/uwumail_server.rs` runs against a local server:
 # in UwUMail-Server: create a.test and mini@a.test, then serve with plain HTTP
 UWUMAIL_LISTEN__PROXY=127.0.0.1:18080 … cargo run -p uwumail-server -- serve
 UWUMAIL_TEST_SERVER=http://127.0.0.1:18080 UWUMAIL_TEST_LOGIN=mini@a.test \
-UWUMAIL_TEST_PASSWORD=… cargo test -p uwumail-core --test uwumail_server -- --test-threads=1
+UWUMAIL_TEST_PASSWORD=… cargo test -p uwumail-core --test integration uwumail_server:: -- --test-threads=1
 ```
 
 ### Contacts

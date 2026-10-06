@@ -4,11 +4,11 @@
 //!
 //!   UWUMAIL_TEST_IMAPS=localhost:2993 UWUMAIL_TEST_CA=<data dir>/tls/self-signed.crt \
 //!   UWUMAIL_TEST_LOGIN=mini@a.test UWUMAIL_TEST_PASSWORD=… \
-//!   cargo test -p uwumail-core --test uwumail_server_imap -- --test-threads=1
+//!   cargo test -p uwumail-core --test integration uwumail_server_imap:: -- --test-threads=1
 //!
 //! Skipped when `UWUMAIL_TEST_IMAPS` isn't set. Works in folders of its own and deletes them.
 
-mod support;
+use crate::support;
 
 use std::sync::Arc;
 

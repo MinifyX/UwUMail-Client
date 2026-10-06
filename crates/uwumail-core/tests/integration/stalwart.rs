@@ -1,7 +1,7 @@
 //! End-to-end test against a real JMAP server (Stalwart).
 //!
 //!   dev/stalwart.sh
-//!   UWUMAIL_TEST_JMAP=http://127.0.0.1:8080 cargo test -p uwumail-core --test stalwart
+//!   UWUMAIL_TEST_JMAP=http://127.0.0.1:8080 cargo test -p uwumail-core --test integration stalwart::
 //!
 //! Skipped when `UWUMAIL_TEST_JMAP` isn't set.
 

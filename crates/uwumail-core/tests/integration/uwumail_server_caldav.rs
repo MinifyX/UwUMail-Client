@@ -7,11 +7,11 @@
 //!   UWUMAIL_TEST_CALDAV=https://localhost:8443 UWUMAIL_TEST_CA=<data dir>/tls/self-signed.crt \
 //!   UWUMAIL_TEST_LOGIN=mini@a.test UWUMAIL_TEST_PASSWORD=… \
 //!   UWUMAIL_TEST_OTHER_LOGIN=ami@a.test UWUMAIL_TEST_OTHER_PASSWORD=… \
-//!   cargo test -p uwumail-core --test uwumail_server_caldav -- --test-threads=1
+//!   cargo test -p uwumail-core --test integration uwumail_server_caldav:: -- --test-threads=1
 //!
 //! Skipped when `UWUMAIL_TEST_CALDAV` isn't set. Works in calendars of its own and deletes them.
 
-mod support;
+use crate::support;
 
 use chrono::{DateTime, Utc};
 use rustls::pki_types::CertificateDer;
