@@ -1,10 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Info, Pencil, Plus, Trash } from "lucide-react";
+import { Button, Icon, IconButton, ICONS, Select, Tag } from "@uwusuite/design";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BackendError, backend } from "@/backend/backend";
 import type { AccountDomainSignatures, Identity, Signature } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import {
   ALL_DOMAINS,
@@ -61,15 +59,9 @@ function asSignature(id: string, signature: SignatureText | null): Signature {
 function Note({ children }: { children: ReactNode }) {
   return (
     <p className="flex gap-2 rounded-2xl bg-canvas px-3 py-2 text-[13px] text-muted">
-      <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <Icon icon={ICONS.info} className="mt-0.5 shrink-0" />
       <span>{children}</span>
     </p>
-  );
-}
-
-function Badge({ children }: { children: string }) {
-  return (
-    <span className="rounded-full bg-pink-tint px-2 py-0.5 text-[11.5px] font-bold text-pink-ink">{children}</span>
   );
 }
 
@@ -513,17 +505,17 @@ function AddressSignatures({ identities, allowAdd }: { identities: Identity[]; a
                 <li key={signature.id} className="rounded-2xl border border-hairline p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{signature.name}</span>
-                    {signature.forNew && <Badge>{t("settings.signatureDefaultNew")}</Badge>}
-                    {signature.forReplies && <Badge>{t("settings.signatureDefaultReplies")}</Badge>}
-                    {unsynced.includes(signature.id) && <Badge>{t("settings.signatureLocalOnly")}</Badge>}
+                    {signature.forNew && <Tag tone="pink">{t("settings.signatureDefaultNew")}</Tag>}
+                    {signature.forReplies && <Tag tone="pink">{t("settings.signatureDefaultReplies")}</Tag>}
+                    {unsynced.includes(signature.id) && <Tag tone="pink">{t("settings.signatureLocalOnly")}</Tag>}
                     <IconButton
-                      icon={Pencil}
+                      icon={ICONS.edit}
                       size="sm"
                       label={t("settings.editSignature", { name: signature.name })}
                       onClick={() => setEditing(signature)}
                     />
                     <IconButton
-                      icon={Trash}
+                      icon={ICONS.delete}
                       size="sm"
                       label={t("settings.deleteSignature", { name: signature.name })}
                       onClick={() => void backend().deleteSignature(signature.id).then(refresh, failed)}
@@ -545,7 +537,7 @@ function AddressSignatures({ identities, allowAdd }: { identities: Identity[]; a
             <Button
               size="sm"
               variant="ghost"
-              icon={Plus}
+              icon={ICONS.add}
               className="self-start"
               disabled={!email}
               onClick={() =>

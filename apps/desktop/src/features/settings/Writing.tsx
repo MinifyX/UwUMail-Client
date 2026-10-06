@@ -1,11 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { Button, IconButton, ICONS, Segmented, TextInput } from "@uwusuite/design";
 import { useState, type FormEvent } from "react";
 import { backend } from "@/backend/backend";
 import type { Account, Identity } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Segmented, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { queryKeys, useAccounts, useIdentities } from "@/lib/queries";
 import { UNDO_SEND_CHOICES, useSettings, type UndoSendSeconds } from "@/state/settings";
@@ -118,7 +116,7 @@ function AccountSenders({ account, identities }: { account: Account; identities:
             />
             {!identity.primary && !identity.fromServer ? (
               <IconButton
-                icon={X}
+                icon={ICONS.close}
                 size="sm"
                 label={t("settings.removeSender", { email: identity.email })}
                 onClick={() => void backend().removeIdentity(identity.id).then(refresh, failed)}
@@ -156,7 +154,7 @@ function AccountSenders({ account, identities }: { account: Account; identities:
           </Button>
         </form>
       ) : (
-        <Button size="sm" variant="ghost" icon={Plus} className="mt-1" onClick={() => setAdding(true)}>
+        <Button size="sm" variant="ghost" icon={ICONS.add} className="mt-1" onClick={() => setAdding(true)}>
           {t("settings.addSender")}
         </Button>
       )}

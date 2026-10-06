@@ -1,29 +1,9 @@
 import clsx from "clsx";
-import {
-  Archive,
-  FolderInput,
-  MailOpen,
-  Menu,
-  Plus,
-  RefreshCw,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  Star,
-  Tag,
-  Tags,
-  Trash,
-  Trash2,
-  Users,
-  X,
-} from "lucide-react";
+import { Button, EmptyState, Icon, IconButton, ICONS, Menu as PopupMenu, type MenuItem, Pill } from "@uwusuite/design";
 import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { LabelRef, ListFilter, ThreadSummary } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
-import { Button, IconButton } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Menu as PopupMenu, type MenuItem } from "@/components/ui/Menu";
-import { Pill } from "@/components/ui/Pill";
+import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import {
   flattenThreads,
@@ -245,7 +225,12 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
       <header className={clsx("flex flex-col gap-3 pt-4", variant === "pro" ? "px-5 pb-3" : "px-4 pb-2")}>
         <div className="flex items-center gap-2">
           {variant === "simple" && (
-            <IconButton icon={Menu} label={t("nav.menu")} onClick={() => setFolderDrawerOpen(true)} className="-ml-1" />
+            <IconButton
+              icon={ICONS.menu}
+              label={t("nav.menu")}
+              onClick={() => setFolderDrawerOpen(true)}
+              className="-ml-1"
+            />
           )}
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[20px] leading-tight font-extrabold tracking-[-0.01em]">{info.title}</h1>
@@ -255,7 +240,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
             <Button
               size="sm"
               variant="ghost"
-              icon={Trash2}
+              icon={ICONS.delete}
               disabled={emptiable.total === 0}
               onClick={() => useFolderEdit.getState().open({ kind: "empty", folder: emptiable })}
             >
@@ -264,7 +249,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
           )}
           {labelEntries.length > 0 && (
             <IconButton
-              icon={Tags}
+              icon={ICONS.labels}
               label={groupedByLabel ? t("labels.ungroup") : t("labels.group")}
               active={groupedByLabel}
               aria-pressed={groupedByLabel}
@@ -272,7 +257,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
             />
           )}
           <IconButton
-            icon={RefreshCw}
+            icon={ICONS.refresh}
             label={t("list.refresh")}
             className={clsx(refreshing && "[&>svg]:animate-spin")}
             onClick={async () => {
@@ -287,9 +272,9 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
         {variant === "simple" && <WorkspaceSwitch />}
 
         <div className="relative">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted"
-            aria-hidden
+          <Icon
+            icon={ICONS.search}
+            className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted"
           />
           <input
             id={SEARCH_INPUT_ID}
@@ -307,7 +292,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
           />
           {draft && (
             <IconButton
-              icon={X}
+              icon={ICONS.close}
               size="sm"
               label={t("list.clearSearch")}
               onClick={() => setDraft("")}
@@ -322,48 +307,48 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
             role="toolbar"
             aria-label={t("list.selected", { count: checked.length })}
           >
-            <IconButton icon={X} size="sm" label={t("list.clearSelection")} onClick={() => setChecked([])} />
+            <IconButton icon={ICONS.close} size="sm" label={t("list.clearSelection")} onClick={() => setChecked([])} />
             <span className="min-w-0 flex-1 truncate px-1 text-[13px] font-bold">
               {t("list.selected", { count: checked.length })}
             </span>
             <IconButton
-              icon={Archive}
+              icon={ICONS.archive}
               size="sm"
               label={t("reader.archive")}
               onClick={() => runOnChecked(selection.archive)}
             />
             <IconButton
-              icon={Trash}
+              icon={ICONS.delete}
               size="sm"
               label={info.isTrash ? t("reader.deleteForever") : t("reader.trash")}
               onClick={() => runOnChecked(selection.trash)}
             />
             <IconButton
-              icon={MailOpen}
+              icon={ICONS.unread}
               size="sm"
               label={anyUnread ? t("list.markRead") : t("reader.markUnread")}
               onClick={() => runOnChecked((ids) => selection.read(ids, anyUnread))}
             />
             <IconButton
-              icon={Star}
+              icon={ICONS.favorite}
               size="sm"
               label={t("reader.flag")}
               onClick={() => runOnChecked((ids) => selection.flag(ids, !allFlagged))}
             />
             <IconButton
-              icon={FolderInput}
+              icon={ICONS.move}
               size="sm"
               label={t("reader.move")}
               onClick={() => runOnChecked(selection.move)}
             />
             <IconButton
-              icon={Tag}
+              icon={ICONS.label}
               size="sm"
               label={t("labels.pick")}
               onClick={() => useUi.getState().openLabeling({ threadIds: checked })}
             />
             <IconButton
-              icon={info.isJunk ? ShieldCheck : ShieldAlert}
+              icon={info.isJunk ? ICONS.notSpam : ICONS.spam}
               size="sm"
               label={info.isJunk ? t("reader.notSpam") : t("reader.spam")}
               onClick={() => runOnChecked((ids) => selection.spam(ids, !info.isJunk))}
@@ -408,18 +393,18 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
           <p className="px-6 py-10 text-center text-[13px] text-muted">{t("list.loading")}</p>
         ) : threads.length === 0 ? (
           <EmptyState
-            scene={EMPTY_SCENES[empty]}
+            art={<NyuScene name={EMPTY_SCENES[empty]} />}
             compact={variant === "pro"}
             title={t(`list.empty.${empty}.title`, { name: workspaceName(activeWorkspace) })}
             body={t(`list.empty.${empty}.body`)}
             action={
               empty === "noAccount" ? (
-                <Button variant="primary" icon={Plus} onClick={() => setAddAccountOpen(true)}>
+                <Button variant="primary" icon={ICONS.add} onClick={() => setAddAccountOpen(true)}>
                   {t("nav.addAccount")}
                 </Button>
               ) : (
                 empty === "workspace" && (
-                  <Button variant="primary" icon={Users} onClick={() => openSettings("accounts")}>
+                  <Button variant="primary" icon={ICONS.account} onClick={() => openSettings("accounts")}>
                     {t("workspace.assign")}
                   </Button>
                 )
@@ -472,7 +457,7 @@ function SectionHeading({ entry, count }: { entry: LabelEntry | null; count: num
   const { t } = useT();
   return (
     <h2 className="sticky top-0 z-[1] flex items-center gap-2 bg-surface px-3 pt-3 pb-1 text-[12px] font-bold tracking-wide text-muted uppercase">
-      {entry ? <LabelDot color={entry.label.color} /> : <Tag className="size-3" aria-hidden />}
+      {entry ? <LabelDot color={entry.label.color} /> : <Icon icon={ICONS.label} size="xs" />}
       <span className="min-w-0 truncate tracking-normal normal-case">
         {entry ? entry.label.name : t("labels.none")}
       </span>

@@ -1,10 +1,9 @@
 import clsx from "clsx";
-import { AlertTriangle, Copy, LockOpen, Route, ShieldOff } from "lucide-react";
+import { Button, Icon, type IconProps, ICONS } from "@uwusuite/design";
 import { useState } from "react";
 import type { Address } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { armedActivation } from "@/components/ui/armed";
-import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { formatAddress } from "@/lib/format";
@@ -48,7 +47,7 @@ export function LinkAddress({ href, compact = false }: { href: string; compact?:
     return (
       <span className={clsx("flex min-w-0 overflow-hidden whitespace-nowrap", EXACT)}>
         <span className="shrink-0 text-muted">{parts.scheme}</span>
-        {parts.userinfo && <span className="min-w-0 truncate text-danger line-through">{parts.userinfo}</span>}
+        {parts.userinfo && <span className="min-w-0 truncate text-danger-ink line-through">{parts.userinfo}</span>}
         <span className="min-w-0 truncate">{parts.subdomain}</span>
         <span className="shrink-0 font-extrabold">{parts.domain}</span>
         <span className="shrink-0 text-muted">{parts.port}</span>
@@ -59,7 +58,7 @@ export function LinkAddress({ href, compact = false }: { href: string; compact?:
   const host = (
     <span className={clsx("break-all", EXACT)}>
       <span className="text-muted">{parts.scheme}</span>
-      {parts.userinfo && <span className="text-danger line-through">{parts.userinfo}</span>}
+      {parts.userinfo && <span className="text-danger-ink line-through">{parts.userinfo}</span>}
       <span>{parts.subdomain}</span>
       <span className="font-extrabold">{parts.domain}</span>
       <span className="text-muted">{parts.port}</span>
@@ -86,12 +85,12 @@ export function LinkFacts({ check }: { check: LinkCheck }) {
     <>
       {check.misleading && (
         <div className="w-full rounded-2xl bg-danger-tint px-4 py-3 text-left text-[13px]">
-          <p className="mb-1.5 font-bold text-danger">{t("link.warningBody")}</p>
+          <p className="mb-1.5 font-bold text-danger-ink">{t("link.warningBody")}</p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
             <dt className="text-muted">{t("link.shown")}</dt>
             <dd className="font-semibold break-all">{visibleText(check.misleading.shown)}</dd>
             <dt className="text-muted">{t("link.actual")}</dt>
-            <dd className={clsx("font-extrabold break-all text-danger", EXACT)}>
+            <dd className={clsx("font-extrabold break-all text-danger-ink", EXACT)}>
               {visibleText(check.misleading.actual)}
             </dd>
           </dl>
@@ -101,10 +100,10 @@ export function LinkFacts({ check }: { check: LinkCheck }) {
         <p
           className={clsx(
             "flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-[12.5px]",
-            check.lookalike ? "bg-danger-tint text-danger" : "bg-canvas text-muted",
+            check.lookalike ? "bg-danger-tint text-danger-ink" : "bg-canvas text-muted",
           )}
         >
-          {check.lookalike && <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />}
+          {check.lookalike && <Icon icon={ICONS.warning} className="mt-0.5 shrink-0" />}
           <span className="min-w-0">
             {t("link.unicodeHost")}:{" "}
             <span className={clsx("font-bold break-all", EXACT)}>{visibleText(check.unicodeHost)}</span>
@@ -113,12 +112,12 @@ export function LinkFacts({ check }: { check: LinkCheck }) {
         </p>
       )}
       {check.userinfo && (
-        <Note tone="danger" icon={AlertTriangle}>
+        <Note tone="danger" icon={ICONS.warning}>
           {t("link.userinfo", { domain })}
         </Note>
       )}
       {check.insecure && (
-        <Note tone="warning" icon={LockOpen}>
+        <Note tone="warning" icon={ICONS.unlocked}>
           {t("link.insecure")}
         </Note>
       )}
@@ -127,7 +126,7 @@ export function LinkFacts({ check }: { check: LinkCheck }) {
           className="flex w-full items-start gap-2 rounded-xl bg-canvas px-3 py-2 text-left text-[12.5px] text-muted"
           title={visibleText(check.safeLink)}
         >
-          <ShieldOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <Icon icon={ICONS.redirect} className="mt-0.5 shrink-0" />
           <span className="min-w-0">
             <span className="block font-semibold">{t("link.safeLink")}</span>
             {t("link.safeLinkBody")}
@@ -136,7 +135,7 @@ export function LinkFacts({ check }: { check: LinkCheck }) {
       )}
       {redirect && (
         <div className="flex w-full items-start gap-2 rounded-xl bg-canvas px-3 py-2 text-left text-[12.5px]">
-          <Route className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+          <Icon icon={ICONS.redirect} className="mt-0.5 shrink-0 text-muted" />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             {redirect.target && (
               <>
@@ -162,21 +161,21 @@ export function LinkFacts({ check }: { check: LinkCheck }) {
 
 function Note({
   tone,
-  icon: Icon,
+  icon: Glyph,
   children,
 }: {
   tone: "danger" | "warning";
-  icon: typeof AlertTriangle;
+  icon: IconProps["icon"];
   children: string;
 }) {
   return (
     <p
       className={clsx(
         "flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-[12.5px]",
-        tone === "danger" ? "bg-danger-tint text-danger" : "bg-warning-tint text-warning",
+        tone === "danger" ? "bg-danger-tint text-danger-ink" : "bg-warning-tint text-warning-ink",
       )}
     >
-      <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <Icon icon={Glyph} className="mt-0.5 shrink-0" />
       <span className="min-w-0">{children}</span>
     </p>
   );
@@ -290,7 +289,7 @@ function LinkQuestion({ check, onDone }: { check: LinkCheck; onDone: () => void 
           </>
         )}
         {!mail && (
-          <Button variant="ghost" icon={Copy} onClick={() => copyLink(check, t("link.copied"))}>
+          <Button variant="ghost" icon={ICONS.copy} onClick={() => copyLink(check, t("link.copied"))}>
             {t("link.copy")}
           </Button>
         )}

@@ -32,6 +32,7 @@ import { CommandPalette } from "./CommandPalette";
 import { LazyCalendar, LazyCalendarDialogs } from "./LazyCalendar";
 import { LazyContactDialogs, LazyContacts } from "./LazyContacts";
 import { ShortcutsDialog } from "./ShortcutsDialog";
+import { useMacMenu } from "./useMacShell";
 
 /** Keys that scroll the open mail from the list as well. */
 const SCROLL_KEYS = [" ", "PageDown", "PageUp", "Home", "End"];
@@ -168,6 +169,9 @@ export function MailShell() {
     ],
   );
 
+  // macOS: the same commands in the menu bar.
+  useMacMenu(commands);
+
   const hotkeys = useMemo(() => {
     const map: HotkeyMap = {
       "mod+k": () => useUi.getState().setPaletteOpen(true),
@@ -253,7 +257,7 @@ export function MailShell() {
                 type="button"
                 aria-label={t("common.close")}
                 onClick={() => setDrawerOpen(false)}
-                className="absolute inset-0 animate-fade bg-[#1c1420]/30"
+                className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
               />
               <MailboxNav className="relative w-[280px] animate-slide-up rounded-r-[22px] bg-surface shadow-float" />
             </div>

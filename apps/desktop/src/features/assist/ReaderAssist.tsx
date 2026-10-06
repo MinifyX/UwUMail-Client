@@ -1,8 +1,5 @@
-import { CalendarSearch, FileText, ShieldQuestion, Sparkles, Tags, type LucideIcon } from "lucide-react";
+import { Icon, IconButton, type IconProps, ICONS, Menu, type MenuEntry, type MenuItem } from "@uwusuite/design";
 import type { Message } from "@/backend/types";
-import { IconButton } from "@/components/ui/Button";
-import type { MenuItem } from "@/components/ui/Menu";
-import { Menu } from "@/components/ui/Menu";
 import { useT } from "@/i18n";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { useEventSearch } from "../dates/search";
@@ -29,18 +26,18 @@ export function useReaderAssist(own: boolean) {
 }
 
 function ItemLabel({
-  icon: Icon,
+  icon: Glyph,
   text,
   estimate,
 }: {
-  icon: LucideIcon;
+  icon: IconProps["icon"];
   text: string;
   /** The call behind the item, for "≈ 1,200 tokens" while it is hovered or held. */
   estimate?: EstimateRequest;
 }) {
   const label = (
     <span className="flex items-center gap-2.5">
-      <Icon className="size-4 shrink-0 text-muted" aria-hidden />
+      <Icon icon={Glyph} className="shrink-0 text-muted" />
       {text}
     </span>
   );
@@ -77,23 +74,20 @@ function findEvents(message: Message) {
 }
 
 /** "Summarize" and "Check for spam" for one mail, for its "more" menu. */
-export function useMessageAssistItems(message: Message, own: boolean, fromMe: boolean): MenuItem[] {
+export function useMessageAssistItems(message: Message, own: boolean, fromMe: boolean): MenuEntry[] {
   const { t, i18n } = useT();
   const can = useReaderAssist(own);
   const showSummary = useAssistReader((s) => s.showSummary);
   const showSpamCheck = useAssistReader((s) => s.showSpamCheck);
   const showLabelCheck = useAssistReader((s) => s.showLabelCheck);
   if (message.flags.draft) return [];
-  // Under their own heading in the mail's "more" menu.
-  const group = t("assist.menuGroup");
-  return [
+  const items: MenuItem[] = [
     ...(can.summarize
       ? [
           {
-            group,
             label: (
               <ItemLabel
-                icon={FileText}
+                icon={ICONS.summary}
                 text={t("assist.summary.summarizeMail")}
                 estimate={summaryEstimate(message, "mail", i18n.language)}
               />
@@ -105,9 +99,8 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
     ...(can.events
       ? [
           {
-            group,
             label: (
-              <ItemLabel icon={CalendarSearch} text={t("dates.findAppointment")} estimate={eventsEstimate(message)} />
+              <ItemLabel icon={ICONS.findEvent} text={t("dates.findAppointment")} estimate={eventsEstimate(message)} />
             ),
             onSelect: () => findEvents(message),
           },
@@ -116,10 +109,9 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
     ...(can.spamCheck && !fromMe
       ? [
           {
-            group,
             label: (
               <ItemLabel
-                icon={ShieldQuestion}
+                icon={ICONS.spamCheck}
                 text={t("assist.spam.check")}
                 estimate={spamEstimate(message, i18n.language)}
               />
@@ -131,10 +123,9 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
     ...(can.labels
       ? [
           {
-            group,
             label: (
               <ItemLabel
-                icon={Tags}
+                icon={ICONS.labels}
                 text={t("assist.labelAgain.menu")}
                 estimate={labelsEstimate(message, i18n.language)}
               />
@@ -144,6 +135,8 @@ export function useMessageAssistItems(message: Message, own: boolean, fromMe: bo
         ]
       : []),
   ];
+  // Under their own heading in the mail's "more" menu.
+  return items.length > 0 ? [{ heading: t("assist.menuGroup") }, ...items] : [];
 }
 
 interface ThreadAssistButtonProps {
@@ -175,7 +168,7 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
             {
               label: (
                 <ItemLabel
-                  icon={Sparkles}
+                  icon={ICONS.summary}
                   text={t("assist.summary.summarizeThread")}
                   estimate={summaryEstimate({ ...messages.at(-1)!, threadId }, "thread", language)}
                 />
@@ -187,7 +180,7 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
                   {
                     label: (
                       <ItemLabel
-                        icon={FileText}
+                        icon={ICONS.summary}
                         text={t("assist.summary.summarizeLatest")}
                         estimate={summaryEstimate(newest, "mail", language)}
                       />
@@ -201,7 +194,7 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
             {
               label: (
                 <ItemLabel
-                  icon={Sparkles}
+                  icon={ICONS.summary}
                   text={t("assist.summary.summarizeMail")}
                   estimate={summaryEstimate(messages[0]!, "mail", language)}
                 />
@@ -214,7 +207,11 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
       ? [
           {
             label: (
-              <ItemLabel icon={CalendarSearch} text={t("dates.findAppointment")} estimate={eventsEstimate(forEvents)} />
+              <ItemLabel
+                icon={ICONS.findEvent}
+                text={t("dates.findAppointment")}
+                estimate={eventsEstimate(forEvents)}
+              />
             ),
             onSelect: () => findEvents(forEvents),
           },
@@ -225,7 +222,7 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
           {
             label: (
               <ItemLabel
-                icon={ShieldQuestion}
+                icon={ICONS.spamCheck}
                 text={t("assist.spam.check")}
                 estimate={spamEstimate(newest, language)}
               />
@@ -239,7 +236,7 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
           {
             label: (
               <ItemLabel
-                icon={Tags}
+                icon={ICONS.labels}
                 text={t(messages.length > 1 ? "assist.labelAgain.menuLatest" : "assist.labelAgain.menu")}
                 estimate={labelsEstimate(forEvents, language)}
               />
@@ -256,7 +253,7 @@ export function ThreadAssistButton({ threadId, messages, own, mine, align }: Thr
       items={items}
       trigger={(menu) => (
         <IconButton
-          icon={Sparkles}
+          icon={ICONS.ai}
           label={t("assist.reader.button")}
           onClick={menu.toggle}
           aria-haspopup={menu["aria-haspopup"]}

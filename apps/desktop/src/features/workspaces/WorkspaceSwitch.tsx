@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { Icon } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useFolders } from "@/lib/queries";
 import { unreadInboxes, WORKSPACES } from "@/lib/workspaces";
@@ -30,7 +31,6 @@ export function WorkspaceSwitch({ size = "md", onCanvas = false, className }: Wo
       className={clsx("flex shrink-0 rounded-full p-1", onCanvas ? "bg-hairline" : "bg-canvas", className)}
     >
       {WORKSPACES.map((workspace) => {
-        const Icon = WORKSPACE_ICONS[workspace];
         const current = workspace === active;
         const count = current ? 0 : unread[workspace];
         return (
@@ -48,12 +48,12 @@ export function WorkspaceSwitch({ size = "md", onCanvas = false, className }: Wo
           >
             {/* The count sits on the icon like on an app icon, so the name keeps its room in the narrow sidebar. */}
             <span className="relative shrink-0">
-              <Icon className={clsx("size-4", current && "text-pink")} strokeWidth={2} aria-hidden />
+              <Icon icon={WORKSPACE_ICONS[workspace]} className={clsx(current && "text-pink")} />
               {count > 0 && (
                 <span
                   aria-hidden
                   className={clsx(
-                    "absolute -top-1.5 -right-2 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-pink px-1 text-[10px] leading-none font-bold text-white ring-2",
+                    "absolute -top-1.5 -right-2 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-pink-solid px-1 text-[10px] leading-none font-bold text-on-pink ring-2",
                     onCanvas ? "ring-hairline" : "ring-canvas",
                   )}
                 >

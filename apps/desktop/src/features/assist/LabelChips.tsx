@@ -1,10 +1,8 @@
 import clsx from "clsx";
-import { Check, Plus, Sparkles, Tag, Undo2, Wand2, X } from "lucide-react";
+import { Button, Icon, ICONS, Menu } from "@uwusuite/design";
 import { useEffect, useId, useRef, useState } from "react";
 import { backend } from "@/backend/backend";
 import type { AssistLabel, AssistLabelLogEntry, Message } from "@/backend/types";
-import { Button } from "@/components/ui/Button";
-import { Menu } from "@/components/ui/Menu";
 import { useT } from "@/i18n";
 import { formatLongDate } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
@@ -143,7 +141,7 @@ export function MessageLabels({ message, canEdit }: MessageLabelsProps) {
               aria-label={t("assist.labels.add")}
               className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-line px-2 text-[11.5px] font-semibold text-muted hover:border-pink hover:text-pink-ink focus-visible:shadow-focus focus-visible:outline-none"
             >
-              {on.length === 0 ? <Tag className="size-3" aria-hidden /> : <Plus className="size-3" aria-hidden />}
+              {on.length === 0 ? <Icon icon={ICONS.label} size="xs" /> : <Icon icon={ICONS.add} size="xs" />}
               {on.length === 0 && t("assist.labels.addShort")}
             </button>
           )}
@@ -225,9 +223,19 @@ function LabelChip({
         <Chip label={label} />
         {entry &&
           (entry.source === "ai" ? (
-            <Sparkles className="-ml-1.5 size-3 shrink-0 text-pink" aria-label={t("assist.labels.byAssistant")} />
+            <Icon
+              icon={ICONS.ai}
+              size="xs"
+              className="-ml-1.5 shrink-0 text-pink"
+              label={t("assist.labels.byAssistant")}
+            />
           ) : (
-            <Wand2 className="-ml-1.5 size-3 shrink-0 text-pink" aria-label={t("labels.chip.automatic")} />
+            <Icon
+              icon={ICONS.automatic}
+              size="xs"
+              className="-ml-1.5 shrink-0 text-pink"
+              label={t("labels.chip.automatic")}
+            />
           ))}
       </button>
       {open && (
@@ -245,18 +253,14 @@ function LabelChip({
               onClick={() => setOpen(false)}
               className="ml-auto grid size-6 place-items-center rounded-full text-muted hover:bg-pink-tint hover:text-pink-ink"
             >
-              <X className="size-3.5" aria-hidden />
+              <Icon icon={ICONS.close} size="xs" />
             </button>
           </div>
           {label.description && <p className="text-[12.5px] text-muted">{label.description}</p>}
           {entry ? (
             <div className="flex flex-col gap-1 rounded-xl bg-pink-tint/40 px-3 py-2">
               <p className="flex items-center gap-1.5 text-[12px] font-bold text-pink-ink">
-                {entry.source === "ai" ? (
-                  <Sparkles className="size-3.5" aria-hidden />
-                ) : (
-                  <Wand2 className="size-3.5" aria-hidden />
-                )}
+                {entry.source === "ai" ? <Icon icon={ICONS.ai} size="xs" /> : <Icon icon={ICONS.automatic} size="xs" />}
                 {entry.source === "ai"
                   ? t("assist.labels.byAssistant")
                   : t("labels.chip.bySource", { source: t(`labels.source.${entry.source}`) })}
@@ -273,18 +277,18 @@ function LabelChip({
             </div>
           ) : (
             <p className="flex items-center gap-1.5 text-[12px] text-muted">
-              <Check className="size-3.5" aria-hidden />
+              <Icon icon={ICONS.done} size="xs" />
               {t("assist.labels.byHand")}
             </p>
           )}
           {canEdit && (
             <div className="flex flex-wrap gap-1.5 pt-0.5">
               {entry ? (
-                <Button size="sm" variant="primary" icon={Undo2} busy={busy} onClick={undo}>
+                <Button size="sm" variant="primary" icon={ICONS.undo} busy={busy} onClick={undo}>
                   {t("assist.labels.undo")}
                 </Button>
               ) : (
-                <Button size="sm" icon={X} onClick={remove}>
+                <Button size="sm" icon={ICONS.close} onClick={remove}>
                   {t("assist.labels.remove")}
                 </Button>
               )}

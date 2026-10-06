@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import type { CalendarInfo, CalendarOccurrence } from "@/backend/types";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { EmptyState } from "@uwusuite/design";
+import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { todayKey, type DateKey } from "@/lib/calendarDates";
 import { BirthdayMark } from "./BirthdayMark";
@@ -31,7 +32,7 @@ export function AgendaView({ days, occurrences, calendars }: AgendaViewProps) {
   if (byDay.every(({ events }) => events.length === 0)) {
     return (
       <EmptyState
-        scene="done"
+        art={<NyuScene name="done" />}
         title={t("calendar.agendaEmpty.title")}
         body={t("calendar.agendaEmpty.body")}
         className="flex-1"

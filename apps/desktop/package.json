@@ -1,6 +1,6 @@
 {
   "name": "@uwumail/desktop",
-  "version": "0.10.0-beta.1",
+  "version": "0.10.0-beta.2",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-only",
@@ -9,12 +9,14 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "icons": "uwu-icons --brand ../../brand --name uwumail --tray --mobile && node -e \"fs.rmSync('src-tauri/icons/android', { recursive: true, force: true })\"",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
     "@fontsource-variable/rubik": "^5.3.0",
     "@tanstack/react-query": "^5.102.8",
     "@tauri-apps/api": "^2.11.1",
@@ -23,6 +25,7 @@
     "@tauri-apps/plugin-haptics": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.5",
     "@uwumail/addon-sdk": "workspace:*",
+    "@uwusuite/design": "https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.16",
     "i18next": "^26.4.2",

@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ChevronDown, CircleCheck, Info, KeyRound, ShieldAlert, Zap } from "lucide-react";
+import { Button, Field, Icon, ICONS, Segmented, Select, TextInput } from "@uwusuite/design";
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { backend, BackendError } from "@/backend/backend";
@@ -13,8 +13,6 @@ import {
   type ServerSettings,
 } from "@/backend/types";
 import { COLOR_CLASSES } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
-import { Field, Segmented, Select, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { isEmail } from "@/lib/format";
 import { queryKeys } from "@/lib/queries";
@@ -321,9 +319,9 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
           <p className="truncate text-[14px] font-bold">{email}</p>
           <p className="flex items-center gap-1.5 text-[12.5px] text-muted">
             {settings.source === "guess" ? (
-              <Info className="size-3.5 shrink-0" aria-hidden />
+              <Icon icon={ICONS.info} size="xs" className="shrink-0" />
             ) : (
-              <CircleCheck className="size-3.5 shrink-0 text-success" aria-hidden />
+              <Icon icon={ICONS.success} size="xs" className="shrink-0 text-success-ink" />
             )}
             {settings.source === "guess" && !settings.jmap
               ? t("account.guessed")
@@ -348,7 +346,7 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
             ]}
           />
           <p className="flex items-center gap-1.5 text-[12.5px] text-muted">
-            <Zap className="size-3.5 shrink-0 text-pink-ink" aria-hidden />
+            <Icon icon={ICONS.automatic} size="xs" className="shrink-0 text-pink-ink" />
             {usesJmap ? t("account.protocolJmapHint") : t("account.protocolImapHint")}
           </p>
         </div>
@@ -357,7 +355,7 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
       {provider ? (
         <div className="flex flex-col gap-3">
           <p className="flex gap-2 rounded-2xl bg-pink-tint/60 px-4 py-3 text-[13px] text-pink-ink">
-            <KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <Icon icon={ICONS.signIn} className="mt-0.5 shrink-0" />
             {t("account.oauthHint", { provider })}
           </p>
           {settings.oauth === "microsoft" && (
@@ -368,9 +366,9 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
                 aria-expanded={showSharedMailbox}
                 className="flex items-center gap-1.5 self-start text-[13px] font-semibold text-muted hover:text-ink"
               >
-                <ChevronDown
-                  className={clsx("size-4 transition-transform", !showSharedMailbox && "-rotate-90")}
-                  aria-hidden
+                <Icon
+                  icon={ICONS.expand}
+                  className={clsx("transition-transform", !showSharedMailbox && "-rotate-90")}
                 />
                 {t("account.sharedMailbox")}
               </button>
@@ -467,7 +465,7 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
             aria-expanded={showServers}
             className="flex items-center gap-1.5 self-start text-[13px] font-semibold text-muted hover:text-ink"
           >
-            <ChevronDown className={clsx("size-4 transition-transform", !showServers && "-rotate-90")} aria-hidden />
+            <Icon icon={ICONS.expand} className={clsx("transition-transform", !showServers && "-rotate-90")} />
             {t("account.editServers")}
           </button>
           {showServers && (
@@ -516,7 +514,7 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
       )}
 
       {provider && error && (
-        <p role="alert" className="text-[13px] text-danger">
+        <p role="alert" className="text-[13px] text-danger-ink">
           {error}
         </p>
       )}
@@ -524,7 +522,7 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
       {consentUrl && (
         <div className="flex flex-col gap-2 rounded-2xl bg-pink-tint/60 px-4 py-3 text-[13px] text-pink-ink">
           <p className="flex gap-2">
-            <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <Icon icon={ICONS.warning} className="mt-0.5 shrink-0" />
             <span>
               <strong className="block">{t("account.adminConsentTitle")}</strong>
               {t("account.adminConsentBody")}
@@ -538,8 +536,8 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
       )}
 
       {cleartext && (
-        <p role="alert" className="flex gap-2 rounded-2xl bg-danger-tint px-4 py-3 text-[13px] text-danger">
-          <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <p role="alert" className="flex gap-2 rounded-2xl bg-danger-tint px-4 py-3 text-[13px] text-danger-ink">
+          <Icon icon={ICONS.warning} className="mt-0.5 shrink-0" />
           <span>
             <strong className="block">{t("account.cleartextTitle")}</strong>
             {t("account.cleartextBody")}

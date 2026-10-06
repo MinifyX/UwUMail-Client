@@ -1,9 +1,8 @@
 import clsx from "clsx";
-import { CalendarDays, Mail, MapPin, Phone, User, UserPlus } from "lucide-react";
+import { Button, Icon, ICONS } from "@uwusuite/design";
 import { useEffect, useState } from "react";
 import type { AttachmentContent } from "@/backend/types";
 import { useT } from "@/i18n";
-import { Button } from "@/components/ui/Button";
 import { parseCsv, parseIcs, parseVcf, type AttachmentKind } from "@/lib/attachments";
 import { draftFromCard } from "../contacts/format";
 import { startNewContact } from "../contacts/state";
@@ -54,7 +53,7 @@ function TextPreview({ file, kind }: { file: AttachmentContent; kind: "text" | "
   const { t } = useT();
   const state = useText(file.url);
   if (!state) return <p className="p-6 text-[13px] text-muted">{t("attachment.loading")}</p>;
-  if ("error" in state) return <p className="p-6 text-[13px] text-danger">{state.error}</p>;
+  if ("error" in state) return <p className="p-6 text-[13px] text-danger-ink">{state.error}</p>;
 
   if (kind === "csv") {
     const rows = parseCsv(state.text, CSV_ROWS);
@@ -112,7 +111,7 @@ function CalendarPreview({ file }: { file: AttachmentContent }) {
   const { t, i18n } = useT();
   const state = useText(file.url);
   if (!state) return <p className="p-6 text-[13px] text-muted">{t("attachment.loading")}</p>;
-  if ("error" in state) return <p className="p-6 text-[13px] text-danger">{state.error}</p>;
+  if ("error" in state) return <p className="p-6 text-[13px] text-danger-ink">{state.error}</p>;
   const events = parseIcs(state.text);
   const format = (value: { date: Date; allDay: boolean } | null) =>
     value
@@ -129,7 +128,7 @@ function CalendarPreview({ file }: { file: AttachmentContent }) {
           className="selectable w-full max-w-[520px] rounded-[20px] border border-line bg-surface p-6"
         >
           <p className="flex items-center gap-2 text-[12px] font-bold tracking-wide text-pink-ink uppercase">
-            <CalendarDays className="size-4" aria-hidden />
+            <Icon icon={ICONS.calendar} />
             {event.method === "REQUEST" ? t("attachment.invitation") : t("attachment.event")}
           </p>
           <h3 className="pt-2 text-[20px] font-extrabold">{event.summary}</h3>
@@ -145,7 +144,7 @@ function CalendarPreview({ file }: { file: AttachmentContent }) {
               <>
                 <dt className="text-muted">{t("attachment.where")}</dt>
                 <dd className="flex items-center gap-1.5">
-                  <MapPin className="size-4 text-muted" aria-hidden />
+                  <Icon icon={ICONS.location} className="text-muted" />
                   {event.location}
                 </dd>
               </>
@@ -173,7 +172,7 @@ function ContactPreview({ file }: { file: AttachmentContent }) {
   const state = useText(file.url);
   const { data: contactsAvailable = false } = useContactsAvailable();
   if (!state) return <p className="p-6 text-[13px] text-muted">{t("attachment.loading")}</p>;
-  if ("error" in state) return <p className="p-6 text-[13px] text-danger">{state.error}</p>;
+  if ("error" in state) return <p className="p-6 text-[13px] text-danger-ink">{state.error}</p>;
   return (
     <div className="grid h-full content-start justify-items-center gap-4 overflow-auto p-6">
       {parseVcf(state.text).map((card, index) => (
@@ -182,7 +181,7 @@ function ContactPreview({ file }: { file: AttachmentContent }) {
           className="selectable flex w-full max-w-[420px] flex-col items-center gap-3 rounded-[20px] border border-line bg-surface p-6 text-center"
         >
           <span className="grid size-16 place-items-center rounded-full bg-pink-tint text-pink-ink">
-            <User className="size-7" aria-hidden />
+            <Icon icon={ICONS.contact} size="xl" />
           </span>
           <div>
             <h3 className="text-[20px] font-extrabold">{card.name}</h3>
@@ -193,19 +192,19 @@ function ContactPreview({ file }: { file: AttachmentContent }) {
           <ul className="flex w-full flex-col gap-2 pt-2 text-[14px]">
             {card.emails.map((email) => (
               <li key={email} className="flex items-center gap-2 rounded-xl bg-canvas px-3 py-2">
-                <Mail className="size-4 text-muted" aria-label={t("attachment.email")} />
+                <Icon icon={ICONS.mail} className="text-muted" label={t("attachment.email")} />
                 {email}
               </li>
             ))}
             {card.phones.map((phone) => (
               <li key={phone} className="flex items-center gap-2 rounded-xl bg-canvas px-3 py-2">
-                <Phone className="size-4 text-muted" aria-label={t("attachment.phone")} />
+                <Icon icon={ICONS.phone} className="text-muted" label={t("attachment.phone")} />
                 {phone}
               </li>
             ))}
           </ul>
           {contactsAvailable && (
-            <Button size="sm" icon={UserPlus} onClick={() => startNewContact(draftFromCard(card))}>
+            <Button size="sm" icon={ICONS.addContact} onClick={() => startNewContact(draftFromCard(card))}>
               {t("contacts.addCard")}
             </Button>
           )}

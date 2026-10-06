@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { EventDeleteScope } from "@/backend/types";
 import { ARMING_MS } from "@/components/ui/armed";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { answerDeleteScope, useCalendarUi } from "./state";

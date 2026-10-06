@@ -1,5 +1,4 @@
-import { AlertTriangle, Route, ShieldOff } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import { Button, Icon, ICONS } from "@uwusuite/design";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { urlParts, visibleText, type LinkCheck } from "@/lib/links";
@@ -17,7 +16,7 @@ function StatusExtra({ check }: { check: LinkCheck }) {
   if (check.misleading) {
     return (
       <span className="flex shrink-0 items-center gap-1 font-bold">
-        <AlertTriangle className="size-3.5" aria-hidden />
+        <Icon icon={ICONS.warning} size="xs" />
         {t("link.otherTarget")}
       </span>
     );
@@ -31,7 +30,7 @@ function StatusExtra({ check }: { check: LinkCheck }) {
       });
   return (
     <span className="flex min-w-0 items-center gap-1 text-muted">
-      <Route className="size-3.5 shrink-0" aria-hidden />
+      <Icon icon={ICONS.redirect} size="xs" className="shrink-0" />
       <span className="truncate">{text}</span>
     </span>
   );
@@ -53,7 +52,7 @@ export function LinkStatus() {
       style={{ left: area.left + 8, bottom: area.bottom + 8, maxWidth: Math.max(area.width - 16, 160) }}
       className={
         "pointer-events-none fixed z-40 flex max-w-full min-w-0 flex-col gap-0.5 rounded-xl border px-3 py-1.5 text-[12px] shadow-float " +
-        (danger ? "border-danger/40 bg-danger-tint text-danger" : "border-hairline bg-elevated text-ink")
+        (danger ? "border-danger/40 bg-danger-tint text-danger-ink" : "border-hairline bg-elevated text-ink")
       }
     >
       <span className="flex min-w-0">
@@ -66,7 +65,7 @@ export function LinkStatus() {
       {(check.misleading || check.redirect) && <StatusExtra check={check} />}
       {check.safeLink && (
         <span className="flex min-w-0 items-center gap-1 text-muted">
-          <ShieldOff className="size-3.5 shrink-0" aria-hidden />
+          <Icon icon={ICONS.redirect} size="xs" className="shrink-0" />
           <span className="truncate">{t("link.safeLink")}</span>
         </span>
       )}
@@ -84,7 +83,7 @@ export function LinkSheet() {
       open={sheet !== null}
       onClose={close}
       width="sm"
-      className="max-[699px]:mb-0 max-[699px]:w-full max-[699px]:max-w-none max-[699px]:rounded-b-none"
+      className="phone:mb-0 phone:w-full phone:max-w-none phone:rounded-b-none"
     >
       {sheet && (
         <div className="flex flex-col gap-3 px-5 pt-4 pb-6">

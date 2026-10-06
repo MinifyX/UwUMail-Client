@@ -1,13 +1,11 @@
 import clsx from "clsx";
-import { Check } from "lucide-react";
+import { Button, Field, Icon, ICONS, Segmented, TextInput, Toggle } from "@uwusuite/design";
 import { useEffect, useState } from "react";
 import type { Account } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { AccountDot } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
-import { Field, Segmented, TextInput, Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { useAccounts } from "@/lib/queries";
 import { WORKSPACES } from "@/lib/workspaces";
@@ -32,12 +30,12 @@ export function WorkspacePicker({
       value={value}
       onChange={onChange}
       options={WORKSPACES.map((workspace) => {
-        const Icon = WORKSPACE_ICONS[workspace];
+        const Glyph = WORKSPACE_ICONS[workspace];
         return {
           value: workspace,
           label: (
             <span className="flex items-center gap-1.5">
-              <Icon className="size-3.5 shrink-0" aria-hidden />
+              <Icon icon={Glyph} size="xs" className="shrink-0" />
               {nameOf(workspace)}
             </span>
           ),
@@ -109,11 +107,11 @@ function WorkspaceSetup({
                 <span
                   className={clsx(
                     "grid size-5 shrink-0 place-items-center rounded-md border-2 transition-colors",
-                    checked ? "border-pink bg-pink text-white" : "border-line bg-surface",
+                    checked ? "border-pink-solid bg-pink-solid text-on-pink" : "border-line bg-surface",
                   )}
                   aria-hidden
                 >
-                  {checked && <Check className="size-3.5" strokeWidth={3} />}
+                  {checked && <Icon icon={ICONS.done} size="xs" />}
                 </span>
                 <AccountDot color={account.color} />
                 <span className="min-w-0 flex-1">

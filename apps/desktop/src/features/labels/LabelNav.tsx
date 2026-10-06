@@ -1,9 +1,7 @@
 import clsx from "clsx";
-import { ChevronDown, ChevronRight, Plus, Settings2 } from "lucide-react";
+import { Badge, Icon, IconButton, ICONS } from "@uwusuite/design";
 import { useState } from "react";
 import type { MailboxView } from "@/backend/types";
-import { IconButton } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Pill";
 import { useT } from "@/i18n";
 import type { LabelEntry } from "@/lib/labelFilter";
 import { useAccounts } from "@/lib/queries";
@@ -117,14 +115,10 @@ export function LabelNav() {
           className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-[12px] font-bold tracking-wide text-muted uppercase hover:text-ink"
         >
           <span className="min-w-0 flex-1 truncate text-left">{t("labels.title")}</span>
-          {collapsed ? (
-            <ChevronRight className="size-3.5" aria-hidden />
-          ) : (
-            <ChevronDown className="size-3.5" aria-hidden />
-          )}
+          <Icon icon={ICONS.expand} size="xs" className={clsx("transition-transform", collapsed && "-rotate-90")} />
         </button>
         <IconButton
-          icon={Settings2}
+          icon={ICONS.settings}
           size="sm"
           label={t("labels.manage")}
           onClick={() => openSettings("labels")}
@@ -138,7 +132,7 @@ export function LabelNav() {
             onClick={() => openSettings("labels")}
             className="flex h-8 items-center gap-3 rounded-xl px-3 text-left text-[13px] text-muted hover:bg-pink-tint/50 hover:text-ink"
           >
-            <Plus className="size-[17px] shrink-0" aria-hidden />
+            <Icon icon={ICONS.add} size="md" className="shrink-0" />
             {t("labels.create")}
           </button>
         ) : (

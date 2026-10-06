@@ -1,6 +1,5 @@
 import clsx from "clsx";
-import { Archive, MailCheck, MailOpen, ShieldAlert, ShieldCheck, Star, Trash } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Icon, type IconProps, ICONS } from "@uwusuite/design";
 import { useRef, useState, type ReactNode } from "react";
 import { mobile } from "@/backend/mobile";
 import { LogoSymbol } from "@/components/ui/Logo";
@@ -13,15 +12,15 @@ const THRESHOLD = 0.3;
 export const EDGE_ZONE = 28;
 const LONG_PRESS_MS = 450;
 
-const LOOKS: Record<Exclude<SwipeAction, "none">, { icon: LucideIcon; className: string }> = {
-  read: { icon: MailCheck, className: "bg-[var(--uwu-account-violet)]" },
-  archive: { icon: Archive, className: "bg-pink-solid" },
-  spam: { icon: ShieldAlert, className: "bg-[var(--uwu-account-coral)]" },
-  trash: { icon: Trash, className: "bg-danger" },
-  flag: { icon: Star, className: "bg-[var(--uwu-account-amber)]" },
+const LOOKS: Record<Exclude<SwipeAction, "none">, { icon: IconProps["icon"]; className: string }> = {
+  read: { icon: ICONS.unread, className: "bg-account-violet" },
+  archive: { icon: ICONS.archive, className: "bg-pink-solid" },
+  spam: { icon: ICONS.spam, className: "bg-account-coral" },
+  trash: { icon: ICONS.delete, className: "bg-danger" },
+  flag: { icon: ICONS.favorite, className: "bg-account-amber" },
 };
 /** "Spam" in junk takes the mail back out. */
-const NOT_SPAM_LOOK = { icon: ShieldCheck, className: "bg-[var(--uwu-account-mint)]" };
+const NOT_SPAM_LOOK = { icon: ICONS.notSpam, className: "bg-account-mint" };
 
 interface SwipeRowProps {
   children: ReactNode;
@@ -91,7 +90,7 @@ export function SwipeRow({
         : side !== "none"
           ? t(`mobile.swipe.${side}`)
           : "";
-  const Icon = side === "read" && !unread ? MailOpen : look?.icon;
+  const Glyph = side === "read" && !unread ? ICONS.unread : look?.icon;
 
   return (
     <div
@@ -104,7 +103,7 @@ export function SwipeRow({
         }
       }}
     >
-      {offset !== 0 && look && Icon && (
+      {offset !== 0 && look && Glyph && (
         <div
           aria-hidden
           className={clsx(
@@ -116,7 +115,7 @@ export function SwipeRow({
         >
           {offset < 0 && <span>{label}</span>}
           <span className={clsx("relative transition-transform duration-150", armed && "scale-125")}>
-            <Icon className="size-5" strokeWidth={2.4} />
+            <Icon icon={Glyph} size="lg" />
             <LogoSymbol key={String(armed)} hop={armed ? 1 : 0} className="absolute -top-3.5 -right-3.5 h-4 w-auto" />
           </span>
           {offset > 0 && <span>{label}</span>}

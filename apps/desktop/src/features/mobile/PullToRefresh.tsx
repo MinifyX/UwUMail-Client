@@ -113,7 +113,7 @@ export function PullToRefresh({ scrollRef, onRefresh, children }: PullToRefreshP
                 mood={refreshing ? "happy" : armed ? "sparkle" : "uwu"}
                 className={clsx(
                   "h-9 w-auto",
-                  refreshing && "origin-bottom animate-[nyu-hop_700ms_ease-in-out_infinite]",
+                  refreshing && "origin-bottom animate-[nyu-logo-hop_700ms_ease-in-out_infinite]",
                 )}
               />
             </span>

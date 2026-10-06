@@ -348,6 +348,8 @@
     "listDensity": "Mail list",
     "listDensityDesc": "Compact fits more mail on screen, with a small picture and two lines.",
     "theme": "Theme",
+    "contrast": "Contrast",
+    "contrastDesc": "High makes text and outlines stronger. With System, UwUMail follows your operating system.",
     "motion": "Animations",
     "motionDesc": "With System, UwUMail follows the reduced motion setting of your operating system.",
     "nyuAnimations": "Nyu animations",
@@ -542,6 +544,11 @@
     "system": "System",
     "light": "Light",
     "dark": "Dark"
+  },
+  "contrast": {
+    "system": "System",
+    "normal": "Normal",
+    "high": "High"
   },
   "motion": {
     "system": "System",
@@ -2266,5 +2273,22 @@
       "newMail": "New mail",
       "hidden": "Open UwUMail to read it."
     }
+  },
+  "macMenu": {
+    "message": "Message",
+    "mailbox": "Mailbox",
+    "newMail": "New Message",
+    "newEvent": "New Event",
+    "newContact": "New Contact",
+    "find": "Search Mail",
+    "palette": "Commands…",
+    "getMail": "Get New Mail",
+    "move": "Move…",
+    "label": "Add Label…",
+    "checkUpdates": "Check for Updates…",
+    "shortcuts": "Keyboard Shortcuts",
+    "website": "UwUMail on GitHub",
+    "releaseNotes": "What's New",
+    "report": "Report a Problem…"
   }
 }

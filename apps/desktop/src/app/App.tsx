@@ -1,8 +1,11 @@
 import { useEffect } from "react";
+import { UwuLabels } from "@uwusuite/design";
 import { useApplyNyuLevel } from "@/components/nyu/level";
 import { NyuStage } from "@/components/nyu/NyuStage";
 import { Toaster } from "@/components/ui/Toaster";
 import { MailShell } from "@/features/shell/MailShell";
+import { useMacLifecycle, useMacMenu } from "@/features/shell/useMacShell";
+import { WindowTitleBar } from "@/features/shell/WindowTitleBar";
 import { Onboarding } from "@/features/onboarding/Onboarding";
 import { DeleteForeverQuestion } from "@/features/mail/DeleteForeverQuestion";
 import { DangerousFileQuestion } from "@/features/attachments/DangerousFileQuestion";
@@ -25,6 +28,9 @@ export function App() {
   useApplyNyuLevel();
   useMobileBridge();
   useUpdateSettings();
+  useMacLifecycle();
+  // Before the first account; MailShell fills the menu bar with the mail's commands afterwards.
+  useMacMenu(null, !onboarded);
 
   useEffect(() => {
     const resolved = resolveLanguage(language);
@@ -33,21 +39,27 @@ export function App() {
   }, [language]);
 
   return (
-    <>
-      <BehindLock>
-        {onboarded ? <MailShell /> : <Onboarding />}
-        <UpdateHint />
-        <LinkWarning />
-        <LinkSheet />
-        <LinkStatus />
-        <DeleteForeverQuestion />
-        <FolderDialogs />
-        <DangerousFileQuestion />
-        <SharedMailboxDialogs />
-        <NyuStage />
-        <Toaster />
-      </BehindLock>
-      <AppLock />
-    </>
+    // The words the package's components say themselves (the dialogs' close button, the title bar).
+    <UwuLabels labels={resolveLanguage(language)}>
+      <div className="flex h-full flex-col">
+        <WindowTitleBar />
+        <div className="relative min-h-0 flex-1">
+          <BehindLock>
+            {onboarded ? <MailShell /> : <Onboarding />}
+            <UpdateHint />
+            <LinkWarning />
+            <LinkSheet />
+            <LinkStatus />
+            <DeleteForeverQuestion />
+            <FolderDialogs />
+            <DangerousFileQuestion />
+            <SharedMailboxDialogs />
+            <NyuStage />
+            <Toaster />
+          </BehindLock>
+          <AppLock />
+        </div>
+      </div>
+    </UwuLabels>
   );
 }

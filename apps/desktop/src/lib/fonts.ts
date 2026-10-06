@@ -1,60 +1,23 @@
 /**
- * The font the app and the mails use (Settings → Appearance → Font). Kept on this device only.
+ * The font the app and the mails use (Settings → Darstellung → Schrift). Kept on this device only.
  *
- * The interface gets the font through `--font-ui` on <html>; the web fonts are declared in
- * styles/fonts.css. Mails are shown in a sandboxed frame that can't see the app's fonts and only
- * loads fonts from `data:` URLs, so the chosen one is handed in as a `data:` @font-face (loaded on
- * demand, once; see `mailFontFaces`).
+ * The choices, their stacks and `applyUiFont` come from @uwusuite/design (UwU Sans, Manrope, Rubik,
+ * DM Sans, system); its font-picker.css declares the web fonts for the interface. Mails are shown in
+ * a sandboxed frame that can't see the app's fonts and only loads fonts from `data:` URLs, so the
+ * chosen one is handed in as a `data:` @font-face (loaded on demand, once; see `mailFontFaces`).
  */
 
-export const FONT_CHOICES = ["uwu", "rubik", "dmsans", "system"] as const;
-export type FontChoice = (typeof FONT_CHOICES)[number];
+import { type FontChoice, SYSTEM_STACK } from "@uwusuite/design";
+
+export { applyUiFont, FONT_CHOICES, FONT_NAMES, FONT_STACKS, FONT_TRACKING, isFontChoice } from "@uwusuite/design";
+export type { FontChoice } from "@uwusuite/design";
 
 /** What happens to the fonts a sender wrote into an HTML mail. */
 export const SENDER_FONT_CHOICES = ["replace", "keep"] as const;
 export type SenderFonts = (typeof SENDER_FONT_CHOICES)[number];
 
-const SYSTEM_STACK = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif';
-
-/** The family list for each choice; web fonts fall back to the system's. */
-export const FONT_STACKS: Record<FontChoice, string> = {
-  uwu: `"UwU Sans", ${SYSTEM_STACK}`,
-  rubik: `"Rubik Variable", ${SYSTEM_STACK}`,
-  dmsans: `"DM Sans Variable", ${SYSTEM_STACK}`,
-  system: SYSTEM_STACK,
-};
-
-/** The names the picker shows (font names stay untranslated). */
-export const FONT_NAMES: Record<Exclude<FontChoice, "system">, string> = {
-  uwu: "UwU Sans",
-  rubik: "Rubik",
-  dmsans: "DM Sans",
-};
-
-/**
- * A little tighter than the fonts are set, for interface text. UwU Sans (Atkinson Hyperlegible) is
- * spaced generously for reading; the others are fine as they come.
- */
-export const FONT_TRACKING: Record<FontChoice, string> = {
-  uwu: "-0.008em",
-  rubik: "0em",
-  dmsans: "-0.004em",
-  system: "0em",
-};
-
-export function isFontChoice(value: unknown): value is FontChoice {
-  return (FONT_CHOICES as readonly unknown[]).includes(value);
-}
-
 export function isSenderFonts(value: unknown): value is SenderFonts {
   return (SENDER_FONT_CHOICES as readonly unknown[]).includes(value);
-}
-
-/** Puts the chosen font on the whole interface at once. */
-export function applyUiFont(choice: FontChoice, root: HTMLElement = document.documentElement) {
-  root.style.setProperty("--font-ui", FONT_STACKS[choice]);
-  root.style.setProperty("--tracking-ui", FONT_TRACKING[choice]);
-  root.dataset.font = choice;
 }
 
 // --- mail frames ---------------------------------------------------------------------------------
@@ -77,7 +40,17 @@ const inline = (module: { default: string }) => module.default;
 
 /** `?inline` turns each file into its own lazily loaded `data:` URL module. */
 const LOADERS: Record<Exclude<FontChoice, "system">, () => Promise<Face[]>> = {
-  uwu: async () => [{ src: inline(await import("@/assets/fonts/UwUSans[wght].woff2?inline")) }],
+  uwu: async () => [{ src: inline(await import("@uwusuite/design/fonts/UwUSans[wght].woff2?inline")) }],
+  manrope: async () => {
+    const [latin, ext] = await Promise.all([
+      import("@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?inline"),
+      import("@fontsource-variable/manrope/files/manrope-latin-ext-wght-normal.woff2?inline"),
+    ]);
+    return [
+      { src: inline(latin), unicodeRange: LATIN },
+      { src: inline(ext), unicodeRange: LATIN_EXT },
+    ];
+  },
   rubik: async () => {
     const [latin, ext] = await Promise.all([
       import("@fontsource-variable/rubik/files/rubik-latin-wght-normal.woff2?inline"),

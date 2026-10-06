@@ -1,6 +1,6 @@
 import { forwardRef, useState, type ComponentProps } from "react";
 import { armedActivation } from "./armed";
-import { Button } from "./Button";
+import { Button } from "@uwusuite/design";
 
 type ArmedButtonProps = Omit<ComponentProps<typeof Button>, "onClick" | "onKeyDown"> & { onClick: () => void };
 

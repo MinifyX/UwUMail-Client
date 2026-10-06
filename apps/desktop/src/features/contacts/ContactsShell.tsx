@@ -1,8 +1,7 @@
 import clsx from "clsx";
-import { Menu, UserPlus } from "lucide-react";
+import { IconButton, ICONS } from "@uwusuite/design";
 import { useMemo } from "react";
 import type { ContactRecord } from "@/backend/types";
-import { IconButton } from "@/components/ui/Button";
 import { useT } from "@/i18n";
 import { useBackLayer } from "@/lib/backStack";
 import { useIsPhone, useMediaQuery } from "@/lib/device";
@@ -84,9 +83,11 @@ function ListHeader({ onMenu }: { onMenu?: () => void }) {
   const title = books.find((book) => book.id === bookId)?.name ?? t("contacts.all");
   return (
     <div className="flex items-center gap-1">
-      {onMenu && <IconButton icon={Menu} label={t("contacts.menu")} onClick={onMenu} className="-ml-1" />}
+      {onMenu && <IconButton icon={ICONS.menu} label={t("contacts.menu")} onClick={onMenu} className="-ml-1" />}
       <h1 className="min-w-0 flex-1 truncate text-[20px] leading-tight font-extrabold tracking-[-0.01em]">{title}</h1>
-      {onMenu && <IconButton icon={UserPlus} label={t("contacts.newContact")} onClick={() => startNewContact()} />}
+      {onMenu && (
+        <IconButton icon={ICONS.addContact} label={t("contacts.newContact")} onClick={() => startNewContact()} />
+      )}
     </div>
   );
 }
@@ -119,7 +120,7 @@ function DesktopContacts() {
             type="button"
             aria-label={t("common.close")}
             onClick={() => setDrawerOpen(false)}
-            className="absolute inset-0 animate-fade bg-[#1c1420]/30"
+            className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
           />
           <ContactsSidebar
             className="relative w-[280px] animate-slide-up rounded-r-[22px] bg-surface shadow-float"
@@ -152,7 +153,7 @@ function PhoneContacts() {
             type="button"
             aria-label={t("common.close")}
             onClick={() => setDrawerOpen(false)}
-            className="absolute inset-0 animate-fade bg-[#1c1420]/40"
+            className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
           />
           <div className="absolute inset-y-0 left-0 w-[300px] max-w-[85vw] animate-[uwu-drawer_220ms_cubic-bezier(0.2,0.9,0.3,1)] overflow-hidden rounded-r-[24px] bg-surface shadow-float">
             <ContactsSidebar className="h-full pt-3" onNavigate={() => setDrawerOpen(false)} />

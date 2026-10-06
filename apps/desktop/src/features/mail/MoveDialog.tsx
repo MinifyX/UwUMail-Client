@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Search } from "lucide-react";
+import { Icon, ICONS } from "@uwusuite/design";
 import { useMemo, useState } from "react";
 import type { Folder } from "@/backend/types";
 import { Dialog } from "@/components/ui/Dialog";
@@ -50,9 +50,9 @@ function MoveChoices({ request, onDone }: { request: MoveRequest; onDone: () => 
   return (
     <div className="flex flex-col gap-2 px-4 pb-4">
       <div className="relative">
-        <Search
-          className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted"
-          aria-hidden
+        <Icon
+          icon={ICONS.search}
+          className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted"
         />
         <input
           type="search"
@@ -75,7 +75,7 @@ function MoveChoices({ request, onDone }: { request: MoveRequest; onDone: () => 
           <li className="px-3 py-6 text-center text-[13px] text-muted">{t("move.empty")}</li>
         ) : (
           shown.map((node) => {
-            const Icon = folderIcon(node.folder);
+            const Glyph = folderIcon(node.folder);
             return (
               <li key={node.folder.id}>
                 <button
@@ -86,7 +86,7 @@ function MoveChoices({ request, onDone }: { request: MoveRequest; onDone: () => 
                   )}
                   style={{ paddingLeft: 12 + (query ? 0 : node.depth * 16) }}
                 >
-                  <Icon className="size-4 shrink-0 text-muted" aria-hidden />
+                  <Icon icon={Glyph} className="shrink-0 text-muted" />
                   <span className="min-w-0 flex-1 truncate">{label(node.folder)}</span>
                 </button>
               </li>

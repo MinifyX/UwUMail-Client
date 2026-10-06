@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Check, ChevronDown, Pencil, Plus, RotateCcw, Sparkles, Tags, Trash, TriangleAlert, X } from "lucide-react";
+import { Button, Field, Icon, IconButton, ICONS, Select, Spinner, Switch, TextInput, Toggle } from "@uwusuite/design";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AssistError, backend } from "@/backend/backend";
 import {
@@ -15,8 +15,6 @@ import {
   type LabelRules,
 } from "@/backend/types";
 import { NyuThinking } from "@/components/nyu/NyuThinking";
-import { Button, IconButton, Spinner } from "@/components/ui/Button";
-import { Field, Select, TextInput, Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
@@ -152,7 +150,7 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
             </p>
             <Button
               size="sm"
-              icon={Sparkles}
+              icon={ICONS.ai}
               busy={applying}
               busyIndicator={<NyuThinking size="sm" fallback={<Spinner />} />}
               onClick={() => void applyNow()}
@@ -176,7 +174,7 @@ export function LabelSettings({ options }: { options: AssistOptions }) {
         action={
           room &&
           editing !== "new" && (
-            <Button size="sm" icon={Plus} onClick={() => startNew("")}>
+            <Button size="sm" icon={ICONS.add} onClick={() => startNew("")}>
               {t("assist.labels.new")}
             </Button>
           )
@@ -232,7 +230,7 @@ function MissingBases({ missing }: { missing: LabelBase[] }) {
             key={base}
             size="sm"
             variant="ghost"
-            icon={RotateCcw}
+            icon={ICONS.reset}
             busy={busy === base}
             disabled={busy !== null && busy !== base}
             onClick={() => restore(base)}
@@ -314,9 +312,10 @@ function LabelRow({
                 onClick={() => setDefinition((open) => !open)}
                 className="inline-flex items-center gap-1 rounded text-[12px] font-semibold text-muted hover:text-ink focus-visible:shadow-focus focus-visible:outline-none"
               >
-                <ChevronDown
-                  className={clsx("size-3.5 transition-transform", definition && "rotate-180")}
-                  aria-hidden
+                <Icon
+                  icon={ICONS.expand}
+                  size="xs"
+                  className={clsx("transition-transform", definition && "rotate-180")}
                 />
                 {definition ? t("labels.base.hideDefinition") : t("labels.base.showDefinition")}
               </button>
@@ -330,11 +329,11 @@ function LabelRow({
                   <p className="text-[11.5px] text-muted">{t("labels.base.previousHint")}</p>
                   <div className="flex flex-wrap gap-1">
                     {onUsePrevious && (
-                      <Button size="sm" variant="ghost" icon={Plus} onClick={onUsePrevious}>
+                      <Button size="sm" variant="ghost" icon={ICONS.add} onClick={onUsePrevious}>
                         {t("labels.base.usePrevious")}
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" icon={X} busy={forgetting} onClick={forgetPrevious}>
+                    <Button size="sm" variant="ghost" icon={ICONS.close} busy={forgetting} onClick={forgetPrevious}>
                       {t("labels.base.forgetPrevious")}
                     </Button>
                   </div>
@@ -353,70 +352,42 @@ function LabelRow({
             <span className="hidden text-[11.5px] text-muted sm:inline">
               {isAuto ? t("labels.base.autoOn") : t("labels.base.autoOff")}
             </span>
-            <AutoSwitch
-              checked={isAuto}
-              label={t("labels.base.auto", { name: label.name })}
-              disabled={auto !== null}
-              onChange={switchAuto}
-            />
+            <span className="flex" title={t("labels.base.auto", { name: label.name })}>
+              <Switch
+                size="sm"
+                checked={isAuto}
+                label={t("labels.base.auto", { name: label.name })}
+                disabled={auto !== null}
+                onChange={switchAuto}
+              />
+            </span>
           </div>
         )}
-        <IconButton icon={Pencil} size="sm" label={t("assist.labels.edit", { name: label.name })} onClick={onEdit} />
         <IconButton
-          icon={Trash}
+          icon={ICONS.edit}
+          size="sm"
+          label={t("assist.labels.edit", { name: label.name })}
+          onClick={onEdit}
+        />
+        <IconButton
+          icon={ICONS.delete}
           size="sm"
           label={t("assist.labels.delete", { name: label.name })}
           onClick={() => setConfirm(true)}
         />
       </div>
       {confirm && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-danger-tint px-3 py-2 text-[12.5px] text-danger">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-danger-tint px-3 py-2 text-[12.5px] text-danger-ink">
           <span className="min-w-0 flex-1">{t("assist.labels.confirmDelete", { name: label.name })}</span>
           <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>
             {t("common.cancel")}
           </Button>
-          <Button size="sm" variant="danger" icon={Trash} busy={busy} onClick={remove}>
+          <Button size="sm" variant="danger" icon={ICONS.delete} busy={busy} onClick={remove}>
             {t("assist.labels.deleteShort")}
           </Button>
         </div>
       )}
     </li>
-  );
-}
-
-/** The per-label switch "put on by itself", small enough for a row. */
-function AutoSwitch({
-  checked,
-  label,
-  disabled,
-  onChange,
-}: {
-  checked: boolean;
-  label: string;
-  disabled?: boolean;
-  onChange: (on: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={clsx(
-        "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus-visible:shadow-focus focus-visible:outline-none disabled:opacity-70",
-        checked ? "bg-pink" : "bg-line",
-      )}
-    >
-      <span
-        className={clsx(
-          "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform duration-200",
-          checked && "translate-x-4",
-        )}
-      />
-    </button>
   );
 }
 
@@ -505,7 +476,7 @@ function LabelEditor({
       className="flex flex-col gap-3 rounded-2xl border border-pink/30 bg-pink-tint/20 px-4 py-3.5"
     >
       <p className="flex items-center gap-1.5 text-[13.5px] font-bold">
-        <Tags className="size-4 text-pink" aria-hidden />
+        <Icon icon={ICONS.labels} className="text-pink" />
         {label ? t("assist.labels.editTitle", { name: label.name }) : t("assist.labels.newTitle")}
       </p>
       <Field label={t("assist.labels.name")} error={problemText("name")}>
@@ -565,7 +536,12 @@ function LabelEditor({
               style={color ? { backgroundColor: color } : undefined}
             >
               {form.color === color && (
-                <Check className={clsx("size-3.5", color ? "text-white" : "text-muted")} strokeWidth={3} aria-hidden />
+                <Icon
+                  icon={ICONS.done}
+                  size="xs"
+                  strokeWidth={3}
+                  className={clsx(color ? "text-white" : "text-muted")}
+                />
               )}
             </button>
           ))}
@@ -580,7 +556,7 @@ function LabelEditor({
         base={base}
       />
       {failure && (
-        <p role="alert" className="rounded-xl bg-danger-tint px-3 py-2 text-[13px] text-danger">
+        <p role="alert" className="rounded-xl bg-danger-tint px-3 py-2 text-[13px] text-danger-ink">
           {failure}
         </p>
       )}
@@ -602,8 +578,8 @@ export function OverlapWarning({ overlaps }: { overlaps: LabelOverlap[] }) {
   const lines = overlapLines(overlaps, t);
   if (lines.length === 0) return null;
   return (
-    <div role="status" className="flex gap-2 rounded-xl bg-warning-tint px-3 py-2 text-[12.5px] text-warning">
-      <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+    <div role="status" className="flex gap-2 rounded-xl bg-warning-tint px-3 py-2 text-[12.5px] text-warning-ink">
+      <Icon icon={ICONS.warning} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{t("labels.overlap.title")}</p>
         <ul className="list-disc pl-4">
@@ -781,14 +757,14 @@ function AutomaticEditor({
                     />
                   )}
                   <IconButton
-                    icon={X}
+                    icon={ICONS.close}
                     size="sm"
                     label={t("labels.settings.removeCondition")}
                     onClick={() => setRules({ ...rules, conditions: rules.conditions.filter((_, at) => at !== index) })}
                   />
                 </div>
                 {problem && (
-                  <p role="alert" className="text-[12.5px] text-danger">
+                  <p role="alert" className="text-[12.5px] text-danger-ink">
                     {t(`labels.settings.problem.${problem}`, { max: CONDITION_MAX_CHARS })}
                   </p>
                 )}
@@ -800,7 +776,7 @@ function AutomaticEditor({
           <Button
             size="sm"
             variant="ghost"
-            icon={Plus}
+            icon={ICONS.add}
             className="self-start"
             onClick={() => setRules({ ...rules, conditions: [...rules.conditions, { field: "from", value: "" }] })}
           >

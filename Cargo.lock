@@ -5597,7 +5597,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -6107,8 +6107,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "uwu-macos"
+version = "1.6.2"
+source = "git+https://github.com/MinifyX/UwUSuite-Design?tag=v1.6.2#1994264df14cc7e9c271e1ddd2c0a18991c5c021"
+dependencies = [
+ "objc2",
+]
+
+[[package]]
 name = "uwumail-android"
-version = "0.10.0-beta.1"
+version = "0.10.0-beta.2"
 dependencies = [
  "base64 0.23.1",
  "jni 0.21.1",
@@ -6125,7 +6133,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-core"
-version = "0.10.0-beta.1"
+version = "0.10.0-beta.2"
 dependencies = [
  "ammonia",
  "async-imap",
@@ -6167,7 +6175,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-desktop"
-version = "0.10.0-beta.1"
+version = "0.10.0-beta.2"
 dependencies = [
  "base64 0.23.1",
  "libc",
@@ -6188,6 +6196,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "tracing",
+ "uwu-macos",
  "uwumail-android",
  "uwumail-core",
  "uwumail-ocr",
@@ -6195,7 +6204,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-labels"
-version = "0.10.0-beta.1"
+version = "0.10.0-beta.2"
 dependencies = [
  "mail-parser",
  "serde",
@@ -6204,7 +6213,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-ocr"
-version = "0.10.0-beta.1"
+version = "0.10.0-beta.2"
 dependencies = [
  "objc2",
  "objc2-foundation",
@@ -6214,7 +6223,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-setup"
-version = "0.10.0-beta.1"
+version = "0.10.0-beta.2"
 dependencies = [
  "libc",
  "semver",
@@ -6232,7 +6241,7 @@ dependencies = [
 
 [[package]]
 name = "uwumail-tnef"
-version = "0.10.0-beta.1"
+version = "0.10.0-beta.2"
 dependencies = [
  "encoding_rs",
  "uwumail-tnef",

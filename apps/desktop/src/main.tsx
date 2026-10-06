@@ -1,5 +1,3 @@
-import "@fontsource-variable/rubik";
-import "@fontsource-variable/dm-sans";
 import "./styles/app.css";
 import "./i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

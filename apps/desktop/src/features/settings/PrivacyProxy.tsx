@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { backend } from "@/backend/backend";
-import { Button } from "@/components/ui/Button";
-import { Field, TextInput } from "@/components/ui/Field";
+import { Button, Field, TextInput } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { hideProxyPassword, withSavedProxyPassword } from "@/lib/proxyLogin";
 import { useSettings } from "@/state/settings";

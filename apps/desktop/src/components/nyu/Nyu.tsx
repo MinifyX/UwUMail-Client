@@ -1,39 +1,13 @@
 import type { ReactNode } from "react";
+import { NYU, type NyuMood, Sticker } from "@uwusuite/design";
 
 /**
- * Nyu's palette. The mascot is artwork with fixed colors: it looks the same in
- * both themes, and a white sticker edge keeps it readable on dark backgrounds.
+ * UwUMail's Nyu as a building block for its scenes and cameos: the envelope cat on the mail 512
+ * grid, placed, scaled and tilted inside a bigger picture, with props behind or in front. The palette,
+ * the sticker edge and the moods come from @uwusuite/design (the package's `Nyu` draws her on her own,
+ * as in the wordmark; `NyuFace`/`NyuEars` are for the 256 grid of the other shells).
  */
-export const NYU = {
-  ink: "#4B1D3F",
-  body: "#FF6FA6",
-  flap: "#FFB8D3",
-  blush: "#FF7FB0",
-  paper: "#FFFFFF",
-  star: "#FFD66E",
-  tear: "#9ED8FF",
-  lilac: "#CDB8FF",
-  violet: "#A78BFA",
-  mint: "#B9F0D0",
-  sky: "#BDE6FF",
-  kraft: "#F2C58F",
-  kraftLight: "#F8DDB8",
-  cloud: "#ECE6F4",
-} as const;
-
-export type NyuMood = "uwu" | "sleepy" | "happy" | "cheer" | "sparkle" | "sad" | "puzzled";
-
-/** Draws its children twice: first as a white die-cut edge, then as they are. */
-export function Sticker({ edge, children }: { edge: number; children: ReactNode }) {
-  return (
-    <>
-      <g className="nyu-edge" strokeWidth={edge}>
-        {children}
-      </g>
-      {children}
-    </>
-  );
-}
+export { NYU, Sticker, type NyuMood };
 
 const line = { fill: "none", stroke: NYU.ink, strokeWidth: 14 } as const;
 

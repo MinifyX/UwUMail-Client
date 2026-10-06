@@ -1,15 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pkg from "../../package.json";
+import type { ContrastSetting, MotionSetting, ThemeSetting } from "@uwusuite/design";
 import { isFontChoice, isSenderFonts, type FontChoice, type SenderFonts } from "@/lib/fonts";
+
+export type { ContrastSetting, MotionSetting, ThemeSetting };
 
 export type LayoutMode = "simple" | "pro";
 /** Mail list rows: roomy cards with three lines, or two lines with a small picture. */
 export type ListDensity = "relaxed" | "compact";
 export type Tone = "playful" | "neutral";
-export type ThemeSetting = "system" | "light" | "dark";
-/** Animations: follow the system's reduced-motion setting, or override it. */
-export type MotionSetting = "system" | "on" | "off";
 /** Nyu's little scenes (sending, archiving, occasions, the AI thinking): see components/nyu/level. */
 export const NYU_ANIMATIONS = ["on", "reduced", "off"] as const;
 export type NyuAnimations = (typeof NYU_ANIMATIONS)[number];
@@ -40,6 +40,9 @@ export interface Settings {
   listDensity: ListDensity;
   tone: Tone;
   theme: ThemeSetting;
+  /** High contrast: follow the system's setting, or override it. This device only. */
+  contrast: ContrastSetting;
+  /** Animations: follow the system's reduced-motion setting, or override it. */
   motion: MotionSetting;
   /**
    * Capped at "reduced" while motion is reduced (setting or operating system). App-wide, for every
@@ -139,6 +142,7 @@ export const DEFAULT_SETTINGS: Settings = {
   listDensity: "relaxed",
   tone: "playful",
   theme: "system",
+  contrast: "system",
   motion: "system",
   nyuAnimations: "on",
   language: "system",
@@ -235,6 +239,7 @@ export const useSettings = create<Settings & SettingsActions>()(
         if (!(NYU_ANIMATIONS as readonly unknown[]).includes(state.nyuAnimations)) {
           state.nyuAnimations = DEFAULT_SETTINGS.nyuAnimations;
         }
+        if (!["system", "normal", "high"].includes(state.contrast)) state.contrast = DEFAULT_SETTINGS.contrast;
         if (!isFontChoice(state.font)) state.font = DEFAULT_SETTINGS.font;
         if (!isSenderFonts(state.senderFonts)) state.senderFonts = DEFAULT_SETTINGS.senderFonts;
         return state;

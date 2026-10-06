@@ -32,7 +32,7 @@ export function UsageSettings() {
   return (
     <Section title={t("assist.usage.title")} description={t("assist.usage.description")}>
       {isPending && <p className="text-[13px] text-muted">{t("assist.usage.loading")}</p>}
-      {isError && <p className="text-[13px] text-danger">{t("assist.usage.failed")}</p>}
+      {isError && <p className="text-[13px] text-danger-ink">{t("assist.usage.failed")}</p>}
       {usage && (
         <>
           <div className="flex flex-col gap-2">
@@ -88,7 +88,7 @@ export function UsageSettings() {
                       </span>
                     )}
                     {share.max !== null && share.max >= 1 && (
-                      <p className="text-[12px] text-danger">{t("assist.usage.limitReached")}</p>
+                      <p className="text-[12px] text-danger-ink">{t("assist.usage.limitReached")}</p>
                     )}
                   </div>
                 );

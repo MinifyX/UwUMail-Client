@@ -1,3 +1,4 @@
+import { Button, Icon, ICONS, Toggle, Wordmark } from "@uwusuite/design";
 import clsx from "clsx";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type Info, type Options } from "./api";
@@ -13,25 +14,17 @@ const MIN_WORKING_MS = 1800;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function Icon({ path, className }: { path: string; className?: string }) {
+/** The window controls' 10 px glyphs, the same as in the package's title bar. */
+function Glyph({ path }: { path: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={clsx("size-4", className)} fill="none" stroke="currentColor" strokeWidth={2.2}>
-      <path d={path} strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 10 10" className="glyph" aria-hidden>
+      <path d={path} />
     </svg>
   );
 }
 
-const ICONS = {
-  soundOn: "M4 9v6h4l5 4V5L8 9H4Z M16.5 8.5a5 5 0 0 1 0 7 M19 6a8.5 8.5 0 0 1 0 12",
-  soundOff: "M4 9v6h4l5 4V5L8 9H4Z M17 9l5 6 M22 9l-5 6",
-  minimize: "M6 12h12",
-  close: "M7 7l10 10 M17 7L7 17",
-  chevron: "M9 6l6 6-6 6",
-  folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z",
-  check: "M5 12.5l4.5 4.5L19 7.5",
-};
-
-function Button({
+/** The package's pill button, a size bigger, as the installer's one big action. */
+function SetupButton({
   children,
   onClick,
   variant = "primary",
@@ -45,24 +38,21 @@ function Button({
   autoFocus?: boolean;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      size="lg"
+      variant={variant === "primary" ? "primary" : "ghost"}
       autoFocus={autoFocus}
       disabled={disabled}
       onClick={onClick}
-      className={clsx(
-        "h-11 rounded-full px-6 text-[15px] font-extrabold transition active:scale-[0.97] disabled:opacity-50",
-        variant === "primary"
-          ? "bg-pink-solid text-white shadow-[0_10px_22px_-10px_rgb(225_29_116/0.8)] hover:bg-pink-solid-hover"
-          : "text-plum-soft hover:text-plum hover:bg-white/70",
-      )}
+      className={clsx("px-6 text-reading", variant === "quiet" && "text-plum-soft hover:bg-white/70 hover:text-plum")}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
-function Switch({
+/** One setting on the card: the package's Toggle, with the hint in the installer's plum. */
+function SetupToggle({
   checked,
   onChange,
   label,
@@ -74,31 +64,9 @@ function Switch({
   hint?: string;
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="hover:bg-blush/60 flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left"
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block text-[13.5px] font-bold">{label}</span>
-        {hint && <span className="text-plum-soft block text-[12px] leading-snug">{hint}</span>}
-      </span>
-      <span
-        className={clsx(
-          "relative h-6 w-10 shrink-0 rounded-full transition-colors",
-          checked ? "bg-pink-solid" : "bg-[#ecd9e3]",
-        )}
-      >
-        <span
-          className={clsx(
-            "absolute top-1 size-4 rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-5" : "translate-x-1",
-          )}
-        />
-      </span>
-    </button>
+    <div className="rounded-2xl px-2 py-2 hover:bg-pink-tint/60 [&_.text-muted]:text-plum-soft">
+      <Toggle checked={checked} onChange={onChange} label={label} description={hint} />
+    </div>
   );
 }
 
@@ -113,27 +81,40 @@ function Window({
   muted: boolean;
   onToggleSound: () => void;
 }) {
-  const control = "grid size-8 place-items-center rounded-full text-plum-soft hover:bg-white/80 hover:text-plum";
   return (
     <div className="setup-sparkles flex h-full flex-col">
       <header data-tauri-drag-region className="flex h-11 shrink-0 items-center gap-1 px-2">
-        <span data-tauri-drag-region className="mr-auto pl-3 text-[14px] font-extrabold tracking-tight">
-          <span className="text-pink">UwU</span>Mail
+        <span data-tauri-drag-region className="mr-auto pl-3">
+          <Wordmark product="Mail" shell="mail" className="text-body" />
         </span>
-        <button type="button" className={control} onClick={onToggleSound} aria-label={muted ? t.soundOn : t.soundOff}>
-          <Icon path={muted ? ICONS.soundOff : ICONS.soundOn} />
-        </button>
-        <button type="button" className={control} onClick={() => void api.minimize()} aria-label={t.minimize}>
-          <Icon path={ICONS.minimize} />
+        <button
+          type="button"
+          className="setup-control"
+          onClick={onToggleSound}
+          title={muted ? t.soundOn : t.soundOff}
+          aria-label={muted ? t.soundOn : t.soundOff}
+        >
+          <Icon icon={muted ? ICONS.soundOff : ICONS.sound} />
         </button>
         <button
           type="button"
-          className={clsx(control, "hover:bg-pink-solid! hover:text-white!")}
+          className="setup-control"
+          onClick={() => void api.minimize()}
+          title={t.minimize}
+          aria-label={t.minimize}
+        >
+          <Glyph path="M0 5.5h10" />
+        </button>
+        <button
+          type="button"
+          className="setup-control"
+          data-kind="close"
           disabled={busy}
           onClick={() => void api.finish()}
+          title={t.close}
           aria-label={t.close}
         >
-          <Icon path={ICONS.close} />
+          <Glyph path="M.5.5l9 9 M9.5.5l-9 9" />
         </button>
       </header>
       <main className="flex min-h-0 flex-1 flex-col items-center px-7 pb-5">{children}</main>
@@ -147,7 +128,7 @@ function Stage({ scene, title, body, compact }: { scene: ReactNode; title: strin
       <div className={clsx("pt-1 transition-[width] duration-300", compact ? "w-[168px]" : "w-[272px]")}>{scene}</div>
       <h1 className="pt-3 text-center text-[24px] leading-tight font-extrabold tracking-tight">{title}</h1>
       {body && !compact && (
-        <p className="text-plum-soft max-w-[340px] pt-1.5 text-center text-[14px] leading-relaxed">{body}</p>
+        <p className="max-w-[340px] pt-1.5 text-center text-[14px] leading-relaxed text-plum-soft">{body}</p>
       )}
     </div>
   );
@@ -282,25 +263,29 @@ export function App() {
           }
         />
         <div className="flex flex-col items-center gap-2 pt-5">
-          <Button onClick={startInstall} autoFocus disabled={!info.hasPayload}>
+          <SetupButton onClick={startInstall} autoFocus disabled={!info.hasPayload}>
             {actionLabel} ♡
-          </Button>
+          </SetupButton>
           <button
             type="button"
             onClick={() => setShowOptions(!showOptions)}
             aria-expanded={showOptions}
-            className="text-plum-soft hover:text-plum flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-bold"
+            className="flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-bold text-plum-soft hover:text-plum"
           >
             {showOptions ? t.fewerOptions : t.options}
-            <Icon path={ICONS.chevron} className={clsx("size-3.5 transition-transform", showOptions && "rotate-90")} />
+            <Icon
+              icon={ICONS.expand}
+              size="xs"
+              className={clsx("transition-transform", !showOptions && "-rotate-90")}
+            />
           </button>
         </div>
         {showOptions && (
           <div className="setup-card setup-fade mt-1 w-full rounded-[22px] p-3">
             <div className="flex items-center gap-2 px-2 pb-1">
-              <Icon path={ICONS.folder} className="size-4 shrink-0 text-pink" />
+              <Icon icon={ICONS.folder} className="text-pink" />
               <span className="min-w-0 flex-1">
-                <span className="text-plum-soft block text-[12px] font-bold">{t.folder}</span>
+                <span className="block text-[12px] font-bold text-plum-soft">{t.folder}</span>
                 <span className="block truncate text-[13px] font-semibold" title={options.dir}>
                   {options.dir}
                 </span>
@@ -309,7 +294,7 @@ export function App() {
               {windows && (
                 <button
                   type="button"
-                  className="hover:bg-blush shrink-0 rounded-full px-3 py-1 text-[12.5px] font-bold text-pink-solid"
+                  className="shrink-0 rounded-full px-3 py-1 text-[12.5px] font-bold text-pink-solid hover:bg-pink-tint"
                   onClick={async () => {
                     const dir = await api.pickFolder(options.dir);
                     if (dir) setOptions({ ...options, dir });
@@ -320,19 +305,19 @@ export function App() {
               )}
             </div>
             {windows && (
-              <Switch
+              <SetupToggle
                 checked={options.desktopShortcut}
                 onChange={(desktopShortcut) => setOptions({ ...options, desktopShortcut })}
                 label={t.desktopShortcut}
               />
             )}
-            <Switch
+            <SetupToggle
               checked={options.autostart}
               onChange={(autostart) => setOptions({ ...options, autostart })}
               label={pick(t.autostart, t.autostartMac, t.autostartLinux)}
               hint={pick(t.autostartHint, t.autostartHintMac, t.autostartHintLinux)}
             />
-            <Switch
+            <SetupToggle
               checked={options.defaultMailApp}
               onChange={(defaultMailApp) => setOptions({ ...options, defaultMailApp })}
               label={t.defaultMailApp}
@@ -343,14 +328,14 @@ export function App() {
               <button
                 type="button"
                 onClick={() => setScreen("uninstall")}
-                className="text-plum-soft hover:text-plum mt-1 w-full rounded-2xl px-2 py-2 text-left text-[12.5px] font-bold"
+                className="mt-1 w-full rounded-2xl px-2 py-2 text-left text-[12.5px] font-bold text-plum-soft hover:text-plum"
               >
                 {t.uninstallLink}
               </button>
             )}
           </div>
         )}
-        <p className="text-plum-soft mt-auto pt-3 text-center text-[11.5px]">
+        <p className="mt-auto pt-3 text-center text-[11.5px] text-plum-soft">
           {!info.hasPayload ? t.devBuild : info.sandbox ? t.sandbox : fill(t.footer, { version: info.version })}
         </p>
       </>,
@@ -362,7 +347,7 @@ export function App() {
       <div className="my-auto flex w-full flex-col items-center pb-10">
         <Stage scene={<PuzzledScene />} title={t.runningTitle} body={t.runningBody} />
         <div className="flex flex-col items-center gap-1 pt-6">
-          <Button
+          <SetupButton
             autoFocus
             onClick={async () => {
               try {
@@ -375,10 +360,10 @@ export function App() {
             }}
           >
             {t.closeAndContinue}
-          </Button>
-          <Button variant="quiet" onClick={() => setScreen("welcome")}>
+          </SetupButton>
+          <SetupButton variant="quiet" onClick={() => setScreen("welcome")}>
             {t.back}
-          </Button>
+          </SetupButton>
         </div>
       </div>,
     );
@@ -400,7 +385,7 @@ export function App() {
           >
             <div className="setup-bar h-full rounded-full" style={{ width: `${Math.max(6, percent)}%` }} />
           </div>
-          <div className="text-plum-soft flex items-center justify-between pt-2.5 text-[13px] font-semibold">
+          <div className="flex items-center justify-between pt-2.5 text-[13px] font-semibold text-plum-soft">
             <span key={quote} className="setup-fade">
               {t.quotes[quote]}
             </span>
@@ -431,22 +416,22 @@ export function App() {
           <ul className="flex flex-col gap-1.5">
             {t.tips.map((tip) => (
               <li key={tip} className="flex gap-2 text-[13px] leading-snug">
-                <Icon path={ICONS.check} className="mt-0.5 size-3.5 shrink-0 text-pink" />
+                <Icon icon={ICONS.done} size="xs" className="mt-0.5 text-pink" />
                 {tip}
               </li>
             ))}
           </ul>
           {options.defaultMailApp && info.platform !== "linux" && (
-            <p className="bg-blush mt-2 rounded-xl px-3 py-2 text-[12px] font-semibold">
+            <p className="mt-2 rounded-xl bg-pink-tint px-3 py-2 text-[12px] font-semibold">
               {windows ? t.defaultAppsHint : t.defaultAppsHintMac}
             </p>
           )}
         </div>
         <div className="mt-auto flex items-center gap-2 pt-3">
-          <Button variant="quiet" onClick={() => void api.finish()}>
+          <SetupButton variant="quiet" onClick={() => void api.finish()}>
             {t.close}
-          </Button>
-          <Button
+          </SetupButton>
+          <SetupButton
             autoFocus
             onClick={async () => {
               await api.launchApp();
@@ -454,7 +439,7 @@ export function App() {
             }}
           >
             {t.start}
-          </Button>
+          </SetupButton>
         </div>
       </>,
     );
@@ -464,11 +449,11 @@ export function App() {
     return shell(
       <>
         <Stage scene={<ErrorScene />} title={t.errorTitle} />
-        <p className="selectable text-plum-soft mt-3 w-full rounded-2xl bg-white/80 px-4 py-3 text-center text-[12.5px] break-words select-text">
+        <p className="selectable mt-3 w-full rounded-2xl bg-white/80 px-4 py-3 text-center text-[12.5px] break-words text-plum-soft select-text">
           {error}
         </p>
         <div className="flex items-center gap-2 pt-5">
-          <Button
+          <SetupButton
             variant="quiet"
             onClick={() =>
               void (async () => {
@@ -479,10 +464,10 @@ export function App() {
             }
           >
             {t.close}
-          </Button>
-          <Button autoFocus onClick={() => void run(job, options, info, keepData)}>
+          </SetupButton>
+          <SetupButton autoFocus onClick={() => void run(job, options, info, keepData)}>
             {t.retry}
-          </Button>
+          </SetupButton>
         </div>
       </>,
     );
@@ -493,18 +478,18 @@ export function App() {
       <>
         <Stage scene={<GoodbyeScene />} title={t.uninstallTitle} body={fill(t.uninstallBody, { device })} />
         <div className="setup-card mt-5 w-full rounded-[22px] p-2">
-          <Switch checked={keepData} onChange={setKeepData} label={t.keepData} hint={t.keepDataHint} />
+          <SetupToggle checked={keepData} onChange={setKeepData} label={t.keepData} hint={t.keepDataHint} />
         </div>
         <div className="mt-auto flex items-center gap-2 pt-3">
-          <Button
+          <SetupButton
             variant="quiet"
             onClick={() => (info.mode === "uninstall" ? void api.finish() : setScreen("welcome"))}
           >
             {t.keep}
-          </Button>
-          <Button autoFocus onClick={() => void run("uninstall", options, info, keepData)}>
+          </SetupButton>
+          <SetupButton autoFocus onClick={() => void run("uninstall", options, info, keepData)}>
             {t.uninstall}
-          </Button>
+          </SetupButton>
         </div>
       </>,
     );
@@ -514,9 +499,9 @@ export function App() {
     <div className="my-auto flex w-full flex-col items-center pb-10">
       <Stage scene={<GoodbyeScene />} title={t.goodbyeTitle} body={t.goodbyeBody} />
       <div className="pt-6">
-        <Button autoFocus onClick={() => void api.finish()}>
+        <SetupButton autoFocus onClick={() => void api.finish()}>
           {t.close}
-        </Button>
+        </SetupButton>
       </div>
     </div>,
   );

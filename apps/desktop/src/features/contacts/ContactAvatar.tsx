@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { UsersRound } from "lucide-react";
+import { Icon, ICONS } from "@uwusuite/design";
 import { useState } from "react";
 import type { ContactRecord } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
@@ -35,7 +35,7 @@ export function ContactAvatar({ contact, size = "list" }: { contact: ContactReco
         aria-hidden
         className={clsx("grid shrink-0 place-items-center rounded-full bg-pink-tint text-pink-ink", SIZES[size])}
       >
-        <UsersRound className={size === "lg" ? "size-7" : "size-4"} />
+        <Icon icon={ICONS.people} size={size === "lg" ? "xl" : "sm"} />
       </span>
     );
   }

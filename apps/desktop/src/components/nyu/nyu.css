@@ -1,201 +1,13 @@
-/* Nyu, the mascot. Shared by the app and the installer (apps/setup). See docs/design.md. */
+/*
+ * UwUMail's own Nyu motion. The edge, blink, ears, wave, thinking, logo hop, flyer and the shared
+ * scene loops (nyu-zzz …) come from @uwusuite/design's nyu.css; what is here only UwUMail's scenes
+ * use (scenes.tsx), plus Settings → Darstellung → Nyu-Animationen. Shared with the installer.
+ */
 
-.nyu-edge,
-.nyu-edge * {
-  fill: #fff;
-  stroke: #fff;
-}
-
-.nyu-edge * {
-  stroke-width: inherit;
-}
-
-.nyu-edge [fill="none"],
-.nyu-edge [fill="none"] * {
-  fill: none;
-}
-
-.nyu-edge .no-edge {
-  display: none;
-}
-
-.nyu-ear,
-.nyu-eyes,
-.nyu-wave {
-  transform-box: fill-box;
-}
-
-.nyu-ear {
-  transform-origin: 50% 100%;
-}
-
-.nyu-host:hover .nyu-ear-l {
-  animation: nyu-ear-l 480ms ease-in-out;
-}
-
-.nyu-host:hover .nyu-ear-r {
-  animation: nyu-ear-r 480ms ease-in-out;
-}
-
-.nyu-blink .nyu-eyes {
-  transform-origin: center;
-  animation: nyu-blink 5s ease-in-out infinite;
-}
-
-.nyu-wave {
-  transform-origin: 30% 90%;
-  animation: nyu-wave 2.4s ease-in-out infinite;
-}
-
-@keyframes nyu-ear-l {
-  0%,
-  100% {
-    transform: rotate(0);
-  }
-  30% {
-    transform: rotate(-14deg);
-  }
-  65% {
-    transform: rotate(6deg);
-  }
-}
-
-@keyframes nyu-ear-r {
-  0%,
-  100% {
-    transform: rotate(0);
-  }
-  30% {
-    transform: rotate(14deg);
-  }
-  65% {
-    transform: rotate(-6deg);
-  }
-}
-
-@keyframes nyu-blink {
-  0%,
-  90%,
-  100% {
-    transform: scaleY(1);
-  }
-  94% {
-    transform: scaleY(0.1);
-  }
-}
-
-@keyframes nyu-wave {
-  0%,
-  45%,
-  100% {
-    transform: rotate(0);
-  }
-  12%,
-  32% {
-    transform: rotate(-18deg);
-  }
-  22% {
-    transform: rotate(10deg);
-  }
-}
-
-@keyframes nyu-hop {
-  0%,
-  100% {
-    transform: translateY(0) scale(1, 1);
-  }
-  18% {
-    transform: translateY(0) scale(1.1, 0.88);
-  }
-  50% {
-    transform: translateY(-38%) scale(0.94, 1.08);
-  }
-  82% {
-    transform: translateY(0) scale(1.06, 0.94);
-  }
-}
-
-@keyframes nyu-fly {
-  0% {
-    opacity: 1;
-    transform: translate(0, 0) rotate(0) scale(1);
-  }
-  25% {
-    transform: translate(18px, -26px) rotate(-10deg) scale(1.15);
-  }
-  70% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(170px, -120px) rotate(24deg) scale(0.7);
-  }
-}
-
-/* ---- Nyu thinking while the AI works (NyuThinking.tsx) ---- */
-
-.nyu-think-bob {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: nyu-think-bob 1.6s ease-in-out infinite;
-}
-
-.nyu-thinking .nyu-eyes {
-  animation: nyu-think-eyes 3.2s ease-in-out infinite;
-}
-
-.nyu-think-dot {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: nyu-think-dot 1.2s ease-in-out infinite both;
-}
-
-@keyframes nyu-think-bob {
-  0%,
-  100% {
-    transform: rotate(-3deg);
-  }
-  50% {
-    transform: rotate(3deg) translateY(-3%);
-  }
-}
-
-@keyframes nyu-think-eyes {
-  0%,
-  30%,
-  100% {
-    transform: translate(10px, -8px);
-  }
-  45%,
-  70% {
-    transform: translate(-6px, -10px);
-  }
-}
-
-@keyframes nyu-think-dot {
-  0%,
-  60%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.8);
-  }
-  30% {
-    opacity: 1;
-    transform: scale(1.15) translateY(-2px);
-  }
-}
-
-/* ---- Small idle movements in the empty-state scenes (scenes.tsx) ---- */
-
-.nyu-zzz,
 .nyu-steam,
 .nyu-sweep,
 .nyu-wonder {
   transform-box: fill-box;
-}
-
-.nyu-zzz {
-  animation: nyu-zzz 3.2s ease-in-out infinite;
 }
 
 .nyu-steam {
@@ -210,18 +22,6 @@
 .nyu-wonder {
   transform-origin: 50% 100%;
   animation: nyu-wonder 2.6s ease-in-out infinite;
-}
-
-@keyframes nyu-zzz {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: translate(0, 4px);
-  }
-  50% {
-    opacity: 1;
-    transform: translate(4px, -4px);
-  }
 }
 
 @keyframes nyu-steam {
@@ -265,13 +65,20 @@
   }
 }
 
-/* ---- Settings → Appearance → Nyu animations, resolved in level.ts ---- */
+/* ---- Settings → Darstellung → Nyu-Animationen, resolved in level.ts ---- */
 
 /* Reduced: Nyu stays still everywhere (cameos show as still pictures). Off: no cameos at all. */
 [data-nyu="reduced"] .nyu-host,
 [data-nyu="reduced"] .nyu-host *,
 [data-nyu="off"] .nyu-host,
 [data-nyu="off"] .nyu-host * {
+  animation: none !important;
+}
+
+/* Her hops sit on a wrapper outside the svg: LogoSymbol (nyu-logo, also the pull-to-refresh hop)
+   and the package's Wordmark (nyu-logo-hop). */
+[data-nyu="reduced"] :is(.nyu-logo, .nyu-logo-hop),
+[data-nyu="off"] :is(.nyu-logo, .nyu-logo-hop) {
   animation: none !important;
 }
 

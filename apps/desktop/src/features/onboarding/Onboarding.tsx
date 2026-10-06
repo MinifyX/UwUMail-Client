@@ -1,8 +1,7 @@
 import clsx from "clsx";
-import { ArrowLeft, Check } from "lucide-react";
+import { Button, Icon, ICONS } from "@uwusuite/design";
 import { useState, type ReactNode } from "react";
 import { backend } from "@/backend/backend";
-import { Button } from "@/components/ui/Button";
 import { NyuScene } from "@/components/nyu/scenes";
 import { i18n, useT } from "@/i18n";
 import { toast } from "@/state/toasts";
@@ -37,8 +36,8 @@ function ChoiceCard({
       )}
     >
       {selected && (
-        <span className="absolute top-3 right-3 grid size-6 animate-pop place-items-center rounded-full bg-pink text-white">
-          <Check className="size-3.5" strokeWidth={3} aria-hidden />
+        <span className="absolute top-3 right-3 grid size-6 animate-pop place-items-center rounded-full bg-pink-solid text-on-pink">
+          <Icon icon={ICONS.done} size="xs" />
         </span>
       )}
       <div className="h-28 overflow-hidden rounded-xl bg-canvas p-2.5" aria-hidden>
@@ -144,7 +143,7 @@ export function Onboarding() {
         >
           {step !== "welcome" && step !== "done" && (
             <div className="flex items-center justify-between">
-              <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={back}>
+              <Button variant="ghost" size="sm" icon={ICONS.back} onClick={back}>
                 {t("onboarding.back")}
               </Button>
               <div className="flex gap-1.5" aria-label={t("onboarding.step", { current: index, total: 3 })}>

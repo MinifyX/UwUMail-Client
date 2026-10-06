@@ -1,11 +1,9 @@
 import clsx from "clsx";
-import { Trash } from "lucide-react";
+import { Button, Field, ICONS, Segmented, Select, TextInput, Toggle } from "@uwusuite/design";
 import { useState } from "react";
 import type { CalendarOccurrence, EventInput, Recurrence, Weekday } from "@/backend/types";
-import { Button } from "@/components/ui/Button";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
-import { Field, Segmented, Select, TextInput, Toggle } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import {
   addDays,
@@ -377,7 +375,7 @@ function EditorDialog({ request, onClose }: { request: EditorRequest | null; onC
                     )}
                   </div>
                   {shown.some((problem) => problem !== "end") && (
-                    <p role="alert" className="text-[13px] text-danger">
+                    <p role="alert" className="text-[13px] text-danger-ink">
                       {t("calendar.problem.repeat")}
                     </p>
                   )}
@@ -442,7 +440,7 @@ function EditorDialog({ request, onClose }: { request: EditorRequest | null; onC
             {occurrence && !occurrence.readOnly && (
               <Button
                 variant="danger"
-                icon={Trash}
+                icon={ICONS.delete}
                 onClick={() =>
                   void actions.remove(occurrence).then((removed) => {
                     if (removed) onClose();

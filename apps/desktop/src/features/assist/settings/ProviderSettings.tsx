@@ -1,21 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import {
-  CircleCheck,
-  CircleDashed,
-  Copy,
-  Cpu,
-  ExternalLink,
-  FlaskConical,
-  KeyRound,
-  LogIn,
-  Pencil,
-  Plus,
-  Server,
-  Trash,
-  UserRound,
-  Zap,
-} from "lucide-react";
+import { Button, Field, Icon, IconButton, ICONS, Select, TextInput } from "@uwusuite/design";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AssistError, backend } from "@/backend/backend";
 import {
@@ -27,8 +12,6 @@ import {
   DEVICE_ASSIST_SCOPE,
   type LocalModelServer,
 } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Field, Select, TextInput } from "@/components/ui/Field";
 import { useT } from "@/i18n";
 import { ASSIST_KINDS, assistKind } from "@/lib/assistKinds";
 import { queryKeys } from "@/lib/queries";
@@ -75,7 +58,7 @@ export function ProviderSettings({ options }: { options: AssistOptions }) {
       action={
         options.mayAddProviders &&
         editing !== "new" && (
-          <Button size="sm" icon={Plus} disabled={!room} onClick={() => setEditing("new")}>
+          <Button size="sm" icon={ICONS.add} disabled={!room} onClick={() => setEditing("new")}>
             {t("assist.providers.add")}
           </Button>
         )
@@ -140,7 +123,7 @@ function LocalModels() {
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-pink/30 bg-pink-tint/20 px-3.5 py-3">
       <p className="flex items-center gap-2 text-[13px] font-bold">
-        <Cpu className="size-4 shrink-0 text-pink" aria-hidden />
+        <Icon icon={ICONS.localModel} className="shrink-0 text-pink" />
         {t("assist.local.title")}
       </p>
       <p className="text-[12.5px] text-muted">{t("assist.local.description")}</p>
@@ -199,7 +182,7 @@ function LocalModelOffer({ server }: { server: LocalModelServer }) {
       ) : (
         <span className="text-[12.5px] text-muted">{t("assist.local.noModels")}</span>
       )}
-      <Button size="sm" variant="primary" icon={Plus} busy={busy} onClick={add}>
+      <Button size="sm" variant="primary" icon={ICONS.add} busy={busy} onClick={add}>
         {t("assist.local.add")}
       </Button>
     </li>
@@ -207,10 +190,10 @@ function LocalModelOffer({ server }: { server: LocalModelServer }) {
 }
 
 function ProviderIcon({ provider }: { provider: AssistProvider }) {
-  const Icon = provider.scope === "server" ? Server : UserRound;
+  const Glyph = provider.scope === "server" ? ICONS.server : ICONS.account;
   return (
     <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-canvas text-muted">
-      <Icon className="size-4" aria-hidden />
+      <Icon icon={Glyph} />
     </span>
   );
 }
@@ -327,8 +310,8 @@ function OwnProvider({
             <span className="text-[13.5px] font-bold break-words">{provider.name}</span>
             <span className="rounded-full bg-canvas px-2 py-px text-[11px] font-semibold text-muted">{kind.label}</span>
             {provider.experimental && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-warning-tint px-2 py-px text-[11px] font-semibold text-warning">
-                <FlaskConical className="size-3" aria-hidden />
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning-tint px-2 py-px text-[11px] font-semibold text-warning-ink">
+                <Icon icon={ICONS.experimental} size="xs" />
                 {t("assist.providers.experimental")}
               </span>
             )}
@@ -336,18 +319,17 @@ function OwnProvider({
           <Models provider={provider} />
           <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-muted">
             <span
-              className={clsx("inline-flex items-center gap-1", provider.connected ? "text-success" : "text-warning")}
-            >
-              {provider.connected ? (
-                <CircleCheck className="size-3.5" aria-hidden />
-              ) : (
-                <CircleDashed className="size-3.5" aria-hidden />
+              className={clsx(
+                "inline-flex items-center gap-1",
+                provider.connected ? "text-success-ink" : "text-warning-ink",
               )}
+            >
+              {provider.connected ? <Icon icon={ICONS.success} size="xs" /> : <Icon icon={ICONS.maybe} size="xs" />}
               {status}
             </span>
             {kind.key !== "none" && (
               <span className="inline-flex items-center gap-1">
-                <KeyRound className="size-3.5" aria-hidden />
+                <Icon icon={ICONS.secret} size="xs" />
                 {provider.hasKey
                   ? t("assist.providers.keyStored", { hint: provider.keyHint ?? "…" })
                   : t("assist.providers.noKey")}
@@ -358,13 +340,13 @@ function OwnProvider({
         </div>
         <div className="flex shrink-0 items-start gap-0.5">
           <IconButton
-            icon={Pencil}
+            icon={ICONS.edit}
             size="sm"
             label={t("assist.providers.edit", { name: provider.name })}
             onClick={onEdit}
           />
           <IconButton
-            icon={Trash}
+            icon={ICONS.delete}
             size="sm"
             label={t("assist.providers.delete", { name: provider.name })}
             onClick={() => setConfirmDelete(true)}
@@ -372,12 +354,12 @@ function OwnProvider({
         </div>
       </div>
       {confirmDelete ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-danger-tint px-3 py-2 text-[12.5px] text-danger">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-danger-tint px-3 py-2 text-[12.5px] text-danger-ink">
           <span className="min-w-0 flex-1">{t("assist.providers.confirmDelete")}</span>
           <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
             {t("common.cancel")}
           </Button>
-          <Button size="sm" variant="danger" icon={Trash} busy={deleting} onClick={remove}>
+          <Button size="sm" variant="danger" icon={ICONS.delete} busy={deleting} onClick={remove}>
             {t("assist.providers.deleteShort")}
           </Button>
         </div>
@@ -387,14 +369,14 @@ function OwnProvider({
             <Button
               size="sm"
               variant={provider.connected ? "ghost" : "primary"}
-              icon={LogIn}
+              icon={ICONS.signIn}
               onClick={() => onSignIn(true)}
             >
               {provider.connected ? t("assist.chatgpt.again") : t("assist.chatgpt.signIn")}
             </Button>
           )}
           {(provider.connected || provider.kind !== "chatgpt") && (
-            <Button size="sm" variant="ghost" icon={Zap} busy={testing} onClick={test}>
+            <Button size="sm" variant="ghost" icon={ICONS.connect} busy={testing} onClick={test}>
               {t("assist.providers.test")}
             </Button>
           )}
@@ -583,7 +565,7 @@ function ProviderEditor({
               onClick={() => void openLinkNow(kind.keyUrl!)}
               className="inline-flex items-center gap-1 rounded font-semibold text-pink-ink hover:underline focus-visible:shadow-focus focus-visible:outline-none"
             >
-              <ExternalLink className="size-3.5" aria-hidden />
+              <Icon icon={ICONS.openExternal} size="xs" />
               {t("assist.providers.getKey", { provider: kind.label })}
             </button>
           )}
@@ -658,7 +640,7 @@ function ProviderEditor({
         </div>
       )}
       {failure !== null && Object.keys(fromServer).length === 0 && (
-        <p role="alert" className="rounded-xl bg-danger-tint px-3 py-2 text-[13px] text-danger">
+        <p role="alert" className="rounded-xl bg-danger-tint px-3 py-2 text-[13px] text-danger-ink">
           {assistErrorText(failure)}
           {assistErrorDetail(failure) && (
             <span className="block text-[12px] opacity-80">{assistErrorDetail(failure)}</span>
@@ -760,7 +742,7 @@ function ChatgptSignIn({ provider, onClose }: { provider: AssistProvider; onClos
               {login.userCode}
             </code>
             <IconButton
-              icon={Copy}
+              icon={ICONS.copy}
               size="sm"
               label={t("assist.chatgpt.copyCode")}
               onClick={() =>
@@ -773,7 +755,7 @@ function ChatgptSignIn({ provider, onClose }: { provider: AssistProvider; onClos
             <Button
               size="sm"
               variant="primary"
-              icon={ExternalLink}
+              icon={ICONS.openExternal}
               onClick={() => void openLinkNow(login.verificationUri)}
             >
               {t("assist.chatgpt.open")}
@@ -789,14 +771,14 @@ function ChatgptSignIn({ provider, onClose }: { provider: AssistProvider; onClos
         </>
       )}
       {(state === "expired" || state === "failed") && (
-        <p className="text-danger">
+        <p className="text-danger-ink">
           {state === "expired" ? t("assist.chatgpt.expired") : t("assist.chatgpt.failed")}
           {problem && <span className="block text-[12px] opacity-80">{problem}</span>}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
         {(state === "expired" || state === "failed") && (
-          <Button size="sm" icon={LogIn} onClick={again}>
+          <Button size="sm" icon={ICONS.signIn} onClick={again}>
             {t("assist.chatgpt.again")}
           </Button>
         )}

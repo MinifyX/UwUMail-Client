@@ -5,37 +5,14 @@ import { colorFor, initials } from "@/lib/format";
 import { cachedLook, lookOfImage } from "@/lib/pictureLook";
 import { useSenderPicture } from "@/lib/queries";
 
+/** The initials chip and the account dot per colour, from the package's account tokens. */
 export const COLOR_CLASSES: Record<AccountColor, { bg: string; text: string; dot: string }> = {
-  pink: {
-    bg: "bg-[#ffe4ef] dark:bg-[#3a1a2a]",
-    text: "text-[#a3154f] dark:text-[#ffa3c4]",
-    dot: "bg-[var(--uwu-account-pink)]",
-  },
-  violet: {
-    bg: "bg-[#ede5ff] dark:bg-[#2a2142]",
-    text: "text-[#5b32c7] dark:text-[#c4b1ff]",
-    dot: "bg-[var(--uwu-account-violet)]",
-  },
-  sky: {
-    bg: "bg-[#dff3fc] dark:bg-[#10293a]",
-    text: "text-[#0b6591] dark:text-[#8fd6f8]",
-    dot: "bg-[var(--uwu-account-sky)]",
-  },
-  mint: {
-    bg: "bg-[#d8f5e8] dark:bg-[#123a2a]",
-    text: "text-[#0b6e4c] dark:text-[#6ee7b7]",
-    dot: "bg-[var(--uwu-account-mint)]",
-  },
-  amber: {
-    bg: "bg-[#fdf0d6] dark:bg-[#3a2a0c]",
-    text: "text-[#8a5606] dark:text-[#f5c453]",
-    dot: "bg-[var(--uwu-account-amber)]",
-  },
-  coral: {
-    bg: "bg-[#fde6e2] dark:bg-[#3d1d18]",
-    text: "text-[#a8392a] dark:text-[#ffab9d]",
-    dot: "bg-[var(--uwu-account-coral)]",
-  },
+  pink: { bg: "bg-avatar-pink", text: "text-avatar-pink-ink", dot: "bg-account-pink" },
+  violet: { bg: "bg-avatar-violet", text: "text-avatar-violet-ink", dot: "bg-account-violet" },
+  sky: { bg: "bg-avatar-sky", text: "text-avatar-sky-ink", dot: "bg-account-sky" },
+  mint: { bg: "bg-avatar-mint", text: "text-avatar-mint-ink", dot: "bg-account-mint" },
+  amber: { bg: "bg-avatar-amber", text: "text-avatar-amber-ink", dot: "bg-account-amber" },
+  coral: { bg: "bg-avatar-coral", text: "text-avatar-coral-ink", dot: "bg-account-coral" },
 };
 
 interface AvatarProps {

@@ -348,6 +348,8 @@
     "listDensity": "Mail-Liste",
     "listDensityDesc": "Kompakt zeigt mehr Mails auf einmal, mit kleinem Bild und zwei Zeilen.",
     "theme": "Design",
+    "contrast": "Kontrast",
+    "contrastDesc": "„Hoch“ zeigt Schrift und Ränder kräftiger. „System“ richtet sich nach deinem Betriebssystem.",
     "motion": "Animationen",
     "motionDesc": "„Wie System“ richtet sich nach der Einstellung für reduzierte Bewegung in deinem Betriebssystem.",
     "nyuAnimations": "Nyu-Animationen",
@@ -542,6 +544,11 @@
     "system": "System",
     "light": "Hell",
     "dark": "Dunkel"
+  },
+  "contrast": {
+    "system": "System",
+    "normal": "Normal",
+    "high": "Hoch"
   },
   "motion": {
     "system": "Wie System",
@@ -2266,5 +2273,22 @@
       "newMail": "Neue Mail",
       "hidden": "Öffne UwUMail, um sie zu lesen."
     }
+  },
+  "macMenu": {
+    "message": "E-Mail",
+    "mailbox": "Postfach",
+    "newMail": "Neue E-Mail",
+    "newEvent": "Neuer Termin",
+    "newContact": "Neuer Kontakt",
+    "find": "Mails durchsuchen",
+    "palette": "Befehle …",
+    "getMail": "Neue E-Mails abrufen",
+    "move": "Verschieben …",
+    "label": "Label vergeben …",
+    "checkUpdates": "Nach Updates suchen …",
+    "shortcuts": "Tastenkürzel",
+    "website": "UwUMail auf GitHub",
+    "releaseNotes": "Was ist neu",
+    "report": "Problem melden …"
   }
 }

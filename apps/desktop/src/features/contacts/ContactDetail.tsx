@@ -1,22 +1,8 @@
 import clsx from "clsx";
-import type { LucideIcon } from "lucide-react";
-import {
-  Bell,
-  BookUser,
-  Cake,
-  ChevronLeft,
-  Heart,
-  Mail,
-  MapPin,
-  NotebookPen,
-  Pencil,
-  Phone,
-  Trash,
-} from "lucide-react";
+import { Button, EmptyState, Icon, IconButton, type IconProps, ICONS } from "@uwusuite/design";
 import type { ReactNode } from "react";
 import type { ContactRecord } from "@/backend/types";
-import { Button, IconButton } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { useUi } from "@/state/ui";
 import { ContactAvatar } from "./ContactAvatar";
@@ -31,19 +17,19 @@ export function writeTo(contact: ContactRecord, email: string) {
 }
 
 function Row({
-  icon: Icon,
+  icon: Glyph,
   label,
   kind,
   children,
 }: {
-  icon: LucideIcon;
+  icon: IconProps["icon"];
   label: string;
   kind?: string;
   children: ReactNode;
 }) {
   return (
     <li className="flex gap-3 rounded-2xl px-3 py-2.5 hover:bg-canvas">
-      <Icon className="mt-0.5 size-[18px] shrink-0 text-muted" strokeWidth={2} aria-label={label} />
+      <Icon icon={Glyph} size="md" className="mt-0.5 shrink-0 text-muted" label={label} />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="selectable min-w-0 text-[14px] break-words">{children}</div>
         {kind && <span className="text-[12px] text-muted">{kind}</span>}
@@ -72,7 +58,7 @@ export function ContactDetail({
   if (!contact) {
     return (
       <section className={clsx("flex items-center justify-center bg-surface", className)}>
-        <EmptyState scene="pick" title={t("contacts.pick")} />
+        <EmptyState art={<NyuScene name="pick" />} title={t("contacts.pick")} />
       </section>
     );
   }
@@ -94,7 +80,7 @@ export function ContactDetail({
       <header className="flex items-center gap-1 px-3 pt-3">
         {onBack && (
           <IconButton
-            icon={ChevronLeft}
+            icon={ICONS.back}
             label={t("contacts.back")}
             onClick={onBack}
             className={backWide ? undefined : "lg:hidden"}
@@ -102,9 +88,9 @@ export function ContactDetail({
         )}
         <span className="flex-1" />
         {writable && !contact.isGroup && (
-          <IconButton icon={Pencil} label={t("contacts.edit")} onClick={() => openEditor({ contact })} />
+          <IconButton icon={ICONS.edit} label={t("contacts.edit")} onClick={() => openEditor({ contact })} />
         )}
-        {writable && <IconButton icon={Trash} label={t("contacts.delete")} onClick={() => askDelete(contact)} />}
+        {writable && <IconButton icon={ICONS.delete} label={t("contacts.delete")} onClick={() => askDelete(contact)} />}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 sm:px-8">
         <div className="flex flex-col items-center gap-3 pt-2 pb-5 text-center">
@@ -116,7 +102,7 @@ export function ContactDetail({
             {subtitle && <p className="selectable text-[14px] text-muted">{subtitle}</p>}
           </div>
           {firstEmail && (
-            <Button variant="primary" size="sm" icon={Mail} onClick={() => writeTo(contact, firstEmail)}>
+            <Button variant="primary" size="sm" icon={ICONS.compose} onClick={() => writeTo(contact, firstEmail)}>
               {t("contacts.writeMail")}
             </Button>
           )}
@@ -124,7 +110,12 @@ export function ContactDetail({
 
         <ul className="mx-auto flex max-w-[560px] flex-col gap-0.5">
           {contact.emails.map((email) => (
-            <Row key={`e-${email.id}`} icon={Mail} label={t("contacts.email")} kind={t(`contacts.kinds.${email.kind}`)}>
+            <Row
+              key={`e-${email.id}`}
+              icon={ICONS.mail}
+              label={t("contacts.email")}
+              kind={t(`contacts.kinds.${email.kind}`)}
+            >
               <button
                 type="button"
                 onClick={() => writeTo(contact, email.address)}
@@ -137,7 +128,7 @@ export function ContactDetail({
           {contact.phones.map((phone) => (
             <Row
               key={`p-${phone.id}`}
-              icon={Phone}
+              icon={ICONS.phone}
               label={t("contacts.phone")}
               kind={t(`contacts.kinds.${phone.kind}`)}
             >
@@ -149,7 +140,7 @@ export function ContactDetail({
           {contact.addresses.map((postal) => (
             <Row
               key={`a-${postal.id}`}
-              icon={MapPin}
+              icon={ICONS.location}
               label={t("contacts.address")}
               kind={t(`contacts.kinds.${postal.kind}`)}
             >
@@ -161,7 +152,7 @@ export function ContactDetail({
             </Row>
           ))}
           {contact.birthday && (
-            <Row icon={Cake} label={t("contacts.birthday")} kind={t("contacts.birthday")}>
+            <Row icon={ICONS.birthday} label={t("contacts.birthday")} kind={t("contacts.birthday")}>
               {formatBirthday(contact.birthday, i18n.language)}
               <span className="block text-[12.5px] text-muted">
                 {describeDay(contact.birthday, "birth", i18n.language, t)}
@@ -169,7 +160,7 @@ export function ContactDetail({
             </Row>
           )}
           {contact.anniversary && (
-            <Row icon={Heart} label={t("contacts.anniversary")} kind={t("contacts.anniversary")}>
+            <Row icon={ICONS.anniversary} label={t("contacts.anniversary")} kind={t("contacts.anniversary")}>
               {formatBirthday(contact.anniversary, i18n.language)}
               <span className="block text-[12.5px] text-muted">
                 {describeDay(contact.anniversary, "wedding", i18n.language, t)}
@@ -177,17 +168,17 @@ export function ContactDetail({
             </Row>
           )}
           {(contact.reminders?.length ?? 0) > 0 && (contact.birthday || contact.anniversary) && (
-            <Row icon={Bell} label={t("contacts.reminders")} kind={t("contacts.reminders")}>
+            <Row icon={ICONS.reminder} label={t("contacts.reminders")} kind={t("contacts.reminders")}>
               {contact.reminders!.map((reminder) => reminderLabel(reminder, t)).join(", ")}
             </Row>
           )}
           {contact.note && (
-            <Row icon={NotebookPen} label={t("contacts.note")}>
+            <Row icon={ICONS.note} label={t("contacts.note")}>
               <span className="whitespace-pre-wrap">{contact.note}</span>
             </Row>
           )}
           {book && books.length > 1 && (
-            <Row icon={BookUser} label={t("contacts.addressBook")} kind={t("contacts.addressBook")}>
+            <Row icon={ICONS.contacts} label={t("contacts.addressBook")} kind={t("contacts.addressBook")}>
               {book.name}
             </Row>
           )}

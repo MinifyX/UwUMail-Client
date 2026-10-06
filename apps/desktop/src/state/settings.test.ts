@@ -56,6 +56,29 @@ describe("font settings", () => {
     await useSettings.persist.rehydrate();
     expect(useSettings.getState()).toMatchObject({ font: "uwu", senderFonts: "replace" });
   });
+
+  it("keep a font picked before Manrope was there, and take Manrope", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ state: { font: "dmsans" }, version: 1 }));
+    await useSettings.persist.rehydrate();
+    expect(useSettings.getState().font).toBe("dmsans");
+    localStorage.setItem(KEY, JSON.stringify({ state: { font: "manrope" }, version: 1 }));
+    await useSettings.persist.rehydrate();
+    expect(useSettings.getState().font).toBe("manrope");
+  });
+});
+
+describe("contrast setting", () => {
+  afterEach(() => useSettings.setState({ contrast: DEFAULT_SETTINGS.contrast }));
+
+  it("follows the system by default and falls back to it for an unknown value", async () => {
+    expect(DEFAULT_SETTINGS.contrast).toBe("system");
+    localStorage.setItem(KEY, JSON.stringify({ state: { contrast: "max" }, version: 1 }));
+    await useSettings.persist.rehydrate();
+    expect(useSettings.getState().contrast).toBe("system");
+    localStorage.setItem(KEY, JSON.stringify({ state: { contrast: "high" }, version: 1 }));
+    await useSettings.persist.rehydrate();
+    expect(useSettings.getState().contrast).toBe("high");
+  });
 });
 
 describe("settings kept on this device", () => {

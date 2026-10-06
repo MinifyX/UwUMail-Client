@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { mobile, type PushStatus } from "@/backend/mobile";
-import { Select, Toggle } from "@/components/ui/Field";
+import { Select, Toggle } from "@uwusuite/design";
 import { useT } from "@/i18n";
 
 export const PUSH_STATUS_KEY = ["pushStatus"];
