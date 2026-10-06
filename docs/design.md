@@ -151,7 +151,7 @@ mono symbol) and `apps/desktop/src/components/nyu/` (React).
   drawn by hand from the brand SVGs), so the script drops the PNG mipmaps
   `uwu-icons` writes as well.
 - **Scenes** (`NyuScene`, 320 × 220): inbox zero, no search results, empty
-  folder, nothing selected, no preview, no addons, welcome, setup done,
+  folder, nothing selected, no preview, welcome, setup done,
   message failed to load, offline, no account yet. `EmptyState` shows them at
   240 px, or 150 px with `compact` (Pro layout, dialogs). New scenes reuse
   `Nyu`, `Sticker` and the props in `scenes.tsx`, with a 6 px outline at

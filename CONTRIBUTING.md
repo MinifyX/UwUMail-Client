@@ -21,14 +21,13 @@ UwUMail is a hobby project I build for myself, just for fun (see
 - User-facing strings go through i18n (`apps/desktop/src/i18n/locales`) with
   both an English and a German entry. Read the tone rules in
   [docs/design.md](docs/design.md#tone-of-voice).
-- New core features need a reason why they can't be an addon
-  (see [docs/vision.md](docs/vision.md)).
+- New features should fit [the vision](docs/vision.md): a small, focused core.
 
 ## Commits
 
 [Conventional Commits](https://www.conventionalcommits.org/):
 `feat(sync): …`, `fix(ui): …`, `docs: …`, `chore(ci): …`.
-Scopes: `ui`, `core`, `sync`, `smtp`, `store`, `addons`, `sdk`, `ci`, `brand`.
+Scopes: `ui`, `core`, `sync`, `smtp`, `store`, `ci`, `brand`.
 
 ## Before you open a pull request
 
@@ -49,5 +48,4 @@ Security issues: please don't open a public issue, see [SECURITY.md](SECURITY.md
 
 ## Licensing
 
-By contributing you agree that your contribution is licensed under GPL-3.0
-(app and core) or MIT (`packages/addon-sdk`), matching the files you change.
+By contributing you agree that your contribution is licensed under GPL-3.0.

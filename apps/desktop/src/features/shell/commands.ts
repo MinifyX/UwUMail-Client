@@ -39,7 +39,7 @@ async function afterChange(client: QueryClient) {
   ]);
 }
 
-/** App commands shared by the shortcuts and the command palette. Addons will add their own. */
+/** App commands shared by the shortcuts and the command palette. */
 export function buildCommands(
   client: QueryClient,
   t: (key: string, options?: Record<string, unknown>) => string,

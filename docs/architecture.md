@@ -7,12 +7,12 @@
 │  ┌────────────────────────────┐   commands    ┌───────────────────────────┐  │
 │  │ Layouts: Simple / Pro      │ ────────────▶ │ apps/desktop/src-tauri    │  │
 │  │ Mail, compose, settings    │ ◀──────────── │  commands.rs, events      │  │
-│  │ Addon host                 │    events     └────────────┬──────────────┘  │
-│  │  ┌──────────┐ ┌──────────┐ │                            │                 │
-│  │  │ addon A  │ │ addon B  │ │ postMessage RPC            ▼                 │
-│  │  │ sandbox  │ │ sandbox  │ │ (permission-checked) ┌───────────────────┐   │
-│  │  └──────────┘ └──────────┘ │                      │ crates/uwumail-core│  │
-│  └────────────────────────────┘                      │  accounts, sync,  │   │
+│  │ Calendar, contacts         │    events     └────────────┬──────────────┘  │
+│  └────────────────────────────┘                            │                 │
+│                                                            ▼                 │
+│                                                      ┌───────────────────┐   │
+│                                                      │ crates/uwumail-core│  │
+│                                                      │  accounts, sync,  │   │
 │                                                      │  smtp, store, fts │   │
 │                                                      └──┬──────────┬─────┘   │
 └─────────────────────────────────────────────────────────┼──────────┼─────────┘
@@ -286,12 +286,11 @@ React 19, Vite, Tailwind CSS 4, TypeScript.
 - `i18n/` — English and German strings in two i18next namespaces per
   language: `neutral` (complete) and `playful` (overrides). `useT()` picks the
   namespace for the active tone; missing playful keys fall back to neutral.
-- `features/` — mail list, reader, composer, onboarding, settings, addons,
+- `features/` — mail list, reader, composer, onboarding, settings,
   calendar, contacts, and `features/dates` (appointments in mail, see "Dates
   in mail"; the finder itself is `lib/dates`).
   `features/mobile` is the phone layout below 700 px: list, reader, drawer,
   swipes, pull to refresh, app lock and the Android bridge hooks.
-- `addons/` — the addon host (sandbox frames, RPC, permission checks).
 
 ### Mail rendering
 
@@ -648,22 +647,13 @@ attached pictures (never remote ones) comes from `Engine::image_text` (see
 [Text in pictures](#text-in-pictures)), at most 8 000 characters, as data like
 the mail.
 
-### Addons
-
-See [addons.md](addons.md). In short: each addon runs in its own sandboxed
-iframe with an opaque origin and no access to Tauri. It talks to the host over
-`postMessage`; the host checks every call against the permissions the user
-granted and forwards allowed calls to the backend. Network access goes through
-the host too, limited to the hosts in the manifest.
-
 ## Data locations
 
 | Data | Where |
 | --- | --- |
-| Mail cache, contacts, addon storage | `<app data>/uwumail.db` |
+| Mail cache, contacts | `<app data>/uwumail.db` |
 | Opened attachments (trimmed at 1 GB) | `<app data>/attachments/<message id>/` |
 | Sender pictures without a UwUMail server (30 days per domain) | `<app data>/pictures/<domain>.<logo\|icon>.<ext>` |
-| Installed addons | `<app data>/addons/<addon id>/` |
 | Passwords, OAuth refresh tokens | OS keychain, service `UwUMail` |
 | AI providers, settings, labels, label log, usage (device scope) | `<app data>/uwumail.db` (`assist_*` tables) |
 | AI provider keys (device scope) | OS keychain, service `UwUMail`, entry `assist-provider:<id>` |

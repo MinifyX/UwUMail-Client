@@ -175,30 +175,6 @@ function NoPreview() {
   );
 }
 
-/** No addons yet: Nyu gets starry eyes over a puzzle piece. */
-function Addons() {
-  return (
-    <>
-      <Shadow cx={150} />
-      <Nyu mood="sparkle" x={128} y={122} scale={0.4} tilt={-5} />
-      <Sticker edge={EDGE}>
-        <g transform="rotate(14 244 96)">
-          <path
-            d="M216 68 H234 A10 10 0 0 1 254 68 H272 V86 A10 10 0 0 1 272 106 V124 H216 V106 A10 10 0 0 0 216 86 Z"
-            fill={NYU.mint}
-            {...S}
-          />
-        </g>
-      </Sticker>
-      <Sticker edge={12}>
-        <Star x={292} y={40} r={13} />
-        <Star x={222} y={170} r={9} />
-        <Star x={40} y={56} r={10} />
-      </Sticker>
-    </>
-  );
-}
-
 /** First start: Nyu says hello. */
 function Welcome() {
   return (
@@ -372,7 +348,6 @@ const SCENES = {
   emptyFolder: EmptyFolder,
   pick: Pick,
   noPreview: NoPreview,
-  addons: Addons,
   welcome: Welcome,
   done: Done,
   loadError: LoadError,
