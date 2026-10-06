@@ -4,6 +4,9 @@
 # Screenshots and logs land in $2.
 #
 # Usage: scripts/ios-smoke.sh <UwUMail.app> [output folder]
+#        scripts/ios-smoke.sh --boot   only starts booting the iPhone simulator and returns; CI
+#                                      does that before the build, so the minutes the
+#                                      simulator takes to come up overlap with it
 set -uo pipefail
 
 app="$1"
@@ -38,7 +41,9 @@ device=$(xcrun simctl list devices available -j | node -e '
 ')
 [ -n "$device" ] || { fail "No iPhone simulator on this runner"; exit 1; }
 
+# Already booting or booted after --boot, which simctl answers with an error.
 xcrun simctl boot "$device" 2>/dev/null
+[ "$app" = --boot ] && exit 0
 xcrun simctl bootstatus "$device" -b > /dev/null
 xcrun simctl install "$device" "$app" || { fail "Install failed"; exit 1; }
 trap 'xcrun simctl shutdown "$device" 2>/dev/null' EXIT

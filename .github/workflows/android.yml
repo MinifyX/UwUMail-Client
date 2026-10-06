@@ -53,9 +53,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: aarch64-linux-android
+      # Saved by main only; the tag's run and runs started by hand read main's.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: android
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm install --frozen-lockfile
 
       - name: Version code
@@ -72,6 +74,14 @@ jobs:
 
       # The checked-in wrapper jar runs first in the build; it must be an official Gradle release.
       - uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      # Gradle itself and the Android dependencies, from the Actions cache (the open-source cache
+      # provider; saved by main only), instead of downloading them on every build.
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-provider: basic
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          validate-wrappers: false
+          add-job-summary: on-failure
 
       # Built without the signing key: thousands of third-party build scripts run here.
       - name: Build

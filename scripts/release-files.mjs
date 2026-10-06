@@ -34,7 +34,7 @@ export const DESKTOP_BUILD_FILES = {
 
 /** Every artifact a release takes files from, with the files each one carries. */
 export const releaseArtifacts = (version) => ({
-  "release-windows": [updateAsset("windows-x86_64")],
+  "desktop-windows-x64": [updateAsset("windows-x86_64")],
   "desktop-windows-arm64": [updateAsset("windows-aarch64")],
   ...DESKTOP_BUILD_FILES,
   "release-signatures": PLATFORMS.map((platform) => `${signedName(platform, version)}.sig`),

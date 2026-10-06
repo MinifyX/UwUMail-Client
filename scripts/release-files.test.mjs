@@ -11,7 +11,7 @@ import { collectReleaseFiles, releaseArtifacts } from "./release-files.mjs";
 const VERSION = "1.2.3";
 /** What the signing job takes. */
 const SIGNED = [
-  "release-windows",
+  "desktop-windows-x64",
   "desktop-windows-arm64",
   "desktop-macos-universal",
   "desktop-linux-x64",
@@ -44,7 +44,7 @@ test("takes each artifact's own files", () => {
   assert.deepEqual(readdirSync(files).sort(), all.sort());
   assert.equal(
     readFileSync(join(files, "UwUMail-windows-x64-setup.exe"), "utf8"),
-    "release-windows/UwUMail-windows-x64-setup.exe",
+    "desktop-windows-x64/UwUMail-windows-x64-setup.exe",
   );
 });
 
@@ -95,7 +95,7 @@ test("a link instead of a file fails", (t) => {
   const deb = join(unpacked, "desktop-linux-x64", "UwUMail-linux-x64.deb");
   rmSync(deb);
   try {
-    symlinkSync(join(unpacked, "release-windows", "UwUMail-windows-x64-setup.exe"), deb);
+    symlinkSync(join(unpacked, "desktop-windows-x64", "UwUMail-windows-x64-setup.exe"), deb);
   } catch {
     t.skip("no symbolic links here");
     return;
