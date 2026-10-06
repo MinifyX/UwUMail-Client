@@ -14,7 +14,8 @@ name: Desktop setups
 #
 # Caches: each build restores the Rust cache main saved last; only pushes to main
 # save one (pull requests and tags only read), so the repository's 10 GB hold one
-# warm cache per build instead of evicting each other.
+# warm cache per build instead of evicting each other. prefix-key counts up when
+# the Cargo profiles change (see ci.yml).
 #
 # Nothing here is signed for the updater: the release workflow signs what it
 # publishes in a job of its own, on a runner that never built anything.
@@ -109,6 +110,7 @@ jobs:
           targets: ${{ matrix.targets }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          prefix-key: v1-rust
           key: setup-${{ matrix.id }}
           save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-speed') }}
       - run: pnpm install --frozen-lockfile
@@ -262,6 +264,7 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          prefix-key: v1-rust
           key: setup-${{ matrix.target }}
           save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-speed') }}
       - run: pnpm install --frozen-lockfile
