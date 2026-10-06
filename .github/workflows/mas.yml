@@ -17,7 +17,6 @@ name: Mac App Store
 on:
   push:
     tags: ["v*"]
-    branches: [appstore] # TEMP: until mas.yml is on main and can be started by hand
   workflow_dispatch:
   pull_request:
     paths:
@@ -99,7 +98,7 @@ jobs:
   testflight:
     name: TestFlight (macOS)
     needs: build
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/appstore' # TEMP
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
     steps:
       # Only the scripts, not the workspace: nothing here installs or builds.
