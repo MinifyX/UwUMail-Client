@@ -36,9 +36,6 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Shared mailboxes (Microsoft 365) nested under their account: found through Autodiscover, added by address, older ones sorted in on their own (0.8, [oauth.md](oauth.md#shared-mailboxes))
 - [x] Sign in with Google (OAuth 2) — needs a registered client id, see [oauth.md](oauth.md)
 - [x] System notifications for new mail
-- [ ] Addon host: permissions dialog, sandbox frames, RPC bridge, install from file
-- [x] Addon SDK: manifest validation, wire protocol, typed client
-- [ ] Addon catalog (`MinifyX/UwUMail-Addons`) with one-click install
 - [x] Installers for Windows and Linux in CI, release workflow with macOS
 - [x] UwUMail's own setup on macOS (Apple chip and Intel) and Linux (AppImage), tested on GitHub's runners ([install.md](install.md))
 - [x] Release files with stable names: one universal Mac setup, .deb/.rpm/portable for Linux x64 and arm64, AUR package `uwumail-bin`
@@ -84,7 +81,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Redirect back from Microsoft sign-in (`app.uwumail://oauth`)
 - [ ] `mailto:` links and Google sign-in
 
-## After v0.1 — official addons
+## After v0.1 — more features
 
 - [x] Send later: the UwUMail server holds it, other mailboxes wait in this device's outbox (0.10)
 - [ ] Snooze
@@ -100,5 +97,5 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [ ] Microsoft/Google: reminders, wedding anniversaries (Graph has none), Google contact labels as address books, birthday-event import
 - [x] Birthdays: the server's birthdays calendar with ages, a local one from CardDAV cards, moving birthday events into contacts, anniversaries and reminders (reminders on UwUMail servers only)
 - [x] Like the webmail: masked addresses, own profile picture, sharing calendars and leaving shared ones (UwUMail servers), contact photos with crop, camera and company logo for every address book (0.10)
-- [ ] Self-hostable sync server for settings, signatures and addons (AGPL-3.0)
+- [ ] Self-hostable sync server for settings and signatures (AGPL-3.0)
 - [ ] Code signing for Windows and macOS

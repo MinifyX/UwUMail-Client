@@ -112,7 +112,6 @@
     "errorSmtpDisabled": "Ich darf von hier aus nichts verschicken (｡•́︿•̀｡) Eure Administration schaltet das Senden frei mit: Set-CASMailbox -Identity ADRESSE -SmtpClientAuthenticationDisabled $false"
   },
   "settings": {
-    "addonsEmptyTitle": "Noch keine Addons, so viel Potenzial (✧ω✧)",
     "motionDesc": "Soll Nyu blinzeln, hüpfen und herumfliegen? „Wie System“ hält sich an dein Betriebssystem.",
     "nyuAnimationsDesc": "Soll ich deiner Mail hinterherwinken, beim Archivieren die Kiste zumachen und grübeln, während die KI arbeitet? „Reduziert“: Ich halte still wie auf einem Foto.",
     "senderPicturesCleared": "Bilder weggefegt ✧",

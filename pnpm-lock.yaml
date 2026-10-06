@@ -44,9 +44,6 @@ importers:
       '@tauri-apps/plugin-opener':
         specifier: ^2.5.5
         version: 2.5.5
-      '@uwumail/addon-sdk':
-        specifier: workspace:*
-        version: link:../../packages/addon-sdk
       '@uwusuite/design':
         specifier: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz
         version: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.6.2/uwusuite-design-1.6.2.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
@@ -190,15 +187,6 @@ importers:
       vite:
         specifier: ^8.3.0
         version: 8.3.0(@types/node@24.13.4)(jiti@2.7.0)
-
-  packages/addon-sdk:
-    devDependencies:
-      typescript:
-        specifier: ~6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^5.0.0
-        version: 5.0.0(@types/node@24.13.4)(jsdom@30.0.1)(vite@8.3.0(@types/node@24.13.4)(jiti@2.7.0))
 
 packages:
 

@@ -215,6 +215,10 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
     send_later::MIGRATION,
     invites::MIGRATION,
     send_later::HOLD_MIGRATION,
+    r#"
+-- The addon system was dropped before it was finished: its storage table goes too.
+DROP TABLE IF EXISTS addon_storage;
+"#,
 ];
 
 /// What this device remembers about one calendar.
@@ -1919,28 +1923,6 @@ impl Store {
             .take(8)
             .collect())
     }
-
-    // ------------------------------------------------------------ addon storage
-
-    pub fn addon_get(&self, addon_id: &str, key: &str) -> Result<Option<String>> {
-        Ok(self
-            .conn()
-            .query_row(
-                "SELECT value FROM addon_storage WHERE addon_id = ?1 AND key = ?2",
-                params![addon_id, key],
-                |row| row.get(0),
-            )
-            .optional()?)
-    }
-
-    pub fn addon_set(&self, addon_id: &str, key: &str, value: &str) -> Result<()> {
-        self.conn().execute(
-            "INSERT INTO addon_storage (addon_id, key, value) VALUES (?1, ?2, ?3)
-             ON CONFLICT (addon_id, key) DO UPDATE SET value = excluded.value",
-            params![addon_id, key, value],
-        )?;
-        Ok(())
-    }
 }
 
 fn summarize(id: &str, messages: &[Message]) -> Option<ThreadSummary> {
@@ -2003,6 +1985,18 @@ mod tests {
         if wal.exists() {
             assert_eq!(mode(&wal), 0o600);
         }
+    }
+
+    #[test]
+    fn the_addon_storage_table_is_dropped() {
+        let store = Store::open_in_memory().unwrap();
+        let conn = store.conn();
+        let tables: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE name = 'addon_storage'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(tables, 0);
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0)).unwrap();
+        assert_eq!(version, MIGRATIONS.len() as i64);
     }
 
     fn store_with_account() -> (Store, String, String, String) {

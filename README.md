@@ -63,9 +63,6 @@ is in [docs/features.md](docs/features.md):
   Android, new mail can come through UnifiedPush.
 - **Playful.** UwUMail talks to you with a wink, and Nyu reacts to what you do.
   Prefer it plain? Settings → Tone → Neutral, and Nyu can be reduced or off.
-- **Extensible, one day.** Addons are meant to add things like snooze, PGP or
-  templates, and to touch only what you allowed. The SDK exists, the addon host
-  doesn't yet.
 
 > **Status:** beta. It works, but expect rough edges and things that change.
 > The [roadmap](docs/roadmap.md) shows what's done and what I'd like to do next.
@@ -156,10 +153,8 @@ More in [docs/ai-assistant.md](docs/ai-assistant.md).
 | `apps/setup` | UwUMail's own installer, updater and uninstaller for Windows, macOS and Linux |
 | `crates/uwumail-core` | Mail engine: accounts, IMAP and JMAP sync, sending, local store, search, the assistant |
 | `crates/uwumail-android` | Android side of the engine: background service, keystore, notifications |
-| `packages/addon-sdk` | `@uwumail/addon-sdk` — types and runtime for addon authors (MIT) |
-| `addons/` | Official example addons |
 | `brand/` | Logo and icon sources |
-| `docs/` | Features, vision, architecture, addon API, design system |
+| `docs/` | Features, vision, architecture, design system |
 | `release-notes/` | "What's new" texts per version |
 
 ## Development
@@ -205,7 +200,6 @@ data.
 - [Privacy](PRIVACY.md) — what UwUMail does with your data (English and German)
 - [Microsoft and Google sign-in](docs/oauth.md) — client ids, redirects, Microsoft 365
 - [Architecture](docs/architecture.md) — how the pieces fit together
-- [Addons](docs/addons.md) — manifest, permissions and the addon API
 - [Design](docs/design.md) — colors, type, tone of voice, and [Nyu's animations](docs/nyu-animations.md)
 - [Roadmap](docs/roadmap.md) — my wish list, without dates
 - [Contributing](CONTRIBUTING.md) — worth a look before you open an issue or a pull request
@@ -215,6 +209,4 @@ data.
 
 UwUMail is free software under the [GNU GPL v3.0](LICENSE): use it, change it,
 fork it, share it. If you pass on a changed version, its source has to stay
-open too. The addon SDK in `packages/addon-sdk` is
-[MIT-licensed](packages/addon-sdk/LICENSE), so addon authors can pick any
-license they like.
+open too.

@@ -24,19 +24,15 @@ These are the rules I build by.
 
 1. **Simple first, powerful on request.** A new user adds a mailbox with an
    address and a password and reads mail. Power lives one switch away (Pro
-   layout, shortcuts, addons), never in the way.
-2. **A small core, room for addons.** The core does mail and contacts really
-   well. Everything else — calendars, encryption, snooze, templates, AI — is
-   meant to be an addon, including the official ones. The core only grows when
-   something clearly belongs in it.
-3. **Addons are guests, not owners.** An addon can only do what its manifest
-   declares and the user approved. No addon ever sees a password.
-4. **Private by default.** No telemetry, no tracking pixels, no remote content
+   layout, shortcuts), never in the way.
+2. **A focused core.** The app does mail, calendars and contacts really well.
+   It only grows when something clearly belongs in it.
+3. **Private by default.** No telemetry, no tracking pixels, no remote content
    without consent, no cloud account required. Everything works offline with
    the local cache.
-5. **Cute, not childish.** The playful tone is the default and part of the
+4. **Cute, not childish.** The playful tone is the default and part of the
    brand, but it never hides information, and one setting makes it neutral.
-6. **Open.** GPL-3.0 for the app, MIT for the addon SDK. Documentation and code
+5. **Open.** GPL-3.0 for the whole app. Documentation and code
    are in English so anyone can read, fork and change them; the UI speaks
    German and English.
 
@@ -50,7 +46,7 @@ recognize yourself, UwUMail might suit you too.
 | "I just want my mail" | One inbox, big readable rows, no settings to understand |
 | "I have five mailboxes" | Unified inbox, fast switching, per-account identities |
 | "Keyboard all day" | Pro layout, shortcuts, command palette, instant search |
-| "I want it my way" | Addons, themes, tone packs, and an API that is fun to build on — mostly still to come |
+| "I want it my way" | Themes, tone packs and layouts that bend to how they work |
 
 ## Non-goals
 

@@ -73,7 +73,6 @@ export type SettingsSection =
   | "accounts"
   | "profile"
   | "masked"
-  | "addons"
   | "about";
 
 /** The two halves of the app. */
