@@ -31,7 +31,8 @@ import { AccountDot } from "@/components/ui/Avatar";
 import { Button, IconButton } from "@/components/ui/Button";
 import { useT } from "@/i18n";
 import { formatSize } from "@/lib/format";
-import { modKey } from "@/lib/platform";
+import { shortcutHint } from "@/lib/platform";
+import { onQuit } from "@/lib/quit";
 import { foreignHtml, htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
 import { useAccounts, useDomainSignatures, useIdentities, useMessageActions, useSenderSignatures } from "@/lib/queries";
 import { companyFooterForSender } from "@/lib/localSignatures";
@@ -278,6 +279,18 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         void saveDraft();
       }
     },
+    [localCopy, saveDraft],
+  );
+
+  // UwUMail is quitting (⌘Q, the Dock, logging out): what was typed since the last save goes to the
+  // Drafts folder first, and stays on this device in case that fails.
+  useEffect(
+    () =>
+      onQuit(async () => {
+        if (!dirty.current || finished.current) return;
+        localCopy(false);
+        await saveDraft();
+      }),
     [localCopy, saveDraft],
   );
 
@@ -729,7 +742,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           icon={Send}
           busy={sending}
           onClick={() => void send()}
-          title={`${t("compose.send")} (${modKey}+Enter)`}
+          title={shortcutHint(t("compose.send"), "CmdOrCtrl+Enter", i18n.language)}
         >
           {sending ? t("compose.sending") : t("compose.send")}
         </Button>

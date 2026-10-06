@@ -2266,5 +2266,22 @@
       "newMail": "New mail",
       "hidden": "Open UwUMail to read it."
     }
+  },
+  "macMenu": {
+    "message": "Message",
+    "mailbox": "Mailbox",
+    "newMail": "New Message",
+    "newEvent": "New Event",
+    "newContact": "New Contact",
+    "find": "Search Mail",
+    "palette": "Commands…",
+    "getMail": "Get New Mail",
+    "move": "Move…",
+    "label": "Add Label…",
+    "checkUpdates": "Check for Updates…",
+    "shortcuts": "Keyboard Shortcuts",
+    "website": "UwUMail on GitHub",
+    "releaseNotes": "What's New",
+    "report": "Report a Problem…"
   }
 }

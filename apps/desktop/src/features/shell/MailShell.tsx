@@ -32,6 +32,7 @@ import { CommandPalette } from "./CommandPalette";
 import { LazyCalendar, LazyCalendarDialogs } from "./LazyCalendar";
 import { LazyContactDialogs, LazyContacts } from "./LazyContacts";
 import { ShortcutsDialog } from "./ShortcutsDialog";
+import { useMacMenu } from "./useMacShell";
 
 /** Keys that scroll the open mail from the list as well. */
 const SCROLL_KEYS = [" ", "PageDown", "PageUp", "Home", "End"];
@@ -167,6 +168,9 @@ export function MailShell() {
       contactsAvailable,
     ],
   );
+
+  // macOS: the same commands in the menu bar.
+  useMacMenu(commands);
 
   const hotkeys = useMemo(() => {
     const map: HotkeyMap = {

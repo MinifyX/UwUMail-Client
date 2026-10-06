@@ -2266,5 +2266,22 @@
       "newMail": "Neue Mail",
       "hidden": "Öffne UwUMail, um sie zu lesen."
     }
+  },
+  "macMenu": {
+    "message": "E-Mail",
+    "mailbox": "Postfach",
+    "newMail": "Neue E-Mail",
+    "newEvent": "Neuer Termin",
+    "newContact": "Neuer Kontakt",
+    "find": "Mails durchsuchen",
+    "palette": "Befehle …",
+    "getMail": "Neue E-Mails abrufen",
+    "move": "Verschieben …",
+    "label": "Label vergeben …",
+    "checkUpdates": "Nach Updates suchen …",
+    "shortcuts": "Tastenkürzel",
+    "website": "UwUMail auf GitHub",
+    "releaseNotes": "Was ist neu",
+    "report": "Problem melden …"
   }
 }
