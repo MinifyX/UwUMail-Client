@@ -272,6 +272,7 @@ jobs:
       # With an explicit --target the build lands in target/<target>/release, and the setup in
       # target/release under its release name either way.
       - name: Build the setup
+        shell: bash
         run: node scripts/build-setup.mjs --target "$TARGET"
         env:
           TARGET: ${{ matrix.target }}
