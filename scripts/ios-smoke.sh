@@ -117,11 +117,10 @@ if [ -n "$refresh" ]; then
 else
   fail "No background refresh round ran (no background-refresh.json)"
 fi
-if grep -q "background refresh registered" "$out/stdout.txt" 2>/dev/null; then
+if [ -n "$refresh" ] && grep -q '"registered":true' "$refresh"; then
   echo "The background refresh task is registered"
 else
-  # A warning: whether stdout reaches the file depends on the simulator runtime.
-  echo "::warning::'background refresh registered' not in the app's output (see stdout.txt)"
+  fail "The background refresh task isn't registered (BGTaskSchedulerPermittedIdentifiers?)"
 fi
 grep "UwUMail:" "$out/stdout.txt" 2>/dev/null || true
 

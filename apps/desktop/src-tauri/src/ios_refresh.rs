@@ -48,6 +48,8 @@ const SETTLE: Duration = Duration::from_millis(1500);
 /// Whether UwUMail is the app in front. False until iOS says otherwise: a launch for a background
 /// wake-up never becomes active.
 static ACTIVE: AtomicBool = AtomicBool::new(false);
+/// iOS took the launch handler (the identifier is in Info.plist); recorded with every round.
+static REGISTERED: AtomicBool = AtomicBool::new(false);
 
 pub fn in_foreground() -> bool {
     ACTIVE.load(Ordering::Relaxed)
@@ -80,6 +82,7 @@ pub fn register(app: &AppHandle) {
             &launch,
         )
     };
+    REGISTERED.store(registered, Ordering::Relaxed);
     println!("UwUMail: background refresh {}", if registered { "registered" } else { "not registered" });
     if registered {
         schedule();
@@ -166,6 +169,11 @@ fn record(app: &AppHandle, outcome: Option<&uwumail_core::engine::RefreshOutcome
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_secs())
         .unwrap_or_default();
-    let json = serde_json::json!({ "at": at, "expired": outcome.is_none(), "outcome": outcome });
+    let json = serde_json::json!({
+        "at": at,
+        "registered": REGISTERED.load(Ordering::Relaxed),
+        "expired": outcome.is_none(),
+        "outcome": outcome,
+    });
     let _ = std::fs::write(dir.join("background-refresh.json"), json.to_string());
 }
