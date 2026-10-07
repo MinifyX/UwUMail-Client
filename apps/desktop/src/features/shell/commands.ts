@@ -4,7 +4,7 @@ import { playNyu } from "@/components/nyu/cameo";
 import { i18n } from "@/i18n";
 import { leaveThread, queryKeys, trashMail } from "@/lib/queries";
 import { WORKSPACES } from "@/lib/workspaces";
-import { useSettings } from "@/state/settings";
+import { layoutChoice, useSettings } from "@/state/settings";
 import { announceMove, runLastUndo } from "@/state/undo";
 import { useUi } from "@/state/ui";
 import type { QueryClient } from "@tanstack/react-query";
@@ -288,12 +288,17 @@ export function buildCommands(
           },
         ]
       : []),
-    {
-      id: "layout",
-      title: `${t("settings.layout")}: ${i18n.t(`layout.${settings.layout === "pro" ? "simple" : "pro"}.name`)}`,
-      icon: ICONS.layout,
-      run: () => settings.update({ layout: settings.layout === "pro" ? "simple" : "pro" }),
-    },
+    // A phone has no Simple or Pro.
+    ...(layoutChoice
+      ? [
+          {
+            id: "layout",
+            title: `${t("settings.layout")}: ${i18n.t(`layout.${settings.layout === "pro" ? "simple" : "pro"}.name`)}`,
+            icon: ICONS.layout,
+            run: () => settings.update({ layout: settings.layout === "pro" ? "simple" : "pro" }),
+          },
+        ]
+      : []),
     {
       id: "tone",
       title: `${t("settings.tone")}: ${i18n.t(`tone.${settings.tone === "playful" ? "neutral" : "playful"}.name`)}`,

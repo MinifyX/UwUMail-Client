@@ -5,11 +5,15 @@ import { backend } from "@/backend/backend";
 import { NyuScene } from "@/components/nyu/scenes";
 import { i18n, useT } from "@/i18n";
 import { toast } from "@/state/toasts";
-import { useSettings, type LayoutMode, type Tone } from "@/state/settings";
+import { layoutChoice, useSettings, type LayoutMode, type Tone } from "@/state/settings";
 import { AccountSetup } from "../accounts/AccountSetup";
 
-const STEPS = ["welcome", "layout", "tone", "account", "done"] as const;
-type Step = (typeof STEPS)[number];
+const ALL_STEPS = ["welcome", "layout", "tone", "account", "done"] as const;
+type Step = (typeof ALL_STEPS)[number];
+// A phone has no Simple or Pro to pick.
+const STEPS: readonly Step[] = layoutChoice ? ALL_STEPS : ALL_STEPS.filter((step) => step !== "layout");
+// The steps between the welcome and the end, as the dots count them.
+const COUNTED = STEPS.length - 2;
 
 function ChoiceCard({
   selected,
@@ -146,8 +150,8 @@ export function Onboarding() {
               <Button variant="ghost" size="sm" icon={ICONS.back} onClick={back}>
                 {t("onboarding.back")}
               </Button>
-              <div className="flex gap-1.5" aria-label={t("onboarding.step", { current: index, total: 3 })}>
-                {[1, 2, 3].map((i) => (
+              <div className="flex gap-1.5" aria-label={t("onboarding.step", { current: index, total: COUNTED })}>
+                {Array.from({ length: COUNTED }, (_, i) => i + 1).map((i) => (
                   <span
                     key={i}
                     className={clsx(
@@ -167,7 +171,9 @@ export function Onboarding() {
                 <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.02em]">
                   {t("onboarding.welcomeTitle")}
                 </h1>
-                <p className="text-[15px] text-muted">{t("onboarding.welcomeBody")}</p>
+                <p className="text-[15px] text-muted">
+                  {t(layoutChoice ? "onboarding.welcomeBody" : "onboarding.welcomeBodyPhone")}
+                </p>
               </div>
               <Button variant="primary" size="lg" onClick={next}>
                 {t("onboarding.start")}

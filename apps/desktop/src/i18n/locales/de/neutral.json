@@ -240,6 +240,7 @@
   "onboarding": {
     "welcomeTitle": "Willkommen bei UwUMail",
     "welcomeBody": "Drei kurze Schritte, dann geht's los.",
+    "welcomeBodyPhone": "Zwei kurze Schritte, dann geht's los.",
     "start": "Los geht's",
     "layoutTitle": "Wähle ein Layout",
     "layoutBody": "Du kannst das jederzeit in den Einstellungen ändern.",

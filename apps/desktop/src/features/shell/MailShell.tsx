@@ -10,7 +10,7 @@ import { isAndroid, PRO_QUERY, useIsPhone, useMediaQuery } from "@/lib/device";
 import { useHotkeys, type HotkeyMap } from "@/lib/hotkeys";
 import { fitPanes, usePaneWidths } from "@/lib/paneWidths";
 import { useAccounts, useBackendEvents, useDomainSignatures, useIdentities, useSignatures } from "@/lib/queries";
-import { useSettings } from "@/state/settings";
+import { useLayout, useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { AccountSetup } from "../accounts/AccountSetup";
@@ -104,7 +104,7 @@ function useWindowWidth() {
 export function MailShell() {
   const { t } = useT();
   const client = useQueryClient();
-  const layout = useSettings((s) => s.layout);
+  const layout = useLayout();
   const tone = useSettings((s) => s.tone);
   const theme = useSettings((s) => s.theme);
   const workspaces = useSettings((s) => s.workspaces);
