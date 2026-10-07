@@ -76,10 +76,7 @@ export function fitAndZoom(doc: Document, root: HTMLElement, onZoom: () => void)
   };
 
   const stops: (() => void)[] = [];
-  const listen = <K extends keyof DocumentEventMap>(
-    type: K,
-    handler: (event: DocumentEventMap[K]) => void,
-  ) => {
+  const listen = <K extends keyof DocumentEventMap>(type: K, handler: (event: DocumentEventMap[K]) => void) => {
     const listener = handler as EventListener;
     doc.addEventListener(type, listener, { passive: false });
     stops.push(() => doc.removeEventListener(type, listener));

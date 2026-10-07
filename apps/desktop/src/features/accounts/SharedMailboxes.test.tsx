@@ -9,7 +9,6 @@ import { MailboxNav } from "../mail/MailboxNav";
 import { SharedMailboxDialogs } from "./SharedMailboxDialogs";
 import { useSettings } from "@/state/settings";
 
-
 const work: Account = {
   id: "work",
   name: "contoso.example",
