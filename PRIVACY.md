@@ -1,6 +1,6 @@
 # UwUMail Privacy Policy
 
-*Last updated: 2026-10-06* · [Deutsche Fassung weiter unten](#datenschutzerklärung-für-uwumail)
+*Last updated: 2026-10-07* · [Deutsche Fassung weiter unten](#datenschutzerklärung-für-uwumail)
 
 UwUMail is an open-source mail, calendar and contacts app for Windows, macOS, Linux, Android, iPhone and iPad,
 developed by Lorin (MinifyX) as a hobby project. This policy covers the UwUMail app. It does not cover the mail
@@ -118,16 +118,17 @@ providers you chose; requests about the data they hold go to them.
 
 ## Changes and contact
 
-Changes to this policy are published in the repository and on this page with a new date. Questions: please open an
-issue at <https://github.com/MinifyX/UwUMail-Client/issues>, or for anything private use GitHub's private reporting
-described at <https://github.com/MinifyX/UwUMail-Client/blob/main/SECURITY.md> or contact
-[@MinifyX](https://github.com/MinifyX) on GitHub.
+Changes to this policy are published in the repository and on this page with a new date.
+
+Questions and privacy requests: **<privacy@minifyx.de>**. Public questions can also go to
+<https://github.com/MinifyX/UwUMail-Client/issues>; security problems as described in
+<https://github.com/MinifyX/UwUMail-Client/blob/main/SECURITY.md>.
 
 ---
 
 # Datenschutzerklärung für UwUMail
 
-*Stand: 06.10.2026*
+*Stand: 07.10.2026*
 
 UwUMail ist eine quelloffene App für Mail, Kalender und Kontakte für Windows, macOS, Linux, Android, iPhone und
 iPad, entwickelt von Lorin (MinifyX) als Hobbyprojekt. Diese Erklärung gilt für die App UwUMail. Sie gilt nicht für
@@ -258,7 +259,8 @@ den Mail-, KI- und sonstigen Anbietern, die du gewählt hast; Anfragen zu den Da
 
 ## Änderungen und Kontakt
 
-Änderungen dieser Erklärung werden im Repository und auf dieser Seite mit neuem Datum veröffentlicht. Fragen: Bitte
-eröffne ein Issue unter <https://github.com/MinifyX/UwUMail-Client/issues>, oder nutze für Vertrauliches die
-private Meldung über GitHub, beschrieben in <https://github.com/MinifyX/UwUMail-Client/blob/main/SECURITY.md>, oder
-kontaktiere [@MinifyX](https://github.com/MinifyX) auf GitHub.
+Änderungen dieser Erklärung werden im Repository und auf dieser Seite mit neuem Datum veröffentlicht.
+
+Fragen und Anliegen zum Datenschutz: **<privacy@minifyx.de>**. Öffentliche Fragen gehen auch als Issue unter
+<https://github.com/MinifyX/UwUMail-Client/issues>; Sicherheitsprobleme wie in
+<https://github.com/MinifyX/UwUMail-Client/blob/main/SECURITY.md> beschrieben.
