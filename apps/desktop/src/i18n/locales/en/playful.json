@@ -90,6 +90,7 @@
   "onboarding": {
     "welcomeTitle": "Hi! I'm Nyu (◕‿◕✿)",
     "welcomeBody": "Your mail cat from UwUMail. Three tiny steps and we're ready to go!",
+    "welcomeBodyPhone": "Your mail cat from UwUMail. Two tiny steps and we're ready to go!",
     "start": "Let's go!",
     "layoutTitle": "How do you like it?",
     "toneTitle": "How should I talk to you?",

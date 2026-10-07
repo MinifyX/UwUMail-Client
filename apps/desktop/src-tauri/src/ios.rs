@@ -9,6 +9,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use objc2::msg_send;
+use objc2::runtime::AnyObject;
 use serde::{Deserialize, Serialize};
 use tauri::{App, AppHandle, Manager, RunEvent, Runtime, Wry};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -78,7 +80,32 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
 /// Runs inside `didFinishLaunching`, where iOS wants the background refresh registered.
 pub fn after_start(app: &mut App) -> tauri::Result<()> {
     crate::ios_refresh::register(app.handle());
+    disable_pinch_zoom(app);
     Ok(())
+}
+
+/// The app doesn't zoom (index.html's viewport, styles/app.css, lib/noZoom.ts): switches off the
+/// web view's own pinch as well, whatever a page says. Scrolling and the page's own touches stay.
+fn disable_pinch_zoom(app: &App) {
+    let Some(window) = app.get_webview_window("main") else { return };
+    let done = window.with_webview(|webview| {
+        let view = webview.inner().cast::<AnyObject>();
+        // SAFETY: `inner` is the window's live WKWebView and this runs on the main thread; every
+        // object is checked for nil before a message goes to it.
+        unsafe {
+            let Some(view) = view.as_ref() else { return };
+            let scroll: *mut AnyObject = msg_send![view, scrollView];
+            let Some(scroll) = scroll.as_ref() else { return };
+            let _: () = msg_send![scroll, setBouncesZoom: false];
+            let pinch: *mut AnyObject = msg_send![scroll, pinchGestureRecognizer];
+            if let Some(pinch) = pinch.as_ref() {
+                let _: () = msg_send![pinch, setEnabled: false];
+            }
+        }
+    });
+    if let Err(error) = done {
+        tracing::warn!("could not switch off pinch zoom: {error}");
+    }
 }
 
 /// Rings for new mail that arrived while UwUMail wasn't the app in front — also when iOS woke it

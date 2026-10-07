@@ -720,7 +720,8 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         </p>
       )}
 
-      <footer className="flex items-center gap-1 border-t border-hairline px-3 py-2.5">
+      {/* A phone has no room for everything in one row: the formatting tools get their own below. */}
+      <footer className="flex flex-wrap items-center gap-1 border-t border-hairline px-3 py-2.5">
         <Button
           variant="primary"
           icon={ICONS.send}
@@ -757,64 +758,66 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
             />
           </div>
         )}
-        <span className="mx-1.5 h-5 w-px bg-line" aria-hidden />
-        <IconButton
-          icon={ICONS.bold}
-          size="sm"
-          label={t("compose.bold")}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => format("bold")}
-        />
-        <IconButton
-          icon={ICONS.italic}
-          size="sm"
-          label={t("compose.italic")}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => format("italic")}
-        />
-        <IconButton
-          icon={ICONS.bulletList}
-          size="sm"
-          label={t("compose.list")}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => format("insertUnorderedList")}
-        />
-        <IconButton
-          icon={ICONS.link}
-          size="sm"
-          label={t("compose.link")}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => format("createLink")}
-        />
-        <IconButton
-          icon={ICONS.attachment}
-          size="sm"
-          label={t("compose.attach")}
-          onClick={() => fileInput.current?.click()}
-        />
-        <Menu
-          side="above"
-          items={[
-            ...(signatures ?? [])
-              .filter((signature) => signature.email.toLowerCase() === senderEmail.toLowerCase())
-              .map((signature) => ({ label: signature.name, onSelect: () => pickSignature(signature) })),
-            { label: t("compose.noSignature"), onSelect: () => pickSignature(null) },
-            { label: t("compose.editSignatures"), onSelect: () => useUi.getState().openSettings("compose") },
-          ]}
-          trigger={(menu) => (
-            <IconButton
-              icon={ICONS.signature}
-              size="sm"
-              label={t("compose.signature")}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={menu.toggle}
-              aria-haspopup={menu["aria-haspopup"]}
-              aria-expanded={menu["aria-expanded"]}
-              aria-controls={menu["aria-controls"]}
-            />
-          )}
-        />
-        {assist.available && <ComposeAssistButton onPick={assist.start} estimate={assist.estimateFor} />}
+        <span className="mx-1.5 h-5 w-px bg-line phone:hidden" aria-hidden />
+        <div className="flex items-center gap-1 phone:order-last phone:w-full phone:justify-between phone:pt-1">
+          <IconButton
+            icon={ICONS.bold}
+            size="sm"
+            label={t("compose.bold")}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => format("bold")}
+          />
+          <IconButton
+            icon={ICONS.italic}
+            size="sm"
+            label={t("compose.italic")}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => format("italic")}
+          />
+          <IconButton
+            icon={ICONS.bulletList}
+            size="sm"
+            label={t("compose.list")}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => format("insertUnorderedList")}
+          />
+          <IconButton
+            icon={ICONS.link}
+            size="sm"
+            label={t("compose.link")}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => format("createLink")}
+          />
+          <IconButton
+            icon={ICONS.attachment}
+            size="sm"
+            label={t("compose.attach")}
+            onClick={() => fileInput.current?.click()}
+          />
+          <Menu
+            side="above"
+            items={[
+              ...(signatures ?? [])
+                .filter((signature) => signature.email.toLowerCase() === senderEmail.toLowerCase())
+                .map((signature) => ({ label: signature.name, onSelect: () => pickSignature(signature) })),
+              { label: t("compose.noSignature"), onSelect: () => pickSignature(null) },
+              { label: t("compose.editSignatures"), onSelect: () => useUi.getState().openSettings("compose") },
+            ]}
+            trigger={(menu) => (
+              <IconButton
+                icon={ICONS.signature}
+                size="sm"
+                label={t("compose.signature")}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={menu.toggle}
+                aria-haspopup={menu["aria-haspopup"]}
+                aria-expanded={menu["aria-expanded"]}
+                aria-controls={menu["aria-controls"]}
+              />
+            )}
+          />
+          {assist.available && <ComposeAssistButton onPick={assist.start} estimate={assist.estimateFor} />}
+        </div>
         <input
           ref={fileInput}
           type="file"

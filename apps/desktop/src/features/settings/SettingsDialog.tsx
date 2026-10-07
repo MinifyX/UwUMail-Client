@@ -24,6 +24,7 @@ import { MacIntegration } from "./MacIntegration";
 import { useUpdatesInApp } from "@/lib/distribution";
 import { confirmIdentity } from "@/state/lock";
 import {
+  layoutChoice,
   NYU_ANIMATIONS,
   useSettings,
   type LanguageSetting,
@@ -73,17 +74,19 @@ function Appearance() {
   const settings = useSettings();
   return (
     <>
-      <Row label={t("settings.layout")} description={t(`layout.${settings.layout}.desc`)}>
-        <Segmented
-          label={t("settings.layout")}
-          value={settings.layout}
-          onChange={(layout) => settings.update({ layout })}
-          options={[
-            { value: "simple", label: t("layout.simple.name") },
-            { value: "pro", label: t("layout.pro.name") },
-          ]}
-        />
-      </Row>
+      {layoutChoice && (
+        <Row label={t("settings.layout")} description={t(`layout.${settings.layout}.desc`)}>
+          <Segmented
+            label={t("settings.layout")}
+            value={settings.layout}
+            onChange={(layout) => settings.update({ layout })}
+            options={[
+              { value: "simple", label: t("layout.simple.name") },
+              { value: "pro", label: t("layout.pro.name") },
+            ]}
+          />
+        </Row>
+      )}
       <Row label={t("settings.listDensity")} description={t("settings.listDensityDesc")}>
         <Segmented
           label={t("settings.listDensity")}
@@ -481,7 +484,8 @@ function Accounts() {
               className="flex flex-wrap items-center gap-3 rounded-2xl border border-hairline px-4 py-3"
             >
               <AccountDot color={account.color} className="size-3" />
-              <span className="min-w-0 flex-1">
+              {/* On a phone the buttons go below, so the address isn't cut down to a few letters. */}
+              <span className="min-w-0 flex-1 phone:basis-[calc(100%-1.5rem)]">
                 <span className="block truncate text-sm font-semibold">{account.email}</span>
                 <span className="block text-[12.5px] text-muted">
                   {account.displayName} · {PROTOCOL_NAMES[account.protocol]}
