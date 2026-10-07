@@ -7,6 +7,7 @@ import type { FontChoice, SenderFonts } from "@/lib/fonts";
 import { escapeHtml, textToHtml } from "@/lib/format";
 import { replaceContentIds } from "@/lib/inlineImages";
 import { fontVariables, rewriteElementFonts } from "@/lib/mailFonts";
+import { blockPinchZoom, blocksZoom } from "@/lib/noZoom";
 import { proxyRemoteImages, type ImageProxy } from "@/lib/remoteImages";
 import { SAFE_LINK_MARKER, unwrapSafeLink, unwrapSafeLinkElement, unwrappedText } from "@/lib/safeLinks";
 import type { MailAppearance } from "@/state/settings";
@@ -245,7 +246,7 @@ export function buildDocument(
   // A font that is still loading leaves --uwu-font on the system font rather than on nothing.
   const variables = fontVariables(fonts.faces || fonts.font === "system" ? fonts.font : "system", fonts.senderFonts);
   const frame = `${fonts.faces ? `${fonts.faces}\n` : ""}:root{color-scheme:${dark ? "dark" : "light"};${variables}}
-html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:hidden!important}
+html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:hidden!important;touch-action:pan-x pan-y}
 #${ROOT_ID}{display:flow-root;overflow-x:auto}${dateMarks.length > 0 ? `\n${DATE_STYLE}` : ""}`;
   // HTML mail brings its own design: keep the sender's sizes and weights and only give it paper,
   // some breathing room and a font where it names none (the engine's default would be Times).
@@ -516,6 +517,8 @@ export function MessageBody({
     forwardFrameKeys(frame, doc);
     watchLinks(frame, doc);
     keepFrameOnMail(doc);
+    // The mail doesn't zoom either, like the app around it.
+    if (blocksZoom) stops.push(blockPinchZoom(doc));
   };
 
   // A srcdoc frame's load event waits for every picture in it, and one dead host held the whole

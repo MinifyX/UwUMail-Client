@@ -6,6 +6,8 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { loadBackend } from "./backend/backend";
 import { applyUiFont, loadMailFont } from "./lib/fonts";
+import { keepMenusInView } from "./lib/menuInView";
+import { blockPinchZoom, blocksZoom } from "./lib/noZoom";
 import { useSettings } from "./state/settings";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { startAccountSync, watchSyncAccountChoice } from "./state/accountSync";
@@ -25,6 +27,11 @@ chooseFont(useSettings.getState().font);
 useSettings.subscribe((state, previous) => {
   if (state.font !== previous.font) chooseFont(state.font);
 });
+
+// No zooming on phones and tablets (see styles/app.css).
+if (blocksZoom) blockPinchZoom(document);
+// Menus that would open partly off the screen (mostly on phones) move back in.
+keepMenusInView();
 
 await loadBackend();
 // The settings that follow the account come from its UwUMail server, see state/accountSync.
