@@ -175,6 +175,9 @@ impl Inner {
     /// that search could tell — it asks the mail domain's website, so it waits until someone opens
     /// the contacts.
     pub(super) async fn contacts_source_known(&self, account_id: &str) -> Option<Result<Source>> {
+        if self.jmap_share_of(account_id).is_some() {
+            return Some(Err(Error::not_supported("A shared mailbox has no address books of its own.")));
+        }
         match self.contacts_sources.lock().await.get(account_id) {
             Some(SourceState::Ready(source)) => return Some(Ok(source.clone())),
             Some(SourceState::Unavailable { problem, since }) if since.elapsed() < RETRY_UNAVAILABLE => {

@@ -28,6 +28,13 @@ CREATE TABLE shared_dismissed (
 );
 "#;
 
+/// The migration of shared mailboxes on a JMAP server: the account a shared mailbox is in the
+/// login's session (its `accountId`), and whether the login may only read it.
+pub(super) const JMAP_MIGRATION: &str = r#"
+ALTER TABLE accounts ADD COLUMN jmap_account_id TEXT;
+ALTER TABLE accounts ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0;
+"#;
+
 /// How an account relates to shared mailboxes.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AccountLink {
@@ -39,6 +46,11 @@ pub struct AccountLink {
     pub shared_checked_at: Option<i64>,
     /// How that search went: `done`, `needsSignIn`, `unavailable` or `personal`.
     pub shared_state: Option<String>,
+    /// For a shared mailbox on a JMAP server: its account in the session of the account it is
+    /// nested under. It has no login of its own; its mail is that login's view of this account.
+    pub jmap_account_id: Option<String>,
+    /// That shared mailbox may only be read.
+    pub read_only: bool,
 }
 
 impl AccountLink {
@@ -79,12 +91,16 @@ pub fn shared_by_sign_in(accounts: &[(AccountRecord, AccountLink)]) -> Vec<(Stri
     pairs
 }
 
+const LINK_COLUMNS: &str = "parent_id, sign_in_as, shared_checked_at, shared_state, jmap_account_id, read_only";
+
 fn link_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AccountLink> {
     Ok(AccountLink {
         parent_id: row.get("parent_id")?,
         sign_in_as: row.get("sign_in_as")?,
         shared_checked_at: row.get("shared_checked_at")?,
         shared_state: row.get("shared_state")?,
+        jmap_account_id: row.get("jmap_account_id")?,
+        read_only: row.get("read_only")?,
     })
 }
 
@@ -92,8 +108,7 @@ impl Store {
     /// Every account's link, by account id.
     pub fn account_links(&self) -> Result<HashMap<String, AccountLink>> {
         let conn = self.conn();
-        let mut statement =
-            conn.prepare("SELECT id, parent_id, sign_in_as, shared_checked_at, shared_state FROM accounts")?;
+        let mut statement = conn.prepare(&format!("SELECT id, {LINK_COLUMNS} FROM accounts"))?;
         let rows = statement.query_map([], |row| Ok((row.get::<_, String>("id")?, link_from_row(row)?)))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
@@ -101,17 +116,22 @@ impl Store {
     pub fn account_link(&self, id: &str) -> Result<AccountLink> {
         Ok(self
             .conn()
-            .query_row(
-                "SELECT parent_id, sign_in_as, shared_checked_at, shared_state FROM accounts WHERE id = ?1",
-                [id],
-                link_from_row,
-            )
+            .query_row(&format!("SELECT {LINK_COLUMNS} FROM accounts WHERE id = ?1"), [id], link_from_row)
             .optional()?
             .unwrap_or_default())
     }
 
     pub fn set_account_parent(&self, id: &str, parent_id: Option<&str>) -> Result<()> {
         self.conn().execute("UPDATE accounts SET parent_id = ?1 WHERE id = ?2", params![parent_id, id])?;
+        Ok(())
+    }
+
+    /// Makes the account a shared mailbox of a JMAP login: its `accountId` there, read-only or not.
+    pub fn set_jmap_share(&self, id: &str, jmap_account_id: &str, read_only: bool) -> Result<()> {
+        self.conn().execute(
+            "UPDATE accounts SET jmap_account_id = ?1, read_only = ?2 WHERE id = ?3",
+            params![jmap_account_id, read_only, id],
+        )?;
         Ok(())
     }
 

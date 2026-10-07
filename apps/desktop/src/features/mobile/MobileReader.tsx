@@ -5,6 +5,7 @@ import type { Message } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
+import { isReadOnly } from "@/state/sharedMailboxes";
 import { useUi } from "@/state/ui";
 import { ThreadAssistButton, ThreadSummary } from "../assist/ReaderAssist";
 import { AssistForAccount } from "../assist/useAssist";
@@ -62,7 +63,7 @@ export function MobileReader({ threadId }: { threadId: string }) {
 
   useEffect(() => {
     if (!messages) return;
-    const unseen = messages.filter((m) => !m.flags.seen).map((m) => m.id);
+    const unseen = messages.filter((m) => !m.flags.seen && !isReadOnly(accounts, m.accountId)).map((m) => m.id);
     if (unseen.length > 0) void actions.setFlags(unseen, { seen: true });
     // Only when a different thread finished loading, not on every refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,6 +110,8 @@ export function MobileReader({ threadId }: { threadId: string }) {
   const hiddenCount = all.filter((m) => !expanded.has(m.id)).length;
   const leaveAfter = (work: Promise<void>) => void work.then(back);
   const inJunk = all.every((m) => folders.find((f) => f.id === m.folderId)?.role === "junk");
+  // A read-only shared mailbox's mail only reads: no flag, move, spam, archive or trash.
+  const readOnly = isReadOnly(accounts, latest.accountId);
 
   return (
     <section className="flex h-full min-w-0 flex-col bg-canvas" aria-label={data.thread.subject}>
@@ -126,18 +129,22 @@ export function MobileReader({ threadId }: { threadId: string }) {
             align="end"
           />
         </AssistForAccount>
-        <IconButton
-          icon={ICONS.favorite}
-          label={flagged ? t("reader.unflag") : t("reader.flag")}
-          active={flagged}
-          onClick={() => void actions.setFlags(flagged ? ids : [latest.id], { flagged: !flagged })}
-        />
-        <IconButton
-          icon={ICONS.more}
-          label={t("mobile.more")}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen(!menuOpen)}
-        />
+        {!readOnly && (
+          <IconButton
+            icon={ICONS.favorite}
+            label={flagged ? t("reader.unflag") : t("reader.flag")}
+            active={flagged}
+            onClick={() => void actions.setFlags(flagged ? ids : [latest.id], { flagged: !flagged })}
+          />
+        )}
+        {!readOnly && (
+          <IconButton
+            icon={ICONS.more}
+            label={t("mobile.more")}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(!menuOpen)}
+          />
+        )}
         {menuOpen && (
           <>
             <button
@@ -242,16 +249,20 @@ export function MobileReader({ threadId }: { threadId: string }) {
           label={t("reader.forward")}
           onClick={() => openCompose({ mode: "forward", source: latest })}
         />
-        <BarButton
-          icon={ICONS.archive}
-          label={t("mobile.swipe.archive")}
-          onClick={() => leaveAfter(actions.archive(ids))}
-        />
-        <BarButton
-          icon={ICONS.delete}
-          label={t("reader.trash")}
-          onClick={() => void actions.trash(all).then((gone) => gone && back())}
-        />
+        {!readOnly && (
+          <>
+            <BarButton
+              icon={ICONS.archive}
+              label={t("mobile.swipe.archive")}
+              onClick={() => leaveAfter(actions.archive(ids))}
+            />
+            <BarButton
+              icon={ICONS.delete}
+              label={t("reader.trash")}
+              onClick={() => void actions.trash(all).then((gone) => gone && back())}
+            />
+          </>
+        )}
       </nav>
     </section>
   );

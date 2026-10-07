@@ -927,6 +927,20 @@ pub async fn send(
     from: &str,
     recipients: &[String],
 ) -> Result<()> {
+    send_as(client, store, account_id, raw, from, recipients, false).await
+}
+
+/// Like [`send`]; with `exact_identity` only an identity with the `from` address sends, never
+/// the first one instead (a shared mailbox sending through its login's account).
+pub async fn send_as(
+    client: &Client,
+    store: &Store,
+    account_id: &str,
+    raw: Vec<u8>,
+    from: &str,
+    recipients: &[String],
+    exact_identity: bool,
+) -> Result<()> {
     let submission_account = client
         .session
         .submission_account_id
@@ -941,9 +955,15 @@ pub async fn send(
     let identity = identities
         .iter()
         .find(|identity| text(identity, "email").is_some_and(|email| email.eq_ignore_ascii_case(from)))
-        .or_else(|| identities.first())
+        .or_else(|| if exact_identity { None } else { identities.first() })
         .and_then(|identity| text(identity, "id"))
-        .ok_or_else(|| Error::invalid("This mailbox has no sending identity on the server."))?
+        .ok_or_else(|| {
+            if exact_identity {
+                Error::invalid(format!("The server doesn't let you send as {from}."))
+            } else {
+                Error::invalid("This mailbox has no sending identity on the server.")
+            }
+        })?
         .to_string();
 
     let rcpt_to: Vec<Value> = recipients.iter().map(|email| json!({ "email": email, "parameters": null })).collect();

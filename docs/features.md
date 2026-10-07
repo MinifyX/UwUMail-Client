@@ -20,6 +20,10 @@ for. What is planned but not there yet is on the [roadmap](roadmap.md).
   under the account whose sign-in opens them, with their own folders; others
   are added by address. Counters, notifications, the unified inbox and sending
   as the shared address work like in any mailbox.
+- **Shared mailboxes on a UwUMail server** (JMAP) come from the login's
+  session and sit under that account; they come and go with the server.
+  Mail sent from one goes out through the login with the shared address, and
+  mailboxes shared for reading only offer no actions that change mail.
   Google on the iPhone is best added with an app password. See
   [oauth.md](oauth.md).
 - **A unified inbox** across all mailboxes, and private and business mailboxes

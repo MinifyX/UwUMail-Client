@@ -56,7 +56,12 @@ fn is_person_account(record: &AccountRecord, link: &AccountLink) -> bool {
 }
 
 /// What the account settings show about the search for shared mailboxes.
+///
+/// A JMAP login has it once its server said it shares mail (see `jmap_shared_ops`).
 pub(super) fn shared_search_of(record: &AccountRecord, link: &AccountLink) -> Option<SharedSearch> {
+    if record.protocol == Protocol::Jmap && link.parent_id.is_none() && link.jmap_account_id.is_none() {
+        return (link.shared_state.as_deref() == Some(SharedSearch::Done.as_str())).then_some(SharedSearch::Done);
+    }
     is_person_account(record, link)
         .then(|| link.shared_state.as_deref().and_then(SharedSearch::parse).unwrap_or(SharedSearch::Pending))
 }
@@ -201,6 +206,9 @@ impl Engine {
 
     /// Searches a Microsoft 365 account for its shared mailboxes now ("Search again").
     pub async fn find_shared_mailboxes(&self, account_id: &str) -> Result<SharedSearchResult> {
+        if self.is_jmap_login(account_id) {
+            return self.search_jmap_shared(account_id).await;
+        }
         self.search_shared(account_id, true).await
     }
 
@@ -337,6 +345,9 @@ impl Engine {
         if !shared::is_mailbox_address(email) {
             return Err(Error::invalid("That doesn't look like an email address."));
         }
+        if self.is_jmap_login(parent_id) {
+            return self.add_jmap_shared_mailbox(parent_id, email).await;
+        }
         let (local, _) = autoconfig::split_email(email)?;
         let local = local.to_string();
         let (parent, _) = self.person_account(parent_id)?;
@@ -381,6 +392,13 @@ impl Engine {
             store.dismiss_shared(parent, &record.email)?;
         }
         let children = store.shared_children(account_id)?;
+        // A JMAP login's shared mailboxes are views of its login: they can't stay without it.
+        let (server_shared, children): (Vec<String>, Vec<String>) = children
+            .into_iter()
+            .partition(|child| store.account_link(child).is_ok_and(|link| link.jmap_account_id.is_some()));
+        for child in &server_shared {
+            self.remove_one_account(child).await?;
+        }
         if keep_shared && !children.is_empty() {
             let secret = self.inner.secrets.get(account_id)?;
             let person = store
