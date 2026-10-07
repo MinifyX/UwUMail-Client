@@ -242,7 +242,8 @@ function AccountSection({
   /** A shared mailbox inside its account. */
   nested?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  const open = useSettings((s) => s.expandedAccounts.includes(account.id));
+  const toggle = useSettings((s) => s.toggleAccount);
   const [menuOpen, setMenuOpen] = useState(false);
   const { t } = useT();
   const client = useQueryClient();
@@ -256,9 +257,9 @@ function AccountSection({
           ? `${t("status.error", { account: account.email })}: ${status.message}`
           : undefined;
   const tree = buildFolderTree(folders.filter((f) => f.accountId === account.id));
-  // A folded mailbox still tells what's unread in its shared mailboxes' inboxes.
-  const sharedUnread = folders
-    .filter((f) => f.role === "inbox" && shared.some((s) => s.id === f.accountId))
+  // A folded mailbox still tells what's unread in its inbox and its shared mailboxes' inboxes.
+  const foldedUnread = folders
+    .filter((f) => f.role === "inbox" && (f.accountId === account.id || shared.some((s) => s.id === f.accountId)))
     .reduce((sum, f) => sum + f.unread, 0);
 
   return (
@@ -272,7 +273,7 @@ function AccountSection({
       >
         <button
           type="button"
-          onClick={() => setOpen(!open)}
+          onClick={() => toggle(account.id)}
           aria-expanded={open}
           title={nested ? t("shared.of", { email: account.email }) : (statusLabel ?? account.email)}
           className={clsx(
@@ -293,7 +294,7 @@ function AccountSection({
           {status.state === "error" && (
             <Icon icon={ICONS.error} size="xs" className="text-danger-ink" label={statusLabel} />
           )}
-          {!open && sharedUnread > 0 && <Badge count={sharedUnread} />}
+          {!open && foldedUnread > 0 && <Badge count={foldedUnread} />}
           <Icon icon={ICONS.expand} size="xs" className={clsx("transition-transform", !open && "-rotate-90")} />
         </button>
         <IconButton

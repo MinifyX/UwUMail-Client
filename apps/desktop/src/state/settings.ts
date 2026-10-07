@@ -79,6 +79,8 @@ export interface Settings {
   senderAppearance: Record<string, "light" | "dark">;
   /** Folder ids whose subfolders are hidden in the sidebar. */
   collapsedFolders: string[];
+  /** Mailbox (account) ids opened in the sidebar; the others are folded, new ones too. */
+  expandedAccounts: string[];
   /**
    * Sender pictures from elsewhere: people's pictures and company logos. Off, only contacts'
    * photos and people on a UwUMail server.
@@ -140,6 +142,7 @@ interface SettingsActions {
   rememberAppearance: (email: string, appearance: "light" | "dark") => void;
   forgetAppearances: () => void;
   toggleFolder: (folderId: string) => void;
+  toggleAccount: (accountId: string) => void;
   setAccountWorkspace: (accountId: string, workspace: Workspace) => void;
 }
 
@@ -164,6 +167,7 @@ export const DEFAULT_SETTINGS: Settings = {
   darkImages: true,
   senderAppearance: {},
   collapsedFolders: [],
+  expandedAccounts: [],
   senderPictures: true,
   privacyProxy: "",
   runInBackground: true,
@@ -213,6 +217,12 @@ export const useSettings = create<Settings & SettingsActions>()(
           collapsedFolders: state.collapsedFolders.includes(folderId)
             ? state.collapsedFolders.filter((id) => id !== folderId)
             : [...state.collapsedFolders, folderId],
+        })),
+      toggleAccount: (accountId) =>
+        set((state) => ({
+          expandedAccounts: state.expandedAccounts.includes(accountId)
+            ? state.expandedAccounts.filter((id) => id !== accountId)
+            : [...state.expandedAccounts, accountId],
         })),
       setAccountWorkspace: (accountId, workspace) =>
         set((state) => {

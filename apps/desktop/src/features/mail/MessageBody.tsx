@@ -12,6 +12,7 @@ import { proxyRemoteImages, type ImageProxy } from "@/lib/remoteImages";
 import { SAFE_LINK_MARKER, unwrapSafeLink, unwrapSafeLinkElement, unwrappedText } from "@/lib/safeLinks";
 import type { MailAppearance } from "@/state/settings";
 import { hideLinkStatus, keepFrameOnMail, watchLinks } from "./linkEvents";
+import { FIT_ID, fitAndZoom } from "./mailZoom";
 import { darkenImages, type RemoteImageLoader } from "./darkImages";
 import { darkenDocument, decide, declaresDarkMode, forceColorSchemeQueries, measure } from "./darkMode";
 import { forwardFrameKeys } from "./readerKeys";
@@ -247,14 +248,15 @@ export function buildDocument(
   const variables = fontVariables(fonts.faces || fonts.font === "system" ? fonts.font : "system", fonts.senderFonts);
   const frame = `${fonts.faces ? `${fonts.faces}\n` : ""}:root{color-scheme:${dark ? "dark" : "light"};${variables}}
 html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:hidden!important;touch-action:pan-x pan-y}
-#${ROOT_ID}{display:flow-root;overflow-x:auto}${dateMarks.length > 0 ? `\n${DATE_STYLE}` : ""}`;
+#${ROOT_ID}{display:flow-root;overflow-x:auto}
+#${FIT_ID}{display:flow-root;width:fit-content;min-width:100%}${dateMarks.length > 0 ? `\n${DATE_STYLE}` : ""}`;
   // HTML mail brings its own design: keep the sender's sizes and weights and only give it paper,
   // some breathing room and a font where it names none (the engine's default would be Times).
   const html = `body{background:${dark ? "#1c171f" : "#ffffff"};color:${dark ? "#f8f2f6" : "#1c1420"};font-family:var(--uwu-font)}
 #${ROOT_ID}{padding:16px}
 a{color:${dark ? "#ff9dbf" : "#c8165f"}}`;
   const text = `body{color:${dark ? "#f8f2f6" : "#1c1420"};background:${dark ? "transparent" : "#ffffff"};font:15px/1.6 var(--uwu-font)}
-#${ROOT_ID}{overflow-wrap:break-word;${dark ? "" : "padding:16px"}}
+#${ROOT_ID}{overflow-wrap:anywhere;${dark ? "" : "padding:16px"}}
 a{color:${dark ? "#ff9dbf" : "#c8165f"}}
 p{margin:0 0 12px}
 blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${dark ? "#4d2338" : "#ffd0e2"};color:${dark ? "#b3a8b3" : "#716672"}}`;
@@ -263,7 +265,7 @@ blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${dark ? "#4d233
   return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta charset="utf-8">
 <style>${frame}
-${isHtml ? html : text}${defer ? `\n${PICTURE_STYLES}` : ""}</style></head><body><div id="${ROOT_ID}">${body}</div></body></html>`;
+${isHtml ? html : text}${defer ? `\n${PICTURE_STYLES}` : ""}</style></head><body><div id="${ROOT_ID}"><div id="${FIT_ID}">${body}</div></div></body></html>`;
 }
 
 export interface PrintLabels {
@@ -517,8 +519,9 @@ export function MessageBody({
     forwardFrameKeys(frame, doc);
     watchLinks(frame, doc);
     keepFrameOnMail(doc);
-    // The mail doesn't zoom either, like the app around it.
+    // The engine's own pinch would zoom the whole app; the mail zooms itself instead.
     if (blocksZoom) stops.push(blockPinchZoom(doc));
+    stops.push(fitAndZoom(doc, root, () => (growth.length = 0)));
   };
 
   // A srcdoc frame's load event waits for every picture in it, and one dead host held the whole

@@ -8,6 +8,10 @@ import { useFolderEdit } from "@/state/folderEdit";
 import { useToasts } from "@/state/toasts";
 import { FolderDialogs } from "./FolderDialogs";
 import { MailboxNav } from "./MailboxNav";
+import { useSettings } from "@/state/settings";
+
+// Mailboxes start folded; these tests work inside them.
+useSettings.setState({ expandedAccounts: ["a1"] });
 
 const account: Account = {
   id: "a1",
