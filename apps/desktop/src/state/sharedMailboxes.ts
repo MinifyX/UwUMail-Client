@@ -16,9 +16,24 @@ export const useSharedMailboxes = create<SharedMailboxState>()((set) => ({
   close: () => set({ request: null }),
 }));
 
-/** Whether shared mailboxes can be added under this account: a Microsoft 365 work account, not a shared one. */
-export function takesSharedMailboxes(account: Pick<Account, "auth" | "parentId" | "sharedSearch">): boolean {
-  return account.auth === "microsoft" && !account.parentId && account.sharedSearch !== undefined;
+/**
+ * Whether shared mailboxes can be added under this account: a Microsoft 365 work account, or a
+ * JMAP login whose server shares mailboxes (there "adding" brings back one removed before); never
+ * a shared one.
+ */
+export function takesSharedMailboxes(
+  account: Pick<Account, "auth" | "protocol" | "parentId" | "sharedSearch">,
+): boolean {
+  const kind = account.auth === "microsoft" || account.protocol === "jmap";
+  return kind && !account.parentId && account.sharedSearch !== undefined;
+}
+
+/** Whether mail of `accountId` may only be read: a read-only shared mailbox. */
+export function isReadOnly(
+  accounts: readonly Pick<Account, "id" | "readOnly">[],
+  accountId: string | undefined,
+): boolean {
+  return accounts.some((account) => account.id === accountId && account.readOnly === true);
 }
 
 /** The shared mailboxes nested under `parentId`, in their order. */

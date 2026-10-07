@@ -101,6 +101,13 @@ const OAUTH_DOMAINS: Record<string, "microsoft" | "google"> = {
 
 /** Demo domains that pretend to offer JMAP. */
 const JMAP_DOMAINS = ["fastmail.com", "fastmail.fm", "uwumail.example", "stalwart.example"];
+/** Domains whose UwUMail server makes app passwords through a browser sign-in. */
+const UWUMAIL_LOGIN_DOMAINS = ["uwumail.example"];
+/**
+ * Domains found only through their MX host, which then shows (like a split-horizon DNS without SRV
+ * records and an autoconfig proxy answering 502): domain → MX host, a UwUMail server.
+ */
+const MX_ONLY_DOMAINS: Record<string, string> = { "minifyx.example": "mail.bitlynx.example" };
 
 const DEMO_FREEMAIL = new Set(["gmail.com", "gmx.de", "web.de", "outlook.com", "icloud.com", "posteo.de", "proton.me"]);
 
@@ -415,6 +422,19 @@ export class DemoBackend implements Backend {
         source: "microsoft",
       };
     }
+    const mx = MX_ONLY_DOMAINS[domain];
+    if (mx) {
+      return {
+        email,
+        imap: { host: mx, port: 993, security: "tls" },
+        smtp: { host: mx, port: 465, security: "tls" },
+        username: email,
+        source: "mailserver",
+        jmap: `https://${mx}/.well-known/jmap`,
+        viaMx: mx,
+        uwumailLogin: true,
+      };
+    }
     if (JMAP_DOMAINS.includes(domain)) {
       return {
         email,
@@ -426,6 +446,7 @@ export class DemoBackend implements Backend {
         jmap: domain.startsWith("fastmail")
           ? "https://api.fastmail.com/jmap/session"
           : `https://${domain}/.well-known/jmap`,
+        uwumailLogin: UWUMAIL_LOGIN_DOMAINS.includes(domain) || undefined,
       };
     }
     return {
@@ -450,7 +471,7 @@ export class DemoBackend implements Backend {
     }
     const account: Account = {
       id: `acc-${this.nextId++}`,
-      name: input.email.split("@")[1] ?? input.email,
+      name: input.accountName?.trim() || input.email,
       email: input.email,
       displayName: input.displayName,
       color: input.color,
@@ -481,7 +502,8 @@ export class DemoBackend implements Backend {
     const shared = this.accounts.filter((a) => a.parentId === accountId);
     const removed = new Set([accountId]);
     for (const account of shared) {
-      if (options?.keepShared) delete account.parentId;
+      // The ones the mail server shares with this login can't stay without it.
+      if (options?.keepShared && !account.serverShared) delete account.parentId;
       else removed.add(account.id);
     }
     const parentId = this.accounts.find((a) => a.id === accountId)?.parentId;
@@ -563,6 +585,33 @@ export class DemoBackend implements Backend {
 
   async signInAgain(_accountId: string): Promise<Account> {
     throw new BackendError("not_supported", "Signing in with a provider needs the desktop app.");
+  }
+
+  async renameAccount(accountId: string, name: string) {
+    const account = this.accounts.find((a) => a.id === accountId);
+    if (!account) throw new BackendError("not_found", "This mailbox no longer exists.");
+    if (name.trim().length > 100) throw new BackendError("invalid_input", "A mailbox name has at most 100 characters.");
+    account.name = name.trim() || account.email;
+    this.emit({ type: "accounts:changed" });
+  }
+
+  async deviceName() {
+    return null;
+  }
+
+  async uwumailLoginAvailable(accountId: string) {
+    const account = this.accounts.find((a) => a.id === accountId);
+    const domain = account?.email.split("@")[1] ?? "";
+    return account?.auth === "password" && UWUMAIL_LOGIN_DOMAINS.includes(domain);
+  }
+
+  async uwumailSignInAgain(accountId: string, _name: string): Promise<Account> {
+    await wait(900);
+    const account = this.accounts.find((a) => a.id === accountId);
+    if (!account) throw new BackendError("not_found", "This mailbox no longer exists.");
+    account.status = { state: "idle" };
+    this.emit({ type: "account:status", accountId, status: account.status });
+    return structuredClone(account);
   }
 
   async syncNow(accountId?: string) {

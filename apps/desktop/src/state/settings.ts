@@ -2,11 +2,18 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pkg from "../../package.json";
 import type { ContrastSetting, MotionSetting, ThemeSetting } from "@uwusuite/design";
+import { isPhoneDevice } from "@/lib/device";
 import { isFontChoice, isSenderFonts, type FontChoice, type SenderFonts } from "@/lib/fonts";
 
 export type { ContrastSetting, MotionSetting, ThemeSetting };
 
 export type LayoutMode = "simple" | "pro";
+/**
+ * Simple or Pro only means something with room for columns: a phone always has its own one-column
+ * layout, so it offers no choice and ignores the stored one (which still travels to the desktop
+ * with the account's settings).
+ */
+export const layoutChoice = !isPhoneDevice;
 /** Mail list rows: roomy cards with three lines, or two lines with a small picture. */
 export type ListDensity = "relaxed" | "compact";
 export type Tone = "playful" | "neutral";
@@ -247,3 +254,9 @@ export const useSettings = create<Settings & SettingsActions>()(
     },
   ),
 );
+
+/** The layout in use: the stored one, except on a phone, which has no choice (see `layoutChoice`). */
+export function useLayout(): LayoutMode {
+  const layout = useSettings((s) => s.layout);
+  return layoutChoice ? layout : "simple";
+}

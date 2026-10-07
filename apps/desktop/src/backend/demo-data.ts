@@ -515,7 +515,7 @@ export const DEMO_ACCOUNTS: Account[] = [
   },
   {
     id: "acc-studio-team",
-    name: "pixelstudio.example",
+    name: ME_TEAM.email,
     email: ME_TEAM.email,
     displayName: ME_TEAM.name!,
     color: "violet",

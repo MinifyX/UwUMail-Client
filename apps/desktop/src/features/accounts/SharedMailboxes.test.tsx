@@ -4,7 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import type { Account, Folder } from "@/backend/types";
 import { ARMING_MS } from "@/components/ui/armed";
 import { i18n } from "@/i18n";
-import { nestAccounts, takesSharedMailboxes, useSharedMailboxes } from "@/state/sharedMailboxes";
+import { isReadOnly, nestAccounts, takesSharedMailboxes, useSharedMailboxes } from "@/state/sharedMailboxes";
 import { MailboxNav } from "../mail/MailboxNav";
 import { SharedMailboxDialogs } from "./SharedMailboxDialogs";
 
@@ -101,6 +101,15 @@ describe("shared mailboxes", () => {
     expect(takesSharedMailboxes(work)).toBe(true);
     expect(takesSharedMailboxes(team)).toBe(false);
     expect(takesSharedMailboxes(home)).toBe(false);
+    // A JMAP login whose server shares mailboxes takes back one removed before, by address.
+    const login: Account = { ...home, protocol: "jmap", protocols: ["imap", "jmap"], sharedSearch: "done" };
+    expect(takesSharedMailboxes(login)).toBe(true);
+    expect(takesSharedMailboxes({ ...login, sharedSearch: undefined })).toBe(false);
+    const support: Account = { ...login, id: "support", parentId: "home", serverShared: true, readOnly: true };
+    expect(takesSharedMailboxes(support)).toBe(false);
+    expect(isReadOnly([login, support], "support")).toBe(true);
+    expect(isReadOnly([login, support], "home")).toBe(false);
+    expect(isReadOnly([login, support], undefined)).toBe(false);
   });
 
   it("shows a shared mailbox with its own folders inside its account, and folds with it", async () => {

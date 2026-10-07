@@ -5,6 +5,7 @@ import type { Message } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { useT } from "@/i18n";
 import { inTrash, useAccounts, useFolders, useMessageActions, useThread } from "@/lib/queries";
+import { isReadOnly } from "@/state/sharedMailboxes";
 import { useUi } from "@/state/ui";
 import { ThreadAssistButton, ThreadSummary } from "../assist/ReaderAssist";
 import { AssistForAccount } from "../assist/useAssist";
@@ -52,7 +53,8 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
 
   useEffect(() => {
     if (!messages) return;
-    const unseen = messages.filter((m) => !m.flags.seen).map((m) => m.id);
+    // A read-only shared mailbox keeps its own read state.
+    const unseen = messages.filter((m) => !m.flags.seen && !isReadOnly(accounts, m.accountId)).map((m) => m.id);
     if (unseen.length > 0) void actions.setFlags(unseen, { seen: true });
     // Only when a different thread finished loading, not on every refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,6 +106,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const hiddenCount = all.filter((m) => !expanded.has(m.id)).length;
   const inJunk = all.every((m) => folders.find((f) => f.id === m.folderId)?.role === "junk");
   const trashed = inTrash(all, folders);
+  const readOnly = isReadOnly(accounts, latest.accountId);
 
   return (
     <section
@@ -131,37 +134,41 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
           onClick={() => openCompose({ mode: "forward", source: latest })}
         />
         <span className="mx-1.5 h-5 w-px bg-line" aria-hidden />
-        <IconButton
-          icon={ICONS.archive}
-          label={t("reader.archive")}
-          onClick={() => void actions.archive(ids).then(() => selectThread(null))}
-        />
-        <IconButton
-          icon={ICONS.delete}
-          label={trashed ? t("reader.deleteForever") : t("reader.trash")}
-          onClick={() => void actions.trash(all).then((gone) => gone && selectThread(null))}
-        />
-        <IconButton
-          icon={ICONS.move}
-          label={t("reader.move")}
-          onClick={() => requestMove(all, () => selectThread(null))}
-        />
-        <IconButton
-          icon={inJunk ? ICONS.notSpam : ICONS.spam}
-          label={inJunk ? t("reader.notSpam") : t("reader.spam")}
-          onClick={() => void actions.spam(ids, !inJunk).then(() => selectThread(null))}
-        />
-        <IconButton
-          icon={ICONS.favorite}
-          label={flagged ? t("reader.unflag") : t("reader.flag")}
-          active={flagged}
-          onClick={() => void actions.setFlags(flagged ? ids : [latest.id], { flagged: !flagged })}
-        />
-        <IconButton
-          icon={ICONS.unread}
-          label={t("reader.markUnread")}
-          onClick={() => void actions.setFlags([latest.id], { seen: false }).then(() => selectThread(null))}
-        />
+        {!readOnly && (
+          <>
+            <IconButton
+              icon={ICONS.archive}
+              label={t("reader.archive")}
+              onClick={() => void actions.archive(ids).then(() => selectThread(null))}
+            />
+            <IconButton
+              icon={ICONS.delete}
+              label={trashed ? t("reader.deleteForever") : t("reader.trash")}
+              onClick={() => void actions.trash(all).then((gone) => gone && selectThread(null))}
+            />
+            <IconButton
+              icon={ICONS.move}
+              label={t("reader.move")}
+              onClick={() => requestMove(all, () => selectThread(null))}
+            />
+            <IconButton
+              icon={inJunk ? ICONS.notSpam : ICONS.spam}
+              label={inJunk ? t("reader.notSpam") : t("reader.spam")}
+              onClick={() => void actions.spam(ids, !inJunk).then(() => selectThread(null))}
+            />
+            <IconButton
+              icon={ICONS.favorite}
+              label={flagged ? t("reader.unflag") : t("reader.flag")}
+              active={flagged}
+              onClick={() => void actions.setFlags(flagged ? ids : [latest.id], { flagged: !flagged })}
+            />
+            <IconButton
+              icon={ICONS.unread}
+              label={t("reader.markUnread")}
+              onClick={() => void actions.setFlags([latest.id], { seen: false }).then(() => selectThread(null))}
+            />
+          </>
+        )}
         <AssistForAccount accountId={latest.accountId}>
           <ThreadAssistButton
             threadId={latest.threadId}

@@ -167,3 +167,81 @@ describe("AccountSetup with Microsoft 365", () => {
     expect(screen.queryByText(/adminconsent/)).toBeNull();
   });
 });
+
+describe("AccountSetup with a UwUMail server", () => {
+  beforeAll(async () => {
+    await i18n.changeLanguage("de");
+  });
+
+  /** Found only through the MX host, a UwUMail server that makes app passwords. */
+  const throughMx: DiscoveredSettings = {
+    email: "lorin@example.org",
+    imap: { host: "mail.example.net", port: 993, security: "tls" },
+    smtp: { host: "mail.example.net", port: 465, security: "tls" },
+    username: "lorin@example.org",
+    source: "mailserver",
+    jmap: "https://mail.example.net/.well-known/jmap",
+    viaMx: "mail.example.net",
+    uwumailLogin: true,
+  };
+
+  beforeEach(() => {
+    discoverSettings.mockReset().mockResolvedValue(throughMx);
+    addAccount.mockReset().mockResolvedValue({ ...added, email: throughMx.email, auth: "password" });
+  });
+
+  afterEach(cleanup);
+
+  async function discoverUwumail() {
+    fireEvent.change(screen.getByLabelText("E-Mail-Adresse"), { target: { value: throughMx.email } });
+    click("Weiter");
+    await screen.findByLabelText("Name des App-Passworts");
+  }
+
+  it("shows the server the MX record led to, and signs in with UwUMail instead of a password", async () => {
+    setup();
+    await discoverUwumail();
+
+    expect(screen.getAllByText("Server: mail.example.net").length).toBeGreaterThan(0);
+    expect(screen.getByText(/MX-Eintrag/)).toBeTruthy();
+    expect(screen.queryByLabelText("Passwort")).toBeNull();
+    expect((screen.getByLabelText("Kontoname") as HTMLInputElement).value).toBe("lorin@example.org");
+
+    fireEvent.change(screen.getByLabelText("Kontoname"), { target: { value: "Privat" } });
+    fireEvent.change(screen.getByLabelText("Name des App-Passworts"), { target: { value: "Lorins MacBook" } });
+    click("Mit UwUMail anmelden");
+
+    await waitFor(() => expect(addAccount).toHaveBeenCalledTimes(1));
+    const sent = addAccount.mock.calls[0]![0];
+    expect(sent.appPasswordName).toBe("Lorins MacBook");
+    expect(sent.password).toBeUndefined();
+    expect(sent.accountName).toBe("Privat");
+    expect(sent.auth).toBe("password");
+    expect(sent.jmapUrl).toBe(throughMx.jmap);
+  });
+
+  it("keeps typing an app password one click away", async () => {
+    setup();
+    await discoverUwumail();
+
+    click("Stattdessen App-Passwort eingeben");
+    fireEvent.change(screen.getByLabelText("Passwort"), { target: { value: "app-secret" } });
+    click("Verbinden");
+
+    await waitFor(() => expect(addAccount).toHaveBeenCalledTimes(1));
+    const sent = addAccount.mock.calls[0]![0];
+    expect(sent.password).toBe("app-secret");
+    expect(sent.appPasswordName).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Doch lieber mit UwUMail anmelden" })).toBeTruthy();
+  });
+
+  it("asks an older server for a password without saying anything", async () => {
+    discoverSettings.mockResolvedValue({ ...throughMx, uwumailLogin: undefined, viaMx: undefined });
+    setup();
+    fireEvent.change(screen.getByLabelText("E-Mail-Adresse"), { target: { value: throughMx.email } });
+    click("Weiter");
+    await screen.findByLabelText("Passwort");
+    expect(screen.queryByLabelText("Name des App-Passworts")).toBeNull();
+    expect(screen.queryByText(/MX-Eintrag/)).toBeNull();
+  });
+});

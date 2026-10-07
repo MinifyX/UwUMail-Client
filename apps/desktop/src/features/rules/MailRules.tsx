@@ -192,12 +192,14 @@ function AccountRules({ accountId }: { accountId: string }) {
                 disabled={saving || locked || index === set.rules.length - 1}
                 onClick={() => move(index, 1)}
               />
+              {/* On a phone the row itself opens the rule, which leaves its name more room. */}
               <IconButton
                 icon={ICONS.edit}
                 size="sm"
                 label={t("rules.editRule", { name: rule.name })}
                 disabled={locked}
                 onClick={() => setEditing({ rule, index })}
+                className="phone:hidden"
               />
               <IconButton
                 icon={ICONS.delete}
@@ -268,7 +270,7 @@ function RuleSummary({ accountId, rule }: { accountId: string; rule: MailRule })
     })
     .join(", ");
   return (
-    <span className="block truncate text-[12.5px] text-muted">
+    <span className="block truncate text-[12.5px] text-muted phone:line-clamp-2 phone:whitespace-normal">
       {conditions} → {actions}
       {rule.stop ? ` · ${t("rules.summary.stop")}` : ""}
     </span>

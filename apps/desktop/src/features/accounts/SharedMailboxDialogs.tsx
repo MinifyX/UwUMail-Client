@@ -130,16 +130,18 @@ function RemoveQuestion({ account, onDone }: { account: Account; onDone: () => v
   const client = useQueryClient();
   const { data: accounts = [] } = useAccounts();
   const shared = sharedOf(accounts, account.id);
+  // The ones the mail server shares with this login can't stay without it.
+  const keepable = shared.filter((mailbox) => !mailbox.serverShared);
   const [withShared, setWithShared] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const remove = async () => {
     setBusy(true);
     try {
-      const keepShared = shared.length > 0 && !withShared;
+      const keepShared = keepable.length > 0 && !withShared;
       await backend().removeAccount(account.id, { keepShared });
       const settings = useSettings.getState();
-      const gone = [account, ...(keepShared ? [] : shared)];
+      const gone = [account, ...(keepShared ? shared.filter((mailbox) => mailbox.serverShared) : shared)];
       for (const removed of gone) settings.setAccountWorkspace(removed.id, "private");
       await client.invalidateQueries();
       // Another account may carry the settings now.
@@ -159,7 +161,7 @@ function RemoveQuestion({ account, onDone }: { account: Account; onDone: () => v
           ? t("shared.removeConfirm", { email: account.email })
           : t("settings.removeAccountConfirm", { email: account.email })}
       </p>
-      {shared.length > 0 && (
+      {keepable.length > 0 && (
         <label className="flex items-center gap-2.5 text-left text-[13.5px]">
           <input
             type="checkbox"
@@ -167,7 +169,7 @@ function RemoveQuestion({ account, onDone }: { account: Account; onDone: () => v
             onChange={(event) => setWithShared(event.target.checked)}
             className="size-4 accent-pink"
           />
-          <span>{t("shared.removeWithShared", { count: shared.length })}</span>
+          <span>{t("shared.removeWithShared", { count: keepable.length })}</span>
         </label>
       )}
       <div className="flex flex-wrap justify-center gap-2 pt-1">

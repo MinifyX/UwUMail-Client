@@ -561,16 +561,7 @@ impl Engine {
         let to = Address { name: organizer.name.clone(), email: organizer.email.clone() };
         let mail = invite::reply_mail(&from, &to, &reply, status, comment, language)?;
         if account.protocol == Protocol::Jmap {
-            let client = self.inner.jmap_client(&account.id).await?;
-            jmap_sync::send(
-                &client,
-                &self.inner.store,
-                &account.id,
-                mail.formatted(),
-                &from.email,
-                std::slice::from_ref(&to.email),
-            )
-            .await
+            self.inner.jmap_send(&account.id, mail.formatted(), &from.email, std::slice::from_ref(&to.email)).await
         } else {
             let auth = match self.inner.credential(account).await? {
                 Credential::Password(password) => SmtpAuth::Password(password),

@@ -21,6 +21,7 @@ impl Engine {
                 _ => return Err(Error::invalid("Pick the mailbox for the new folder.")),
             },
         };
+        self.inner.refuse_read_only_account(&account_id)?;
         let account = store.account(&account_id)?;
         let siblings: Vec<Folder> = store
             .folders(Some(&account_id))?
@@ -78,6 +79,7 @@ impl Engine {
     pub async fn rename_folder(&self, folder_id: &str, name: &str) -> Result<()> {
         let store = &self.inner.store;
         let folder = store.folder(folder_id).map_err(|_| Error::not_found("This folder no longer exists."))?;
+        self.inner.refuse_read_only_account(&folder.account_id)?;
         if folder.role.is_some() || folder.path.eq_ignore_ascii_case("INBOX") {
             return Err(Error::invalid("System folders like the inbox or the trash keep their names."));
         }
@@ -116,6 +118,7 @@ impl Engine {
     pub async fn delete_folder(&self, folder_id: &str) -> Result<()> {
         let store = &self.inner.store;
         let folder = store.folder(folder_id).map_err(|_| Error::not_found("This folder no longer exists."))?;
+        self.inner.refuse_read_only_account(&folder.account_id)?;
         if folder.role.is_some() || folder.path.eq_ignore_ascii_case("INBOX") {
             return Err(Error::invalid("System folders like the inbox or the trash can't be deleted."));
         }
@@ -151,6 +154,7 @@ impl Engine {
     pub async fn empty_folder(&self, folder_id: &str) -> Result<usize> {
         let store = &self.inner.store;
         let folder = store.folder(folder_id).map_err(|_| Error::not_found("This folder no longer exists."))?;
+        self.inner.refuse_read_only_account(&folder.account_id)?;
         if !matches!(folder.role, Some(FolderRole::Trash | FolderRole::Junk)) {
             return Err(Error::invalid("Only the trash and the junk folder can be emptied."));
         }

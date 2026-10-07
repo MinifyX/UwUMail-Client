@@ -19,6 +19,7 @@ import { queryKeys } from "@/lib/queries";
 import { useSettings, type Workspace } from "@/state/settings";
 import { WorkspacePicker } from "../workspaces/WorkspaceSettings";
 import { switchWorkspace } from "../workspaces/workspaces";
+import { AppPasswordNameField, useAppPasswordName } from "./UwumailLogin";
 
 interface AccountSetupProps {
   onDone: (account: Account) => void;
@@ -98,6 +99,11 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
   const client = useQueryClient();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
+  // What the mailbox is called in UwUMail; starts as the address.
+  const [accountName, setAccountName] = useState("");
+  // Sign in with UwUMail (an app password the server makes) instead of typing a password.
+  const [useUwumailLogin, setUseUwumailLogin] = useState(true);
+  const appPassword = useAppPasswordName();
   const [password, setPassword] = useState("");
   const [color, setColor] = useState<AccountColor>("pink");
   const [settings, setSettings] = useState<DiscoveredSettings | null>(null);
@@ -150,6 +156,8 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
     try {
       const found = await backend().discoverSettings(email.trim());
       setSettings(found);
+      setAccountName(email.trim());
+      setUseUwumailLogin(true);
       // JMAP whenever the server offers it; IMAP stays one click away.
       setProtocol(found.jmap && !found.oauth ? "jmap" : "imap");
       setShowServers(found.source === "guess" && !found.jmap);
@@ -162,6 +170,9 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
 
   const jmapPossible = Boolean(settings && !settings.oauth && settings.jmap?.trim());
   const usesJmap = jmapPossible && protocol === "jmap";
+  // The server makes an app password itself; an older UwUMail server or any other gets a password.
+  const uwumailPossible = jmapPossible && Boolean(settings?.uwumailLogin);
+  const uwumailLogin = uwumailPossible && useUwumailLogin;
   const isFastmail = /fastmail/i.test(`${settings?.providerName ?? ""} ${settings?.jmap ?? ""}`);
 
   const connect = async () => {
@@ -173,7 +184,7 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
         displayName: displayName.trim() || email.split("@")[0]!,
         email: email.trim(),
         auth: settings.oauth ?? "password",
-        password: settings.oauth ? undefined : password,
+        password: settings.oauth || uwumailLogin ? undefined : password,
         imap: settings.imap,
         smtp: settings.smtp,
         username: settings.username,
@@ -181,6 +192,8 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
         protocol: jmapPossible ? protocol : "imap",
         jmapUrl: settings.oauth ? undefined : settings.jmap?.trim() || undefined,
         signInAs: settings.oauth ? signInAs.trim() || undefined : undefined,
+        accountName: accountName.trim() || undefined,
+        appPasswordName: uwumailLogin ? appPassword.name.trim() : undefined,
       });
       if (useSettings.getState().workspaces) {
         useSettings.getState().setAccountWorkspace(account.id, workspace);
@@ -290,9 +303,9 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
             />
           )}
         </Field>
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          {footer ?? <span />}
-          <Button type="submit" variant="primary" busy={busy === "discover"}>
+        <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          {footer ?? <span className="hidden sm:block" />}
+          <Button type="submit" variant="primary" busy={busy === "discover"} className="max-w-full">
             {busy === "discover" ? t("account.discovering") : t("account.continue")}
           </Button>
         </div>
@@ -301,6 +314,17 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
   }
 
   const provider = settings.oauth ? PROVIDER_NAMES[settings.oauth] : null;
+  // The server that gets the password (or the sign-in), always in sight.
+  const jmapHost = (() => {
+    try {
+      return settings.jmap ? new URL(settings.jmap).hostname : null;
+    } catch {
+      return null;
+    }
+  })();
+  const serverHost = usesJmap && jmapHost ? jmapHost : settings.imap.host;
+  // Unless the line above names it already, or the MX note below does.
+  const showServer = !provider && !settings.viaMx && serverHost !== (settings.providerName ?? settings.imap.host);
   // Passwords would travel readable over these connections.
   const cleartext = usesJmap
     ? /^http:\/\//i.test(settings.jmap?.trim() ?? "")
@@ -314,7 +338,7 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
         void connect();
       }}
     >
-      <div className="flex items-center justify-between gap-3 rounded-2xl bg-canvas px-4 py-3">
+      <div className="flex flex-col gap-2 rounded-2xl bg-canvas px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div className="min-w-0">
           <p className="truncate text-[14px] font-bold">{email}</p>
           <p className="flex items-center gap-1.5 text-[12.5px] text-muted">
@@ -327,11 +351,44 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
               ? t("account.guessed")
               : t("account.found", { provider: settings.providerName ?? settings.imap.host })}
           </p>
+          {showServer && (
+            <p className="flex items-center gap-1.5 text-[12.5px] break-all text-muted">
+              <Icon icon={ICONS.server} size="xs" className="shrink-0" />
+              {t("account.server", { host: serverHost })}
+            </p>
+          )}
         </div>
-        <Button size="sm" variant="ghost" onClick={() => setSettings(null)}>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setSettings(null)}
+          className="-ml-3 self-start sm:ml-0 sm:self-auto"
+        >
           {t("account.changeAddress")}
         </Button>
       </div>
+
+      {settings.viaMx && !provider && (
+        <p role="note" className="flex gap-2 rounded-2xl bg-warning-tint px-4 py-3 text-[13px] text-warning-ink">
+          <Icon icon={ICONS.warning} className="mt-0.5 shrink-0" />
+          <span>
+            <strong className="block break-all">{t("account.server", { host: settings.viaMx })}</strong>
+            {t("account.serverViaMx")}
+          </span>
+        </p>
+      )}
+
+      <Field label={t("account.accountName")} hint={t("account.accountNameHint")}>
+        {(id) => (
+          <TextInput
+            id={id}
+            value={accountName}
+            maxLength={100}
+            placeholder={email.trim()}
+            onChange={(e) => setAccountName(e.target.value)}
+          />
+        )}
+      </Field>
 
       {jmapPossible && (
         <div className="flex flex-col gap-2">
@@ -398,6 +455,24 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
             </>
           )}
         </div>
+      ) : uwumailLogin ? (
+        <div className="flex flex-col gap-3">
+          <p className="flex gap-2 rounded-2xl bg-pink-tint/60 px-4 py-3 text-[13px] text-pink-ink">
+            <Icon icon={ICONS.signIn} className="mt-0.5 shrink-0" />
+            {t("account.uwumailLoginHint")}
+          </p>
+          <AppPasswordNameField value={appPassword.name} onChange={appPassword.setName} />
+          <button
+            type="button"
+            onClick={() => {
+              setUseUwumailLogin(false);
+              setError(null);
+            }}
+            className="self-start text-[12.5px] text-muted underline underline-offset-2 hover:text-ink"
+          >
+            {t("account.useAppPassword")}
+          </button>
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
           <Field
@@ -419,13 +494,26 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
               />
             )}
           </Field>
-          <button
-            type="button"
-            onClick={switchToMicrosoft}
-            className="self-start text-[12.5px] text-muted underline underline-offset-2 hover:text-ink"
-          >
-            {t("account.useMicrosoft")}
-          </button>
+          {uwumailPossible ? (
+            <button
+              type="button"
+              onClick={() => {
+                setUseUwumailLogin(true);
+                setError(null);
+              }}
+              className="self-start text-[12.5px] text-muted underline underline-offset-2 hover:text-ink"
+            >
+              {t("account.useUwumailLogin")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={switchToMicrosoft}
+              className="self-start text-[12.5px] text-muted underline underline-offset-2 hover:text-ink"
+            >
+              {t("account.useMicrosoft")}
+            </button>
+          )}
         </div>
       )}
 
@@ -513,7 +601,7 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
         </div>
       )}
 
-      {provider && error && (
+      {(provider || uwumailLogin) && error && (
         <p role="alert" className="text-[13px] text-danger-ink">
           {error}
         </p>
@@ -545,16 +633,26 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-        {footer ?? <span />}
-        <Button type="submit" variant="primary" busy={busy === "connect"} disabled={!provider && password.length === 0}>
+      <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        {footer ?? <span className="hidden sm:block" />}
+        <Button
+          type="submit"
+          variant="primary"
+          busy={busy === "connect"}
+          disabled={uwumailLogin ? appPassword.name.trim().length === 0 : !provider && password.length === 0}
+          className="max-w-full"
+        >
           {busy === "connect"
-            ? t("account.connecting")
+            ? uwumailLogin
+              ? t("account.uwumailWaiting")
+              : t("account.connecting")
             : settings.oauth === "microsoft"
               ? t("account.oauthMicrosoft")
               : settings.oauth === "google"
                 ? t("account.oauthGoogle")
-                : t("account.connect")}
+                : uwumailLogin
+                  ? t("account.uwumailLogin")
+                  : t("account.connect")}
         </Button>
       </div>
     </form>

@@ -6,6 +6,7 @@ import { useT } from "@/i18n";
 import { displayName, formatListDate } from "@/lib/format";
 import type { useThreadActions } from "@/lib/queries";
 import type { ListDensity } from "@/state/settings";
+import { isReadOnly } from "@/state/sharedMailboxes";
 import { ThreadLabelChips } from "../assist/LabelChips";
 import { endThreadDrag, startThreadDrag } from "./threadDrag";
 
@@ -88,6 +89,8 @@ export function ThreadRow({
   const names = people.map(displayName).join(", ");
   const date = formatListDate(thread.lastDate, i18n.language, t("common.yesterday"));
   const account = showAccount ? accounts.find((a) => a.id === thread.accountIds[0]) : undefined;
+  // A read-only shared mailbox's mail only reads.
+  const readOnly = thread.accountIds.length > 0 && thread.accountIds.every((id) => isReadOnly(accounts, id));
   const subject = thread.subject || t("reader.noSubject");
 
   return (
@@ -208,45 +211,47 @@ export function ThreadRow({
         )}
       </span>
 
-      <span
-        className={clsx(
-          "absolute right-2 hidden -translate-y-1/2 items-center gap-0.5 rounded-full border border-hairline bg-surface p-0.5 shadow-[0_2px_8px_rgb(28_20_32/0.08)] group-hover:flex",
-          // Centered on the first line, where the date was.
-          compact ? "top-[18px]" : "top-[22px]",
-        )}
-      >
-        <QuickAction
-          icon={ICONS.archive}
-          label={t("reader.archive")}
-          compact={compact}
-          onClick={() => void actions.archive(thread)}
-        />
-        <QuickAction
-          icon={inJunk ? ICONS.notSpam : ICONS.spam}
-          label={inJunk ? t("reader.notSpam") : t("reader.spam")}
-          compact={compact}
-          onClick={() => void actions.spam(thread, !inJunk)}
-        />
-        <QuickAction
-          icon={ICONS.delete}
-          label={inTrash ? t("reader.deleteForever") : t("reader.trash")}
-          compact={compact}
-          onClick={() => void actions.trash(thread)}
-        />
-        <QuickAction
-          icon={unread ? ICONS.unread : ICONS.mail}
-          label={unread ? t("list.markRead") : t("reader.markUnread")}
-          compact={compact}
-          onClick={() => void actions.toggleRead(thread)}
-        />
-        <QuickAction
-          icon={ICONS.favorite}
-          label={thread.flagged ? t("reader.unflag") : t("reader.flag")}
-          active={thread.flagged}
-          compact={compact}
-          onClick={() => void actions.toggleFlag(thread)}
-        />
-      </span>
+      {!readOnly && (
+        <span
+          className={clsx(
+            "absolute right-2 hidden -translate-y-1/2 items-center gap-0.5 rounded-full border border-hairline bg-surface p-0.5 shadow-[0_2px_8px_rgb(28_20_32/0.08)] group-hover:flex",
+            // Centered on the first line, where the date was.
+            compact ? "top-[18px]" : "top-[22px]",
+          )}
+        >
+          <QuickAction
+            icon={ICONS.archive}
+            label={t("reader.archive")}
+            compact={compact}
+            onClick={() => void actions.archive(thread)}
+          />
+          <QuickAction
+            icon={inJunk ? ICONS.notSpam : ICONS.spam}
+            label={inJunk ? t("reader.notSpam") : t("reader.spam")}
+            compact={compact}
+            onClick={() => void actions.spam(thread, !inJunk)}
+          />
+          <QuickAction
+            icon={ICONS.delete}
+            label={inTrash ? t("reader.deleteForever") : t("reader.trash")}
+            compact={compact}
+            onClick={() => void actions.trash(thread)}
+          />
+          <QuickAction
+            icon={unread ? ICONS.unread : ICONS.mail}
+            label={unread ? t("list.markRead") : t("reader.markUnread")}
+            compact={compact}
+            onClick={() => void actions.toggleRead(thread)}
+          />
+          <QuickAction
+            icon={ICONS.favorite}
+            label={thread.flagged ? t("reader.unflag") : t("reader.flag")}
+            active={thread.flagged}
+            compact={compact}
+            onClick={() => void actions.toggleFlag(thread)}
+          />
+        </span>
+      )}
     </div>
   );
 }

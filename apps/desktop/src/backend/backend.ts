@@ -247,6 +247,14 @@ export interface Backend {
   signInAgain(accountId: string): Promise<Account>;
   /** Switches between IMAP/SMTP and JMAP; the mailbox syncs again from scratch. */
   setAccountProtocol(accountId: string, protocol: Protocol): Promise<Account>;
+  /** Renames a mailbox; an empty name calls it by its address again. */
+  renameAccount(accountId: string, name: string): Promise<void>;
+  /** What this computer is called (for naming its app password); null on phones and in the browser. */
+  deviceName(): Promise<string | null>;
+  /** Whether a password mailbox's server signs in with UwUMail. */
+  uwumailLoginAvailable(accountId: string): Promise<boolean>;
+  /** Signs in again with UwUMail in the browser: a new app password named `name` replaces the password. */
+  uwumailSignInAgain(accountId: string, name: string): Promise<Account>;
   syncNow(accountId?: string): Promise<void>;
 
   /** Whether any account has calendars (see calendarAccounts); without one the calendar stays hidden. */

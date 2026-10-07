@@ -32,6 +32,7 @@ import { useSelectionActions } from "./selection";
 import { droppedThreads, isThreadDrag } from "./threadDrag";
 import { ScheduledNavItem } from "../compose/ScheduledSends";
 import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
+import { accountLabel, sharedMailboxLabel } from "@/lib/accountLabel";
 
 const UNIFIED_ROLES = ["inbox", "unread", "flagged", "drafts", "sent"] as const;
 
@@ -273,7 +274,7 @@ function AccountSection({
           type="button"
           onClick={() => setOpen(!open)}
           aria-expanded={open}
-          title={nested ? t("shared.of", { email: account.email }) : statusLabel}
+          title={nested ? t("shared.of", { email: account.email }) : (statusLabel ?? account.email)}
           className={clsx(
             "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-[12px] font-bold tracking-wide text-muted hover:text-ink",
             !nested && "uppercase",
@@ -281,7 +282,7 @@ function AccountSection({
         >
           {nested ? <Icon icon={ICONS.people} size="xs" className="shrink-0" /> : <AccountDot color={account.color} />}
           <span className="min-w-0 flex-1 truncate text-left tracking-normal normal-case">
-            {nested ? account.displayName || account.email : account.email}
+            {nested ? sharedMailboxLabel(account) : accountLabel(account)}
           </span>
           {status.state === "syncing" && (
             <Icon icon={ICONS.loading} size="xs" className="animate-spin text-pink" label={statusLabel} />

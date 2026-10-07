@@ -365,7 +365,7 @@ function EditorDialog({ request, onClose }: { request: ContactEditorRequest | nu
 function KindSelect({ kinds, value, onChange }: { kinds: string[]; value: string; onChange: (kind: string) => void }) {
   const { t } = useT();
   return (
-    <span className="w-32 shrink-0">
+    <span className="w-32 shrink-0 phone:w-24">
       <Select aria-label={t("contacts.kind")} value={value} onChange={(event) => onChange(event.target.value)}>
         {kinds.map((kind) => (
           <option key={kind} value={kind}>

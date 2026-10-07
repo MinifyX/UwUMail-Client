@@ -174,6 +174,17 @@ impl Engine {
                     inner.save_push(account_id, &record)?;
                     inner.emit(EngineEvent::PushChanged { reregister: false });
                 }
+                // Shared mailboxes reached with this login follow its push (one subscription per login).
+                // One that can't be synced now doesn't keep the login's own mail from it.
+                for shared in inner.shares_changed(account_id, &changed) {
+                    let synced = match inner.jmap_client(&shared).await {
+                        Ok(shared_client) => inner.sync_jmap(&shared_client, &shared).await,
+                        Err(error) => Err(error),
+                    };
+                    if let Err(error) = synced {
+                        tracing::info!("Couldn't sync shared mailbox {shared}: {error}");
+                    }
+                }
                 let Some(change) = jmap_push::state_change_for(&changed, &client.account_ids()) else {
                     return Ok(());
                 };

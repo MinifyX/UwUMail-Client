@@ -219,6 +219,13 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
 -- The addon system was dropped before it was finished: its storage table goes too.
 DROP TABLE IF EXISTS addon_storage;
 "#,
+    shared::JMAP_MIGRATION,
+    r#"
+-- A mailbox's name is its own now (setup asks, the settings rename it). Before, it was always the
+-- address's domain, which said little: those mailboxes are called by their address.
+UPDATE accounts SET name = email
+WHERE lower(name) = lower(substr(email, instr(email, '@') + 1));
+"#,
 ];
 
 /// What this device remembers about one calendar.
@@ -480,6 +487,16 @@ impl Store {
 
     pub fn set_account_display_name(&self, id: &str, display_name: &str) -> Result<()> {
         self.conn().execute("UPDATE accounts SET display_name = ?1 WHERE id = ?2", params![display_name, id])?;
+        Ok(())
+    }
+
+    pub fn set_account_name(&self, id: &str, name: &str) -> Result<bool> {
+        Ok(self.conn().execute("UPDATE accounts SET name = ?1 WHERE id = ?2", params![name, id])? > 0)
+    }
+
+    /// The login a password mailbox signs in with, e.g. the one of a new app password.
+    pub fn set_account_username(&self, id: &str, username: &str) -> Result<()> {
+        self.conn().execute("UPDATE accounts SET username = ?1 WHERE id = ?2", params![username, id])?;
         Ok(())
     }
 
@@ -1997,6 +2014,35 @@ mod tests {
         assert_eq!(tables, 0);
         let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0)).unwrap();
         assert_eq!(version, MIGRATIONS.len() as i64);
+    }
+
+    #[test]
+    fn mailboxes_named_after_their_domain_are_called_by_their_address() {
+        let conn = Connection::open_in_memory().unwrap();
+        // The database as it was before the mailbox names.
+        let before = MIGRATIONS.len() - 1;
+        for migration in &MIGRATIONS[..before] {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.pragma_update(None, "user_version", before as i64).unwrap();
+        let insert = |id: &str, name: &str, email: &str| {
+            conn.execute(
+                "INSERT INTO accounts (id, name, email, display_name, color, auth, username, imap_host, imap_port,
+                    imap_security, smtp_host, smtp_port, smtp_security, created_at)
+                 VALUES (?1, ?2, ?3, '', 'pink', 'password', ?3, '', 0, 'tls', '', 0, 'tls', 0)",
+                params![id, name, email],
+            )
+            .unwrap();
+        };
+        insert("a", "example.com", "mini@Example.com");
+        insert("b", "Work", "leni@example.org");
+        let store = Store::init(conn).unwrap();
+        let names: Vec<(String, String)> = store.accounts().unwrap().into_iter().map(|a| (a.id, a.name)).collect();
+        assert!(names.contains(&("a".into(), "mini@Example.com".into())), "{names:?}");
+        assert!(names.contains(&("b".into(), "Work".into())), "a name of its own stays");
+        assert!(store.set_account_name("b", "Arbeit").unwrap());
+        assert_eq!(store.account("b").unwrap().name, "Arbeit");
+        assert!(!store.set_account_name("gone", "x").unwrap());
     }
 
     fn store_with_account() -> (Store, String, String, String) {

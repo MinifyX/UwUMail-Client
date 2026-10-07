@@ -7,3 +7,25 @@
 @import "@uwusuite/design/tailwind.css";
 @import "@uwusuite/design/font-picker.css";
 @import "../components/nyu/nyu.css";
+
+/*
+ * Phones and tablets don't zoom the app: panning stays, pinch and double-tap zoom go. The viewport
+ * in index.html covers Android; iOS ignores user-scalable, so lib/noZoom.ts cancels Safari's pinch
+ * gestures and src-tauri/src/ios.rs switches off the web view's own pinch.
+ */
+html,
+body {
+  touch-action: pan-x pan-y;
+}
+
+/* iOS zooms into a field with text under 16 px when it gets the focus. */
+@supports (-webkit-touch-callout: none) {
+  @media (pointer: coarse) {
+    input,
+    textarea,
+    select,
+    [contenteditable="true"] {
+      font-size: max(16px, 1em);
+    }
+  }
+}

@@ -120,6 +120,13 @@ pub struct Account {
     /// For a Microsoft 365 work account: how the search for its shared mailboxes went.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shared_search: Option<SharedSearch>,
+    /// A shared mailbox the mail server shares with the login of its parent (JMAP): it comes and
+    /// goes with the server, and is only there over JMAP.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub server_shared: bool,
+    /// Such a shared mailbox may only be read: no moving, deleting or flagging.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub read_only: bool,
 }
 
 /// How the search for a Microsoft 365 account's shared mailboxes went (see `shared`).
@@ -974,6 +981,9 @@ pub enum DiscoverySource {
     Microsoft,
     Srv,
     Mx,
+    /// The domain's mail server (its MX host) answered with its own autoconfig file. The MX record
+    /// is plain DNS, so setup shows this server ([`DiscoveredSettings::via_mx`]).
+    MailServer,
     Guess,
 }
 
@@ -992,6 +1002,16 @@ pub struct DiscoveredSettings {
     /// The JMAP session URL, when the server offers JMAP.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub jmap: Option<String>,
+    /// The server that gets the password, when only the domain's MX record led to it and it lies on
+    /// another site than the address. The MX record is plain DNS that anyone on the network in
+    /// between could forge, so setup shows this host instead of taking it unseen (RFC 6186 §6,
+    /// audit CC-7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via_mx: Option<String>,
+    /// The JMAP server is a UwUMail server that hands out an app password through a browser sign-in
+    /// (OAuth scope `app-password`), so setup offers "Sign in with UwUMail" instead of a password.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub uwumail_login: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1016,6 +1036,13 @@ pub struct NewAccount {
     /// while adding the mailbox; the refresh token carries it afterwards.
     #[serde(default)]
     pub sign_in_as: Option<String>,
+    /// What the mailbox is called in UwUMail; the address when left out.
+    #[serde(default)]
+    pub account_name: Option<String>,
+    /// Sign in with UwUMail in the browser instead of a password: the server makes an app password
+    /// with this name for this device (`uwumail_login`), and the mailbox uses it like a password.
+    #[serde(default)]
+    pub app_password_name: Option<String>,
 }
 
 /// Events pushed to the UI.

@@ -240,6 +240,7 @@
   "onboarding": {
     "welcomeTitle": "Willkommen bei UwUMail",
     "welcomeBody": "Drei kurze Schritte, dann geht's los.",
+    "welcomeBodyPhone": "Zwei kurze Schritte, dann geht's los.",
     "start": "Los geht's",
     "layoutTitle": "Wähle ein Layout",
     "layoutBody": "Du kannst das jederzeit in den Einstellungen ändern.",
@@ -330,7 +331,18 @@
     "jmapUrlHint": "Meist https://dein-server/.well-known/jmap. Leer lassen für nur IMAP.",
     "fastmailTokenHint": "Fastmail braucht hier ein API-Token: Einstellungen › Datenschutz & Sicherheit › API-Tokens verwalten, mit Zugriff auf Mail und Versand.",
     "cleartextTitle": "Diese Verbindung ist nicht verschlüsselt",
-    "cleartextBody": "Passwort und Mails gehen lesbar durchs Netz. Nutze das nur für einen Server in deinem eigenen Netzwerk."
+    "cleartextBody": "Passwort und Mails gehen lesbar durchs Netz. Nutze das nur für einen Server in deinem eigenen Netzwerk.",
+    "accountName": "Kontoname",
+    "accountNameHint": "So heißt das Postfach in UwUMail. Das sieht nur du.",
+    "server": "Server: {{host}}",
+    "serverViaMx": "Gefunden über den MX-Eintrag deiner Domain. Prüf, ob das wirklich dein Mailserver ist, bevor du dich anmeldest.",
+    "uwumailLogin": "Mit UwUMail anmelden",
+    "uwumailLoginHint": "Du meldest dich im Browser bei deinem UwUMail-Server an. Der legt ein App-Passwort nur für dieses Gerät an – dein Passwort geht nie durch die App.",
+    "appPasswordName": "Name des App-Passworts",
+    "appPasswordNameHint": "So steht dieses Gerät unter Sicherheit in deinem UwUMail-Konto, wo du es jederzeit abmelden kannst.",
+    "useAppPassword": "Stattdessen App-Passwort eingeben",
+    "useUwumailLogin": "Doch lieber mit UwUMail anmelden",
+    "uwumailWaiting": "Warte auf die Anmeldung im Browser"
   },
   "security": {
     "tls": "SSL/TLS",
@@ -543,7 +555,10 @@
     "signatureTooBig": "Die Signatur wird zu groß. Nimm ein kleineres Bild oder weniger Bilder.",
     "profile": "Profilbild",
     "masked": "Maskierte Adressen",
-    "serverAccount": "Postfach"
+    "serverAccount": "Postfach",
+    "renameAccount": "Umbenennen",
+    "accountNameOf": "Name von {{email}}",
+    "accountRenamed": "Postfach umbenannt"
   },
   "theme": {
     "system": "System",
@@ -2059,7 +2074,8 @@
     "removeWithShared_one": "Auch sein gemeinsames Postfach entfernen",
     "removeWithShared_other": "Auch seine {{count}} gemeinsamen Postfächer entfernen",
     "toggle": "Gemeinsame Postfächer von {{email}} ein- oder ausblenden",
-    "accountMenu": "Mehr für {{email}}"
+    "accountMenu": "Mehr für {{email}}",
+    "readOnly": "Nur lesen: Du kannst die Mails lesen, aber nicht ändern."
   },
   "font": {
     "system": "Systemschrift",
@@ -2327,5 +2343,10 @@
     "website": "UwUMail auf GitHub",
     "releaseNotes": "Was ist neu",
     "report": "Problem melden …"
+  },
+  "uwumailSignIn": {
+    "hint": "Der Server lässt {{name}} nicht mehr rein. Melde dich neu mit UwUMail an, dann bekommt dieses Gerät ein frisches App-Passwort.",
+    "button": "Mit UwUMail neu anmelden",
+    "done": "{{email}} ist wieder angemeldet."
   }
 }

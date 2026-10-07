@@ -90,6 +90,7 @@
   "onboarding": {
     "welcomeTitle": "Hi! I'm Nyu (◕‿◕✿)",
     "welcomeBody": "Your mail cat from UwUMail. Three tiny steps and we're ready to go!",
+    "welcomeBodyPhone": "Your mail cat from UwUMail. Two tiny steps and we're ready to go!",
     "start": "Let's go!",
     "layoutTitle": "How do you like it?",
     "toneTitle": "How should I talk to you?",
@@ -109,7 +110,8 @@
     "errorConnection": "I couldn't reach the server (・_・;) Check the address and your internet.",
     "protocolJmapHint": "Your server speaks JMAP: faster, lighter, and new mail flies in instantly ✧",
     "errorImapDisabled": "Microsoft won’t let me in (´･_･`) IMAP is switched off for this mailbox — only an administrator can flip it: Set-CASMailbox -Identity ADDRESS -ImapEnabled $true",
-    "errorSmtpDisabled": "I’m not allowed to send from here (｡•́︿•̀｡) An administrator can turn it on with: Set-CASMailbox -Identity ADDRESS -SmtpClientAuthenticationDisabled $false"
+    "errorSmtpDisabled": "I’m not allowed to send from here (｡•́︿•̀｡) An administrator can turn it on with: Set-CASMailbox -Identity ADDRESS -SmtpClientAuthenticationDisabled $false",
+    "uwumailWaiting": "Waiting for you in the browser… (◕‿◕✿)"
   },
   "settings": {
     "motionDesc": "Should Nyu blink, hop and fly around? With System, I follow your operating system.",

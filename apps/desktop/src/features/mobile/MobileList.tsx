@@ -18,7 +18,7 @@ import {
   useVisibleAccounts,
 } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
-import { useSettings } from "@/state/settings";
+import { useLayout, useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { ThreadRow } from "../mail/ThreadRow";
@@ -59,7 +59,7 @@ export function MobileList() {
     openCompose,
     openSettings,
   } = useUi.getState();
-  const layout = useSettings((s) => s.layout);
+  const layout = useLayout();
   const density = useSettings((s) => s.listDensity);
   const swipeRight = useSettings((s) => s.swipeRight);
   const swipeLeft = useSettings((s) => s.swipeLeft);
