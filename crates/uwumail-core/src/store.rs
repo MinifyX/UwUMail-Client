@@ -219,6 +219,7 @@ ALTER TABLE calendar_prefs ADD COLUMN color TEXT;
 -- The addon system was dropped before it was finished: its storage table goes too.
 DROP TABLE IF EXISTS addon_storage;
 "#,
+    shared::JMAP_MIGRATION,
 ];
 
 /// What this device remembers about one calendar.

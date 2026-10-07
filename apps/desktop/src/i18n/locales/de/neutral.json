@@ -2059,7 +2059,8 @@
     "removeWithShared_one": "Auch sein gemeinsames Postfach entfernen",
     "removeWithShared_other": "Auch seine {{count}} gemeinsamen Postfächer entfernen",
     "toggle": "Gemeinsame Postfächer von {{email}} ein- oder ausblenden",
-    "accountMenu": "Mehr für {{email}}"
+    "accountMenu": "Mehr für {{email}}",
+    "readOnly": "Nur lesen: Du kannst die Mails lesen, aber nicht ändern."
   },
   "font": {
     "system": "Systemschrift",

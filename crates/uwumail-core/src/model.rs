@@ -120,6 +120,13 @@ pub struct Account {
     /// For a Microsoft 365 work account: how the search for its shared mailboxes went.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shared_search: Option<SharedSearch>,
+    /// A shared mailbox the mail server shares with the login of its parent (JMAP): it comes and
+    /// goes with the server, and is only there over JMAP.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub server_shared: bool,
+    /// Such a shared mailbox may only be read: no moving, deleting or flagging.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub read_only: bool,
 }
 
 /// How the search for a Microsoft 365 account's shared mailboxes went (see `shared`).

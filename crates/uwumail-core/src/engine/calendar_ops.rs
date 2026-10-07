@@ -82,6 +82,10 @@ impl Inner {
     /// that search could tell — it asks the mail domain's website, so it waits until someone opens
     /// the calendar.
     pub(super) async fn calendar_source_known(&self, account_id: &str) -> Option<Result<Source>> {
+        // Its login's calendars are the login's own; the shared account has none of its own.
+        if self.jmap_share_of(account_id).is_some() {
+            return Some(Err(Error::not_supported("A shared mailbox has no calendars of its own.")));
+        }
         match self.calendar_sources.lock().await.get(account_id) {
             Some(SourceState::Ready(source)) => return Some(Ok(source.clone())),
             Some(SourceState::Unavailable { problem, since }) if since.elapsed() < RETRY_UNAVAILABLE => {

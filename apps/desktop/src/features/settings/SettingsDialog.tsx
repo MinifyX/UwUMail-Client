@@ -560,6 +560,7 @@ function SharedMailboxesOf({ account, shared }: { account: Account; shared: Acco
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13.5px] font-semibold">{mailbox.email}</span>
                 {mailbox.displayName && <span className="block text-[12.5px] text-muted">{mailbox.displayName}</span>}
+                {mailbox.readOnly && <span className="block text-[12.5px] text-muted">{t("shared.readOnly")}</span>}
               </span>
               <Button size="sm" variant="ghost" onClick={() => openShared({ kind: "remove", account: mailbox })}>
                 {t("shared.remove")}

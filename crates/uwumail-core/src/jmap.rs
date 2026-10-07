@@ -158,6 +158,56 @@ pub struct Session {
     /// The server lists its people for sharing; `own_principal_id` is the login's own.
     pub principals: bool,
     pub own_principal_id: Option<String>,
+    /// The login's own mail account. The same as `account_id`, except in the view of a shared
+    /// account ([`Session::shared_view`]): pictures are fetched for the own account only.
+    pub home_account_id: String,
+    /// Other people's mail accounts this login reaches (`isPersonal: false`): shared mailboxes
+    /// and mailboxes someone shared folders of (UwUMail-Server docs/groups.md, docs/sharing.md).
+    pub shared_accounts: Vec<SharedAccount>,
+}
+
+/// A mail account of someone else in the login's session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharedAccount {
+    /// Its JMAP `accountId`.
+    pub id: String,
+    /// Its `name`: on UwUMail the owner's address.
+    pub name: String,
+    /// The login may only read it (`isReadOnly`).
+    pub read_only: bool,
+}
+
+/// The JMAP ids of other accounts are at most this long (RFC 8620 §1.2); a longer one isn't taken.
+const MAX_ID: usize = 255;
+/// A session naming more shared accounts than this is cut short.
+const MAX_SHARED_ACCOUNTS: usize = 200;
+
+/// The mail accounts of the session other than the login's own `account_id`, by name.
+fn shared_accounts_of(document: &Value, account_id: &str) -> Vec<SharedAccount> {
+    let Some(accounts) = document.get("accounts").and_then(Value::as_object) else { return Vec::new() };
+    let mut shared: Vec<SharedAccount> = accounts
+        .iter()
+        .filter(|(id, _)| id.as_str() != account_id && !id.is_empty() && id.len() <= MAX_ID)
+        // Only what the server says is someone else's: a missing `isPersonal` may be the login's own.
+        .filter(|(_, account)| account.get("isPersonal").and_then(Value::as_bool) == Some(false))
+        .filter(|(_, account)| {
+            account.get("accountCapabilities").and_then(Value::as_object).is_some_and(|c| c.contains_key(MAIL))
+        })
+        .filter_map(|(id, account)| {
+            let name = account.get("name").and_then(Value::as_str).map(str::trim).unwrap_or_default();
+            if name.is_empty() || name.len() > 320 || name.chars().any(char::is_control) {
+                return None;
+            }
+            Some(SharedAccount {
+                id: id.clone(),
+                name: name.to_string(),
+                read_only: account.get("isReadOnly").and_then(Value::as_bool).unwrap_or(false),
+            })
+        })
+        .collect();
+    shared.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.id.cmp(&b.id)));
+    shared.truncate(MAX_SHARED_ACCOUNTS);
+    shared
 }
 
 /// What a session says about UwUMail's AI assistant.
@@ -247,7 +297,10 @@ impl Session {
             .and_then(Value::as_str)
             .filter(|id| !id.is_empty() && id.len() <= 255)
             .map(String::from);
+        let shared_accounts = shared_accounts_of(document, &account_id);
         Ok(Self {
+            home_account_id: account_id.clone(),
+            shared_accounts,
             api_url: absolute(base, text("apiUrl").ok_or_else(invalid)?),
             download_url: absolute(base, text("downloadUrl").ok_or_else(invalid)?),
             upload_url: absolute(base, text("uploadUrl").ok_or_else(invalid)?),
@@ -282,6 +335,35 @@ impl Session {
             profile,
             principals: principals.is_some(),
             own_principal_id,
+        })
+    }
+
+    /// The session as seen from the shared account `id`: mail calls go to that account, while
+    /// everything that is the login's own (sending, settings, rules, calendars, contacts, the
+    /// assistant, push subscriptions) is left out. `None` when the session doesn't name it.
+    pub fn shared_view(&self, id: &str) -> Option<Self> {
+        let shared = self.shared_accounts.iter().find(|account| account.id == id)?;
+        Some(Self {
+            account_id: shared.id.clone(),
+            // The server takes EmailSubmission only in the own account; sending from a shared
+            // mailbox goes through the login's own account (see `engine::jmap_shared_ops`).
+            submission_account_id: None,
+            max_delayed_send: 0,
+            sender_lists: false,
+            user_settings: false,
+            sieve_account_id: None,
+            calendar_account_id: None,
+            contacts_account_id: None,
+            birthdays_account_id: None,
+            signatures_account_id: None,
+            vapid_key: None,
+            assist: None,
+            masked: None,
+            profile: None,
+            principals: false,
+            own_principal_id: None,
+            shared_accounts: Vec::new(),
+            ..self.clone()
         })
     }
 
@@ -470,6 +552,21 @@ impl Client {
 
     pub fn account_id(&self) -> &str {
         &self.session.account_id
+    }
+
+    /// The same login, working in the shared account `id` ([`Session::shared_view`]).
+    pub fn shared_view(&self, id: &str) -> Option<Self> {
+        Some(Self {
+            http: self.http.clone(),
+            auth: self.auth.clone(),
+            session: self.session.shared_view(id)?,
+            latest_session_state: Default::default(),
+        })
+    }
+
+    /// The `sessionState` of the latest API answer, or the state of the session read at sign-in.
+    pub fn latest_session_state(&self) -> Option<String> {
+        self.latest_session_state.lock().unwrap().clone().or_else(|| self.session.state.clone())
     }
 
     /// The accounts of this login that UwUMail reads: mail, and calendars, contacts and rules
@@ -675,7 +772,7 @@ impl Client {
     /// and bytes, `None` when the server can't do that or the picture isn't there.
     pub async fn remote_image(&self, url: &str) -> Result<Option<(String, Vec<u8>)>> {
         let Some(template) = &self.session.image_url else { return Ok(None) };
-        let target = fill(template, &[("accountId", &self.session.account_id), ("url", url)]);
+        let target = fill(template, &[("accountId", &self.session.home_account_id), ("url", url)]);
         let Some((_, bytes)) = self.get_from_server(&target).await? else { return Ok(None) };
         // The type comes from the bytes, never from the server: only pictures reach the reader (EG-2).
         let Some(media_type) = crate::mail_images::image_media_type(&bytes) else { return Ok(None) };
@@ -689,7 +786,7 @@ impl Client {
         let Some(template) = &self.session.image_sizes_url else {
             return Err(Error::not_supported("This server tells no picture sizes."));
         };
-        let target = fill(template, &[("accountId", &self.session.account_id)]);
+        let target = fill(template, &[("accountId", &self.session.home_account_id)]);
         let (Ok(api), Ok(to)) = (Url::parse(&self.session.api_url), Url::parse(&target)) else {
             return Err(Error::invalid("The server announced an address that is not one."));
         };
@@ -742,7 +839,7 @@ impl Client {
         let Some(template) = &self.session.picture_url else {
             return Err(Error::not_supported("No sender pictures here."));
         };
-        let target = picture_target(template, &self.session.account_id, email, local, logo_only);
+        let target = picture_target(template, &self.session.home_account_id, email, local, logo_only);
         let Some((headers, bytes)) = self.get_from_server(&target).await? else { return Ok(None) };
         let kind = crate::pictures::PictureKind::from_header(
             headers.get("x-picture-kind").and_then(|kind| kind.to_str().ok()),
@@ -1323,6 +1420,66 @@ mod tests {
         assert_eq!(Session::parse(&later, &base).unwrap().max_delayed_send, 2_592_000);
         later["accounts"]["c"]["accountCapabilities"][SUBMISSION]["maxDelayedSend"] = json!("30");
         assert_eq!(Session::parse(&later, &base).unwrap().max_delayed_send, 0, "only a number counts");
+    }
+
+    /// A UwUMail session of a member of a shared mailbox (UwUMail-Server sharing.rs `add_to_session`).
+    fn session_with_shared_accounts() -> Value {
+        json!({
+            "capabilities": { CORE: {}, MAIL: {}, SUBMISSION: {}, PRINCIPALS: {}, SIEVE: {},
+                REMOTE: { "imageUrl": "/jmap/remote/{accountId}?url={url}" } },
+            "primaryAccounts": { MAIL: "a1", SUBMISSION: "a1", PRINCIPALS: "a1", SIEVE: "a1" },
+            "accounts": {
+                "a1": { "name": "mini@uwumail.test", "isPersonal": true, "isReadOnly": false,
+                    "accountCapabilities": { MAIL: { "mayCreateTopLevelMailbox": true }, SUBMISSION: {} } },
+                "a7": { "name": "support@uwumail.test", "isPersonal": false, "isReadOnly": false,
+                    "accountCapabilities": { MAIL: { "mayCreateTopLevelMailbox": false } } },
+                "a3": { "name": "Leni@uwumail.test", "isPersonal": false, "isReadOnly": true,
+                    "accountCapabilities": { MAIL: {} } },
+                "a4": { "name": "calendar-only@uwumail.test", "isPersonal": false,
+                    "accountCapabilities": { CALENDARS: {} } },
+                "a5": { "name": "no-flag@uwumail.test", "accountCapabilities": { MAIL: {} } },
+                "a6": { "name": " ", "isPersonal": false, "accountCapabilities": { MAIL: {} } }
+            },
+            "username": "mini@uwumail.test",
+            "apiUrl": "https://mail.uwumail.test/jmap/",
+            "downloadUrl": "https://mail.uwumail.test/jmap/download/{accountId}/{blobId}/{name}?accept={type}",
+            "uploadUrl": "https://mail.uwumail.test/jmap/upload/{accountId}/",
+            "eventSourceUrl": "https://mail.uwumail.test/jmap/eventsource/?types={types}&closeafter={closeafter}&ping={ping}",
+            "state": "s1-s7w-s3r"
+        })
+    }
+
+    #[test]
+    fn lists_the_shared_mail_accounts_of_a_session() {
+        let base = Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let session = Session::parse(&session_with_shared_accounts(), &base).unwrap();
+        assert_eq!(session.account_id, "a1");
+        assert_eq!(session.home_account_id, "a1");
+        // Only other people's mail accounts, by name; neither calendars alone nor unnamed ones.
+        assert_eq!(
+            session.shared_accounts,
+            vec![
+                SharedAccount { id: "a3".into(), name: "Leni@uwumail.test".into(), read_only: true },
+                SharedAccount { id: "a7".into(), name: "support@uwumail.test".into(), read_only: false },
+            ]
+        );
+
+        let view = session.shared_view("a7").unwrap();
+        assert_eq!(view.account_id, "a7");
+        assert_eq!(view.home_account_id, "a1", "pictures are still fetched for the own account");
+        assert_eq!(view.submission_account_id, None, "sending goes through the own account");
+        assert_eq!(view.sieve_account_id, None);
+        assert!(view.shared_accounts.is_empty() && !view.principals);
+        assert_eq!(view.api_url, session.api_url);
+        assert!(view.event_source_url.is_some(), "push follows a shared account too");
+        assert!(session.shared_view("a4").is_none() && session.shared_view("a1").is_none());
+
+        let without = json!({
+            "capabilities": { CORE: {}, MAIL: {} },
+            "primaryAccounts": { MAIL: "a1" },
+            "apiUrl": "/jmap/", "downloadUrl": "/d", "uploadUrl": "/u"
+        });
+        assert!(Session::parse(&without, &base).unwrap().shared_accounts.is_empty());
     }
 
     #[test]

@@ -29,10 +29,20 @@ export interface Account {
   protocol: Protocol;
   /** Protocols this account can switch to. */
   protocols: Protocol[];
-  /** For a shared mailbox: the Microsoft account whose sign-in opens it. Listed right after it. */
+  /**
+   * For a shared mailbox: the account whose sign-in opens it (Microsoft 365), or whose login the
+   * mail server shares it with (JMAP). Listed right after it.
+   */
   parentId?: string;
-  /** For a Microsoft 365 work account: how the search for its shared mailboxes went. */
+  /**
+   * For a Microsoft 365 work account: how the search for its shared mailboxes went. A JMAP account
+   * has `done` once its server said it shares mailboxes.
+   */
   sharedSearch?: SharedSearch;
+  /** A shared mailbox the mail server shares with its parent's login: it comes and goes with the server. */
+  serverShared?: boolean;
+  /** Such a shared mailbox may only be read: no moving, deleting or flagging. */
+  readOnly?: boolean;
 }
 
 /**

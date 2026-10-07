@@ -121,6 +121,8 @@ struct Inner {
     offline_days: AtomicU32,
     /// When each JMAP account's identities were last fetched.
     identities_checked: Mutex<HashMap<String, Instant>>,
+    /// Per JMAP login, the session state its shared mailboxes were last matched with.
+    jmap_shares_seen: Mutex<HashMap<String, String>>,
     /// The app link OAuth providers send the browser back to (Android); loopback when unset.
     oauth_redirect: Mutex<Option<String>>,
     /// The sign-in waiting for that link. It gets every such link and picks its own by `state`.
@@ -206,6 +208,7 @@ mod price_ops;
 mod push_ops;
 mod refresh_ops;
 pub use refresh_ops::RefreshOutcome;
+mod jmap_shared_ops;
 mod send_later_ops;
 mod shared_ops;
 
@@ -239,6 +242,7 @@ impl Engine {
                 picture_logins: AsyncMutex::new(HashMap::new()),
                 offline_days: AtomicU32::new(0),
                 identities_checked: Mutex::new(HashMap::new()),
+                jmap_shares_seen: Mutex::new(HashMap::new()),
                 oauth_redirect: Mutex::new(None),
                 pending_sign_in: Mutex::new(None),
                 calendar_sources: AsyncMutex::new(HashMap::new()),
@@ -320,6 +324,10 @@ impl Engine {
                 if trusted_jmap_url(&record).is_some() && record.auth == AuthKind::Password {
                     protocols.push(Protocol::Jmap);
                 }
+                // A shared mailbox of a JMAP login is only there over JMAP.
+                if link.jmap_account_id.is_some() {
+                    protocols = vec![Protocol::Jmap];
+                }
                 Account {
                     id: record.id,
                     name: record.name,
@@ -330,6 +338,8 @@ impl Engine {
                     status,
                     protocol: record.protocol,
                     protocols,
+                    server_shared: link.jmap_account_id.is_some(),
+                    read_only: link.jmap_account_id.is_some() && link.read_only,
                     parent_id: link.parent_id.filter(|parent| links.contains_key(parent)),
                     shared_search,
                 }
@@ -684,6 +694,14 @@ impl Engine {
             return Err(Error::invalid("This mailbox can't use that protocol."));
         }
         if account.protocol != protocol {
+            // Shared mailboxes of a JMAP login are only there over JMAP.
+            if protocol != Protocol::Jmap {
+                for child in self.inner.store.shared_children(account_id)? {
+                    if self.inner.jmap_share_of(&child).is_some() {
+                        self.remove_one_account(&child).await?;
+                    }
+                }
+            }
             self.stop_push_briefly(account_id).await;
             if protocol == Protocol::Jmap {
                 let url = account.jmap_url.as_deref().unwrap_or_default();
@@ -854,6 +872,7 @@ impl Engine {
 
     pub async fn set_flags(&self, message_ids: &[String], change: FlagChange) -> Result<()> {
         let locations = self.inner.store.locations(message_ids)?;
+        self.inner.refuse_read_only(&locations)?;
         self.inner.store.apply_flag_change(message_ids, change)?;
         self.inner.emit_changed(&locations);
         for (account_id, remote_ids) in group_remote(&locations) {
@@ -902,6 +921,7 @@ impl Engine {
     /// from it get the `$Junk` / `$NotJunk` keywords too.
     pub async fn mark_spam(&self, message_ids: &[String], spam: bool) -> Result<Vec<MovedMessage>> {
         let locations = self.inner.store.locations(message_ids)?;
+        self.inner.refuse_read_only(&locations)?;
         for (account_id, remote_ids) in group_remote(&locations) {
             let client = self.inner.jmap_client(&account_id).await?;
             let _ = jmap_sync::set_keywords(&client, &remote_ids, &[("$junk", spam), ("$notjunk", !spam)]).await;
@@ -1414,10 +1434,8 @@ impl Engine {
 
         let recipients: Vec<Address> = outgoing.to.iter().chain(&outgoing.cc).chain(&outgoing.bcc).cloned().collect();
         if account.protocol == Protocol::Jmap {
-            let client = self.inner.jmap_client(&account.id).await?;
             let envelope: Vec<String> = recipients.iter().map(|a| a.email.clone()).collect();
-            jmap_sync::send(&client, &self.inner.store, &account.id, message.formatted(), &from.email, &envelope)
-                .await?;
+            self.inner.jmap_send(&account.id, message.formatted(), &from.email, &envelope).await?;
         } else {
             let auth = match self.inner.credential(&account).await? {
                 Credential::Password(password) => SmtpAuth::Password(password),
@@ -1885,6 +1903,9 @@ impl Inner {
 
     /// The signed-in JMAP connection of an account, connecting if needed.
     async fn jmap_client(&self, account_id: &str) -> Result<Arc<JmapClient>> {
+        if let Some(share) = self.jmap_share_of(account_id) {
+            return self.shared_jmap_client(account_id, share).await;
+        }
         let mut clients = self.jmap.lock().await;
         if let Some(client) = clients.get(account_id) {
             return Ok(Arc::clone(client));
@@ -1902,6 +1923,7 @@ impl Inner {
     /// Moves mail over IMAP or JMAP. Mail already in the target folder stays where it is.
     async fn move_to(&self, message_ids: &[String], target: MoveTarget) -> Result<Vec<MovedMessage>> {
         let locations = self.store.locations(message_ids)?;
+        self.refuse_read_only(&locations)?;
         let mut moved = Vec::new();
         for (account_id, messages) in by_account(&locations) {
             let jmap = self.store.account(&account_id)?.protocol == Protocol::Jmap;
@@ -1976,6 +1998,7 @@ impl Inner {
     /// elsewhere stays, so an outdated view can never delete it by accident.
     async fn delete_forever(&self, message_ids: &[String]) -> Result<usize> {
         let locations = self.store.locations(message_ids)?;
+        self.refuse_read_only(&locations)?;
         let mut deleted = 0;
         for (account_id, messages) in by_account(&locations) {
             let Some(trash) = self.store.folder_by_role(&account_id, FolderRole::Trash)? else { continue };
@@ -2084,7 +2107,7 @@ impl Inner {
             due
         };
         if identities_due {
-            match jmap_sync::identities(client).await {
+            match self.jmap_identities(client, account_id).await {
                 Ok(found) => {
                     self.store.replace_server_identities(account_id, &found)?;
                 }
@@ -2238,10 +2261,11 @@ async fn sync_loop(inner: Arc<Inner>, account_id: String, wake: Arc<Notify>) {
 }
 
 /// JMAP: sync, then wait for a push, a wake-up or the next regular check.
-async fn run_jmap_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<()> {
+async fn run_jmap_account(inner: &Arc<Inner>, account_id: &str, wake: &Notify) -> Result<()> {
     inner.set_status(account_id, AccountStatus::Syncing { progress: None });
     let client = inner.jmap_client(account_id).await?;
     inner.sync_jmap(&client, account_id).await?;
+    jmap_shared_ops::check_shares(inner, &client, account_id).await;
     let mut push = None;
     loop {
         if push.is_none() {
@@ -2287,10 +2311,11 @@ async fn run_jmap_account(inner: &Inner, account_id: &str, wake: &Notify) -> Res
             }
         }
         inner.sync_jmap(&client, account_id).await?;
+        jmap_shared_ops::check_shares(inner, &client, account_id).await;
     }
 }
 
-async fn run_account(inner: &Inner, account_id: &str, wake: &Notify) -> Result<()> {
+async fn run_account(inner: &Arc<Inner>, account_id: &str, wake: &Notify) -> Result<()> {
     let Ok(account) = inner.store.account(account_id) else { return Ok(()) };
     if account.protocol == Protocol::Jmap {
         return run_jmap_account(inner, account_id, wake).await;

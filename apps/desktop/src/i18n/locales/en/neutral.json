@@ -2059,7 +2059,8 @@
     "removeWithShared_one": "Also remove its shared mailbox",
     "removeWithShared_other": "Also remove its {{count}} shared mailboxes",
     "toggle": "Show or hide the shared mailboxes of {{email}}",
-    "accountMenu": "More for {{email}}"
+    "accountMenu": "More for {{email}}",
+    "readOnly": "Read only: you can read its mail, not change it."
   },
   "font": {
     "system": "System font",

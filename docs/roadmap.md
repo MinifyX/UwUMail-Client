@@ -34,6 +34,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 - [x] Sign in with Microsoft (OAuth 2) — needs a registered client id, see [oauth.md](oauth.md)
 - [x] Microsoft 365 and Exchange Online: company domains recognised through their Entra tenant, switch to Microsoft by hand, shared mailboxes, and a plain explanation when the tenant blocks IMAP or SMTP ([oauth.md](oauth.md#microsoft-365-and-exchange-online))
 - [x] Shared mailboxes (Microsoft 365) nested under their account: found through Autodiscover, added by address, older ones sorted in on their own (0.8, [oauth.md](oauth.md#shared-mailboxes))
+- [x] Shared mailboxes of a UwUMail server (JMAP, the session's other mail accounts) nested under their login: added and removed with the session, sending through the login's own account with the shared address, read-only shares without write actions, removed ones brought back by address (0.11)
 - [x] Sign in with Google (OAuth 2) — needs a registered client id, see [oauth.md](oauth.md)
 - [x] System notifications for new mail
 - [x] Installers for Windows and Linux in CI, release workflow with macOS

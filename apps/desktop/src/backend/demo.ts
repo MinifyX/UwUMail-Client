@@ -481,7 +481,8 @@ export class DemoBackend implements Backend {
     const shared = this.accounts.filter((a) => a.parentId === accountId);
     const removed = new Set([accountId]);
     for (const account of shared) {
-      if (options?.keepShared) delete account.parentId;
+      // The ones the mail server shares with this login can't stay without it.
+      if (options?.keepShared && !account.serverShared) delete account.parentId;
       else removed.add(account.id);
     }
     const parentId = this.accounts.find((a) => a.id === accountId)?.parentId;
