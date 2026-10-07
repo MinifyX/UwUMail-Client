@@ -151,6 +151,8 @@ async fn the_engine_reports_settings_changes() {
             protocol: Protocol::Jmap,
             jmap_url: Some(url.clone()),
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .expect("add the account");

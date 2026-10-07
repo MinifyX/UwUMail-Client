@@ -9,7 +9,6 @@ import pkg from "../../../package.json";
 import { backend } from "@/backend/backend";
 import { mobile, nativeAndroid, nativeIos, nativeMobile } from "@/backend/mobile";
 import type { Account, Protocol } from "@/backend/types";
-import { AccountDot } from "@/components/ui/Avatar";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { LogoSymbol } from "@/components/ui/Logo";
@@ -19,6 +18,7 @@ import { openLinkNow } from "@/state/links";
 import { useAccounts } from "@/lib/queries";
 import { isDomainEntry, sortEntries } from "@/lib/trustedSenders";
 import { workspaceOf } from "@/lib/workspaces";
+import { accountLabel } from "@/lib/accountLabel";
 import { PrivacyProxy } from "./PrivacyProxy";
 import { MacIntegration } from "./MacIntegration";
 import { useUpdatesInApp } from "@/lib/distribution";
@@ -36,7 +36,8 @@ import { toast } from "@/state/toasts";
 import { useMailRulesAccounts } from "../rules/useMailRules";
 import { nestAccounts, takesSharedMailboxes, useSharedMailboxes } from "@/state/sharedMailboxes";
 import { searchSharedMailboxes } from "../accounts/SharedMailboxDialogs";
-import { signInAgain } from "../accounts/SignInAgain";
+import { signInAgain, UwumailSignInAgainHint } from "../accounts/SignInAgain";
+import { AccountName } from "./AccountName";
 import { AccountCalendar } from "./AccountCalendar";
 import { AccountContacts } from "./AccountContacts";
 import { BlockedSenders } from "./BlockedSenders";
@@ -481,35 +482,40 @@ function Accounts() {
           return (
             <li
               key={account.id}
-              className="flex flex-wrap items-center gap-3 rounded-2xl border border-hairline px-4 py-3"
+              className="flex flex-wrap items-start gap-3 rounded-2xl border border-hairline px-4 py-3"
             >
-              <AccountDot color={account.color} className="size-3" />
-              {/* On a phone the buttons go below, so the address isn't cut down to a few letters. */}
-              <span className="min-w-0 flex-1 phone:basis-[calc(100%-1.5rem)]">
-                <span className="block truncate text-sm font-semibold">{account.email}</span>
-                <span className="block text-[12.5px] text-muted">
-                  {account.displayName} · {PROTOCOL_NAMES[account.protocol]}
-                  {account.auth !== "password" && ` · ${account.auth === "microsoft" ? "Microsoft" : "Google"}`}
-                </span>
-              </span>
-              {other && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  busy={switching === account.id}
-                  onClick={() => void switchProtocol(account, other)}
-                >
-                  {t("settings.protocolSwitchTo", { protocol: PROTOCOL_NAMES[other] })}
+              <AccountName
+                account={account}
+                details={
+                  <>
+                    {account.displayName} · {PROTOCOL_NAMES[account.protocol]}
+                    {account.auth !== "password" && ` · ${account.auth === "microsoft" ? "Microsoft" : "Google"}`}
+                  </>
+                }
+              />
+              <div className="flex flex-wrap gap-2">
+                {other && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    busy={switching === account.id}
+                    onClick={() => void switchProtocol(account, other)}
+                  >
+                    {t("settings.protocolSwitchTo", { protocol: PROTOCOL_NAMES[other] })}
+                  </Button>
+                )}
+                <Button size="sm" variant="danger" onClick={() => openShared({ kind: "remove", account })}>
+                  {t("settings.removeAccount")}
                 </Button>
+              </div>
+              {account.auth === "password" && account.status.state === "error" && (
+                <UwumailSignInAgainHint account={account} />
               )}
-              <Button size="sm" variant="danger" onClick={() => openShared({ kind: "remove", account })}>
-                {t("settings.removeAccount")}
-              </Button>
               {workspaces && (
                 <div className="flex basis-full items-center justify-between gap-3 border-t border-hairline pt-2.5">
                   <span className="text-[13px] font-semibold text-muted">{t("workspace.label")}</span>
                   <WorkspacePicker
-                    label={t("workspace.of", { email: account.email })}
+                    label={t("workspace.of", { email: accountLabel(account) })}
                     value={workspaceOf(account.id, businessAccounts)}
                     onChange={(workspace) => {
                       // Its shared mailboxes come along.
@@ -560,9 +566,9 @@ function SharedMailboxesOf({ account, shared }: { account: Account; shared: Acco
       {shared.length > 0 && (
         <ul className="flex flex-col gap-1.5">
           {shared.map((mailbox) => (
-            <li key={mailbox.id} className="flex items-center gap-3 rounded-xl bg-pink-tint/40 px-3 py-2">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13.5px] font-semibold">{mailbox.email}</span>
+            <li key={mailbox.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-pink-tint/40 px-3 py-2">
+              <span className="min-w-0 flex-1 basis-40">
+                <span className="block text-[13.5px] font-semibold break-all">{mailbox.email}</span>
                 {mailbox.displayName && <span className="block text-[12.5px] text-muted">{mailbox.displayName}</span>}
                 {mailbox.readOnly && <span className="block text-[12.5px] text-muted">{t("shared.readOnly")}</span>}
               </span>

@@ -99,6 +99,8 @@ async fn jmap_sync_send_push_flags_and_trash() {
                 protocol: Protocol::Jmap,
                 jmap_url: Some(session_url.clone()),
                 sign_in_as: None,
+                account_name: None,
+                app_password_name: None,
             })
             .await
             .expect("a JMAP account can be added")
@@ -123,6 +125,8 @@ async fn jmap_sync_send_push_flags_and_trash() {
             protocol: Protocol::Jmap,
             jmap_url: Some(session_url.clone()),
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await;
     assert_eq!(wrong.unwrap_err().code, uwumail_core::ErrorCode::AuthFailed);
@@ -352,6 +356,8 @@ async fn jmap_drafts_are_saved_replaced_and_removed_on_send() {
             protocol: Protocol::Jmap,
             jmap_url: Some(session_url.clone()),
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .unwrap();
@@ -444,6 +450,8 @@ async fn jmap_blocks_senders_on_a_uwumail_server() {
             protocol: Protocol::Jmap,
             jmap_url: Some(session_url.clone()),
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .unwrap();

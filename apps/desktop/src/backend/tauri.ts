@@ -407,6 +407,22 @@ export class TauriBackend implements Backend {
     return call<Account>("set_account_protocol", { accountId, protocol });
   }
 
+  renameAccount(accountId: string, name: string) {
+    return call<void>("rename_account", { accountId, name });
+  }
+
+  deviceName() {
+    return call<string | null>("device_name");
+  }
+
+  uwumailLoginAvailable(accountId: string) {
+    return call<boolean>("uwumail_login_available", { accountId });
+  }
+
+  uwumailSignInAgain(accountId: string, name: string) {
+    return call<Account>("uwumail_sign_in_again", { accountId, name });
+  }
+
   syncNow(accountId?: string) {
     return call<void>("sync_now", { accountId: accountId ?? null });
   }

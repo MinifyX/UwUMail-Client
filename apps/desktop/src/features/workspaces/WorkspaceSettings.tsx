@@ -12,6 +12,7 @@ import { WORKSPACES } from "@/lib/workspaces";
 import { useSettings, type Workspace } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useWorkspaceName, WORKSPACE_ICONS } from "./workspaces";
+import { accountLabel, hasOwnName } from "@/lib/accountLabel";
 
 /** Private | Business for one mailbox. */
 export function WorkspacePicker({
@@ -115,8 +116,10 @@ function WorkspaceSetup({
                 </span>
                 <AccountDot color={account.color} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">{account.email}</span>
-                  <span className="block truncate text-[12.5px] text-muted">{account.displayName}</span>
+                  <span className="block truncate text-sm font-semibold">{accountLabel(account)}</span>
+                  <span className="block truncate text-[12.5px] text-muted">
+                    {hasOwnName(account) ? account.email : account.displayName}
+                  </span>
                 </span>
               </button>
             </li>

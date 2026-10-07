@@ -199,6 +199,8 @@ async fn setup(image_text: Option<bool>, recognizer: Option<Arc<dyn TextRecogniz
             protocol: Protocol::Jmap,
             jmap_url: Some(stub.url("127.0.0.1", "/.well-known/jmap").to_string()),
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .expect("add the account");

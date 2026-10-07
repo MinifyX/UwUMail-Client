@@ -331,7 +331,18 @@
     "jmapUrlHint": "Usually https://your-server/.well-known/jmap. Leave empty for IMAP only.",
     "fastmailTokenHint": "Fastmail needs an API token here: Settings › Privacy & Security › Manage API tokens, with access to mail and sending.",
     "cleartextTitle": "This connection isn't encrypted",
-    "cleartextBody": "Your password and mail travel readable through the network. Only use this for a server in your own network."
+    "cleartextBody": "Your password and mail travel readable through the network. Only use this for a server in your own network.",
+    "accountName": "Account name",
+    "accountNameHint": "What the mailbox is called in UwUMail. Only you see it.",
+    "server": "Server: {{host}}",
+    "serverViaMx": "Found through your domain’s MX record. Check that this really is your mail server before you sign in.",
+    "uwumailLogin": "Sign in with UwUMail",
+    "uwumailLoginHint": "You sign in to your UwUMail server in the browser. It makes an app password just for this device – your password never passes through the app.",
+    "appPasswordName": "App password name",
+    "appPasswordNameHint": "This is how the device shows up under Security in your UwUMail account, where you can sign it out any time.",
+    "useAppPassword": "Enter an app password instead",
+    "useUwumailLogin": "Sign in with UwUMail instead",
+    "uwumailWaiting": "Waiting for the sign-in in your browser"
   },
   "security": {
     "tls": "SSL/TLS",
@@ -544,7 +555,10 @@
     "signatureTooBig": "The signature is getting too big. Use a smaller picture or fewer pictures.",
     "profile": "Profile picture",
     "masked": "Masked addresses",
-    "serverAccount": "Mailbox"
+    "serverAccount": "Mailbox",
+    "renameAccount": "Rename",
+    "accountNameOf": "Name of {{email}}",
+    "accountRenamed": "Mailbox renamed"
   },
   "theme": {
     "system": "System",
@@ -2329,5 +2343,10 @@
     "website": "UwUMail on GitHub",
     "releaseNotes": "What's New",
     "report": "Report a Problem…"
+  },
+  "uwumailSignIn": {
+    "hint": "The server doesn’t let {{name}} in any more. Sign in again with UwUMail and this device gets a fresh app password.",
+    "button": "Sign in again with UwUMail",
+    "done": "{{email}} is signed in again."
   }
 }

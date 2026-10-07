@@ -2,7 +2,10 @@
 //!
 //! Order: the domain's own autoconfig file, a Microsoft 365 tenant, the
 //! Thunderbird ISPDB, the provider behind the MX record, RFC 6186 SRV
-//! records, and finally probing the usual host names.
+//! records, the autoconfig file of the MX host itself, and finally probing
+//! the usual host names. Everything that needs no earlier answer is asked at
+//! once, so one place that hangs or fails (a split-horizon DNS without the
+//! records, a proxy that answers 502) costs no more than its own timeout.
 
 use std::time::Duration;
 
@@ -129,6 +132,8 @@ pub(crate) fn microsoft_settings(email: &str, source: DiscoverySource) -> Discov
         username: email.to_string(),
         source,
         jmap: None,
+        via_mx: None,
+        uwumail_login: false,
     }
 }
 
@@ -168,7 +173,9 @@ pub(crate) fn parse_client_config(xml: &str, email: &str, source: DiscoverySourc
     // The domain's own file may call itself anything ("Microsoft 365") while it names a server of its
     // own: its name only counts for servers on the domain's site. Otherwise setup shows the server
     // that gets the password (audit CC-5). ISPDB entries are curated and keep theirs.
-    let named = source != DiscoverySource::Autoconfig || same_site(&imap.hostname, &domain.to_ascii_lowercase());
+    // The same goes for the file of the MX host, which plain DNS chose.
+    let named = !matches!(source, DiscoverySource::Autoconfig | DiscoverySource::MailServer)
+        || same_site(&imap.hostname, &domain.to_ascii_lowercase());
     Some(DiscoveredSettings {
         email: email.to_string(),
         provider_name: provider
@@ -182,6 +189,8 @@ pub(crate) fn parse_client_config(xml: &str, email: &str, source: DiscoverySourc
         username: fill_placeholders(if imap.username.is_empty() { "%EMAILADDRESS%" } else { &imap.username }, email),
         source,
         jmap: None,
+        via_mx: None,
+        uwumail_login: false,
     })
 }
 
@@ -277,7 +286,9 @@ async fn mx_host(domain: &str) -> Option<String> {
         })
         .collect();
     records.sort_by_key(|mx| mx.preference);
-    Some(records.first()?.exchange.to_utf8())
+    let host = records.first()?.exchange.to_utf8().trim_end_matches('.').to_ascii_lowercase();
+    // A null MX (RFC 7505, ".") receives no mail at all.
+    matches!(url::Host::parse(&host), Ok(url::Host::Domain(_))).then_some(host)
 }
 
 /// Whether Microsoft hosts the mail for a domain.
@@ -286,18 +297,28 @@ async fn mx_host(domain: &str) -> Option<String> {
 /// hides it, so an Entra tenant counts as well — except when the MX names a
 /// provider we know to be someone else, which is what a company looks like
 /// that uses Entra for sign-in but keeps its mail elsewhere.
-async fn hosted_by_microsoft(http: &reqwest::Client, domain: &str) -> bool {
-    let (tenant, mx) = tokio::join!(microsoft_tenant(http, domain), mx_host(domain));
-    match mx.as_deref().and_then(oauth_provider_of_host) {
+fn hosted_by_microsoft(tenant: bool, mx: Option<&str>) -> bool {
+    match mx.and_then(oauth_provider_of_host) {
         Some(OAuthProvider::Microsoft) => true,
         Some(_) => false,
         None => tenant,
     }
 }
 
-async fn from_mx(http: &reqwest::Client, email: &str, domain: &str) -> Option<DiscoveredSettings> {
-    let host = mx_host(domain).await?;
-    let provider_domain = base_domain(&host);
+/// The address of the MX host's own autoconfig file. A UwUMail server (and many others) serves it
+/// on its host name: the one place that still answers when the domain's own website and SRV
+/// records don't, e.g. inside a network whose DNS knows only part of the domain.
+fn mail_server_config_url(host: &str, email: &str) -> String {
+    let encoded: String = url::form_urlencoded::byte_serialize(email.as_bytes()).collect();
+    format!("https://{host}/.well-known/autoconfig/mail/config-v1.1.xml?emailaddress={encoded}")
+}
+
+async fn from_mail_server(http: &reqwest::Client, email: &str, host: &str) -> Option<DiscoveredSettings> {
+    fetch_config(http, &mail_server_config_url(host, email), email, DiscoverySource::MailServer).await
+}
+
+async fn from_mx(http: &reqwest::Client, email: &str, domain: &str, host: &str) -> Option<DiscoveredSettings> {
+    let provider_domain = base_domain(host);
     if provider_domain.eq_ignore_ascii_case(domain) {
         return None;
     }
@@ -305,7 +326,7 @@ async fn from_mx(http: &reqwest::Client, email: &str, domain: &str) -> Option<Di
     let mut settings = fetch_config(http, &url, email, DiscoverySource::Mx).await?;
     // Only for the provider's own servers, as in `parse_client_config`.
     let imap_provider = oauth_provider_of_host(&settings.imap.host);
-    settings.oauth = settings.oauth.or_else(|| oauth_provider_of_host(&host).filter(|p| imap_provider == Some(*p)));
+    settings.oauth = settings.oauth.or_else(|| oauth_provider_of_host(host).filter(|p| imap_provider == Some(*p)));
     Some(settings)
 }
 
@@ -362,6 +383,8 @@ async fn from_srv(email: &str, domain: &str) -> Option<DiscoveredSettings> {
         username: email.to_string(),
         source: DiscoverySource::Srv,
         jmap: None,
+        via_mx: None,
+        uwumail_login: false,
     })
 }
 
@@ -395,6 +418,8 @@ async fn guess(email: &str, domain: &str) -> DiscoveredSettings {
         username: email.to_string(),
         source: DiscoverySource::Guess,
         jmap: None,
+        via_mx: None,
+        uwumail_login: false,
     }
 }
 
@@ -414,43 +439,98 @@ pub fn split_email(email: &str) -> Result<(&str, String)> {
     }
 }
 
-/// IMAP and SMTP settings for an address, plus the JMAP session URL if the server offers JMAP.
+/// IMAP and SMTP settings for an address, plus the JMAP session URL if the server offers JMAP, and
+/// whether that server signs in with UwUMail.
 pub async fn discover(http: &reqwest::Client, email: &str) -> Result<DiscoveredSettings> {
     let email = email.trim();
     let (_, domain) = split_email(email)?;
-    let mut settings = discover_imap(http, email, &domain).await;
+    let (mut settings, mx) = discover_imap(http, email, &domain).await;
     // OAuth providers (Google, Microsoft) don't offer JMAP.
     if settings.oauth.is_none() {
-        let mail_hosts = [settings.imap.host.as_str(), settings.smtp.host.as_str()];
-        settings.jmap = crate::jmap::discover(http, &domain, &mail_hosts).await;
+        let mut mail_hosts = vec![settings.imap.host.clone(), settings.smtp.host.clone()];
+        // The MX host is asked for JMAP as well; when only it answers, setup shows it (`via_mx`).
+        if let Some(mx) = mx.as_ref().filter(|mx| !mail_hosts.contains(mx)) {
+            mail_hosts.push(mx.clone());
+        }
+        let hosts: Vec<&str> = mail_hosts.iter().map(String::as_str).collect();
+        settings.jmap = crate::jmap::discover(http, &domain, &hosts).await;
+        settings.via_mx = shown_server(&settings, &domain, mx.as_deref());
+        if let Some(session) = &settings.jmap
+            && let Ok(client) = crate::uwumail_login::http_client()
+        {
+            settings.uwumail_login = crate::uwumail_login::metadata(&client, session).await.is_some();
+        }
     }
     Ok(settings)
 }
 
-async fn discover_imap(http: &reqwest::Client, email: &str, domain: &str) -> DiscoveredSettings {
-    // Microsoft's own domains are known and need no lookup.
-    if oauth_provider_for(domain) == Some(OAuthProvider::Microsoft) {
-        return microsoft_settings(email, DiscoverySource::Microsoft);
+/// The server that gets the password, when only the MX record led to it and it isn't on the
+/// address's own site. The MX record is plain DNS, which anyone on the network in between can
+/// forge, so setup shows this server instead of taking it unseen (RFC 6186 section 6, audit CC-7).
+fn shown_server(settings: &DiscoveredSettings, domain: &str, mx: Option<&str>) -> Option<String> {
+    let mx = mx?;
+    let jmap_host =
+        settings.jmap.as_deref().and_then(|u| url::Url::parse(u).ok()).and_then(|u| u.host_str().map(String::from));
+    let server = jmap_host.clone().unwrap_or_else(|| settings.imap.host.clone());
+    if same_site(&server, domain) {
+        return None;
     }
-    let (found, microsoft) = tokio::join!(from_autoconfig(http, email, domain), hosted_by_microsoft(http, domain));
-    if let Some(found) = found {
+    let from_mx = settings.source == DiscoverySource::MailServer
+        || (jmap_host.is_some()
+            && same_site(&server, mx)
+            && !same_site(&server, &settings.imap.host)
+            && !same_site(&server, &settings.smtp.host));
+    from_mx.then_some(server)
+}
+
+/// Everything found at once, picked in order of trust.
+struct Answers {
+    autoconfig: Option<DiscoveredSettings>,
+    microsoft: bool,
+    mx_provider: Option<DiscoveredSettings>,
+    srv: Option<DiscoveredSettings>,
+    mail_server: Option<DiscoveredSettings>,
+}
+
+fn pick(email: &str, answers: Answers) -> Option<DiscoveredSettings> {
+    if let Some(found) = answers.autoconfig {
         // A file the domain publishes itself wins: whoever wrote it knows where the
         // mail really lives, hybrid setups included. A shared ISPDB entry loses
         // against a tenant, because the password login it describes cannot work there.
-        if found.source == DiscoverySource::Autoconfig || !microsoft {
-            return found;
+        if found.source == DiscoverySource::Autoconfig || !answers.microsoft {
+            return Some(found);
         }
     }
-    if microsoft {
-        return microsoft_settings(email, DiscoverySource::Microsoft);
+    if answers.microsoft {
+        return Some(microsoft_settings(email, DiscoverySource::Microsoft));
     }
-    if let Some(found) = from_mx(http, email, domain).await {
-        return found;
+    answers.mx_provider.or(answers.srv).or(answers.mail_server)
+}
+
+async fn discover_imap(http: &reqwest::Client, email: &str, domain: &str) -> (DiscoveredSettings, Option<String>) {
+    // Microsoft's own domains are known and need no lookup.
+    if oauth_provider_for(domain) == Some(OAuthProvider::Microsoft) {
+        return (microsoft_settings(email, DiscoverySource::Microsoft), None);
     }
-    if let Some(found) = from_srv(email, domain).await {
-        return found;
-    }
-    guess(email, domain).await
+    let behind_mx = async {
+        let Some(host) = mx_host(domain).await else { return (None, None, None) };
+        let (provider, server) =
+            tokio::join!(from_mx(http, email, domain, &host), from_mail_server(http, email, &host));
+        (Some(host), provider, server)
+    };
+    let (autoconfig, tenant, (mx, mx_provider, mail_server), srv) = tokio::join!(
+        from_autoconfig(http, email, domain),
+        microsoft_tenant(http, domain),
+        behind_mx,
+        from_srv(email, domain),
+    );
+    let microsoft = hosted_by_microsoft(tenant, mx.as_deref());
+    let answers = Answers { autoconfig, microsoft, mx_provider, srv, mail_server };
+    let settings = match pick(email, answers) {
+        Some(found) => found,
+        None => guess(email, domain).await,
+    };
+    (settings, mx)
 }
 
 #[cfg(test)]
@@ -627,6 +707,98 @@ mod tests {
         assert_eq!(settings.oauth, Some(OAuthProvider::Microsoft));
         assert_eq!(settings.username, "alex@example-company.de");
         assert!(settings.jmap.is_none(), "Microsoft offers no JMAP");
+    }
+
+    fn found(source: DiscoverySource, host: &str) -> DiscoveredSettings {
+        let server = |port| ServerSettings { host: host.into(), port, security: Security::Tls };
+        DiscoveredSettings {
+            email: "lorin@example.org".into(),
+            provider_name: None,
+            oauth: None,
+            imap: server(993),
+            smtp: server(465),
+            username: "lorin@example.org".into(),
+            source,
+            jmap: None,
+            via_mx: None,
+            uwumail_login: false,
+        }
+    }
+
+    fn none() -> Answers {
+        Answers { autoconfig: None, microsoft: false, mx_provider: None, srv: None, mail_server: None }
+    }
+
+    #[test]
+    fn the_mail_servers_own_file_is_the_last_answer_before_guessing() {
+        let email = "lorin@example.org";
+        // Inside a network whose DNS has no SRV records and whose proxy answers 502 for the
+        // domain's autoconfig: only the MX host's own file is left.
+        let only_mx = Answers { mail_server: Some(found(DiscoverySource::MailServer, "mail.example.net")), ..none() };
+        let picked = pick(email, only_mx).unwrap();
+        assert_eq!((picked.source, picked.imap.host.as_str()), (DiscoverySource::MailServer, "mail.example.net"));
+
+        // Everything that is the domain's own comes first.
+        let all = || Answers {
+            autoconfig: Some(found(DiscoverySource::Autoconfig, "imap.example.org")),
+            microsoft: false,
+            mx_provider: Some(found(DiscoverySource::Mx, "imap.provider.example")),
+            srv: Some(found(DiscoverySource::Srv, "mail.example.org")),
+            mail_server: Some(found(DiscoverySource::MailServer, "mail.example.net")),
+        };
+        assert_eq!(pick(email, all()).unwrap().source, DiscoverySource::Autoconfig);
+        assert_eq!(pick(email, Answers { autoconfig: None, ..all() }).unwrap().source, DiscoverySource::Mx);
+        assert_eq!(
+            pick(email, Answers { autoconfig: None, mx_provider: None, ..all() }).unwrap().source,
+            DiscoverySource::Srv
+        );
+        let microsoft = Answers { autoconfig: None, microsoft: true, ..all() };
+        assert_eq!(pick(email, microsoft).unwrap().source, DiscoverySource::Microsoft);
+        assert!(pick(email, none()).is_none(), "then it guesses");
+    }
+
+    #[test]
+    fn a_server_only_the_mx_record_named_is_shown() {
+        let domain = "example.org";
+        let mx = Some("mail.example.net");
+        // The MX host's file named its own servers: shown.
+        let from_mail_server = found(DiscoverySource::MailServer, "mail.example.net");
+        assert_eq!(shown_server(&from_mail_server, domain, mx).as_deref(), Some("mail.example.net"));
+        // A guess with JMAP only on the MX host: the JMAP host is shown.
+        let mut guessed = found(DiscoverySource::Guess, "imap.example.org");
+        guessed.jmap = Some("https://mail.example.net/.well-known/jmap".into());
+        assert_eq!(shown_server(&guessed, domain, mx).as_deref(), Some("mail.example.net"));
+        // The domain's own file named the MX host: that file is the domain's word, not DNS.
+        let mut own = found(DiscoverySource::Autoconfig, "mail.example.net");
+        own.jmap = Some("https://mail.example.net/.well-known/jmap".into());
+        assert_eq!(shown_server(&own, domain, mx), None);
+        // Servers on the address's own site, or no MX at all.
+        let home = found(DiscoverySource::MailServer, "mail.example.org");
+        assert_eq!(shown_server(&home, domain, Some("mx.example.org")), None);
+        assert_eq!(shown_server(&from_mail_server, domain, None), None);
+    }
+
+    #[test]
+    fn the_mail_servers_file_is_asked_on_its_host_name_and_names_nothing() {
+        assert_eq!(
+            mail_server_config_url("mail.example.net", "lorin+x@example.org"),
+            "https://mail.example.net/.well-known/autoconfig/mail/config-v1.1.xml?emailaddress=lorin%2Bx%40example.org"
+        );
+        // Like the domain's own file, the MX host's may call itself anything; setup shows the server.
+        let foreign = GMAIL
+            .replace("imap.gmail.com", "imap.collector.example")
+            .replace("smtp.gmail.com", "smtp.collector.example");
+        let settings = parse_client_config(&foreign, "mini@example.org", DiscoverySource::MailServer).unwrap();
+        assert_eq!(settings.provider_name, None);
+        assert_eq!(settings.source, DiscoverySource::MailServer);
+    }
+
+    #[test]
+    fn microsoft_is_told_by_the_mx_record_before_the_tenant() {
+        assert!(hosted_by_microsoft(false, Some("example-org.mail.protection.outlook.com")));
+        assert!(!hosted_by_microsoft(true, Some("aspmx.l.google.com")), "Entra sign-in, mail at Google");
+        assert!(hosted_by_microsoft(true, Some("mx.filter.example")), "a spam filter in front");
+        assert!(!hosted_by_microsoft(false, None));
     }
 
     #[test]

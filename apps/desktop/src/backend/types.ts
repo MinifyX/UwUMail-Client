@@ -401,9 +401,17 @@ export interface DiscoveredSettings {
   imap: ServerSettings;
   smtp: ServerSettings;
   username: string;
-  source: "ispdb" | "autoconfig" | "microsoft" | "srv" | "mx" | "guess";
+  /** `mailserver`: the MX host answered with its own autoconfig file. */
+  source: "ispdb" | "autoconfig" | "microsoft" | "srv" | "mx" | "mailserver" | "guess";
   /** The JMAP session URL, when the server offers JMAP. */
   jmap?: string;
+  /**
+   * The server that gets the password, when only the domain's MX record (plain DNS) led to it and it
+   * lies on another site than the address. Setup shows it, never only under "advanced".
+   */
+  viaMx?: string;
+  /** The JMAP server is a UwUMail server that makes an app password through a browser sign-in. */
+  uwumailLogin?: boolean;
 }
 
 export interface NewAccount {
@@ -422,6 +430,13 @@ export interface NewAccount {
    * mailbox is opened by someone who has access to it.
    */
   signInAs?: string;
+  /** What the mailbox is called in UwUMail; the address when left out. */
+  accountName?: string;
+  /**
+   * Sign in with UwUMail instead of a password: the server makes an app password with this name
+   * for this device (needs `jmapUrl` and `DiscoveredSettings.uwumailLogin`).
+   */
+  appPasswordName?: string;
 }
 
 /** What a mailto: link asks for. */
