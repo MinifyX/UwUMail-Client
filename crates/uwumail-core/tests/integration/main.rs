@@ -18,6 +18,7 @@ mod jmap_push;
 mod jmap_scheduled;
 mod pictures_live;
 mod stalwart;
+mod uwumail_login;
 mod uwumail_server;
 mod uwumail_server_caldav;
 mod uwumail_server_calendar;

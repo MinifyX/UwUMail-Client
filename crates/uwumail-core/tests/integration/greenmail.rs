@@ -75,6 +75,8 @@ async fn sync_send_reply_flag_and_trash() {
             protocol: Protocol::Imap,
             jmap_url: None,
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .expect("account can be added");
@@ -317,6 +319,8 @@ async fn old_mail_becomes_previews_and_server_search_finds_the_rest() {
             protocol: Protocol::Imap,
             jmap_url: None,
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .unwrap();
@@ -376,6 +380,8 @@ async fn drafts_are_saved_replaced_continued_and_removed_on_send() {
             protocol: Protocol::Imap,
             jmap_url: None,
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .unwrap();
@@ -491,6 +497,8 @@ async fn undo_send_takes_mail_back_and_otherwise_sends_it() {
             protocol: Protocol::Imap,
             jmap_url: None,
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .unwrap();
@@ -619,6 +627,8 @@ async fn move_spam_and_blocked_senders() {
             protocol: Protocol::Imap,
             jmap_url: None,
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .unwrap();
@@ -762,6 +772,8 @@ async fn unsubscribes_from_a_newsletter_by_mail() {
             protocol: Protocol::Imap,
             jmap_url: None,
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         })
         .await
         .unwrap();

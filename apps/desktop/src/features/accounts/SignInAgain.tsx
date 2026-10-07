@@ -1,10 +1,13 @@
-import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Icon, ICONS } from "@uwusuite/design";
 import { useState } from "react";
 import { backend, BackendError } from "@/backend/backend";
+import type { Account } from "@/backend/types";
 import { translate, useT } from "@/i18n";
+import { accountLabel } from "@/lib/accountLabel";
 import { queryKeys } from "@/lib/queries";
 import { toast } from "@/state/toasts";
+import { AppPasswordNameField, useAppPasswordName } from "./UwumailLogin";
 
 /** Mailboxes, calendars and contacts look again once the new sign-in is stored. */
 function refreshAfterSignIn(client: QueryClient) {
@@ -87,6 +90,62 @@ export function SignInAgainHint({
       </p>
       <Button size="sm" variant="primary" busy={busy} onClick={() => void signIn()} className="self-start">
         {t("cloudSignIn.button")}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * A password mailbox on a UwUMail server whose login stopped working: signing in again with UwUMail
+ * in the browser gives this device a fresh app password, without typing one in.
+ */
+export function UwumailSignInAgainHint({ account }: { account: Account }) {
+  const { t } = useT();
+  const client = useQueryClient();
+  const { name, setName } = useAppPasswordName();
+  const [busy, setBusy] = useState(false);
+  const { data: available } = useQuery({
+    queryKey: ["uwumailLogin", account.id],
+    queryFn: () => backend().uwumailLoginAvailable(account.id),
+    staleTime: 5 * 60_000,
+  });
+  if (!available) return null;
+
+  const signIn = async () => {
+    setBusy(true);
+    try {
+      const renewed = await backend().uwumailSignInAgain(account.id, name.trim());
+      toast(translate("uwumailSignIn.done", { email: renewed.email }), "success");
+    } catch (error) {
+      toast(
+        translate("cloudSignIn.failed", { reason: error instanceof Error ? error.message : String(error) }),
+        "error",
+      );
+    } finally {
+      setBusy(false);
+      await refreshAfterSignIn(client);
+    }
+  };
+
+  return (
+    <div
+      role="note"
+      className="flex basis-full flex-col gap-3 rounded-2xl border border-line bg-pink-tint/35 px-3.5 py-3"
+    >
+      <p className="flex items-start gap-2 text-[12.5px] break-words text-muted">
+        <Icon icon={ICONS.signIn} size="xs" className="mt-0.5 shrink-0" />
+        {t("uwumailSignIn.hint", { name: accountLabel(account) })}
+      </p>
+      <AppPasswordNameField value={name} onChange={setName} />
+      <Button
+        size="sm"
+        variant="primary"
+        busy={busy}
+        disabled={!name.trim()}
+        onClick={() => void signIn()}
+        className="max-w-full self-start"
+      >
+        {busy ? t("account.uwumailWaiting") : t("uwumailSignIn.button")}
       </Button>
     </div>
   );

@@ -136,10 +136,10 @@ export function Onboarding() {
       />
 
       {/* min-h-full + centering on an inner wrapper keeps tall steps scrollable from the top. */}
-      <div className="flex min-h-full items-center justify-center p-6">
+      <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
           key={step}
-          className="relative flex w-full max-w-[620px] animate-slide-up flex-col gap-6 rounded-[28px] border border-line bg-surface p-8 shadow-float"
+          className="relative flex w-full max-w-[620px] animate-slide-up flex-col gap-6 rounded-[28px] border border-line bg-surface p-5 shadow-float sm:p-8"
         >
           {step !== "welcome" && step !== "done" && (
             <div className="flex items-center justify-between">

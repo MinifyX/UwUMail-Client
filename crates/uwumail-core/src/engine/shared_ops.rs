@@ -159,27 +159,10 @@ impl Engine {
 
     /// The browser sign-in, through the app link where there is one.
     pub(super) async fn browser_sign_in(&self, provider: OAuthProvider, login_hint: &str) -> Result<oauth::Tokens> {
-        let mut waiting = None;
-        let app_link = self.inner.oauth_redirect.lock().unwrap().clone();
-        let redirect = match app_link.filter(|_| oauth::takes_app_link(provider)) {
-            Some(uri) => {
-                let (sender, incoming) = tokio::sync::mpsc::channel(SIGN_IN_LINK_QUEUE);
-                // A newer sign-in replaces an abandoned one.
-                waiting = Some(sender.clone());
-                *self.inner.pending_sign_in.lock().unwrap() = Some(sender);
-                oauth::Redirect::App { uri, incoming }
-            }
-            None => oauth::Redirect::Loopback,
-        };
+        let (redirect, waiting) = self.sign_in_redirect(oauth::takes_app_link(provider));
         let tokens =
             oauth::sign_in(&self.inner.http, provider, login_hint, self.inner.open_url.as_ref(), redirect).await;
-        if let Some(ours) = waiting {
-            let mut pending = self.inner.pending_sign_in.lock().unwrap();
-            // Done either way; a sign-in started meanwhile keeps its slot.
-            if pending.as_ref().is_some_and(|sender| sender.same_channel(&ours)) {
-                *pending = None;
-            }
-        }
+        self.sign_in_finished(waiting);
         tokens
     }
 
@@ -300,11 +283,11 @@ impl Engine {
     /// Saves a shared mailbox of `parent` and starts syncing it. It has no secret: it opens with
     /// the parent's sign-in.
     fn insert_shared(&self, parent: &AccountRecord, email: &str, display_name: &str) -> Result<String> {
-        let (_, domain) = autoconfig::split_email(email)?;
+        autoconfig::split_email(email)?;
         let id = uuid::Uuid::new_v4().to_string();
         let record = AccountRecord {
             id: id.clone(),
-            name: domain,
+            name: email.to_string(),
             email: email.to_string(),
             display_name: display_name.trim().to_string(),
             color: parent.color,

@@ -1114,9 +1114,11 @@ pub async fn discover(http: &reqwest::Client, domain: &str, mail_hosts: &[&str])
             format!("https://{target}:{port}/.well-known/jmap")
         });
     }
-    for name in [Some(domain.clone()), host, Some(format!("mail.{domain}")), Some(format!("jmap.{domain}"))]
-        .into_iter()
-        .flatten()
+    // Every mail server is asked, the MX host among them when the caller passes it.
+    let servers =
+        mail_hosts.iter().map(|h| h.trim().trim_end_matches('.').to_ascii_lowercase()).filter(|h| !h.is_empty());
+    for name in
+        std::iter::once(domain.clone()).chain(servers).chain([format!("mail.{domain}"), format!("jmap.{domain}")])
     {
         let url = format!("https://{name}/.well-known/jmap");
         if !candidates.contains(&url) {

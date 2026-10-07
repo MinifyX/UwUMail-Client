@@ -233,7 +233,7 @@ struct TokenError {
     error_description: Option<String>,
 }
 
-fn random_token(bytes: usize) -> Result<String> {
+pub(crate) fn random_token(bytes: usize) -> Result<String> {
     let mut buffer = vec![0u8; bytes];
     getrandom::fill(&mut buffer).map_err(|e| Error::internal(format!("No randomness available: {e}")))?;
     Ok(URL_SAFE_NO_PAD.encode(buffer))
@@ -281,16 +281,25 @@ fn belongs_to(url: &url::Url, state: &str) -> bool {
 }
 
 /// Waits for the app link that answers this sign-in, skipping any other.
+#[cfg(test)]
 async fn wait_for_app_link(
     incoming: &mut tokio::sync::mpsc::Receiver<String>,
     state: &str,
 ) -> Result<(String, String), Refused> {
+    redirect_parameters(&wait_for_app_link_url(incoming, state).await?)
+}
+
+/// The app link that answers this sign-in, skipping any other.
+async fn wait_for_app_link_url(
+    incoming: &mut tokio::sync::mpsc::Receiver<String>,
+    state: &str,
+) -> Result<url::Url, Refused> {
     loop {
         let url = incoming.recv().await.ok_or_else(|| Error::auth("The sign-in was cancelled."))?;
         if let Ok(url) = url::Url::parse(&url)
             && belongs_to(&url, state)
         {
-            return redirect_parameters(&url);
+            return Ok(url);
         }
     }
 }
@@ -420,10 +429,7 @@ pub async fn sign_in(
     open_url: &(dyn Fn(&str) + Send + Sync),
     redirect: Redirect,
 ) -> Result<Tokens> {
-    let mut receiver = match redirect {
-        Redirect::Loopback => Receiver::Loopback(None),
-        Redirect::App { uri, incoming } => Receiver::App(uri, incoming),
-    };
+    let mut receiver = Receiver::from(redirect);
     let mut personal = crate::shared::is_personal_address(login_hint);
     let app = match provider {
         OAuthProvider::Microsoft => {
@@ -486,16 +492,7 @@ async fn attempt(
     receiver: &mut Receiver,
 ) -> Result<Tokens, Refused> {
     let config = config(provider, app)?;
-    let redirect_uri = match receiver {
-        Receiver::Loopback(listeners) => {
-            // New ones for every attempt: the last one's ended with it.
-            let fresh = loopback_listeners().await?;
-            let port = fresh[0].local_addr().map_err(Error::from)?.port();
-            *listeners = Some(fresh);
-            format!("http://{}:{port}", config.redirect_host)
-        }
-        Receiver::App(uri, _) => uri.clone(),
-    };
+    let redirect_uri = receiver.prepare(&format!("http://{}", config.redirect_host), "").await?;
     let verifier = random_token(48)?;
     let state = random_token(24)?;
     let (scopes, exchange) = sign_in_scopes(provider, personal_account);
@@ -514,14 +511,7 @@ async fn attempt(
         .extend_pairs(config.extra.iter().copied());
     open_url(authorize.as_str());
 
-    let waited = match receiver {
-        Receiver::Loopback(listeners) => {
-            let listeners = listeners.take().ok_or_else(|| Error::internal("The sign-in stopped listening."))?;
-            tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_loopback(listeners, state)).await
-        }
-        Receiver::App(_, incoming) => tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_app_link(incoming, &state)).await,
-    };
-    let (code, _state) = waited.map_err(|_| Error::auth("Sign-in took too long. Please try again."))??;
+    let (code, _state) = redirect_parameters(&receiver.wait(&state, "/").await?)?;
     let mut tokens = exchange_code(http, &config, code, redirect_uri, verifier, exchange).await?;
     if provider == OAuthProvider::Microsoft {
         tokens.app = Some(MicrosoftIds::compiled().effective(app));
@@ -552,7 +542,13 @@ const REQUEST_WAIT: Duration = Duration::from_secs(10);
 /// Waits for the browser's redirect with this sign-in's `state`. Every connection is answered on
 /// its own, so one that says nothing, breaks off or sends something else neither holds up nor ends
 /// the sign-in: any program on the device can connect to the port.
+#[cfg(test)]
 async fn wait_for_loopback(listeners: Vec<TcpListener>, state: String) -> Result<(String, String), Refused> {
+    redirect_parameters(&wait_for_loopback_at(listeners, state, "/").await?)
+}
+
+/// The browser's redirect to `path` on the loopback listeners with this sign-in's `state`.
+async fn wait_for_loopback_at(listeners: Vec<TcpListener>, state: String, path: &str) -> Result<url::Url, Refused> {
     let (found, mut answers) = tokio::sync::mpsc::channel(1);
     let (accepted_tx, mut accepted) = tokio::sync::mpsc::channel(16);
     // Dropped on return, which stops them.
@@ -577,17 +573,17 @@ async fn wait_for_loopback(listeners: Vec<TcpListener>, state: String) -> Result
     let mut connections = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
-            Some(result) = answers.recv() => return result,
+            Some(url) = answers.recv() => return Ok(url),
             socket = accepted.recv() => {
                 let Some(socket) = socket else {
                     return Err(Error::internal("The sign-in stopped listening.").into());
                 };
                 // Finished ones are let go of, so a flood of connections holds nothing.
                 while connections.try_join_next().is_some() {}
-                let (found, state) = (found.clone(), state.clone());
+                let (found, state, path) = (found.clone(), state.clone(), path.to_string());
                 connections.spawn(async move {
-                    if let Ok(Some(result)) = tokio::time::timeout(REQUEST_WAIT, answer(socket, &state)).await {
-                        let _ = found.send(result).await;
+                    if let Ok(Some(url)) = tokio::time::timeout(REQUEST_WAIT, answer(socket, &state, &path)).await {
+                        let _ = found.send(url).await;
                     }
                 });
             }
@@ -596,12 +592,12 @@ async fn wait_for_loopback(listeners: Vec<TcpListener>, state: String) -> Result
 }
 
 /// Answers one connection to the loopback listener: the redirect of this sign-in, or `None`.
-async fn answer(mut socket: tokio::net::TcpStream, state: &str) -> Option<Result<(String, String), Refused>> {
+async fn answer(mut socket: tokio::net::TcpStream, state: &str, path: &str) -> Option<url::Url> {
     let mut buffer = vec![0u8; 8192];
     let read = socket.read(&mut buffer).await.ok()?;
     let request = String::from_utf8_lossy(&buffer[..read]).to_string();
     // Browsers also ask for /favicon.ico; only the redirect carries a query.
-    if !request.starts_with("GET /?") {
+    if !request.starts_with(&format!("GET {path}?")) {
         let _ = socket.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n").await;
         return None;
     }
@@ -612,20 +608,64 @@ async fn answer(mut socket: tokio::net::TcpStream, state: &str) -> Option<Result
             return None;
         }
     };
-    let result = redirect_parameters(&url);
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{DONE_PAGE}",
         DONE_PAGE.len()
     );
     let _ = socket.write_all(response.as_bytes()).await;
-    Some(result)
+    Some(url)
 }
 
 /// Where an attempt's answer comes in: the loopback listeners of the current attempt, or the app
 /// link (its address and the links the platform hands over), which all attempts share.
-enum Receiver {
+pub(crate) enum Receiver {
     Loopback(Option<Vec<TcpListener>>),
     App(String, tokio::sync::mpsc::Receiver<String>),
+}
+
+impl From<Redirect> for Receiver {
+    fn from(redirect: Redirect) -> Self {
+        match redirect {
+            Redirect::Loopback => Self::Loopback(None),
+            Redirect::App { uri, incoming } => Self::App(uri, incoming),
+        }
+    }
+}
+
+impl Receiver {
+    /// The redirect address for the next attempt: the app link, or `{loopback}:{port}{path}` on
+    /// fresh loopback listeners (the last attempt's ended with it).
+    pub(crate) async fn prepare(&mut self, loopback: &str, path: &str) -> Result<String> {
+        match self {
+            Self::Loopback(listeners) => {
+                let fresh = loopback_listeners().await?;
+                let port = fresh[0].local_addr()?.port();
+                *listeners = Some(fresh);
+                Ok(format!("{loopback}:{port}{path}"))
+            }
+            Self::App(uri, _) => Ok(uri.clone()),
+        }
+    }
+
+    /// Whether the answer comes back through the app link.
+    pub(crate) fn is_app_link(&self) -> bool {
+        matches!(self, Self::App(..))
+    }
+
+    /// The redirect that answers the sign-in with `state` (on the loopback: a request for `path`),
+    /// for at most five minutes.
+    pub(crate) async fn wait(&mut self, state: &str, path: &str) -> Result<url::Url, Refused> {
+        let waited = match self {
+            Self::Loopback(listeners) => {
+                let listeners = listeners.take().ok_or_else(|| Error::internal("The sign-in stopped listening."))?;
+                tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_loopback_at(listeners, state.to_string(), path)).await
+            }
+            Self::App(_, incoming) => {
+                tokio::time::timeout(SIGN_IN_TIMEOUT, wait_for_app_link_url(incoming, state)).await
+            }
+        };
+        waited.map_err(|_| Error::auth("Sign-in took too long. Please try again."))?
+    }
 }
 
 async fn exchange_code(

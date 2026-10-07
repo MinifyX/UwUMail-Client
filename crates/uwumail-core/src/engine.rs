@@ -200,6 +200,7 @@ mod cloud_ops;
 mod contacts_ops;
 mod folder_ops;
 mod invite_ops;
+mod login_ops;
 mod ocr_ops;
 mod photo_ops;
 mod price_ops;
@@ -504,7 +505,7 @@ impl Engine {
     }
 
     pub async fn add_account(&self, new: NewAccount) -> Result<Account> {
-        let (_, domain) = autoconfig::split_email(&new.email)?;
+        autoconfig::split_email(&new.email)?;
         let jmap_url = new.jmap_url.as_deref().map(str::trim).filter(|url| !url.is_empty()).map(String::from);
         let wants_jmap = new.protocol == Protocol::Jmap && new.auth == AuthKind::Password;
         let has_imap = !new.imap.host.trim().is_empty() && !new.smtp.host.trim().is_empty();
@@ -520,7 +521,8 @@ impl Engine {
         let id = uuid::Uuid::new_v4().to_string();
         let mut record = AccountRecord {
             id: id.clone(),
-            name: domain,
+            name: login_ops::account_name(new.account_name.as_deref().unwrap_or_default())?
+                .unwrap_or_else(|| new.email.trim().to_string()),
             email: new.email.trim().to_string(),
             display_name: new.display_name.trim().to_string(),
             color: new.color,
@@ -536,11 +538,21 @@ impl Engine {
         let mut signed_in = None;
         let secret = match new.auth {
             AuthKind::Password => {
-                let password = new
-                    .password
-                    .clone()
-                    .filter(|p| !p.is_empty())
-                    .ok_or_else(|| Error::invalid("Enter your password."))?;
+                let uwumail_login = new.app_password_name.as_deref().map(str::trim).filter(|name| !name.is_empty());
+                let password = match (uwumail_login, &jmap_url) {
+                    // Signing in with UwUMail: the server makes an app password for this device.
+                    (Some(name), Some(url)) => {
+                        let made = self.uwumail_app_password(url, &record.email, name).await?;
+                        record.username = made.username.trim().to_string();
+                        made.password
+                    }
+                    (Some(_), None) => return Err(Error::invalid("The JMAP address is missing.")),
+                    (None, _) => new
+                        .password
+                        .clone()
+                        .filter(|p| !p.is_empty())
+                        .ok_or_else(|| Error::invalid("Enter your password."))?,
+                };
                 let check_imap = async |record: &AccountRecord| -> Result<()> {
                     let mut session =
                         imap::login(&record.imap, Login::Password { username: &record.username, password: &password })
@@ -2771,6 +2783,8 @@ mod tests {
             protocol: Protocol::Imap,
             jmap_url: None,
             sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
         };
         let error = engine.add_account(new).await.unwrap_err();
         assert_eq!(error.code, crate::error::ErrorCode::InvalidInput, "{error:?}");
