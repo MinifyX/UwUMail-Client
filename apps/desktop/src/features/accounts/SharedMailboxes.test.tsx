@@ -7,6 +7,8 @@ import { i18n } from "@/i18n";
 import { isReadOnly, nestAccounts, takesSharedMailboxes, useSharedMailboxes } from "@/state/sharedMailboxes";
 import { MailboxNav } from "../mail/MailboxNav";
 import { SharedMailboxDialogs } from "./SharedMailboxDialogs";
+import { useSettings } from "@/state/settings";
+
 
 const work: Account = {
   id: "work",
@@ -70,6 +72,7 @@ function answer(button: HTMLElement) {
 
 describe("shared mailboxes", () => {
   beforeAll(async () => {
+    useSettings.setState({ expandedAccounts: ["work", "team", "home", "support"] });
     await i18n.changeLanguage("en");
     HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
       this.open = true;
@@ -85,6 +88,8 @@ describe("shared mailboxes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useSharedMailboxes.getState().close();
+    // Mailboxes start folded; these tests work inside them.
+    useSettings.setState({ expandedAccounts: ["work", "team", "home", "support"] });
   });
 
   afterEach(cleanup);
@@ -124,8 +129,8 @@ describe("shared mailboxes", () => {
     const header = within(section).getAllByRole("button", { expanded: true })[0]!;
     fireEvent.click(header);
     expect(screen.queryByRole("tree", { name: "team@contoso.example" })).toBeNull();
-    // Folded, the account still tells what's unread in its shared inboxes.
-    expect(within(header).getByText("4")).toBeTruthy();
+    // Folded, the account still tells what's unread in its own and its shared inboxes.
+    expect(within(header).getByText("5")).toBeTruthy();
   });
 
   it("adds a shared mailbox by address from the account's menu", async () => {
