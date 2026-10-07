@@ -85,7 +85,8 @@ impl Engine {
     /// Whether a password mailbox's server signs in with UwUMail, for signing in again that way.
     pub async fn uwumail_login_available(&self, account_id: &str) -> Result<bool> {
         let account = self.inner.store.account(account_id)?;
-        if account.auth != AuthKind::Password {
+        // A shared mailbox of a JMAP login signs in with that login.
+        if account.auth != AuthKind::Password || self.inner.jmap_share_of(account_id).is_some() {
             return Ok(false);
         }
         let Some(url) = trusted_jmap_url(&account) else { return Ok(false) };
@@ -99,6 +100,9 @@ impl Engine {
         let account = self.inner.store.account(account_id)?;
         if account.auth != AuthKind::Password {
             return Err(Error::invalid("This mailbox signs in with Microsoft or Google."));
+        }
+        if self.inner.jmap_share_of(account_id).is_some() {
+            return Err(Error::invalid("A shared mailbox signs in with the account it is shared with."));
         }
         let url = trusted_jmap_url(&account)
             .map(String::from)
@@ -128,12 +132,22 @@ impl Engine {
         if username != account.username {
             self.inner.store.set_account_username(account_id, &username)?;
         }
-        match client {
-            Some(client) => {
-                self.inner.jmap.lock().await.insert(account_id.to_string(), Arc::new(client));
+        {
+            let mut clients = self.inner.jmap.lock().await;
+            match client {
+                Some(client) => {
+                    clients.insert(account_id.to_string(), Arc::new(client));
+                }
+                None => {
+                    clients.remove(account_id);
+                }
             }
-            None => {
-                self.inner.jmap.lock().await.remove(account_id);
+            // Its shared mailboxes connect with the new password from now on, too.
+            for child in self.inner.store.shared_children(account_id)? {
+                if self.inner.jmap_share_of(&child).is_some() {
+                    clients.remove(&child);
+                    self.inner.wake(&child);
+                }
             }
         }
         // Calendars and contacts sign in with it as well.
