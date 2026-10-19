@@ -51,9 +51,10 @@ pub fn show(app: &AppHandle, account_id: &str, title: String, body: String) {
     #[cfg(target_os = "macos")]
     {
         let (account_id, fallback) = (account_id.to_string(), app.clone());
+        let (text_title, text_body) = (title.clone(), body.clone());
         let shown = app.run_on_main_thread(move || {
-            if !macos::show(&account_id, &title, &body) {
-                let _ = fallback.notification().builder().title(title).body(body).show();
+            if !macos::show(&account_id, &text_title, &text_body) {
+                let _ = fallback.notification().builder().title(text_title).body(text_body).show();
             }
         });
         if shown.is_ok() {
