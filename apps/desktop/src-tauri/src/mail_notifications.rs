@@ -18,7 +18,8 @@ pub fn add(account_id: &str, mails: &[NotifiedMail<'_>]) -> (usize, Vec<MailLine
     UNSEEN.lock().unwrap_or_else(PoisonError::into_inner).add(account_id, mails)
 }
 
-/// UwUMail came on screen: the next mail starts a new notification.
+/// UwUMail came on screen: the next mail starts counting anew (and, on Windows and macOS, takes
+/// the place of the notification already read).
 pub fn looked_at() {
     UNSEEN.lock().unwrap_or_else(PoisonError::into_inner).clear();
     #[cfg(target_os = "linux")]
@@ -63,13 +64,13 @@ pub fn show(app: &AppHandle, account_id: &str, title: String, body: String) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
-/// A short name for the account's notification that stays the same between starts; Windows
-/// takes at most 16 characters as a tag on older versions.
+/// A short name for the account's notification that stays the same between starts and Rust
+/// versions (FNV-1a); Windows takes at most 16 characters as a tag on older versions.
 fn tag(account_id: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    account_id.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    let hash = account_id
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
+    format!("{hash:016x}")
 }
 
 #[cfg(windows)]

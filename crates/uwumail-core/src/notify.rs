@@ -8,13 +8,20 @@ pub const MAX_NAME: usize = 80;
 /// The longest line of text (subject or snippet) a notification shows.
 pub const MAX_LINE: usize = 200;
 
+fn is_noncharacter(c: char) -> bool {
+    let c = c as u32;
+    (0xFDD0..=0xFDEF).contains(&c) || c & 0xFFFE == 0xFFFE
+}
+
 /// `text` on one line, without direction marks, invisible spaces and control characters, and cut
 /// to `max` characters (with "…" when cut). The zero-width joiner stays: emoji need it.
 pub fn notification_text(text: &str, max: usize) -> String {
     let mut plain = String::with_capacity(text.len().min(max * 4));
     let mut space = false;
     for c in text.chars() {
-        if is_hidden(c) {
+        // Noncharacters (U+FFFE, U+FFFF, …) aren't allowed in XML, so a Windows toast with one
+        // wouldn't load.
+        if is_hidden(c) || is_noncharacter(c) {
             continue;
         }
         if c.is_whitespace() || c.is_control() {
@@ -255,6 +262,11 @@ mod tests {
             NotifyPrefs::new(false, " ", "\u{202E}", "Viele Mails"),
             NotifyPrefs { show_content: false, ..NotifyPrefs::default() }
         );
+    }
+
+    #[test]
+    fn drops_what_xml_doesnt_allow() {
+        assert_eq!(notification_text("Re\u{FFFE}chnung\u{FFFF} \u{FDD0}da", 80), "Rechnung da");
     }
 
     #[test]

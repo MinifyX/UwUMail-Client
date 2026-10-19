@@ -118,7 +118,7 @@ impl RawKeychain for OsKeychain {
 /// call runs on a thread of its own; outside a runtime it stays where it is.
 #[cfg(target_os = "linux")]
 fn off_runtime<T: Send>(call: impl FnOnce() -> T + Send) -> T {
-    if true {
+    if tokio::runtime::Handle::try_current().is_err() {
         return call();
     }
     std::thread::scope(|scope| scope.spawn(call).join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
