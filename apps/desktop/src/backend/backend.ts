@@ -586,9 +586,10 @@ export interface Backend {
    */
   setNotificationPrefs(prefs: {
     showContent: boolean;
-    appLock: boolean;
     newMail: string;
     hidden: string;
+    /** Several unseen mails in one notification, `{n}` for how many. */
+    many: string;
   }): Promise<void>;
   /** The mailto: link UwUMail was opened with, handed out once. */
   takeMailto(): Promise<MailtoDraft | null>;

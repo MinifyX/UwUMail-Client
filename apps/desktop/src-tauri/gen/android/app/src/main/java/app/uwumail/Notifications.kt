@@ -74,12 +74,13 @@ object Notifications {
 
     /**
      * New mail, one notification per message, grouped per mailbox. Silent while UwUMail is on screen.
-     * With the app lock on, or "Show sender and subject" off, it doesn't say who wrote or what about.
+     * With "Show sender and subject" off it doesn't say who wrote or what about; the lock screen
+     * shows the public version unless the system allows private content there.
      */
     fun showMail(context: Context, args: JSONObject) {
         if (MainActivity.visible || !allowed(context)) return
         val text = Prefs.localized(context)
-        val hideContent = Prefs.appLock(context) || !Prefs.showContent(context)
+        val hideContent = !Prefs.showContent(context)
         val accountId = args.getString("accountId")
         val account = args.optString("accountEmail", "")
         val group = "mail:$accountId"

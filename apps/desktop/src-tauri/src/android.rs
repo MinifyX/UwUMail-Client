@@ -134,7 +134,7 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
 
 /// Kotlin builds the notifications, also while no window is open, so it keeps the choice; its
 /// texts come from the app's own resources.
-pub fn set_notification_prefs(show_content: bool, _new_mail: &str, _hidden: &str) -> Result<(), Error> {
+pub fn set_notification_prefs(show_content: bool, _new_mail: &str, _hidden: &str, _many: &str) -> Result<(), Error> {
     call("setPrefs", json!({ "showContent": show_content }))?;
     Ok(())
 }

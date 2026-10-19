@@ -6194,6 +6194,7 @@ dependencies = [
  "block2",
  "libc",
  "minisign-verify",
+ "notify-rust",
  "objc2",
  "objc2-background-tasks",
  "objc2-foundation",
@@ -6217,6 +6218,7 @@ dependencies = [
  "uwumail-android",
  "uwumail-core",
  "uwumail-ocr",
+ "windows",
 ]
 
 [[package]]

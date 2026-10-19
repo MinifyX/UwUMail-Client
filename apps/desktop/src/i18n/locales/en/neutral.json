@@ -2321,10 +2321,11 @@
   },
   "push": {
     "showContent": "Show sender and subject",
-    "showContentDesc": "When this is off, a notification about new mail only says that new mail came. With the app lock on, it never says more.",
+    "showContentDesc": "When this is off, a notification about new mail only says that new mail came. What the lock screen shows is up to the system's settings.",
     "notification": {
       "newMail": "New mail",
-      "hidden": "Open UwUMail to read it."
+      "hidden": "Open UwUMail to read it.",
+      "many": "{{n}} new mails"
     }
   },
   "macMenu": {

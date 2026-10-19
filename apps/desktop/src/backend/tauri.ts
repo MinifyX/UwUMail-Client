@@ -1034,7 +1034,7 @@ export class TauriBackend implements Backend {
     return call<void>("set_run_in_background", { enabled });
   }
 
-  setNotificationPrefs(prefs: { showContent: boolean; appLock: boolean; newMail: string; hidden: string }) {
+  setNotificationPrefs(prefs: { showContent: boolean; newMail: string; hidden: string; many: string }) {
     return call<void>("set_notification_prefs", prefs);
   }
 

@@ -346,7 +346,8 @@
   },
   "push": {
     "notification": {
-      "newMail": "New mail for you! ✉"
+      "newMail": "New mail for you! ✉",
+      "many": "{{n}}× mail for you! ✉"
     }
   }
 }

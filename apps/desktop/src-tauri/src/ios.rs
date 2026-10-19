@@ -127,7 +127,10 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
             })
             .collect();
         // Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
-        if let Some((title, body)) = notify::mail_notification(&crate::notify_prefs::get(), &mails) {
+        if let Some((title, body)) = {
+            let (count, newest) = notify::lines(&mails);
+            notify::mail_notification(&crate::notify_prefs::get(), count, &newest)
+        } {
             let _ = app.notification().builder().title(title).body(body).show();
         }
     }
@@ -233,8 +236,8 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
 
 /// Notifications only go out while UwUMail itself runs, so iOS needs no copy
 /// of the language, the tone or the app lock.
-pub fn set_notification_prefs(show_content: bool, new_mail: &str, hidden: &str) -> Result<(), Error> {
-    crate::notify_prefs::set(notify::NotifyPrefs::new(show_content, new_mail, hidden));
+pub fn set_notification_prefs(show_content: bool, new_mail: &str, hidden: &str, many: &str) -> Result<(), Error> {
+    crate::notify_prefs::set(notify::NotifyPrefs::new(show_content, new_mail, hidden, many));
     Ok(())
 }
 
