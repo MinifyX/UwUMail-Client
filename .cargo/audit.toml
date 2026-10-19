@@ -1,0 +1,11 @@
+# Advisories cargo audit lets through, each with why it doesn't reach UwUMail.
+[advisories]
+ignore = [
+    # zip 4 (SUID bits, symlinks out of the target, permissions through symlinks on extract): only
+    # tauri-plugin-updater pulls it in, and every 2.x version needs zip ^4. UwUMail's updates are
+    # an NSIS setup (Windows) and an .app.tar.gz (macOS), never a zip, and only run after their
+    # minisign signature checked out.
+    "RUSTSEC-2026-0367",
+    "RUSTSEC-2026-0368",
+    "RUSTSEC-2026-0369",
+]

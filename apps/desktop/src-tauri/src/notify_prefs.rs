@@ -1,7 +1,7 @@
 //! How new-mail notifications read on the desktop and on iOS, as the page last said (Settings →
 //! "Show sender and subject"). Kept in a small file next to the engine's data, so a start with a
 //! hidden window honours it before the page has loaded. Only when nothing was ever stored do they
-//! show sender and subject; the app lock hides them too.
+//! show sender and subject.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use uwumail_core::notify::NotifyPrefs;
 
 const FILE: &str = "notification-prefs.json";
-/// The file only ever holds a switch and two short lines.
+/// The file only ever holds a switch and three short lines.
 const MAX_FILE: u64 = 8 * 1024;
 
 struct State {
@@ -57,12 +57,17 @@ fn read(file: &Path) -> Option<NotifyPrefs> {
     let value: Value = serde_json::from_slice(&std::fs::read(file).ok()?).ok()?;
     let show_content = value.get("showContent")?.as_bool()?;
     let text = |key: &str| value.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
-    Some(NotifyPrefs::new(show_content, &text("newMail"), &text("hidden")))
+    Some(NotifyPrefs::new(show_content, &text("newMail"), &text("hidden"), &text("many")))
 }
 
 /// Written next to the file and moved over it, so a crash never leaves half of it.
 fn write(file: &Path, prefs: &NotifyPrefs) -> std::io::Result<()> {
-    let body = json!({ "showContent": prefs.show_content, "newMail": prefs.new_mail, "hidden": prefs.hidden });
+    let body = json!({
+        "showContent": prefs.show_content,
+        "newMail": prefs.new_mail,
+        "hidden": prefs.hidden,
+        "many": prefs.many,
+    });
     let temporary = file.with_extension("json.tmp");
     std::fs::write(&temporary, serde_json::to_vec(&body)?)?;
     std::fs::rename(&temporary, file)
@@ -84,7 +89,7 @@ mod tests {
         let dir = temp_dir("keep");
         let file = dir.join(FILE);
         assert_eq!(read(&file), None);
-        let hidden = NotifyPrefs::new(false, "Neue Mail", "Öffne UwUMail, um sie zu lesen.");
+        let hidden = NotifyPrefs::new(false, "Neue Mail", "Öffne UwUMail, um sie zu lesen.", "{n} neue Mails");
         write(&file, &hidden).unwrap();
         assert_eq!(read(&file), Some(hidden));
         // Another shape, or a huge file, counts as never stored.

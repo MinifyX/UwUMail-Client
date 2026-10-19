@@ -5,6 +5,8 @@ mod background;
 mod ios_refresh;
 #[cfg(target_os = "macos")]
 mod macos_system;
+#[cfg(desktop)]
+mod mail_notifications;
 #[cfg(not(target_os = "android"))]
 mod notify_prefs;
 #[cfg(not(target_os = "android"))]
@@ -1151,10 +1153,12 @@ fn set_mobile_prefs(language: String, tone: String, app_lock: bool) -> CommandRe
 }
 
 /// How new-mail notifications read: sender and subject, or only that new mail came (with the
-/// texts for that in the page's language). The app lock hides them too.
+/// texts for that in the page's language). The app lock leaves them be: what a locked screen
+/// shows is the system's to say (iOS "Show Previews", Android's sensitive content), and hiding
+/// them in UwUMail too left only "New mail" to read.
 #[tauri::command]
-fn set_notification_prefs(show_content: bool, app_lock: bool, new_mail: String, hidden: String) -> CommandResult<()> {
-    platform::set_notification_prefs(show_content && !app_lock, &new_mail, &hidden)
+fn set_notification_prefs(show_content: bool, new_mail: String, hidden: String, many: String) -> CommandResult<()> {
+    platform::set_notification_prefs(show_content, &new_mail, &hidden, &many)
 }
 
 /// Android: colors behind the status and navigation bars.

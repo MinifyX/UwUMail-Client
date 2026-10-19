@@ -46,11 +46,19 @@ tauri-plugin-updater = { version = "2", optional = true }
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2"
 
+# One new-mail notification per account that the next mail replaces (mail_notifications.rs): a
+# toast tag on Windows, the server's notification id on Linux, over one D-Bus connection.
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Data_Xml_Dom", "UI_Notifications"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["async-io"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
 # Opening at login (SMAppService) in the App Store build, macos_system.rs.
 objc2.workspace = true
-objc2-foundation.workspace = true
+objc2-foundation = { workspace = true, features = ["NSBundle", "NSUserNotification"] }
 # ⌘Q, the Dock and logging out quit through the page, which saves first (lib.rs `finish_quit`).
 # The tag matches the @uwusuite/design version in package.json.
 uwu-macos = { git = "https://github.com/MinifyX/UwUSuite-Design", tag = "v1.6.2" }

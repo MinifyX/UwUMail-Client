@@ -2321,10 +2321,11 @@
   },
   "push": {
     "showContent": "Absender und Betreff zeigen",
-    "showContentDesc": "Ist das aus, sagt eine Benachrichtigung nur, dass neue Post da ist. Mit der App-Sperre sagt sie nie mehr.",
+    "showContentDesc": "Ist das aus, sagt eine Benachrichtigung nur, dass neue Post da ist. Was auf dem Sperrbildschirm steht, bestimmen die Einstellungen des Systems.",
     "notification": {
       "newMail": "Neue Mail",
-      "hidden": "Öffne UwUMail, um sie zu lesen."
+      "hidden": "Öffne UwUMail, um sie zu lesen.",
+      "many": "{{n}} neue Mails"
     }
   },
   "macMenu": {

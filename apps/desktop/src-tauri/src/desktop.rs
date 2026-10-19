@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use tauri::{App, AppHandle, Manager, RunEvent, Wry};
 use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::mailto::MailtoDraft;
@@ -104,6 +103,13 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
 
 pub fn after_start(app: &mut App) -> tauri::Result<()> {
     background::setup(app)?;
+    if let Some(window) = app.get_webview_window("main") {
+        window.on_window_event(|event| {
+            if let tauri::WindowEvent::Focused(true) = event {
+                crate::mail_notifications::looked_at();
+            }
+        });
+    }
     #[cfg(self_update)]
     updates::start(app.handle());
     // macOS ends an app on ⌘Q, from the Dock or the menu bar icon and when logging out without
@@ -122,7 +128,7 @@ pub fn after_start(app: &mut App) -> tauri::Result<()> {
 
 /// Rings for new mail while UwUMail is in the background.
 pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
-    let EngineEvent::MailReceived { message_ids, .. } = event else { return };
+    let EngineEvent::MailReceived { account_id, message_ids } = event else { return };
     let focused = app.get_webview_window("main").and_then(|window| window.is_focused().ok()).unwrap_or(false);
     if focused {
         return;
@@ -137,13 +143,15 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
                 snippet: &message.snippet,
             })
             .collect();
+        // One notification per account until UwUMail is looked at again (mail_notifications.rs).
+        let (count, newest) = crate::mail_notifications::add(account_id, &mails);
         // Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
-        if let Some((title, body)) = notify::mail_notification(&crate::notify_prefs::get(), &mails) {
+        if let Some((title, body)) = notify::mail_notification(&crate::notify_prefs::get(), count, &newest) {
             // Linux notification servers may read the body as markup (security review 0.10 NT-1).
             // The title (summary) is plain text by the freedesktop spec; escaping it would show `&amp;`.
             #[cfg(target_os = "linux")]
             let body = notify::markup_escape(&body);
-            let _ = app.notification().builder().title(title).body(body).show();
+            crate::mail_notifications::show(app, account_id, title, body);
         }
     }
 }
@@ -240,8 +248,8 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
     None
 }
 
-pub fn set_notification_prefs(show_content: bool, new_mail: &str, hidden: &str) -> Result<(), Error> {
-    crate::notify_prefs::set(notify::NotifyPrefs::new(show_content, new_mail, hidden));
+pub fn set_notification_prefs(show_content: bool, new_mail: &str, hidden: &str, many: &str) -> Result<(), Error> {
+    crate::notify_prefs::set(notify::NotifyPrefs::new(show_content, new_mail, hidden, many));
     Ok(())
 }
 

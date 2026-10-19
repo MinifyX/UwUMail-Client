@@ -92,12 +92,12 @@ struct OsKeychain;
 
 impl RawKeychain for OsKeychain {
     fn set(&self, name: &str, value: &str) -> Result<()> {
-        keyring::Entry::new(SERVICE, name)?.set_password(value)?;
+        off_runtime(|| keyring::Entry::new(SERVICE, name)?.set_password(value))?;
         Ok(())
     }
 
     fn get(&self, name: &str) -> Result<Option<String>> {
-        match keyring::Entry::new(SERVICE, name)?.get_password() {
+        match off_runtime(|| keyring::Entry::new(SERVICE, name)?.get_password()) {
             Ok(value) => Ok(Some(value)),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(other) => Err(other.into()),
@@ -105,11 +105,28 @@ impl RawKeychain for OsKeychain {
     }
 
     fn delete(&self, name: &str) -> Result<()> {
-        match keyring::Entry::new(SERVICE, name)?.delete_credential() {
+        match off_runtime(|| keyring::Entry::new(SERVICE, name)?.delete_credential()) {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(other) => Err(other.into()),
         }
     }
+}
+
+/// Linux speaks to the Secret Service over zbus, whose blocking calls drive a tokio runtime of their
+/// own. Doing that on one of the engine's runtime threads panics ("Cannot start a runtime from within
+/// a runtime"), and with `panic = "abort"` that closed UwUMail right after signing in. So there each
+/// call runs on a thread of its own; outside a runtime it stays where it is.
+#[cfg(target_os = "linux")]
+fn off_runtime<T: Send>(call: impl FnOnce() -> T + Send) -> T {
+    if tokio::runtime::Handle::try_current().is_err() {
+        return call();
+    }
+    std::thread::scope(|scope| scope.spawn(call).join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn off_runtime<T>(call: impl FnOnce() -> T) -> T {
+    call()
 }
 
 /// Windows keeps at most 2560 bytes per credential, stored as UTF-16, and Microsoft's refresh tokens
@@ -210,6 +227,15 @@ impl SecretStore for MemorySecrets {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The engine reads and saves secrets on its runtime threads. Before `off_runtime` the Secret
+    /// Service backend panicked there. An entry that doesn't exist: found or not, or no Secret
+    /// Service at all (CI), it must come back as an answer.
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn the_keychain_answers_on_a_runtime_thread() {
+        let _ = KeyringSecrets.get("uwumail-test-entry-that-does-not-exist");
+    }
 
     #[test]
     fn debug_output_never_contains_the_secret() {
