@@ -6258,7 +6258,6 @@ dependencies = [
  "block2",
  "libc",
  "minisign-verify",
- "notify-rust",
  "objc2",
  "objc2-background-tasks",
  "objc2-foundation",
@@ -6283,6 +6282,7 @@ dependencies = [
  "uwumail-core",
  "uwumail-ocr",
  "windows",
+ "zbus 5.19.0",
 ]
 
 [[package]]

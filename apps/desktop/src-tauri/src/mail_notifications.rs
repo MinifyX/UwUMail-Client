@@ -123,25 +123,49 @@ mod linux {
     use std::collections::HashMap;
     use std::sync::{Mutex, PoisonError};
 
+    use zbus::zvariant::Value;
+
     /// The id the notification server gave each account's notification, to replace it.
     static SHOWN: Mutex<Option<HashMap<String, u32>>> = Mutex::new(None);
+    /// One connection for as long as UwUMail runs: GNOME takes all of an app's notifications away
+    /// once the connection that sent its first one is gone, and a connection per notification (as
+    /// notify-rust, and so the plugin, opens one) is gone right after.
+    static BUS: Mutex<Option<zbus::Connection>> = Mutex::new(None);
 
     pub fn forget() {
         *SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
     }
 
-    pub fn show(account_id: &str, title: &str, body: &str) -> notify_rust::error::Result<()> {
+    /// Blocks: call it off the async runtime.
+    pub fn show(account_id: &str, title: &str, body: &str) -> zbus::Result<()> {
         let tag = super::tag(account_id);
-        let earlier =
-            SHOWN.lock().unwrap_or_else(PoisonError::into_inner).as_ref().and_then(|shown| shown.get(&tag).copied());
-        let mut notification = notify_rust::Notification::new();
-        // As the plugin shows it, so the notifications look the same as before.
-        notification.summary(title).body(body).auto_icon();
-        if let Some(id) = earlier {
-            notification.id(id);
-        }
-        let handle = notification.show()?;
-        SHOWN.lock().unwrap_or_else(PoisonError::into_inner).get_or_insert_default().insert(tag, handle.id());
+        let earlier = SHOWN
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .and_then(|shown| shown.get(&tag).copied())
+            .unwrap_or(0);
+        let mut bus = BUS.lock().unwrap_or_else(PoisonError::into_inner);
+        let connection = match bus.as_ref() {
+            Some(connection) => connection.clone(),
+            None => bus.insert(zbus::block_on(zbus::Connection::session())?).clone(),
+        };
+        drop(bus);
+        // App name and icon as the plugin gives them, so the notifications look the same as before.
+        let app = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.file_stem().map(|name| name.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| "uwumail".to_string());
+        let id: u32 = zbus::block_on(connection.call_method(
+            Some("org.freedesktop.Notifications"),
+            "/org/freedesktop/Notifications",
+            Some("org.freedesktop.Notifications"),
+            "Notify",
+            &(&app, earlier, &app, title, body, Vec::<&str>::new(), HashMap::<&str, Value<'_>>::new(), -1_i32),
+        ))?
+        .body()
+        .deserialize()?;
+        SHOWN.lock().unwrap_or_else(PoisonError::into_inner).get_or_insert_default().insert(tag, id);
         Ok(())
     }
 }
