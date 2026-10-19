@@ -1,9 +1,9 @@
 {
-  "version": "0.11.0-beta.2",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.11.0-beta.2/UwUMail-android.apk",
-  "sha256": "1b15ad4bc1a1f6ac64aec2e53cc9200f8089f0b3e173f757143acb7ee9a89061",
+  "version": "0.11.0-beta.3",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.11.0-beta.3/UwUMail-android.apk",
+  "sha256": "8d98c1f4d9b11191aa449390720ae0f9be51bcff0ebe4e6b78741e9c2faa427e",
   "notes": {
-    "de": "- Besser: Mails, die breiter als der Bildschirm sind (z. B. Rechnungen und Newsletter mit fester Breite), werden auf die Breite verkleinert statt abgeschnitten – kein seitliches Hin- und Herschieben mehr\n- Neu: In einer Mail kannst du mit zwei Fingern (oder am Computer mit dem Trackpad bzw. Strg/⌘ + Mausrad) hinein- und herauszoomen; der Rest der App bleibt fest\n- Neu: Postfächer in der Seitenleiste sind anfangs eingeklappt und zeigen dann, wie viel im Posteingang ungelesen ist. Ob ein Postfach auf- oder eingeklappt ist, merkt sich UwUMail auch über einen Neustart hinweg",
-    "en": "- Better: mails wider than the screen (receipts and newsletters with a fixed width, for example) are scaled down to fit instead of cut off – no more pushing them back and forth\n- New: zoom into a mail with two fingers (or on a computer with the trackpad or Ctrl/⌘ + wheel); the rest of the app stays put\n- New: mailboxes in the sidebar start folded and then show how much is unread in the inbox. UwUMail remembers whether each mailbox is open or folded, also across restarts"
+    "de": "- Behoben: Unter Linux stürzte UwUMail direkt nach dem Anmelden ab und fing beim nächsten Start wieder mit der Einrichtung an\n- Behoben: Unter GNOME (z. B. Ubuntu) verschwanden Mitteilungen von UwUMail sofort wieder\n- Besser: Kommen mehrere Mails, während du nicht hinschaust (z. B. bei gesperrtem PC), gibt es pro Konto nur noch eine Mitteilung („3 neue Mails“) statt einer für jede Mail – unter Windows, macOS und Linux\n- Besser: Auf iPhone und Android zeigen Mitteilungen auch mit App-Sperre Absender und Betreff. Was auf dem Sperrbildschirm steht, bestimmen die Einstellungen deines Geräts; ganz ausblenden kannst du es weiterhin mit „Absender und Betreff zeigen“",
+    "en": "- Fixed: on Linux, UwUMail crashed right after signing in and started setup again on the next launch\n- Fixed: on GNOME (Ubuntu, for example), notifications from UwUMail disappeared right away\n- Better: when several mails arrive while you're away (a locked PC, for example), each account gets one notification (\"3 new mails\") instead of one per mail – on Windows, macOS and Linux\n- Better: on iPhone and Android, notifications show sender and subject even with the app lock on. What the lock screen shows is up to your device's settings; \"Show sender and subject\" still hides it entirely"
   }
 }
