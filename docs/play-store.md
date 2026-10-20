@@ -23,13 +23,28 @@ never holds up a GitHub release. The `apk` job (named like android.yml's, same c
 Rust and Gradle caches main saves, so only x86_64 and UwUMail itself compile again. Pushes to main
 don't run it.
 
-- **versionCode**: `major·10⁹ + minor·10⁷ + patch·10⁵ + 50 000 + run number of play.yml`
-  (`node scripts/play.mjs version-code <run>`). The GitHub APK has the same scheme with the
-  android.yml run number and no 50 000, so a Play build is always above every APK of its version
-  and below every build of the next. Betas count as their version (`0.11.0-beta.4` → `0.11.0`).
-  Before uploading, `scripts/play.mjs` checks the new code is above every one Play has seen and
-  stops otherwise. A re-run of only the `play` job reuses the bundle and its code; Play refuses it
-  once that code is in.
+- **versionCode**: `major·10⁶ + minor·10⁴ + patch·10² + beta number`, 99 for the final release
+  (`node scripts/play.mjs version-code`), the same for the GitHub APK and the Play build: the app
+  from Play and an APK from GitHub of the same version are the same build to Android.
+
+  | Version         | versionCode |
+  | --------------- | ----------- |
+  | `0.11.0-beta.4` | `110004`    |
+  | `0.11.0`        | `110099`    |
+  | `1.2.3`         | `1020399`   |
+
+  Every beta of a version is below its final release, and that below every build of the next
+  version. Minor, patch and the beta number go from 0 (betas from 1) to 98; other prereleases than
+  `-beta.N` fail. The codes stay far below Play's limit of 2 100 000 000. There is no run number:
+  a re-build of the same version has the same code. Android installs it over an APK of that code,
+  Play refuses it — a new upload needs a new version. Before uploading, `scripts/play.mjs` checks
+  the code is above every one released in Play's tracks (bundles uploaded into discarded drafts
+  don't count) and otherwise stops with "bump the version".
+- **Switching from the old scheme (once):** up to 0.11.0-beta.4 the GitHub APK had
+  `major·10⁹ + minor·10⁷ + patch·10⁵ + run number` (e.g. `110000120`), higher than every new code.
+  Android doesn't install a lower code over it: whoever has such an APK uninstalls UwUMail once and
+  installs the new APK or the Play app (accounts are set up again; with a UwUMail account the
+  settings come back). The note for this is in `release-notes/README.md` for the next release.
 - **What's new**: from `release-notes/<version>.json`, German for every `de-*` language of the
   store listing and English for every `en-*`, cut to Play's 500 characters at a line break.
 - **Release status**: `completed` (testers get it right away). While the app is still a draft in
@@ -100,9 +115,10 @@ testers for 14 days in closed testing first. The track is one variable in `play.
 
 ## Status (2026-10-20)
 
-`play.yml` and `scripts/play.mjs` are in; the App Bundle, its signing and the upload haven't run on
-GitHub yet. Steps 1–5 above are still to be clicked; until the secret exists, tags only produce
-the signed bundle as an artifact.
+Done: steps 1 (app created), 2 (Play App Signing with UwUMail's key) and 4 (service account
+invited, secret `UWUMAIL_PLAY_SERVICE_ACCOUNT_JSON` set). Open: step 3, the first bundle in
+internal testing (with versionCode `110004`, 0.11.0-beta.4, from this scheme; the bundle
+`110050002` of the old scheme stayed in a discarded draft), the testers list, and step 5.
 
 ---
 
@@ -118,9 +134,15 @@ aktualisieren sich Play-App und GitHub-APK gegenseitig.
   signiert es auf einem frischen Runner mit `jarsigner`, prüft das Zertifikat, legt es als
   Artefakt `UwUMail-Play-<sha>` ab und lädt es mit `scripts/play.mjs` hoch. Läuft neben dem
   Release, hält ihn also nie auf.
-- **versionCode** = Version·10ⁿ wie bei der APK + 50 000 + Laufnummer von `play.yml`: immer über
-  jeder APK derselben Version und unter der nächsten Version. Das Skript bricht ab, wenn der Code
-  nicht über allen bisherigen liegt.
+- **versionCode** = `Major·10⁶ + Minor·10⁴ + Patch·10² + Beta-Nummer`, 99 für das finale
+  Release (`0.11.0-beta.4` → `110004`, `0.11.0` → `110099`, `1.2.3` → `1020399`), für GitHub-APK
+  und Play gleich, ohne Laufnummer. Minor, Patch und Beta bis 98, nur `-beta.N` als Vorabversion.
+  Ein neuer Build derselben Version hat denselben Code; Play lehnt ihn ab, also Version anheben.
+  Das Skript prüft vor dem Upload gegen die Codes in den Tracks (verworfene Entwürfe zählen nicht).
+- **Einmaliger Umstieg:** APKs bis 0.11.0-beta.4 haben Codes nach dem alten Schema (z. B.
+  `110000120`), höher als alle neuen. Wer so eine APK hat, deinstalliert UwUMail einmal und
+  installiert die neue APK oder die Play-App. Hinweis für die nächsten Release-Notes steht in
+  `release-notes/README.md`.
 - **Neuigkeiten** aus `release-notes/<version>.json` (de/en, auf 500 Zeichen gekürzt).
 - **Status** `completed`; solange die App in der Console noch ein Entwurf ist, legt das Skript den
   Release als Entwurf an.
@@ -133,3 +155,6 @@ von Hand in „Interner Test“ hochladen und Tester-Liste anlegen → Dienstkon
 (Google Play Android Developer API, JSON-Schlüssel), in der Play Console mit „Apps in Test-Tracks
 veröffentlichen“ und „App-Informationen ansehen“ einladen, Schlüssel als Secret setzen →
 Store-Grunddaten, Datensicherheit, Einstufung, Zielgruppe ausfüllen.
+
+**Stand (2026-10-20):** Schritte 1, 2 und 4 erledigt, Secret gesetzt, Dienstkonto eingeladen.
+Offen: erstes Bundle im internen Test (Code `110004`), Tester-Liste, Schritt 5.

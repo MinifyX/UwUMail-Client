@@ -10,6 +10,15 @@ without it. The text appears under "What's new" in UwUMail's update hint and on 
 }
 ```
 
+## For the next release
+
+Android's versionCode now comes from the version alone (`docs/play-store.md`); APKs up to 0.11.0-beta.4
+have higher codes, so Android won't update them. Put this into the next `release-notes/<version>.json`, then
+delete this section:
+
+- de: `- Android: Wer UwUMail als APK von GitHub installiert hat, muss die App dieses eine Mal deinstallieren und neu installieren (Konten danach neu einrichten; mit UwUMail-Konto kommen die Einstellungen zurück). Danach klappen Updates wieder normal – auch über Google Play.`
+- en: `- Android: if you installed UwUMail as an APK from GitHub, uninstall it this one time and install it again (set up your accounts again; with a UwUMail account your settings come back). Updates work as usual afterwards – Google Play included.`
+
 ## Releasing a version
 
 1. Set the version in `Cargo.toml` (workspace), `apps/desktop/src-tauri/tauri.conf.json`,

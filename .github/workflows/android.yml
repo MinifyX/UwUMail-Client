@@ -64,14 +64,10 @@ jobs:
       - name: Version code
         id: version
         run: |
-          # major·10⁹ + minor·10⁷ + patch·10⁵ + run number, so every build and every release counts up.
-          node -e '
-            const v = require("./apps/desktop/src-tauri/tauri.conf.json").version;
-            const [maj, min, pat] = v.split("-")[0].split(".").map(Number);
-            const code = maj * 1e9 + min * 1e7 + pat * 1e5 + (Number(process.env.GITHUB_RUN_NUMBER) % 1e5);
-            console.log(`version=${v}`);
-            console.log(`code=${code}`);
-          ' >> "$GITHUB_OUTPUT"
+          # From the version alone, the same as the Play build's (scripts/play.mjs, docs/play-store.md).
+          echo "version=$(node -p 'require("./apps/desktop/src-tauri/tauri.conf.json").version')" >> "$GITHUB_OUTPUT"
+          code=$(node scripts/play.mjs version-code)
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
       # The checked-in wrapper jar runs first in the build; it must be an official Gradle release.
       - uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
