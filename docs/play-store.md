@@ -115,10 +115,10 @@ testers for 14 days in closed testing first. The track is one variable in `play.
 
 ## Status (2026-10-20)
 
-Done: steps 1 (app created), 2 (Play App Signing with UwUMail's key) and 4 (service account
-invited, secret `UWUMAIL_PLAY_SERVICE_ACCOUNT_JSON` set). Open: step 3, the first bundle in
-internal testing (with versionCode `110004`, 0.11.0-beta.4, from this scheme; the bundle
-`110050002` of the old scheme stayed in a discarded draft), the testers list, and step 5.
+Done: steps 1–4 (the first bundle, 0.11.0-beta.4 / `110004`, went up through the API, the
+internal track is active, testers list "Intern"), and from step 5 privacy policy, ads, data
+safety, content rating, target audience, app category (Communication). Open: the store listing
+(texts, icon, feature graphic, screenshots) and the contact email.
 
 ---
 
@@ -156,5 +156,7 @@ von Hand in „Interner Test“ hochladen und Tester-Liste anlegen → Dienstkon
 veröffentlichen“ und „App-Informationen ansehen“ einladen, Schlüssel als Secret setzen →
 Store-Grunddaten, Datensicherheit, Einstufung, Zielgruppe ausfüllen.
 
-**Stand (2026-10-20):** Schritte 1, 2 und 4 erledigt, Secret gesetzt, Dienstkonto eingeladen.
-Offen: erstes Bundle im internen Test (Code `110004`), Tester-Liste, Schritt 5.
+**Stand (2026-10-20):** Schritte 1–4 erledigt (erstes Bundle `110004` per API im internen
+Test, Tester-Liste „Intern“), aus Schritt 5 Datenschutz, Anzeigen, Datensicherheit, Einstufung,
+Zielgruppe und Kategorie (Kommunikation). Offen: Store-Eintrag (Texte, Icon, Grafik, Screenshots)
+und Kontakt-E-Mail.
