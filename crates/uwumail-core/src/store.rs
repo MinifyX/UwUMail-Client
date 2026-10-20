@@ -1423,15 +1423,22 @@ impl Store {
     }
 
     pub fn apply_flag_change(&self, ids: &[String], change: FlagChange) -> Result<()> {
-        let conn = self.conn();
-        for id in ids {
-            if let Some(seen) = change.seen {
-                conn.execute("UPDATE messages SET seen = ?1 WHERE id = ?2", params![seen, id])?;
-            }
-            if let Some(flagged) = change.flagged {
-                conn.execute("UPDATE messages SET flagged = ?1 WHERE id = ?2", params![flagged, id])?;
+        let mut conn = self.conn();
+        // One transaction: "mark all as read" can touch tens of thousands of rows.
+        let tx = conn.transaction()?;
+        {
+            let mut seen_stmt = tx.prepare("UPDATE messages SET seen = ?1 WHERE id = ?2")?;
+            let mut flagged_stmt = tx.prepare("UPDATE messages SET flagged = ?1 WHERE id = ?2")?;
+            for id in ids {
+                if let Some(seen) = change.seen {
+                    seen_stmt.execute(params![seen, id])?;
+                }
+                if let Some(flagged) = change.flagged {
+                    flagged_stmt.execute(params![flagged, id])?;
+                }
             }
         }
+        tx.commit()?;
         Ok(())
     }
 

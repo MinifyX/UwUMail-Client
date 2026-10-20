@@ -85,6 +85,8 @@ pub struct NotifyPrefs {
 
 /// The longest list of muted accounts the prefs keep.
 pub const MAX_MUTED: usize = 256;
+/// The longest account id the muted list keeps.
+pub const MAX_MUTED_ID: usize = 128;
 
 /// Times of the week without notifications: from `from` to `to` (minutes after midnight, local
 /// time) on the listed days. A span past midnight belongs to the day it starts on; `from == to`
@@ -191,7 +193,8 @@ impl NotifyPrefs {
     /// The same texts with muted accounts and quiet hours.
     pub fn with_filter(mut self, muted: Vec<String>, quiet: Option<QuietHours>) -> Self {
         let mut muted = muted;
-        muted.retain(|id| !id.is_empty() && id.len() <= 256);
+        // Ids are short; the cap keeps the kept file (notification-prefs.json) well under its limit.
+        muted.retain(|id| !id.is_empty() && id.len() <= MAX_MUTED_ID);
         muted.sort();
         muted.dedup();
         muted.truncate(MAX_MUTED);
@@ -468,5 +471,16 @@ mod tests {
         assert!(prefs.rings("c", 1, 12 * 60));
         assert!(!prefs.rings("c", 1, 23 * 60));
         assert!(NotifyPrefs::default().rings("a", 1, 23 * 60));
+    }
+
+    #[test]
+    fn muted_list_stays_small() {
+        let ids = (0..MAX_MUTED * 2).map(|i| format!("{i:0>width$}", width = MAX_MUTED_ID + 1)).collect();
+        assert!(NotifyPrefs::default().with_filter(ids, None).muted.is_empty(), "overlong ids are dropped");
+        let ids = (0..MAX_MUTED * 2).map(|i| format!("{i:0>width$}", width = MAX_MUTED_ID)).collect();
+        let prefs = NotifyPrefs::default().with_filter(ids, None);
+        assert_eq!(prefs.muted.len(), MAX_MUTED);
+        // The whole list fits the file the desktop app keeps (64 KiB).
+        assert!(serde_json::to_vec(&prefs.muted).unwrap().len() < 48 * 1024);
     }
 }

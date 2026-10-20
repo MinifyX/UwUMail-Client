@@ -9,6 +9,7 @@
 
 import type { Address } from "@/backend/types";
 import { escapeHtml } from "@/lib/format";
+import { foreignHtml } from "@/lib/safeHtml";
 import type { MailTemplate } from "@/state/settings";
 
 export const TEMPLATE_PLACEHOLDERS = ["firstName", "name", "date", "myName"] as const;
@@ -59,6 +60,14 @@ export function fillText(text: string, values: TemplateValues): string {
 /** HTML with its placeholders filled in; the values go in as text. */
 export function fillHtml(html: string, values: TemplateValues): string {
   return html.replace(PLACEHOLDER, (_, key: TemplatePlaceholder) => escapeHtml(values[key]));
+}
+
+/**
+ * The markup a template puts into a draft: filled in, and cleaned like a signature, since it may
+ * come from another device (no scripts, none of the app's own `data-uwu-*` markers).
+ */
+export function templateHtml(html: string, values: TemplateValues): string {
+  return foreignHtml(fillHtml(html, values));
 }
 
 /** Templates by name, for menus and the settings list. */

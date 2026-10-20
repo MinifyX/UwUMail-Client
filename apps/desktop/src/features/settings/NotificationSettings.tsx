@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { TextInput, Toggle } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { accountLabel } from "@/lib/accountLabel";
+import { accountAddress } from "@/lib/arrangement";
 import { useAccounts } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import { Row } from "./Row";
@@ -36,7 +37,7 @@ export function NotificationSettings() {
         <Row label={t("notify.accounts")} description={t("notify.accountsDesc")}>
           <div className="flex flex-col gap-1">
             {accounts.map((account) => {
-              const address = account.email.toLowerCase();
+              const address = accountAddress(account);
               return (
                 <Toggle
                   key={account.id}

@@ -379,6 +379,14 @@ export function valueBytes(value: unknown): number {
 }
 
 /**
+ * The id a template, snooze, signature or folder entry goes by. Entries land as keys of plain
+ * objects, so `__proto__` is never one.
+ */
+function isEntryId(entry: string): boolean {
+  return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && entry !== "__proto__";
+}
+
+/**
  * Whether the server takes this key with this value. Everything it would refuse stays on this
  * device: one refused key fails the whole write, so it must never be sent.
  */
@@ -399,19 +407,19 @@ export function isSyncable(key: string, value: unknown): boolean {
     case "linkDomains":
       return value === true && isAsciiHost(entry);
     case "signature":
-      return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isSignatureValue(value);
+      return isEntryId(entry) && isSignatureValue(value);
     case ARRANGEMENT.unifiedHidden:
       return value === true && isSyncableAddress(entry);
     case ARRANGEMENT.unifiedFolders:
     case ARRANGEMENT.favoriteFolders:
     case ARRANGEMENT.hiddenFolders:
-      return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isFolderRef(value);
+      return isEntryId(entry) && isFolderRef(value);
     case "template":
-      return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isTemplateValue(value);
+      return isEntryId(entry) && isTemplateValue(value);
     case "notify.muted":
       return value === true && isSyncableAddress(entry);
     case "snooze":
-      return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isSnoozeValue(value);
+      return isEntryId(entry) && isSnoozeValue(value);
     default:
       return false;
   }

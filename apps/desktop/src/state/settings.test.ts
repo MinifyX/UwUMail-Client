@@ -101,4 +101,22 @@ describe("settings kept on this device", () => {
     expect(state.undoSendSeconds).toBe(DEFAULT_SETTINGS.undoSendSeconds);
     expect("unknown" in state).toBe(false);
   });
+
+  it("drop snoozes that are not whole", async () => {
+    const snooze = {
+      account: "mini@uwumail.test",
+      messageId: "a@uwumail.test",
+      folder: "INBOX",
+      until: "2026-10-21T07:00:00Z",
+    };
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        state: { snoozes: { ok: snooze, empty: null, half: { ...snooze, until: 5 }, text: "soon" } },
+        version: 1,
+      }),
+    );
+    await useSettings.persist.rehydrate();
+    expect(useSettings.getState().snoozes).toEqual({ ok: snooze });
+  });
 });

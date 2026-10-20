@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isSyncable } from "./settingsSync";
-import { cleanTemplateName, fillHtml, fillText, newTemplateId, templateValues } from "./templates";
+import { cleanTemplateName, fillHtml, fillText, newTemplateId, templateHtml, templateValues } from "./templates";
 
 describe("templates", () => {
   it("makes ids the server takes", () => {
@@ -31,5 +31,18 @@ describe("templates", () => {
   it("cleans names", () => {
     expect(cleanTemplateName(" a\tb ")).toBe("a b");
     expect([...cleanTemplateName("x".repeat(200))]).toHaveLength(100);
+  });
+});
+
+describe("template markup in a draft", () => {
+  const values = { firstName: "<b>Leni</b>", name: "Leni", date: "", myName: "Mini" };
+
+  it("is cleaned like a signature and keeps no app markers", () => {
+    const html = templateHtml(
+      '<p data-uwu-signature="1" onclick="x()">Hi {firstName}</p><img src="x" onerror="x()"><script>x()</script>',
+      values,
+    );
+    expect(html).toContain("Hi &lt;b&gt;Leni&lt;/b&gt;");
+    expect(html).not.toMatch(/data-uwu|onclick|onerror|<script/i);
   });
 });

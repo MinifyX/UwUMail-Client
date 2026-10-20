@@ -439,3 +439,35 @@ describe("notifications and snooze", () => {
     expect(result.pending).toEqual({});
   });
 });
+
+describe("entry ids", () => {
+  const template = { name: "Thanks", subject: "", html: "<p>Hi</p>" };
+  const snooze = {
+    account: "mini@uwumail.test",
+    messageId: "abc@uwumail.test",
+    folder: "INBOX",
+    until: "2026-10-21T07:00:00Z",
+  };
+
+  it("never takes __proto__ as the id of an entry", () => {
+    const folder = { account: "mini@uwumail.test", folder: "INBOX" };
+    const lists: [string, unknown][] = [
+      ["template", template],
+      ["snooze", snooze],
+      ["signature", signature],
+      ["unified.folders", folder],
+      ["folders.favorite", folder],
+      ["folders.hidden", folder],
+    ];
+    for (const [list, value] of lists) {
+      expect(isSyncable(`${list}:proto`, value)).toBe(true);
+      expect(isSyncable(`${list}:__proto__`, value)).toBe(false);
+    }
+    const changed = applyToSettings(base, { "template:__proto__": template, "snooze:__proto__": snooze });
+    expect(changed.templates).toBeUndefined();
+    expect(changed.snoozes).toBeUndefined();
+    const templates = applyToSettings(base, { "template:a": template, "template:__proto__": template }).templates!;
+    expect(Object.getPrototypeOf(templates)).toBe(Object.prototype);
+    expect(Object.keys(templates)).toEqual(["a"]);
+  });
+});

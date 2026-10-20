@@ -78,8 +78,13 @@ fn terms(input: &str) -> Vec<(Option<String>, String)> {
     terms
 }
 
+/// `YYYY-MM-DD` exactly (four-digit year, as the page's parser takes it), so IMAP and JMAP get
+/// dates they can read.
 fn date(value: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
+    let bytes = value.as_bytes();
+    let shape = bytes.len() == 10
+        && bytes.iter().enumerate().all(|(i, b)| if i == 4 || i == 7 { *b == b'-' } else { b.is_ascii_digit() });
+    shape.then(|| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()).flatten()
 }
 
 impl SearchQuery {
@@ -282,6 +287,14 @@ mod tests {
         assert_eq!(SearchQuery::parse("subject:\"halb offen").subject, vec!["halb offen"]);
         assert_eq!(SearchQuery::parse("\"unbalanced").words, vec!["unbalanced"]);
         assert_eq!(SearchQuery::parse("FROM:Leni").from, vec!["Leni"]);
+        // Only YYYY-MM-DD with a four-digit year is a day.
+        for odd in
+            ["before:+12026-01-01", "before:2026-1-5", "before:-001-01-01", "after:2026-02-30", "after:２０２６-01-01"]
+        {
+            let query = SearchQuery::parse(odd);
+            assert!(query.before.is_none() && query.after.is_none(), "{odd}");
+            assert_eq!(query.words.len(), 1, "{odd}");
+        }
     }
 
     #[test]

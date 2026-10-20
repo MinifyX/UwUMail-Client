@@ -31,7 +31,7 @@ import { ComposeAssistButton, ComposeAssistPanel } from "../assist/ComposeAssist
 import { needsAttachmentReminder } from "./attachmentReminder";
 import { AttachmentReminderDialog } from "./AttachmentReminderDialog";
 import { SaveTemplateDialog, TemplatesMenu } from "./TemplatesMenu";
-import { fillHtml, fillText, templateValues } from "@/lib/templates";
+import { fillText, templateHtml, templateValues } from "@/lib/templates";
 import type { MailTemplate } from "@/state/settings";
 import { AssistForAccount } from "../assist/useAssist";
 import { useComposeAssist } from "../assist/useComposeAssist";
@@ -398,7 +398,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       myName: sender?.name || accounts.find((a) => a.id === accountId)?.displayName || "",
       language: i18n.language,
     });
-    const html = quotableHtml(fillHtml(template.html, values));
+    const html = templateHtml(template.html, values);
     const range =
       cursor.current && node.contains(cursor.current.startContainer) && node.contains(cursor.current.endContainer)
         ? cursor.current

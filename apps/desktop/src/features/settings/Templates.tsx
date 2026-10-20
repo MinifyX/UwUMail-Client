@@ -2,7 +2,7 @@ import { Button, IconButton, ICONS, TextInput } from "@uwusuite/design";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n";
 import { insertDroppedHtml } from "@/features/compose/droppedHtml";
-import { foreignHtml, htmlToPlainText, isSafeLinkTarget, quotableHtml } from "@/lib/safeHtml";
+import { foreignHtml, htmlToPlainText, isSafeLinkTarget } from "@/lib/safeHtml";
 import { MAX_VALUE_BYTES, valueBytes } from "@/lib/settingsSync";
 import {
   cleanTemplateName,
@@ -199,7 +199,7 @@ function TemplateEditor({
         <div
           ref={(node) => {
             editor.current = node;
-            if (node && node.innerHTML === "" && template.html) node.innerHTML = quotableHtml(template.html);
+            if (node && node.innerHTML === "" && template.html) node.innerHTML = foreignHtml(template.html);
           }}
           contentEditable
           role="textbox"

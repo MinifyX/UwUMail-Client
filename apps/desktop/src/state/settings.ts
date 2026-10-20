@@ -356,6 +356,7 @@ export const useSettings = create<Settings & SettingsActions>()(
         state.templates = Object.fromEntries(
           Object.entries(state.templates).filter(([, template]) => isTemplateShape(template)),
         );
+        state.snoozes = Object.fromEntries(Object.entries(state.snoozes).filter(([, entry]) => isSnoozeShape(entry)));
         const quiet = state.quietHours as Partial<QuietHours>;
         if (
           typeof quiet.enabled !== "boolean" ||
@@ -375,6 +376,17 @@ function isTemplateShape(value: unknown): value is MailTemplate {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as Record<string, unknown>;
   return typeof entry.name === "string" && typeof entry.subject === "string" && typeof entry.html === "string";
+}
+
+function isSnoozeShape(value: unknown): value is SnoozeEntry {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.account === "string" &&
+    typeof entry.messageId === "string" &&
+    typeof entry.folder === "string" &&
+    typeof entry.until === "string"
+  );
 }
 
 /** The layout in use: the stored one, except on a phone, which has no choice (see `layoutChoice`). */

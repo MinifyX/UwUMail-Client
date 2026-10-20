@@ -18,7 +18,7 @@ import type {
 } from "@/backend/types";
 import { translate, useT } from "@/i18n";
 import { inWorkspace, sharedFollowAccounts } from "@/lib/workspaces";
-import { isUnified, scopeFor, type ListScope } from "@/lib/arrangement";
+import { accountAddress, isUnified, scopeFor, type ListScope } from "@/lib/arrangement";
 import { senderSignatures } from "@/lib/localSignatures";
 import { useAccountSync } from "@/state/accountSync";
 import { confirmDeleteForever } from "@/state/deleteForever";
@@ -514,7 +514,7 @@ export function useBackendEvents() {
   // Muted mailboxes are named by address in the settings and by id where the shell rings.
   const mutedAccounts = useMemo(() => {
     const muted = new Set(notifyMuted);
-    return (accounts ?? []).filter((account) => muted.has(account.email.toLowerCase())).map((account) => account.id);
+    return (accounts ?? []).filter((account) => muted.has(accountAddress(account))).map((account) => account.id);
   }, [accounts, notifyMuted]);
   const mutedKey = mutedAccounts.join("\n");
   useEffect(() => {
