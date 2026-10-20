@@ -7,6 +7,7 @@ import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { moveBack, rememberUndo } from "@/state/undo";
 import { useUi } from "@/state/ui";
+import { requestSnooze, useSnooze } from "./snooze";
 
 const ids = (messages: Message[]) => messages.map((message) => message.id);
 
@@ -51,6 +52,7 @@ export function useSelectionActions() {
   const client = useQueryClient();
   const actions = useMessageActions();
   const conversations = useSettings((s) => s.conversations);
+  const snoozing = useSnooze();
 
   const messagesOf = async (threadIds: string[]) => {
     const details = await Promise.all(
@@ -74,5 +76,8 @@ export function useSelectionActions() {
     flag: async (threadIds: string[], flagged: boolean) =>
       actions.setFlags(ids(await messagesOf(threadIds)), { flagged }),
     move: async (threadIds: string[], onMoved?: () => void) => requestMove(await messagesOf(threadIds), onMoved),
+    snooze: async (threadIds: string[], onSnoozed?: () => void) =>
+      requestSnooze(await messagesOf(threadIds), onSnoozed),
+    unsnooze: async (threadIds: string[]) => snoozing.unsnooze(await messagesOf(threadIds), threadIds),
   };
 }

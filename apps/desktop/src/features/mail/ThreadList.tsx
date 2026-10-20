@@ -24,6 +24,7 @@ import { labelsFor, useLabelDirectory } from "../labels/useLabels";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { useSelectionActions } from "./selection";
+import { useSnoozedRows } from "./snooze";
 import { ThreadRow } from "./ThreadRow";
 import { useViewInfo } from "./view";
 
@@ -62,6 +63,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
     openSettings,
   } = useUi.getState();
   const info = useViewInfo(view);
+  const snoozedRows = useSnoozedRows(view);
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
   const emptiable = view.kind === "folder" ? folders.find((f) => f.id === view.folderId && canEmpty(f)) : undefined;
@@ -148,6 +150,10 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
         onSelect: () => void selection.read(threadIds, unread).then(done),
       },
       { label: t("reader.move"), onSelect: () => void selection.move(threadIds, done) },
+      { label: t("snooze.action"), onSelect: () => void selection.snooze(threadIds, done) },
+      ...(info.isSnoozed
+        ? [{ label: t("snooze.unsnooze"), onSelect: () => void selection.unsnooze(threadIds).then(done) }]
+        : []),
       {
         label: info.isJunk ? t("reader.notSpam") : t("reader.spam"),
         onSelect: () => void selection.spam(threadIds, !info.isJunk).then(done),
@@ -173,6 +179,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
       dragIds={checked.includes(thread.id) ? checked : [thread.id]}
       inTrash={info.isTrash}
       inJunk={info.isJunk}
+      snoozedUntil={snoozedRows?.get(thread.id)}
       onContextMenu={(event) => {
         event.preventDefault();
         const threadIds = checked.includes(thread.id) ? checked : [thread.id];

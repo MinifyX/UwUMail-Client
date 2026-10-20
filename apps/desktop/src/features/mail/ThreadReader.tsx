@@ -11,6 +11,7 @@ import { ThreadAssistButton, ThreadSummary } from "../assist/ReaderAssist";
 import { AssistForAccount } from "../assist/useAssist";
 import { MessageView } from "./MessageView";
 import { requestMove } from "./selection";
+import { requestSnooze, someSnoozed, useSnooze } from "./snooze";
 import { useNyuOnOpen } from "./nyuOnOpen";
 
 interface ThreadReaderProps {
@@ -35,6 +36,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
   const actions = useMessageActions();
+  const { unsnooze } = useSnooze();
   const messages = data?.messages;
   const loadedThreadId = data?.thread.id;
   useNyuOnOpen(data);
@@ -107,6 +109,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const inJunk = all.every((m) => folders.find((f) => f.id === m.folderId)?.role === "junk");
   const trashed = inTrash(all, folders);
   const readOnly = isReadOnly(accounts, latest.accountId);
+  const snoozed = someSnoozed(all, folders);
 
   return (
     <section
@@ -151,6 +154,18 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
               label={t("reader.move")}
               onClick={() => requestMove(all, () => selectThread(null))}
             />
+            <IconButton
+              icon={ICONS.reminder}
+              label={t("snooze.action")}
+              onClick={() => requestSnooze(all, () => selectThread(null))}
+            />
+            {snoozed && (
+              <IconButton
+                icon={ICONS.inbox}
+                label={t("snooze.unsnooze")}
+                onClick={() => void unsnooze(all, [data.thread.id]).then(() => selectThread(null))}
+              />
+            )}
             <IconButton
               icon={inJunk ? ICONS.notSpam : ICONS.spam}
               label={inJunk ? t("reader.notSpam") : t("reader.spam")}

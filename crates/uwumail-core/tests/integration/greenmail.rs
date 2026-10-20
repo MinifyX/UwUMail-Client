@@ -810,3 +810,100 @@ async fn unsubscribes_from_a_newsletter_by_mail() {
 
     engine.remove_account(&account.id).await.unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn snoozed_mail_comes_back_unread_even_with_a_new_uid() {
+    let Some(host) = server() else {
+        eprintln!("UWUMAIL_TEST_MAILSERVER not set, skipping");
+        return;
+    };
+    let data = tempfile::tempdir().unwrap();
+    let engine = Engine::new(EngineOptions {
+        data_dir: data.path().to_path_buf(),
+        secrets: Arc::new(MemorySecrets::default()),
+        open_url: Arc::new(|_| {}),
+        recognizer: None,
+    })
+    .unwrap();
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("snooze-{}@uwumail.test", &unique[..8]);
+    let imap = ServerSettings { host: host.clone(), port: 3143, security: Security::None };
+    let account = engine
+        .add_account(NewAccount {
+            display_name: "Mini".into(),
+            email: email.clone(),
+            auth: AuthKind::Password,
+            password: Some("uwu".into()),
+            imap: imap.clone(),
+            smtp: ServerSettings { host, port: 3025, security: Security::None },
+            username: email.clone(),
+            color: AccountColor::Pink,
+            protocol: Protocol::Imap,
+            jmap_url: None,
+            sign_in_as: None,
+            account_name: None,
+            app_password_name: None,
+        })
+        .await
+        .unwrap();
+    let folders = || engine.list_folders(Some(&account.id)).unwrap();
+    let inbox = wait_for("the inbox", async || folders().into_iter().find(|f| f.role == Some(FolderRole::Inbox))).await;
+
+    let subject = format!("Später {unique}");
+    engine
+        .send(OutgoingMessage {
+            account_id: account.id.clone(),
+            to: vec![Address { name: None, email: email.clone() }],
+            cc: vec![],
+            bcc: vec![],
+            subject: subject.clone(),
+            html: "<p>Hi</p>".into(),
+            text: "Hi".into(),
+            in_reply_to: None,
+            attachments: vec![],
+            draft_key: None,
+            from_email: None,
+        })
+        .await
+        .unwrap();
+    let thread = wait_for("the mail in the inbox", async || {
+        engine.sync_now(Some(&account.id));
+        engine.list_threads(&inbox_query(None)).unwrap().threads.into_iter().find(|t| t.subject == subject)
+    })
+    .await;
+    let message = engine.get_thread(&thread.id, false).await.unwrap().messages.remove(0);
+    engine.set_flags(std::slice::from_ref(&message.id), FlagChange { seen: Some(true), flagged: None }).await.unwrap();
+
+    // Snoozing makes the Snoozed folder and moves the mail there.
+    let snoozed = engine.snooze_messages(std::slice::from_ref(&message.id)).await.unwrap();
+    assert_eq!(snoozed.len(), 1);
+    assert_eq!(snoozed[0].folder_id.as_deref(), Some(inbox.id.as_str()));
+    let header_id = snoozed[0].header_id.clone();
+    let folder = folders().into_iter().find(|f| f.name == uwumail_core::SNOOZED_FOLDER).expect("Snoozed folder");
+    assert!(engine.folder_header_ids(&folder.id).unwrap().iter().any(|(_, id)| *id == header_id));
+
+    // Another client moves it out and back in: it gets a new uid this device doesn't know yet.
+    let mut other = imap::login(&imap, imap::Login::Password { username: &email, password: "uwu" }).await.unwrap();
+    let uids = imap::uids_with_message_id(&mut other, &folder.path, &header_id).await.unwrap();
+    imap::move_messages(&mut other, &folder.path, &uids, "INBOX").await.unwrap();
+    let uids = imap::uids_with_message_id(&mut other, "INBOX", &header_id).await.unwrap();
+    imap::move_messages(&mut other, "INBOX", &uids, &folder.path).await.unwrap();
+    let _ = other.logout().await;
+
+    // Due: it comes back unread to the inbox; a second device asking again finds nothing to do.
+    let outcome = engine.unsnooze(&account.id, &header_id, Some(&inbox.id)).await.unwrap();
+    assert_eq!(outcome, uwumail_core::UnsnoozeOutcome::Moved);
+    let outcome = engine.unsnooze(&account.id, &header_id, Some(&inbox.id)).await.unwrap();
+    assert_eq!(outcome, uwumail_core::UnsnoozeOutcome::Gone);
+    let back = wait_for("the mail back in the inbox, unread", async || {
+        engine.sync_now(Some(&account.id));
+        engine
+            .list_threads(&inbox_query(None))
+            .unwrap()
+            .threads
+            .into_iter()
+            .find(|t| t.subject == subject && t.unread_count == 1)
+    })
+    .await;
+    assert_eq!(back.message_count, 1);
+}

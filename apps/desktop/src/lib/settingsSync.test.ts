@@ -29,6 +29,9 @@ const base: SyncedSettings = {
   trustedSenders: [],
   senderAppearance: {},
   linkDomains: [],
+  notifyMuted: [],
+  quietHours: { enabled: false, from: "22:00", to: "07:00", days: [0, 1, 2, 3, 4, 5, 6] },
+  snoozes: {},
 };
 
 const signature = { email: "mini@uwumail.test", name: "Kurz", html: "<p>Mini</p>", forNew: true, forReplies: false };
@@ -250,5 +253,85 @@ describe("merging with the server", () => {
       keep: new Set(["signature:big", "trustedSenders:@refused.example"]),
     });
     expect(result).toEqual({ apply: {}, pending: {} });
+  });
+});
+
+describe("notifications and snooze", () => {
+  const quiet = { enabled: true, from: "22:00", to: "07:00", days: [0, 6] };
+  const snooze = {
+    account: "mini@uwumail.test",
+    messageId: "abc@uwumail.test",
+    folder: "INBOX",
+    until: "2026-10-21T07:00:00Z",
+  };
+
+  it("takes muted mailboxes, quiet hours and snoozes in their shape only", () => {
+    expect(isSyncable("notify.muted:mini@uwumail.test", true)).toBe(true);
+    expect(isSyncable("notify.muted:Mini@uwumail.test", true)).toBe(false);
+    expect(isSyncable("notify.muted:mini@uwumail.test", false)).toBe(false);
+    expect(isSyncable("notify.quietHours", quiet)).toBe(true);
+    expect(isSyncable("notify.quietHours", { ...quiet, enabled: false })).toBe(true);
+    expect(isSyncable("notify.quietHours", { ...quiet, from: "24:00" })).toBe(false);
+    expect(isSyncable("notify.quietHours", { ...quiet, to: "7:00" })).toBe(false);
+    expect(isSyncable("notify.quietHours", { ...quiet, days: [0, 0] })).toBe(false);
+    expect(isSyncable("notify.quietHours", { ...quiet, days: [7] })).toBe(false);
+    expect(isSyncable("notify.quietHours", { ...quiet, extra: 1 })).toBe(false);
+    expect(isSyncable("snooze:Ab_-0123456789xy", snooze)).toBe(true);
+    expect(isSyncable("snooze:a b", snooze)).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, account: "Mini@uwumail.test" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "<abc@uwumail.test>" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "a b" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "a".repeat(999) })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, folder: "" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, folder: "a\nb" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, until: "2026-10-21T09:00:00+02:00" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, until: "2026-10-21T07:00:00.123Z" })).toBe(true);
+    expect(isSyncable("snooze:a", { ...snooze, until: "2026-13-45T07:00:00Z" })).toBe(false);
+  });
+
+  it("writes quiet hours only while they are on", () => {
+    expect(settingsToValues(base)).not.toHaveProperty(["notify.quietHours"]);
+    const values = settingsToValues({
+      ...base,
+      notifyMuted: ["mini@uwumail.test"],
+      quietHours: quiet,
+      snoozes: { s1: snooze },
+    });
+    expect(values).toMatchObject({
+      "notify.muted:mini@uwumail.test": true,
+      "notify.quietHours": quiet,
+      "snooze:s1": snooze,
+    });
+  });
+
+  it("applies them, and a removed key switches quiet hours off but keeps the times", () => {
+    const current = { ...base, notifyMuted: ["a@uwumail.test"], quietHours: quiet, snoozes: { s1: snooze } };
+    expect(
+      applyToSettings(current, {
+        "notify.muted:a@uwumail.test": null,
+        "notify.muted:b@uwumail.test": true,
+        "notify.quietHours": null,
+        "snooze:s1": null,
+        "snooze:s2": { ...snooze, until: "2026-10-22T07:00:00Z" },
+      }),
+    ).toEqual({
+      notifyMuted: ["b@uwumail.test"],
+      quietHours: { ...quiet, enabled: false },
+      snoozes: { s2: { ...snooze, until: "2026-10-22T07:00:00Z" } },
+    });
+    expect(applyToSettings(base, { "notify.quietHours": quiet })).toEqual({ quietHours: quiet });
+    expect(applyToSettings(base, { "notify.quietHours": null })).toEqual({});
+  });
+
+  it("drops a snooze another device finished", () => {
+    const result = mergeWithServer({
+      server: {},
+      local: { "snooze:s1": snooze, "notify.quietHours": quiet },
+      pending: {},
+      firstSync: false,
+    });
+    expect(result.apply).toEqual({ "snooze:s1": null, "notify.quietHours": null });
+    expect(result.pending).toEqual({});
   });
 });

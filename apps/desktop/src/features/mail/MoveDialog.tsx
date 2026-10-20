@@ -7,7 +7,7 @@ import { useT } from "@/i18n";
 import { useFolders, useMessageActions } from "@/lib/queries";
 import { useUi, type MoveRequest } from "@/state/ui";
 import { buildFolderTree, type FolderNode } from "./folderTree";
-import { folderIcon } from "./view";
+import { folderIcon, folderLabel } from "./view";
 
 function flatten(nodes: FolderNode[]): FolderNode[] {
   return nodes.flatMap((node) => [node, ...flatten(node.children)]);
@@ -31,7 +31,7 @@ function MoveChoices({ request, onDone }: { request: MoveRequest; onDone: () => 
   const [search, setSearch] = useState("");
   const accountId = request.accountIds.length === 1 ? request.accountIds[0] : null;
 
-  const label = (folder: Folder) => (folder.role ? t(`folder.${folder.role}`) : folder.name);
+  const label = (folder: Folder) => folderLabel(folder, t);
   const nodes = useMemo(
     () => (accountId ? flatten(buildFolderTree(folders.filter((folder) => folder.accountId === accountId))) : []),
     [folders, accountId],

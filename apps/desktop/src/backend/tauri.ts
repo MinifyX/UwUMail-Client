@@ -102,6 +102,8 @@ import type {
   ServerAccountFeatures,
   ShareLevel,
   MovedMessage,
+  SnoozedMessage,
+  UnsnoozeOutcome,
   NewAccount,
   OutgoingMessage,
   Protocol,
@@ -680,6 +682,18 @@ export class TauriBackend implements Backend {
     return call<MovedMessage[]>("move_messages", { messageIds, folderId });
   }
 
+  snoozeMessages(messageIds: string[]) {
+    return call<SnoozedMessage[]>("snooze_messages", { messageIds });
+  }
+
+  unsnooze(accountId: string, headerId: string, folderId: string | null) {
+    return call<UnsnoozeOutcome>("unsnooze_message", { accountId, headerId, folderId });
+  }
+
+  folderHeaderIds(folderId: string) {
+    return call<[string, string][]>("folder_header_ids", { folderId });
+  }
+
   markSpam(messageIds: string[], spam: boolean) {
     return call<MovedMessage[]>("mark_spam", { messageIds, spam });
   }
@@ -1034,7 +1048,14 @@ export class TauriBackend implements Backend {
     return call<void>("set_run_in_background", { enabled });
   }
 
-  setNotificationPrefs(prefs: { showContent: boolean; newMail: string; hidden: string; many: string }) {
+  setNotificationPrefs(prefs: {
+    showContent: boolean;
+    newMail: string;
+    hidden: string;
+    many: string;
+    mutedAccounts: string[];
+    quietHours: { from: string; to: string; days: number[] } | null;
+  }) {
     return call<void>("set_notification_prefs", prefs);
   }
 

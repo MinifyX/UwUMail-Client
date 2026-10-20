@@ -1319,6 +1319,20 @@ impl Store {
         Ok(ids)
     }
 
+    /// Thread id and Message-ID of the mail in a folder, newest first (at most `limit`); mail
+    /// without a Message-ID is left out.
+    pub fn header_ids_in_folder(&self, folder_id: &str, limit: usize) -> Result<Vec<(String, String, String)>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT thread_id, id, message_id FROM messages WHERE folder_id = ?1 AND message_id IS NOT NULL
+             ORDER BY date DESC LIMIT ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![folder_id, limit as i64], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
     /// The local id of the message with this IMAP uid in a folder.
     pub fn id_by_uid(&self, folder_id: &str, uid: u32) -> Result<Option<String>> {
         let conn = self.conn();

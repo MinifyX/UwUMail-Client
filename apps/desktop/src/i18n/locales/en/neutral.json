@@ -627,7 +627,8 @@
     "contactsDelete": "Delete contact",
     "contactsNext": "Next contact",
     "contactsPrevious": "Previous contact",
-    "label": "Label"
+    "label": "Label",
+    "snooze": "Snooze"
   },
   "palette": {
     "placeholder": "Type a command",
@@ -647,7 +648,8 @@
     "drafts": "Drafts",
     "archive": "Archive",
     "trash": "Trash",
-    "junk": "Junk"
+    "junk": "Junk",
+    "snoozed": "Snoozed"
   },
   "attachment": {
     "open": "Open with app",
@@ -776,7 +778,8 @@
       "flag": "Flag",
       "none": "Nothing",
       "spam": "Spam",
-      "notSpam": "Not spam"
+      "notSpam": "Not spam",
+      "snooze": "Snooze"
     },
     "pull": {
       "pull": "Pull to refresh",
@@ -2349,5 +2352,36 @@
     "hint": "The server doesn’t let {{name}} in any more. Sign in again with UwUMail and this device gets a fresh app password.",
     "button": "Sign in again with UwUMail",
     "done": "{{email}} is signed in again."
+  },
+  "snooze": {
+    "title": "Snooze until …",
+    "action": "Snooze",
+    "unsnooze": "Back to the inbox now",
+    "pick": "Pick a date and time",
+    "confirm": "Snooze",
+    "until": "Snoozed until {{time}}",
+    "done": "Snoozed until {{time}}",
+    "back": "The mail is back",
+    "failed": "Couldn't snooze the mail. {{reason}}",
+    "preset": {
+      "laterToday": "Later today",
+      "tomorrow": "Tomorrow",
+      "weekend": "This weekend",
+      "nextWeek": "Next week"
+    },
+    "problem": {
+      "invalid": "Pick a date and a time.",
+      "past": "That time has already passed."
+    }
+  },
+  "notify": {
+    "accounts": "Notifications per mailbox",
+    "accountsDesc": "Mailboxes that are switched off stay quiet on all your devices.",
+    "quiet": "Quiet hours",
+    "quietDesc": "No notifications during these hours. They may span midnight.",
+    "from": "From",
+    "to": "to",
+    "days": "Days",
+    "noDays": "Pick at least one day, otherwise the quiet hours never start."
   }
 }

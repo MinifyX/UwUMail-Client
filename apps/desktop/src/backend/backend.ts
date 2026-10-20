@@ -68,6 +68,8 @@ import type {
   MaskedAddressInput,
   MaskedAddressPatch,
   MovedMessage,
+  SnoozedMessage,
+  UnsnoozeOutcome,
   NewAccount,
   OutgoingMessage,
   Person,
@@ -384,6 +386,18 @@ export interface Backend {
   deleteForever(messageIds: string[]): Promise<number>;
   /** Into another folder of the same mailbox. */
   moveMessages(messageIds: string[], folderId: string): Promise<MovedMessage[]>;
+  /**
+   * Snooze: into the mailbox's "Snoozed" folder, made when missing. Refused for mail without a
+   * Message-ID. When it comes back is kept in the settings (`snooze:<id>`).
+   */
+  snoozeMessages(messageIds: string[]): Promise<SnoozedMessage[]>;
+  /**
+   * Brings snoozed mail back, unread: the mail with this Message-ID in the Snoozed folder moves
+   * to `folderId` (the inbox for null or a folder that's gone).
+   */
+  unsnooze(accountId: string, headerId: string, folderId: string | null): Promise<UnsnoozeOutcome>;
+  /** Thread id and Message-ID of the mail in a folder, for "Snoozed until …" on its rows. */
+  folderHeaderIds(folderId: string): Promise<[string, string][]>;
   /** Spam goes into the junk folder; not spam back to the inbox. */
   markSpam(messageIds: string[], spam: boolean): Promise<MovedMessage[]>;
   /** The app's own blocked senders, then what each account keeps on its UwUMail server. New mail from them goes to junk. */
@@ -590,6 +604,10 @@ export interface Backend {
     hidden: string;
     /** Several unseen mails in one notification, `{n}` for how many. */
     many: string;
+    /** Accounts (ids) whose new mail doesn't notify. */
+    mutedAccounts: string[];
+    /** When nothing notifies; null for never. */
+    quietHours: { from: string; to: string; days: number[] } | null;
   }): Promise<void>;
   /** The mailto: link UwUMail was opened with, handed out once. */
   takeMailto(): Promise<MailtoDraft | null>;

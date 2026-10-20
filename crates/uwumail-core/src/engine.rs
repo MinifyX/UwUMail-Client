@@ -212,6 +212,8 @@ pub use refresh_ops::RefreshOutcome;
 mod jmap_shared_ops;
 mod send_later_ops;
 mod shared_ops;
+mod snooze_ops;
+pub use snooze_ops::{SNOOZED_FOLDER, SnoozedMessage, UnsnoozeOutcome};
 
 impl Engine {
     /// Must be called inside a Tokio runtime.

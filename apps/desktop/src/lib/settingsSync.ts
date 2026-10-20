@@ -10,7 +10,14 @@
  * same time never overwrite each other. Removing an entry sets its key to `null`.
  */
 
-import { CURRENCY_CHOICES, NYU_ANIMATIONS, UNDO_SEND_CHOICES, type Settings } from "@/state/settings";
+import {
+  CURRENCY_CHOICES,
+  NYU_ANIMATIONS,
+  UNDO_SEND_CHOICES,
+  type QuietHours,
+  type Settings,
+  type SnoozeEntry,
+} from "@/state/settings";
 
 /** Keys and their values, as the server holds them. */
 export type SettingsValues = Record<string, unknown>;
@@ -48,12 +55,23 @@ export type KeyedChoice = keyof typeof KEYED_CHOICES;
 export const SYNCED_LISTS = ["trustedSenders", "senderAppearance", "linkDomains"] as const;
 export type SyncedList = (typeof SYNCED_LISTS)[number];
 
+/**
+ * Notifications and snooze (one key per entry, like the lists): `notify.muted:<addr>`, the single
+ * key `notify.quietHours` (only while on; removing it switches them off) and `snooze:<id>`.
+ */
+export const NOTIFY_MUTED_PREFIX = "notify.muted:";
+export const QUIET_HOURS_KEY = "notify.quietHours";
+export const SNOOZE_PREFIX = "snooze:";
+export const NOTIFY_SNOOZE_FIELDS = ["notifyMuted", "quietHours", "snoozes"] as const;
+export type NotifySnoozeField = (typeof NOTIFY_SNOOZE_FIELDS)[number];
+
 /** Everything that follows the account. The rest of the settings stays on this device. */
-export type SyncedSettings = Pick<Settings, SyncedChoice | KeyedChoice | SyncedList>;
+export type SyncedSettings = Pick<Settings, SyncedChoice | KeyedChoice | SyncedList | NotifySnoozeField>;
 export const SYNCED_FIELDS: readonly (keyof SyncedSettings)[] = [
   ...SYNCED_CHOICES,
   ...(Object.keys(KEYED_CHOICES) as KeyedChoice[]),
   ...SYNCED_LISTS,
+  ...NOTIFY_SNOOZE_FIELDS,
 ];
 
 /** The setting a key of `KEYED_CHOICES` stands for; the key itself for every other choice. */
@@ -155,6 +173,64 @@ function isSignatureValue(value: unknown): boolean {
   );
 }
 
+/** "HH:MM", 00:00 to 23:59. */
+function isClockTime(value: unknown): boolean {
+  return typeof value === "string" && /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value);
+}
+
+/** Quiet hours as `notify.quietHours` holds them: days 0–6 (0 = Sunday), each once. */
+export function isQuietHours(value: unknown): value is QuietHours {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  if (Object.keys(entry).some((key) => !["enabled", "from", "to", "days"].includes(key))) return false;
+  return (
+    typeof entry.enabled === "boolean" &&
+    isClockTime(entry.from) &&
+    isClockTime(entry.to) &&
+    Array.isArray(entry.days) &&
+    entry.days.length <= 7 &&
+    entry.days.every((day) => Number.isInteger(day) && day >= 0 && day <= 6) &&
+    new Set(entry.days).size === entry.days.length
+  );
+}
+
+/** A Message-ID without angle brackets: 1–998 characters, no controls, spaces or brackets. */
+export function isMessageIdValue(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    [...value].length <= 998 &&
+    !/[\s<>]/.test(value) &&
+    !hasControl(value)
+  );
+}
+
+/** RFC 3339 in UTC, `2026-10-21T07:00:00Z` (fractions of a second allowed). */
+export function isUtcTime(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$/.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  );
+}
+
+/** A snooze as `snooze:<id>` holds it. */
+export function isSnoozeValue(value: unknown): value is SnoozeEntry {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  if (Object.keys(entry).some((key) => !["account", "messageId", "folder", "until"].includes(key))) return false;
+  return (
+    typeof entry.account === "string" &&
+    isSyncableAddress(entry.account) &&
+    isMessageIdValue(entry.messageId) &&
+    typeof entry.folder === "string" &&
+    entry.folder.length > 0 &&
+    [...entry.folder].length <= 1024 &&
+    !hasControl(entry.folder) &&
+    isUtcTime(entry.until)
+  );
+}
+
 /** Bytes a value takes on the server, as UTF-8 JSON. */
 export function valueBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
@@ -168,6 +244,7 @@ export function isSyncable(key: string, value: unknown): boolean {
   if (value === null || value === undefined) return false;
   if (valueBytes(value) > MAX_VALUE_BYTES) return false;
   if (Object.hasOwn(CHOICES, key)) return CHOICES[key as keyof typeof CHOICES](value);
+  if (key === QUIET_HOURS_KEY) return isQuietHours(value);
   const colon = key.indexOf(":");
   if (colon < 0) return false;
   const entry = key.slice(colon + 1);
@@ -180,6 +257,10 @@ export function isSyncable(key: string, value: unknown): boolean {
       return value === true && isAsciiHost(entry);
     case "signature":
       return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isSignatureValue(value);
+    case "notify.muted":
+      return value === true && isSyncableAddress(entry);
+    case "snooze":
+      return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isSnoozeValue(value);
     default:
       return false;
   }
@@ -207,6 +288,9 @@ export function settingsToValues(settings: SyncedSettings): SettingsValues {
   for (const entry of settings.trustedSenders) values[`trustedSenders:${entry}`] = true;
   for (const [address, look] of Object.entries(settings.senderAppearance)) values[`senderAppearance:${address}`] = look;
   for (const domain of settings.linkDomains) values[`linkDomains:${domain}`] = true;
+  for (const address of settings.notifyMuted) values[`${NOTIFY_MUTED_PREFIX}${address}`] = true;
+  if (settings.quietHours.enabled) values[QUIET_HOURS_KEY] = settings.quietHours;
+  for (const [id, snooze] of Object.entries(settings.snoozes)) values[`${SNOOZE_PREFIX}${id}`] = snooze;
   return syncableValues(values);
 }
 
@@ -219,8 +303,16 @@ export function applyToSettings(settings: SyncedSettings, patch: SettingsPatch):
   let trusted: Set<string> | null = null;
   let domains: Set<string> | null = null;
   let looks: Record<string, "light" | "dark"> | null = null;
+  let muted: Set<string> | null = null;
+  let snoozes: Record<string, SnoozeEntry> | null = null;
   for (const [key, value] of Object.entries(patch)) {
     if (value !== null && !isSyncable(key, value)) continue;
+    if (key === QUIET_HOURS_KEY) {
+      // Removed means off; the times stay for switching them on again.
+      const next = value === null ? { ...settings.quietHours, enabled: false } : (value as QuietHours);
+      if (!sameValue(next, settings.quietHours)) changed.quietHours = next;
+      continue;
+    }
     if (isChoiceKey(key)) {
       // A choice is never removed, only changed.
       const field = fieldOf(key);
@@ -244,8 +336,18 @@ export function applyToSettings(settings: SyncedSettings, patch: SettingsPatch):
       looks ??= { ...settings.senderAppearance };
       if (value === null) delete looks[entry];
       else looks[entry] = value as "light" | "dark";
+    } else if (list === "notify.muted") {
+      muted ??= new Set(settings.notifyMuted);
+      if (value === null) muted.delete(entry);
+      else muted.add(entry);
+    } else if (list === "snooze") {
+      snoozes ??= { ...settings.snoozes };
+      if (value === null) delete snoozes[entry];
+      else snoozes[entry] = value as SnoozeEntry;
     }
   }
+  if (muted) changed.notifyMuted = [...muted];
+  if (snoozes) changed.snoozes = snoozes;
   if (trusted) changed.trustedSenders = [...trusted];
   if (domains) changed.linkDomains = [...domains];
   if (looks) changed.senderAppearance = looks;

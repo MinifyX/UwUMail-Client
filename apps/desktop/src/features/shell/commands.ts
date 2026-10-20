@@ -11,6 +11,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadDetail } from "@/backend/types";
 import { startNewContact } from "../contacts/state";
 import { requestMove } from "../mail/selection";
+import { requestSnooze } from "../mail/snooze";
 import { SEARCH_INPUT_ID } from "../mail/ThreadList";
 import { switchWorkspace, WORKSPACE_ICONS, WORKSPACE_KEYS, workspaceName } from "../workspaces/workspaces";
 
@@ -125,6 +126,14 @@ export function buildCommands(
       keys: ["v"],
       needsThread: true,
       run: withThread((thread) => requestMove(thread.messages, () => ui.selectThread(null))),
+    },
+    {
+      id: "snooze",
+      title: t("shortcuts.snooze"),
+      icon: ICONS.reminder,
+      keys: ["b"],
+      needsThread: true,
+      run: withThread((thread) => requestSnooze(thread.messages, () => ui.selectThread(null))),
     },
     {
       id: "label",

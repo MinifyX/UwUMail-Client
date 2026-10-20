@@ -276,6 +276,19 @@ export interface MovedMessage {
   fromFolderId: string;
 }
 
+/** A mail that went into the Snoozed folder, with what bringing it back needs. */
+export interface SnoozedMessage {
+  id: string;
+  accountId: string;
+  /** The Message-ID header, without angle brackets. */
+  headerId: string;
+  /** Where it came from; null when it already was in the Snoozed folder. */
+  folderId: string | null;
+}
+
+/** Back in its folder; not in the Snoozed folder (any more); or this device can't tell yet. */
+export type UnsnoozeOutcome = "moved" | "gone" | "waiting";
+
 /** A mail waiting for its "undo send" time. */
 export interface QueuedSend {
   id: string;
