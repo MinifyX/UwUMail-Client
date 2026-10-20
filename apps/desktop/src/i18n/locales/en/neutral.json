@@ -2377,5 +2377,68 @@
   "unified": {
     "include": "Show under All mailboxes",
     "leaveOut": "Leave out of All mailboxes"
+  },
+  "searchHelp": {
+    "open": "Search tips",
+    "title": "Search with operators",
+    "hint": "Everything else is searched as text.",
+    "example": {
+      "from": "from:leni@example.com",
+      "to": "to:noah",
+      "subject": "subject:invoice",
+      "phrase": "\"exact words\"",
+      "hasAttachment": "has:attachment",
+      "unread": "is:unread",
+      "flagged": "is:flagged",
+      "after": "after:2026-10-01",
+      "before": "before:2026-10-31"
+    },
+    "desc": {
+      "from": "Sent by a name or address",
+      "to": "Sent to a name or address (To or Cc)",
+      "subject": "Words in the subject",
+      "phrase": "These words, in this order",
+      "hasAttachment": "With attachments",
+      "unread": "Not read yet",
+      "flagged": "Flagged",
+      "after": "From this day on",
+      "before": "Before this day"
+    }
+  },
+  "templates": {
+    "title": "Templates",
+    "desc": "Text you write often. In a mail, insert one with the template button or by typing “/” at the start of a line. Follows your account to your other devices.",
+    "insert": "Insert template",
+    "none": "No templates yet",
+    "saveDraft": "Save as template",
+    "saveDraftHint": "Keeps the subject and what you wrote, without signature and quoted mail.",
+    "manage": "Manage templates…",
+    "add": "New template",
+    "edit": "Edit {{name}}",
+    "delete": "Delete {{name}}",
+    "deleted": "“{{name}}” deleted.",
+    "saved": "Saved as template “{{name}}”.",
+    "tooBig": "This template is too large to save.",
+    "untitled": "Template",
+    "name": "Name",
+    "namePlaceholder": "Name, e.g. Thanks for your order",
+    "subject": "Subject",
+    "subjectPlaceholder": "Subject (optional, only used when the mail has none)",
+    "text": "Template text",
+    "textPlaceholder": "Hello {firstName}, …",
+    "placeholder": {
+      "firstName": "First name of the first recipient",
+      "name": "Name of the first recipient",
+      "date": "Today’s date",
+      "myName": "Your name as the sender"
+    }
+  },
+  "attachmentReminder": {
+    "title": "Forgot the attachment?",
+    "body": "Your mail mentions an attachment, but nothing is attached.",
+    "sendAnyway": "Send anyway",
+    "attach": "Attach file",
+    "setting": "Attachment reminder",
+    "settingDesc": "Asks before sending when your text mentions an attachment and none is there. Quoted text and signatures don’t count."
   }
 }

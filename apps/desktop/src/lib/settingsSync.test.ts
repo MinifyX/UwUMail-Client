@@ -35,6 +35,8 @@ const base: SyncedSettings = {
   accountsOrder: [],
   favoriteFolders: [],
   hiddenFolders: [],
+  attachmentReminder: true,
+  templates: {},
 };
 
 const signature = { email: "mini@uwumail.test", name: "Kurz", html: "<p>Mini</p>", forNew: true, forReplies: false };
@@ -128,6 +130,7 @@ describe("settings as keys", () => {
       [
         "assist.currency",
         "assist.refineEvents",
+        "compose.attachmentReminder",
         "conversations",
         "darkImages",
         "language",
@@ -186,6 +189,31 @@ describe("settings as keys", () => {
     expect(settingsToValues(base)).not.toHaveProperty("detectEvents");
     expect(applyToSettings(base, { "mail.detectEvents": false })).toEqual({ detectEvents: false });
     expect(applyToSettings(base, { detectEvents: false })).toEqual({});
+  });
+
+  it("syncs the attachment reminder under the composer's namespace", () => {
+    expect(settingsToValues(base)["compose.attachmentReminder"]).toBe(true);
+    expect(isSyncable("compose.attachmentReminder", "yes")).toBe(false);
+    expect(applyToSettings(base, { "compose.attachmentReminder": false })).toEqual({ attachmentReminder: false });
+  });
+
+  it("syncs templates one key each and checks their shape", () => {
+    const template = { name: "Thanks", subject: "", html: "<p>Hi {firstName}</p>" };
+    expect(settingsToValues({ ...base, templates: { "aB3_-xYz0123456Q": template } })).toMatchObject({
+      "template:aB3_-xYz0123456Q": template,
+    });
+    expect(isSyncable("template:abc", template)).toBe(true);
+    expect(isSyncable("template:a/b", template)).toBe(false);
+    expect(isSyncable("template:abc", { ...template, name: "" })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, name: "x".repeat(101) })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, subject: "a\nb" })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, subject: "s".repeat(999) })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, extra: 1 })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, html: "x".repeat(MAX_VALUE_BYTES) })).toBe(false);
+    const current = { ...base, templates: { old: template, keep: template } };
+    expect(applyToSettings(current, { "template:old": null, "template:new": template })).toEqual({
+      templates: { keep: template, new: template },
+    });
   });
 
   it("diffs into a patch with null for removals", () => {

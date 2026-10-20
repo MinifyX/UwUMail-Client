@@ -2377,5 +2377,68 @@
   "unified": {
     "include": "Unter „Alle Postfächer“ zeigen",
     "leaveOut": "Aus „Alle Postfächer“ ausblenden"
+  },
+  "searchHelp": {
+    "open": "Suchtipps",
+    "title": "Suche verfeinern",
+    "hint": "Alles andere wird als Text gesucht.",
+    "example": {
+      "from": "from:leni@example.com",
+      "to": "to:noah",
+      "subject": "subject:Rechnung",
+      "phrase": "\"genau diese Worte\"",
+      "hasAttachment": "has:attachment",
+      "unread": "is:unread",
+      "flagged": "is:flagged",
+      "after": "after:2026-10-01",
+      "before": "before:2026-10-31"
+    },
+    "desc": {
+      "from": "Von einem Namen oder einer Adresse",
+      "to": "An einen Namen oder eine Adresse (An oder Cc)",
+      "subject": "Wörter im Betreff",
+      "phrase": "Diese Wörter in dieser Reihenfolge",
+      "hasAttachment": "Mit Anhängen",
+      "unread": "Noch nicht gelesen",
+      "flagged": "Markiert",
+      "after": "Ab diesem Tag",
+      "before": "Vor diesem Tag"
+    }
+  },
+  "templates": {
+    "title": "Vorlagen",
+    "desc": "Text, den du oft schreibst. In einer Mail fügst du ihn mit dem Vorlagen-Knopf ein oder indem du am Zeilenanfang „/“ tippst. Folgt deinem Konto auf deine anderen Geräte.",
+    "insert": "Vorlage einfügen",
+    "none": "Noch keine Vorlagen",
+    "saveDraft": "Als Vorlage speichern",
+    "saveDraftHint": "Behält den Betreff und was du geschrieben hast, ohne Signatur und zitierte Mail.",
+    "manage": "Vorlagen verwalten…",
+    "add": "Neue Vorlage",
+    "edit": "{{name}} bearbeiten",
+    "delete": "{{name}} löschen",
+    "deleted": "„{{name}}“ gelöscht.",
+    "saved": "Als Vorlage „{{name}}“ gespeichert.",
+    "tooBig": "Diese Vorlage ist zu groß zum Speichern.",
+    "untitled": "Vorlage",
+    "name": "Name",
+    "namePlaceholder": "Name, z. B. Danke für die Bestellung",
+    "subject": "Betreff",
+    "subjectPlaceholder": "Betreff (optional, nur wenn die Mail noch keinen hat)",
+    "text": "Text der Vorlage",
+    "textPlaceholder": "Hallo {firstName}, …",
+    "placeholder": {
+      "firstName": "Vorname des ersten Empfängers",
+      "name": "Name des ersten Empfängers",
+      "date": "Heutiges Datum",
+      "myName": "Dein Name als Absender"
+    }
+  },
+  "attachmentReminder": {
+    "title": "Anhang vergessen?",
+    "body": "In deiner Mail ist von einem Anhang die Rede, aber es ist nichts angehängt.",
+    "sendAnyway": "Trotzdem senden",
+    "attach": "Datei anhängen",
+    "setting": "Anhang-Erinnerung",
+    "settingDesc": "Fragt vor dem Senden nach, wenn dein Text einen Anhang erwähnt und keiner da ist. Zitate und Signaturen zählen nicht."
   }
 }

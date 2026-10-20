@@ -35,6 +35,7 @@ pub mod oauth;
 pub mod ocr;
 pub mod phishing;
 pub mod pictures;
+pub mod search_query;
 pub mod secrets;
 pub mod send_later;
 pub mod shared;

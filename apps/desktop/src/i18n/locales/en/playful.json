@@ -354,5 +354,13 @@
     "done_one": "All caught up, {{count}} message read (^ω^)",
     "done_other": "All caught up, {{count}} messages read (^ω^)",
     "nothing": "Nothing unread here, all cozy"
+  },
+  "templates": {
+    "none": "No templates yet (・ω・)",
+    "saved": "Tucked away as template “{{name}}” ✿"
+  },
+  "attachmentReminder": {
+    "title": "Forgot something? (・・;)",
+    "body": "Your mail talks about an attachment, but there’s nothing attached yet."
   }
 }

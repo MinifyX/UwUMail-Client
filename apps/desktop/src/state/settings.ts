@@ -49,6 +49,14 @@ export interface FolderRef {
   folder: string;
 }
 
+/** A text snippet the composer inserts, see lib/templates. Follows the account as `template:<id>`. */
+export interface MailTemplate {
+  name: string;
+  /** Put in when the mail has no subject yet; may be empty. */
+  subject: string;
+  html: string;
+}
+
 export interface Settings {
   onboarded: boolean;
   layout: LayoutMode;
@@ -153,6 +161,13 @@ export interface Settings {
   hiddenFolders: FolderRef[];
   /** The sidebar shows hidden folders anyway (dimmed). This device only. */
   showHiddenFolders: boolean;
+  /**
+   * Sending asks first when the text mentions an attachment and none is there. Follows the account
+   * as `compose.attachmentReminder`.
+   */
+  attachmentReminder: boolean;
+  /** Text snippets by id (16 random characters), see lib/templates. */
+  templates: Record<string, MailTemplate>;
 }
 
 interface SettingsActions {
@@ -167,6 +182,8 @@ interface SettingsActions {
   toggleFolder: (folderId: string) => void;
   toggleAccount: (accountId: string) => void;
   setAccountWorkspace: (accountId: string, workspace: Workspace) => void;
+  saveTemplate: (id: string, template: MailTemplate) => void;
+  deleteTemplate: (id: string) => void;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -221,6 +238,8 @@ export const DEFAULT_SETTINGS: Settings = {
   favoriteFolders: [],
   hiddenFolders: [],
   showHiddenFolders: false,
+  attachmentReminder: true,
+  templates: {},
 };
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -258,6 +277,13 @@ export const useSettings = create<Settings & SettingsActions>()(
           const others = state.businessAccounts.filter((id) => id !== accountId);
           return { businessAccounts: workspace === "business" ? [...others, accountId] : others };
         }),
+      saveTemplate: (id, template) => set((state) => ({ templates: { ...state.templates, [id]: template } })),
+      deleteTemplate: (id) =>
+        set((state) => {
+          const rest = { ...state.templates };
+          delete rest[id];
+          return { templates: rest };
+        }),
     }),
     {
       name: "uwumail.settings",
@@ -294,11 +320,20 @@ export const useSettings = create<Settings & SettingsActions>()(
         for (const field of ["unifiedFolders", "favoriteFolders", "hiddenFolders"] as const) {
           state[field] = state[field].filter((ref) => isText(ref?.account) && isText(ref?.folder));
         }
+        state.templates = Object.fromEntries(
+          Object.entries(state.templates).filter(([, template]) => isTemplateShape(template)),
+        );
         return state;
       },
     },
   ),
 );
+
+function isTemplateShape(value: unknown): value is MailTemplate {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return typeof entry.name === "string" && typeof entry.subject === "string" && typeof entry.html === "string";
+}
 
 /** The layout in use: the stored one, except on a phone, which has no choice (see `layoutChoice`). */
 export function useLayout(): LayoutMode {

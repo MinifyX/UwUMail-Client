@@ -354,5 +354,13 @@
     "done_one": "Alles erledigt, {{count}} Nachricht gelesen (^ω^)",
     "done_other": "Alles erledigt, {{count}} Nachrichten gelesen (^ω^)",
     "nothing": "Hier ist nichts ungelesen, alles kuschelig"
+  },
+  "templates": {
+    "none": "Noch keine Vorlagen (・ω・)",
+    "saved": "Als Vorlage „{{name}}“ verstaut ✿"
+  },
+  "attachmentReminder": {
+    "title": "Etwas vergessen? (・・;)",
+    "body": "Deine Mail spricht von einem Anhang, aber angehängt ist noch nichts."
   }
 }
