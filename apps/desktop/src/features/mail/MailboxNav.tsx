@@ -7,7 +7,7 @@ import {
   type IconProps,
   ICONS,
   Menu,
-  type MenuItem,
+  type MenuEntry,
   Wordmark,
 } from "@uwusuite/design";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
@@ -16,7 +16,9 @@ import { backend } from "@/backend/backend";
 import type { Account, Folder, MailboxView } from "@/backend/types";
 import { AccountDot } from "@/components/ui/Avatar";
 import { useT } from "@/i18n";
-import { useFolders, useMessageActions, useVisibleAccounts } from "@/lib/queries";
+import { accountAddress, folderRefOf, hasRef, hiddenFromUnified, resolveRefs } from "@/lib/arrangement";
+import { useAccounts, useFolders, useMessageActions, useVisibleAccounts } from "@/lib/queries";
+import { moveAccount, setFolderListed, setHiddenFromUnified, topLevel, useUnifiedTally } from "@/state/arrangement";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
 import { nestAccounts, takesSharedMailboxes, useSharedMailboxes } from "@/state/sharedMailboxes";
 import { toast } from "@/state/toasts";
@@ -33,6 +35,7 @@ import { droppedThreads, isThreadDrag } from "./threadDrag";
 import { ScheduledNavItem } from "../compose/ScheduledSends";
 import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
 import { accountLabel, sharedMailboxLabel } from "@/lib/accountLabel";
+import { markAllRead, viewScope } from "./markAllRead";
 
 const UNIFIED_ROLES = ["inbox", "unread", "flagged", "drafts", "sent"] as const;
 
@@ -42,16 +45,23 @@ interface NavItemProps {
   count?: number;
   active: boolean;
   onClick: () => void;
+  /** Shown on hover, e.g. which mailbox a favorite folder is in. */
+  title?: string;
+  /** What else can be done with it, behind "…" and the context menu. */
+  menu?: { label: string; items: MenuEntry[] };
 }
 
-function NavItem({ icon: Glyph, label, count, active, onClick }: NavItemProps) {
-  return (
+function NavItem({ icon: Glyph, label, count, active, onClick, title, menu }: NavItemProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const button = (
     <button
       type="button"
       onClick={onClick}
+      title={title}
       aria-current={active ? "page" : undefined}
       className={clsx(
-        "group flex h-9 w-full items-center gap-3 rounded-xl px-3 text-left text-[13.5px] transition-colors",
+        "group flex h-9 w-full min-w-0 items-center gap-3 rounded-xl px-3 text-left text-[13.5px] transition-colors",
+        menu && "flex-1",
         active ? "bg-pink-tint font-semibold text-pink-ink" : "text-ink/85 hover:bg-pink-tint/50",
       )}
     >
@@ -59,6 +69,35 @@ function NavItem({ icon: Glyph, label, count, active, onClick }: NavItemProps) {
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {count !== undefined && count > 0 && <Badge count={count} />}
     </button>
+  );
+  if (!menu) return button;
+  return (
+    <div
+      className="group relative flex items-center"
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setMenuOpen(true);
+      }}
+    >
+      {button}
+      <Menu
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        align="end"
+        className="mr-1"
+        items={menu.items}
+        trigger={({ toggle, ...aria }) => (
+          <IconButton
+            icon={ICONS.more}
+            size="sm"
+            label={menu.label}
+            onClick={toggle}
+            className={clsx("absolute right-1 size-7!", HOVER_ONLY)}
+            {...aria}
+          />
+        )}
+      />
+    </div>
   );
 }
 
@@ -68,15 +107,61 @@ const INDENT = 16;
 const HOVER_ONLY =
   "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 [@media(hover:none)]:opacity-100";
 
-/** What can be done with a folder: new folder inside; rename and delete for folders people made; emptying trash and junk. */
-function folderMenuItems(folder: Folder, t: (key: string) => string): MenuItem[] {
+interface FolderPlace {
+  favorite: boolean;
+  hidden: boolean;
+  /** Taken into the unified inbox. */
+  unified: boolean;
+}
+
+/**
+ * What can be done with a folder: marking it read, pinning it to the favorites, taking it into
+ * the unified inbox, hiding it; new folder inside; rename and delete for folders people made;
+ * emptying trash and junk.
+ */
+function folderMenuItems(
+  folder: Folder,
+  account: Account,
+  place: FolderPlace,
+  t: (key: string) => string,
+  client: QueryClient,
+): MenuEntry[] {
   const edit = useFolderEdit.getState();
-  const items: MenuItem[] = [
-    {
-      label: t("folders.newInside"),
-      onSelect: () => edit.open({ kind: "create", accountId: folder.accountId, parent: folder }),
-    },
-  ];
+  const items: MenuEntry[] = [];
+  if (folder.selectable) {
+    items.push({
+      label: t("markAllRead.folder"),
+      icon: ICONS.done,
+      onSelect: () =>
+        void markAllRead(client, {
+          kind: "view",
+          view: { kind: "folder", accountId: account.id, folderId: folder.id },
+        }),
+    });
+    items.push({
+      label: place.favorite ? t("folders.unfavorite") : t("folders.favorite"),
+      icon: ICONS.favorite,
+      onSelect: () => setFolderListed("favoriteFolders", folder, account, !place.favorite),
+    });
+    if (folder.role !== "inbox") {
+      items.push({
+        label: place.unified ? t("folders.leaveUnified") : t("folders.joinUnified"),
+        icon: ICONS.allMailboxes,
+        onSelect: () => setFolderListed("unifiedFolders", folder, account, !place.unified),
+      });
+    }
+  }
+  if (folder.role !== "inbox") {
+    items.push({
+      label: place.hidden ? t("folders.unhide") : t("folders.hide"),
+      icon: place.hidden ? ICONS.show : ICONS.hide,
+      onSelect: () => setFolderListed("hiddenFolders", folder, account, !place.hidden),
+    });
+  }
+  items.push("separator", {
+    label: t("folders.newInside"),
+    onSelect: () => edit.open({ kind: "create", accountId: folder.accountId, parent: folder }),
+  });
   if (!folder.role) {
     items.push(
       { label: t("folders.rename"), onSelect: () => edit.open({ kind: "rename", folder }) },
@@ -114,10 +199,25 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   const actions = useMessageActions();
   const [dropping, setDropping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const client = useQueryClient();
+  const ref = folderRefOf(folder, account);
+  const place: FolderPlace = {
+    favorite: useSettings((s) => hasRef(s.favoriteFolders, ref)),
+    hidden: useSettings((s) => hasRef(s.hiddenFolders, ref)),
+    unified: useSettings((s) => hasRef(s.unifiedFolders, ref)),
+  };
+  const showHidden = useSettings((s) => s.showHiddenFolders);
   const accepts = (event: React.DragEvent) => folder.selectable && isThreadDrag(event.dataTransfer);
+  // A hidden folder takes its subfolders with it.
+  if (place.hidden && !showHidden) return null;
 
   return (
-    <li role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined} aria-selected={active}>
+    <li
+      role="treeitem"
+      aria-expanded={hasChildren ? !collapsed : undefined}
+      aria-selected={active}
+      className={clsx(place.hidden && "opacity-60")}
+    >
       <div
         onDragOver={(event) => {
           if (!accepts(event)) return;
@@ -184,7 +284,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
           onOpenChange={setMenuOpen}
           align="end"
           className="mr-1"
-          items={folderMenuItems(folder, t)}
+          items={folderMenuItems(folder, account, place, t, client)}
           trigger={({ toggle, ...aria }) => (
             <IconButton
               icon={ICONS.more}
@@ -208,15 +308,41 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   );
 }
 
-/** What can be done with a mailbox: new folder; for a Microsoft 365 account its shared mailboxes; removing a shared one. */
-function accountMenuItems(account: Account, t: (key: string) => string, client: QueryClient): MenuItem[] {
+/**
+ * What can be done with a mailbox: marking it read, leaving it out of the unified views, showing
+ * its hidden folders; new folder; for a Microsoft 365 account its shared mailboxes; removing a
+ * shared one.
+ */
+function accountMenuItems(
+  account: Account,
+  t: (key: string) => string,
+  client: QueryClient,
+  { leftOut, hasHidden, showHidden }: { leftOut: boolean; hasHidden: boolean; showHidden: boolean },
+): MenuEntry[] {
   const shared = useSharedMailboxes.getState();
-  const items: MenuItem[] = [
+  const items: MenuEntry[] = [
     {
-      label: t("folders.new"),
-      onSelect: () => useFolderEdit.getState().open({ kind: "create", accountId: account.id, parent: null }),
+      label: t("markAllRead.account"),
+      icon: ICONS.done,
+      onSelect: () => void markAllRead(client, { kind: "account", accountId: account.id }),
+    },
+    {
+      label: leftOut ? t("unified.include") : t("unified.leaveOut"),
+      icon: ICONS.allMailboxes,
+      onSelect: () => setHiddenFromUnified(account, !leftOut),
     },
   ];
+  if (hasHidden) {
+    items.push({
+      label: showHidden ? t("folders.hideHidden") : t("folders.showHidden"),
+      icon: showHidden ? ICONS.hide : ICONS.show,
+      onSelect: () => useSettings.getState().update({ showHiddenFolders: !showHidden }),
+    });
+  }
+  items.push("separator", {
+    label: t("folders.new"),
+    onSelect: () => useFolderEdit.getState().open({ kind: "create", accountId: account.id, parent: null }),
+  });
   if (takesSharedMailboxes(account)) {
     items.push(
       { label: t("shared.add"), onSelect: () => shared.open({ kind: "add", parent: account }) },
@@ -229,11 +355,15 @@ function accountMenuItems(account: Account, t: (key: string) => string, client: 
   return items;
 }
 
+/** What a dragged mailbox heading carries: the mailbox's id. */
+const ACCOUNT_DRAG = "application/x-uwumail-account";
+
 function AccountSection({
   account,
   shared = [],
   folders,
   nested = false,
+  onReorder,
 }: {
   account: Account;
   /** Its shared mailboxes, shown inside it. */
@@ -241,12 +371,19 @@ function AccountSection({
   folders: Folder[];
   /** A shared mailbox inside its account. */
   nested?: boolean;
+  /** Dragging the heading reorders the mailboxes. */
+  onReorder?: (moved: string, target: Account) => void;
 }) {
   const open = useSettings((s) => s.expandedAccounts.includes(account.id));
   const toggle = useSettings((s) => s.toggleAccount);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dropping, setDropping] = useState(false);
   const { t } = useT();
   const client = useQueryClient();
+  const leftOut = useSettings((s) => hiddenFromUnified(account, s.unifiedHidden));
+  const showHidden = useSettings((s) => s.showHiddenFolders);
+  const address = accountAddress(account);
+  const hasHidden = useSettings((s) => s.hiddenFolders.some((ref) => ref.account === address));
   const { status } = account;
   const statusLabel =
     status.state === "syncing"
@@ -265,10 +402,30 @@ function AccountSection({
   return (
     <section className={clsx("flex flex-col gap-0.5", nested && "ml-3 border-l border-hairline pl-1")}>
       <div
-        className="group flex items-center"
+        className={clsx("group flex items-center rounded-lg", dropping && "ring-2 ring-pink")}
         onContextMenu={(event) => {
           event.preventDefault();
           setMenuOpen(true);
+        }}
+        draggable={onReorder !== undefined}
+        onDragStart={(event) => {
+          if (!onReorder) return;
+          event.dataTransfer.setData(ACCOUNT_DRAG, account.id);
+          event.dataTransfer.effectAllowed = "move";
+        }}
+        onDragOver={(event) => {
+          if (!onReorder || !event.dataTransfer.types.includes(ACCOUNT_DRAG)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          setDropping(true);
+        }}
+        onDragLeave={() => setDropping(false)}
+        onDrop={(event) => {
+          setDropping(false);
+          const moved = event.dataTransfer.getData(ACCOUNT_DRAG);
+          if (!onReorder || !moved) return;
+          event.preventDefault();
+          if (moved !== account.id) onReorder(moved, account);
         }}
       >
         <button
@@ -309,7 +466,7 @@ function AccountSection({
           onOpenChange={setMenuOpen}
           align="end"
           className="mr-1"
-          items={accountMenuItems(account, t, client)}
+          items={accountMenuItems(account, t, client, { leftOut, hasHidden, showHidden })}
           trigger={({ toggle, ...aria }) => (
             <IconButton
               icon={ICONS.more}
@@ -373,8 +530,24 @@ export function MailboxNav({
   const openSettings = useUi((s) => s.openSettings);
   const setAddAccountOpen = useUi((s) => s.setAddAccountOpen);
 
+  const { data: everyAccount = [] } = useAccounts();
+  const client = useQueryClient();
+  const order = useSettings((s) => s.accountsOrder);
+  const favoriteRefs = useSettings((s) => s.favoriteFolders);
+  const tally = useUnifiedTally();
+
   const folders = allFolders.filter((f) => accounts.some((account) => account.id === f.accountId));
-  const unreadInboxes = folders.filter((f) => f.role === "inbox").reduce((sum, f) => sum + f.unread, 0);
+  // The unified inbox's count: without the mailboxes left out of it, with the folders it takes in.
+  const unreadInboxes = folders
+    .filter((f) => !tally.leftOut.includes(f.accountId))
+    .filter((f) => f.role === "inbox" || tally.extraFolderIds.includes(f.id))
+    .reduce((sum, f) => sum + f.unread, 0);
+  const favorites = resolveRefs(favoriteRefs, accounts, folders).filter((folder) => folder.selectable);
+  const ordered = topLevel(accounts, order);
+  const reorder = (moved: string, target: Account) => {
+    const account = everyAccount.find((each) => each.id === moved);
+    if (account) moveAccount(everyAccount, account, target);
+  };
   // Where no switch sits above, the heading tells which workspace this is.
   const heading = workspaces
     ? (!workspaceSwitch || accounts.length > 1) && workspaceName(activeWorkspace)
@@ -405,30 +578,85 @@ export function MailboxNav({
           {heading && <p className="px-3 pb-1 text-[12px] font-bold tracking-wide text-muted uppercase">{heading}</p>}
           {UNIFIED_ROLES.map((role) => {
             const target: MailboxView = { kind: "unified", role };
+            const label = t(`nav.${role}`);
             return (
               <NavItem
                 key={role}
                 icon={UNIFIED_ICONS[role]}
-                label={t(`nav.${role}`)}
+                label={label}
                 count={role === "inbox" ? unreadInboxes : undefined}
                 active={sameView(view, target)}
                 onClick={() => setView(target)}
+                menu={
+                  role === "drafts"
+                    ? undefined
+                    : {
+                        label: t("folders.more", { name: label }),
+                        items: [
+                          {
+                            label: t("markAllRead.view"),
+                            icon: ICONS.done,
+                            onSelect: () => void markAllRead(client, viewScope(client, target)),
+                          },
+                        ],
+                      }
+                }
               />
             );
           })}
           <ScheduledNavItem />
         </section>
 
+        {favorites.length > 0 && (
+          <section className="flex flex-col gap-0.5" aria-label={t("nav.favorites")}>
+            <p className="px-3 pb-1 text-[12px] font-bold tracking-wide text-muted uppercase">{t("nav.favorites")}</p>
+            {favorites.map((folder) => {
+              const account = accounts.find((each) => each.id === folder.accountId)!;
+              const target: MailboxView = { kind: "folder", accountId: folder.accountId, folderId: folder.id };
+              const label = folder.role ? t(`folder.${folder.role}`) : folder.name;
+              return (
+                <NavItem
+                  key={folder.id}
+                  icon={folderIcon(folder)}
+                  label={accounts.length > 1 ? `${label} · ${accountLabel(account)}` : label}
+                  title={account.email}
+                  count={countsUnread(folder) ? folder.unread : undefined}
+                  active={sameView(view, target)}
+                  onClick={() => setView(target)}
+                  menu={{
+                    label: t("folders.more", { name: label }),
+                    items: [
+                      {
+                        label: t("markAllRead.folder"),
+                        icon: ICONS.done,
+                        onSelect: () => void markAllRead(client, { kind: "view", view: target }),
+                      },
+                      {
+                        label: t("folders.unfavorite"),
+                        icon: ICONS.favorite,
+                        onSelect: () => setFolderListed("favoriteFolders", folder, account, false),
+                      },
+                    ],
+                  }}
+                />
+              );
+            })}
+          </section>
+        )}
+
         <LabelNav />
 
-        {nestAccounts(accounts).map(({ account, shared }) => (
-          <AccountSection
-            key={account.id}
-            account={account}
-            shared={shared}
-            folders={folders.filter((f) => f.accountId === account.id || shared.some((s) => s.id === f.accountId))}
-          />
-        ))}
+        {nestAccounts(ordered.flatMap((top) => [top, ...accounts.filter((a) => a.parentId === top.id)])).map(
+          ({ account, shared }) => (
+            <AccountSection
+              key={account.id}
+              account={account}
+              shared={shared}
+              onReorder={reorder}
+              folders={folders.filter((f) => f.accountId === account.id || shared.some((s) => s.id === f.accountId))}
+            />
+          ),
+        )}
       </div>
 
       <div className="flex flex-col gap-0.5 border-t border-hairline pt-3">

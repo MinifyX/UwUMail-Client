@@ -349,5 +349,10 @@
       "newMail": "New mail for you! ✉",
       "many": "{{n}}× mail for you! ✉"
     }
+  },
+  "markAllRead": {
+    "done_one": "All caught up, {{count}} message read (^ω^)",
+    "done_other": "All caught up, {{count}} messages read (^ω^)",
+    "nothing": "Nothing unread here, all cozy"
   }
 }

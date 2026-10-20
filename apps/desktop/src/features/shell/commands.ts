@@ -10,6 +10,7 @@ import { useUi } from "@/state/ui";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadDetail } from "@/backend/types";
 import { startNewContact } from "../contacts/state";
+import { markAllRead, viewScope } from "../mail/markAllRead";
 import { requestMove } from "../mail/selection";
 import { SEARCH_INPUT_ID } from "../mail/ThreadList";
 import { switchWorkspace, WORKSPACE_ICONS, WORKSPACE_KEYS, workspaceName } from "../workspaces/workspaces";
@@ -206,6 +207,13 @@ export function buildCommands(
         ui.selectThread(null);
         await afterChange(client);
       }),
+    },
+    {
+      id: "markAllRead",
+      title: t("shortcuts.markAllRead"),
+      icon: ICONS.done,
+      keys: ["shift+i"],
+      run: () => markAllRead(client, viewScope(client, useUi.getState().view)),
     },
     {
       id: "inbox",

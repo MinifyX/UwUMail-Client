@@ -18,7 +18,8 @@
       "calendar": "Kalender",
       "contacts": "Kontakte"
     },
-    "scheduled": "Geplant"
+    "scheduled": "Geplant",
+    "favorites": "Favoriten"
   },
   "filter": {
     "all": "Alle",
@@ -558,7 +559,13 @@
     "serverAccount": "Postfach",
     "renameAccount": "Umbenennen",
     "accountNameOf": "Name von {{email}}",
-    "accountRenamed": "Postfach umbenannt"
+    "accountRenamed": "Postfach umbenannt",
+    "accountUp": "{{email}} nach oben",
+    "accountDown": "{{email}} nach unten",
+    "inUnified": "Unter „Alle Postfächer“",
+    "inUnifiedDesc": "Die Mails erscheinen in Posteingang, Ungelesen, Markiert, Entwürfe und Gesendet von „Alle Postfächer“ und zählen zu deren Zahlen.",
+    "showHiddenFolders": "Ausgeblendete Ordner zeigen",
+    "showHiddenFoldersDesc": "Ausgeblendete Ordner erscheinen abgeblendet in der Seitenleiste."
   },
   "theme": {
     "system": "System",
@@ -627,7 +634,8 @@
     "contactsDelete": "Kontakt löschen",
     "contactsNext": "Nächster Kontakt",
     "contactsPrevious": "Vorheriger Kontakt",
-    "label": "Label vergeben"
+    "label": "Label vergeben",
+    "markAllRead": "Alle als gelesen markieren"
   },
   "palette": {
     "placeholder": "Befehl eingeben",
@@ -904,7 +912,15 @@
       "tooLong": "Der Name ist zu lang.",
       "dots": "„.“ und „..“ gehen als Ordnername nicht.",
       "taken": "Hier gibt es schon einen Ordner mit diesem Namen."
-    }
+    },
+    "favorite": "Zu Favoriten hinzufügen",
+    "unfavorite": "Aus Favoriten entfernen",
+    "joinUnified": "Im gemeinsamen Posteingang zeigen",
+    "leaveUnified": "Aus dem gemeinsamen Posteingang nehmen",
+    "hide": "Ordner ausblenden",
+    "unhide": "Ordner wieder einblenden",
+    "showHidden": "Ausgeblendete zeigen",
+    "hideHidden": "Ausgeblendete verbergen"
   },
   "calendar": {
     "title": "Kalender",
@@ -2349,5 +2365,17 @@
     "hint": "Der Server lässt {{name}} nicht mehr rein. Melde dich neu mit UwUMail an, dann bekommt dieses Gerät ein frisches App-Passwort.",
     "button": "Mit UwUMail neu anmelden",
     "done": "{{email}} ist wieder angemeldet."
+  },
+  "markAllRead": {
+    "view": "Alle als gelesen markieren",
+    "folder": "Ordner als gelesen markieren",
+    "account": "Postfach als gelesen markieren",
+    "done_one": "{{count}} Nachricht als gelesen markiert",
+    "done_other": "{{count}} Nachrichten als gelesen markiert",
+    "nothing": "Hier ist nichts ungelesen"
+  },
+  "unified": {
+    "include": "Unter „Alle Postfächer“ zeigen",
+    "leaveOut": "Aus „Alle Postfächer“ ausblenden"
   }
 }

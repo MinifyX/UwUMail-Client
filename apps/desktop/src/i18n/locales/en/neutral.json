@@ -18,7 +18,8 @@
       "calendar": "Calendar",
       "contacts": "Contacts"
     },
-    "scheduled": "Scheduled"
+    "scheduled": "Scheduled",
+    "favorites": "Favorites"
   },
   "filter": {
     "all": "All",
@@ -558,7 +559,13 @@
     "serverAccount": "Mailbox",
     "renameAccount": "Rename",
     "accountNameOf": "Name of {{email}}",
-    "accountRenamed": "Mailbox renamed"
+    "accountRenamed": "Mailbox renamed",
+    "accountUp": "Move {{email}} up",
+    "accountDown": "Move {{email}} down",
+    "inUnified": "Under All mailboxes",
+    "inUnifiedDesc": "Its mail shows in the inbox, unread, flagged, drafts and sent of All mailboxes and counts towards their badges.",
+    "showHiddenFolders": "Show hidden folders",
+    "showHiddenFoldersDesc": "Hidden folders show dimmed in the sidebar."
   },
   "theme": {
     "system": "System",
@@ -627,7 +634,8 @@
     "contactsDelete": "Delete contact",
     "contactsNext": "Next contact",
     "contactsPrevious": "Previous contact",
-    "label": "Label"
+    "label": "Label",
+    "markAllRead": "Mark all as read"
   },
   "palette": {
     "placeholder": "Type a command",
@@ -904,7 +912,15 @@
       "tooLong": "That name is too long.",
       "dots": "“.” and “..” can't be folder names.",
       "taken": "There's already a folder with that name here."
-    }
+    },
+    "favorite": "Add to favorites",
+    "unfavorite": "Remove from favorites",
+    "joinUnified": "Show in the unified inbox",
+    "leaveUnified": "Remove from the unified inbox",
+    "hide": "Hide folder",
+    "unhide": "Show folder again",
+    "showHidden": "Show hidden folders",
+    "hideHidden": "Hide hidden folders"
   },
   "calendar": {
     "title": "Calendar",
@@ -2349,5 +2365,17 @@
     "hint": "The server doesn’t let {{name}} in any more. Sign in again with UwUMail and this device gets a fresh app password.",
     "button": "Sign in again with UwUMail",
     "done": "{{email}} is signed in again."
+  },
+  "markAllRead": {
+    "view": "Mark all as read",
+    "folder": "Mark folder as read",
+    "account": "Mark mailbox as read",
+    "done_one": "Marked {{count}} message as read",
+    "done_other": "Marked {{count}} messages as read",
+    "nothing": "Nothing unread here"
+  },
+  "unified": {
+    "include": "Show under All mailboxes",
+    "leaveOut": "Leave out of All mailboxes"
   }
 }

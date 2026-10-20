@@ -35,6 +35,8 @@ import {
 import { toast } from "@/state/toasts";
 import { useMailRulesAccounts } from "../rules/useMailRules";
 import { nestAccounts, takesSharedMailboxes, useSharedMailboxes } from "@/state/sharedMailboxes";
+import { accountAddress, hiddenFromUnified } from "@/lib/arrangement";
+import { moveAccount, setHiddenFromUnified, topLevel } from "@/state/arrangement";
 import { searchSharedMailboxes } from "../accounts/SharedMailboxDialogs";
 import { signInAgain, UwumailSignInAgainHint } from "../accounts/SignInAgain";
 import { AccountName } from "./AccountName";
@@ -456,6 +458,13 @@ function Accounts() {
   const setAccountWorkspace = useSettings((s) => s.setAccountWorkspace);
   const [switching, setSwitching] = useState<string | null>(null);
   const openShared = useSharedMailboxes((s) => s.open);
+  const order = useSettings((s) => s.accountsOrder);
+  const unifiedHidden = useSettings((s) => s.unifiedHidden);
+  const showHiddenFolders = useSettings((s) => s.showHiddenFolders);
+  const hasHiddenFolders = useSettings((s) => s.hiddenFolders.length > 0);
+  const updateSettings = useSettings((s) => s.update);
+  const ordered = topLevel(accounts, order);
+  const nested = nestAccounts(ordered.flatMap((top) => [top, ...accounts.filter((a) => a.parentId === top.id)]));
 
   const switchProtocol = async (account: Account, protocol: Protocol) => {
     const name = PROTOCOL_NAMES[protocol];
@@ -476,9 +485,21 @@ function Accounts() {
     <div className="flex flex-col gap-3 py-4">
       <SettingsSyncRow />
       <WorkspaceSettings />
+      {hasHiddenFolders && (
+        <Toggle
+          checked={showHiddenFolders}
+          onChange={(on) => updateSettings({ showHiddenFolders: on })}
+          label={t("settings.showHiddenFolders")}
+          description={t("settings.showHiddenFoldersDesc")}
+        />
+      )}
       <ul className="flex flex-col gap-2">
-        {nestAccounts(accounts).map(({ account, shared }) => {
+        {nested.map(({ account, shared }, index) => {
           const other = account.protocols.find((p) => p !== account.protocol);
+          const name = accountLabel(account);
+          // Several mailboxes with one address move together.
+          const above = nested[index - 1]?.account;
+          const below = nested[index + 1]?.account;
           return (
             <li
               key={account.id}
@@ -494,6 +515,24 @@ function Accounts() {
                 }
               />
               <div className="flex flex-wrap gap-2">
+                {nested.length > 1 && (
+                  <span className="flex gap-1">
+                    <IconButton
+                      icon={ICONS.moveUp}
+                      size="sm"
+                      label={t("settings.accountUp", { email: name })}
+                      disabled={!above || accountAddress(above) === accountAddress(account)}
+                      onClick={() => above && moveAccount(accounts, account, above)}
+                    />
+                    <IconButton
+                      icon={ICONS.moveDown}
+                      size="sm"
+                      label={t("settings.accountDown", { email: name })}
+                      disabled={!below || accountAddress(below) === accountAddress(account)}
+                      onClick={() => below && moveAccount(accounts, account, below)}
+                    />
+                  </span>
+                )}
                 {other && (
                   <Button
                     size="sm"
@@ -510,6 +549,16 @@ function Accounts() {
               </div>
               {account.auth === "password" && account.status.state === "error" && (
                 <UwumailSignInAgainHint account={account} />
+              )}
+              {accounts.length > 1 && (
+                <div className="basis-full border-t border-hairline pt-2.5">
+                  <Toggle
+                    checked={!hiddenFromUnified(account, unifiedHidden)}
+                    onChange={(on) => setHiddenFromUnified(account, !on)}
+                    label={t("settings.inUnified")}
+                    description={t("settings.inUnifiedDesc")}
+                  />
+                </div>
               )}
               {workspaces && (
                 <div className="flex basis-full items-center justify-between gap-3 border-t border-hairline pt-2.5">

@@ -4,6 +4,7 @@ import {
   MAX_VALUE_BYTES,
   applyToSettings,
   diffValues,
+  folderRefId,
   isSyncable,
   mergeWithServer,
   settingsToValues,
@@ -29,6 +30,11 @@ const base: SyncedSettings = {
   trustedSenders: [],
   senderAppearance: {},
   linkDomains: [],
+  unifiedHidden: [],
+  unifiedFolders: [],
+  accountsOrder: [],
+  favoriteFolders: [],
+  hiddenFolders: [],
 };
 
 const signature = { email: "mini@uwumail.test", name: "Kurz", html: "<p>Mini</p>", forNew: true, forReplies: false };
@@ -250,5 +256,66 @@ describe("merging with the server", () => {
       keep: new Set(["signature:big", "trustedSenders:@refused.example"]),
     });
     expect(result).toEqual({ apply: {}, pending: {} });
+  });
+});
+
+describe("arrangement of mailboxes and folders", () => {
+  const inbox = { account: "mini@uwumail.test", folder: "INBOX" };
+  const projects = { account: "mini@uwumail.test", folder: "Projekte/Ünïcode" };
+
+  it("names folders by the start of a SHA-256 of address and path", () => {
+    expect(folderRefId(inbox)).toBe("312f4066a41e0e45");
+    expect(folderRefId(projects)).toBe("256ba3c7a0ede822");
+    // Longer than one block of the hash.
+    expect(folderRefId({ account: inbox.account, folder: "Archiv/".repeat(20) })).toBe("6c14943694dd13fa");
+  });
+
+  it("takes the keys in the server's shape", () => {
+    expect(isSyncable("unified.hidden:mini@uwumail.test", true)).toBe(true);
+    expect(isSyncable("unified.hidden:mini@uwumail.test", false)).toBe(false);
+    expect(isSyncable("unified.folders:312f4066a41e0e45", inbox)).toBe(true);
+    expect(isSyncable("folders.favorite:312f4066a41e0e45", { account: "x", folder: "" })).toBe(false);
+    expect(isSyncable("folders.hidden:312f4066a41e0e45", { account: "x", folder: "a\u0007b" })).toBe(false);
+    expect(isSyncable("folders.hidden:bad id!", inbox)).toBe(false);
+    expect(isSyncable("accounts.order", ["a@uwumail.test", "b@uwumail.test"])).toBe(true);
+    expect(isSyncable("accounts.order", ["a@uwumail.test", "a@uwumail.test"])).toBe(false);
+    expect(isSyncable("accounts.order", ["A@uwumail.test"])).toBe(false);
+    expect(
+      isSyncable(
+        "accounts.order",
+        Array.from({ length: 201 }, (_, i) => `${i}@uwumail.test`),
+      ),
+    ).toBe(false);
+  });
+
+  it("writes and reads them back", () => {
+    const settings = {
+      ...base,
+      unifiedHidden: ["work@uwumail.test"],
+      unifiedFolders: [projects],
+      accountsOrder: ["work@uwumail.test", "mini@uwumail.test"],
+      favoriteFolders: [inbox],
+      hiddenFolders: [projects],
+    };
+    const values = settingsToValues(settings);
+    expect(values).toMatchObject({
+      "unified.hidden:work@uwumail.test": true,
+      "unified.folders:256ba3c7a0ede822": projects,
+      "accounts.order": ["work@uwumail.test", "mini@uwumail.test"],
+      "folders.favorite:312f4066a41e0e45": inbox,
+      "folders.hidden:256ba3c7a0ede822": projects,
+    });
+    expect(applyToSettings(base, values)).toMatchObject({
+      unifiedHidden: settings.unifiedHidden,
+      unifiedFolders: settings.unifiedFolders,
+      accountsOrder: settings.accountsOrder,
+      favoriteFolders: settings.favoriteFolders,
+      hiddenFolders: settings.hiddenFolders,
+    });
+  });
+
+  it("goes back to the usual order when the order is gone", () => {
+    const ordered = { ...base, accountsOrder: ["work@uwumail.test"] };
+    expect(applyToSettings(ordered, { "accounts.order": null })).toMatchObject({ accountsOrder: [] });
   });
 });

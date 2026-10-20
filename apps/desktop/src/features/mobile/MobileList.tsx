@@ -15,6 +15,7 @@ import {
   useMessageActions,
   useThreadActions as useCardActions,
   useThreads,
+  useListScope,
   useVisibleAccounts,
 } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
@@ -69,7 +70,8 @@ export function MobileList() {
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
   const emptiable = view.kind === "folder" ? folders.find((f) => f.id === view.folderId && canEmpty(f)) : undefined;
-  const { accounts: shown, loaded: accountsLoaded, accountIds } = useVisibleAccounts();
+  const { accounts: shown, loaded: accountsLoaded } = useVisibleAccounts();
+  const { accountIds, includeFolderIds } = useListScope(view);
   const { refresh } = useMessageActions();
   const threadActions = useThreadActions();
   const selectionActions = useSelectionActions();
@@ -93,7 +95,7 @@ export function MobileList() {
 
   const query = useThreads(view, filter, search);
   const local = flattenThreads(query.data?.pages);
-  const searchKey = JSON.stringify([view, filter, search, conversations, accountIds]);
+  const searchKey = JSON.stringify([view, filter, search, conversations, accountIds, includeFolderIds]);
   const fromServer = server?.key === searchKey ? server.threads : null;
   // Server matches join the local ones in the same list, newest first.
   const threads = fromServer
@@ -111,6 +113,7 @@ export function MobileList() {
         search,
         conversations,
         accountIds: accountIds ?? undefined,
+        includeFolderIds,
         limit: 200,
       });
       if (page) {

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { backend } from "@/backend/backend";
 import { playNyu, type CameoName } from "@/components/nyu/cameo";
 import type {
+  Account,
   Signature,
   LabelRef,
   FlagChange,
@@ -17,6 +18,7 @@ import type {
 } from "@/backend/types";
 import { translate, useT } from "@/i18n";
 import { inWorkspace, sharedFollowAccounts } from "@/lib/workspaces";
+import { isUnified, scopeFor, type ListScope } from "@/lib/arrangement";
 import { senderSignatures } from "@/lib/localSignatures";
 import { useAccountSync } from "@/state/accountSync";
 import { confirmDeleteForever } from "@/state/deleteForever";
@@ -84,6 +86,44 @@ export function useVisibleAccounts() {
   };
 }
 
+/**
+ * What a list of `view` takes in: the mailboxes (as `useVisibleAccounts`, but the unified views
+ * leave out the mailboxes hidden from them) and, for the unified inbox, the extra folders. The
+ * mailboxes are null until they have loaded, when it matters.
+ */
+export function useListScope(view: MailboxView): {
+  accountIds: string[] | undefined | null;
+  includeFolderIds: string[] | undefined;
+} {
+  const { data: accounts = [], isSuccess: loaded } = useAccounts();
+  const { accounts: visible } = useVisibleAccounts();
+  const { data: folders = [] } = useFolders();
+  const workspaces = useSettings((s) => s.workspaces);
+  const hidden = useSettings((s) => s.unifiedHidden);
+  const extra = useSettings((s) => s.unifiedFolders);
+  return useMemo(() => {
+    const scope = scopeFor(view, { accounts, visible, filtered: workspaces, folders, hidden, extra });
+    const waits = workspaces || (isUnified(view) && hidden.length > 0);
+    return { ...scope, accountIds: waits && !loaded ? null : scope.accountIds };
+  }, [view, accounts, visible, workspaces, folders, hidden, extra, loaded]);
+}
+
+/** The same, right now, from what is cached (for commands, which run outside components). */
+export function listScopeNow(client: QueryClient, view: MailboxView): ListScope {
+  const accounts = client.getQueryData<Account[]>(queryKeys.accounts) ?? [];
+  const folders = client.getQueryData<Folder[]>(queryKeys.folders) ?? [];
+  const { workspaces, activeWorkspace, businessAccounts, unifiedHidden, unifiedFolders } = useSettings.getState();
+  const visible = workspaces ? inWorkspace(accounts, activeWorkspace, businessAccounts) : accounts;
+  return scopeFor(view, {
+    accounts,
+    visible,
+    filtered: workspaces,
+    folders,
+    hidden: unifiedHidden,
+    extra: unifiedFolders,
+  });
+}
+
 /** Every address the mailboxes can send from. */
 export function useIdentities() {
   return useQuery({ queryKey: queryKeys.identities, queryFn: () => backend().listIdentities() });
@@ -147,9 +187,9 @@ export function useThreads(
   enabled = true,
 ) {
   const conversations = useSettings((s) => s.conversations);
-  const { accountIds } = useVisibleAccounts();
+  const { accountIds, includeFolderIds } = useListScope(view);
   return useInfiniteQuery({
-    queryKey: [...queryKeys.threads, view, filter, search, conversations, accountIds, labels],
+    queryKey: [...queryKeys.threads, view, filter, search, conversations, accountIds, includeFolderIds, labels],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       backend().listThreads({
@@ -158,6 +198,7 @@ export function useThreads(
         search,
         conversations,
         accountIds: accountIds ?? undefined,
+        includeFolderIds,
         cursor: pageParam,
         limit: PAGE_SIZE,
         labels: labels.length > 0 ? labels : undefined,

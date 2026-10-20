@@ -10,7 +10,7 @@
  * same time never overwrite each other. Removing an entry sets its key to `null`.
  */
 
-import { CURRENCY_CHOICES, NYU_ANIMATIONS, UNDO_SEND_CHOICES, type Settings } from "@/state/settings";
+import { CURRENCY_CHOICES, NYU_ANIMATIONS, UNDO_SEND_CHOICES, type FolderRef, type Settings } from "@/state/settings";
 
 /** Keys and their values, as the server holds them. */
 export type SettingsValues = Record<string, unknown>;
@@ -48,12 +48,30 @@ export type KeyedChoice = keyof typeof KEYED_CHOICES;
 export const SYNCED_LISTS = ["trustedSenders", "senderAppearance", "linkDomains"] as const;
 export type SyncedList = (typeof SYNCED_LISTS)[number];
 
+/**
+ * How mailboxes and folders are arranged: the setting, and its key on the server. Mailboxes go by
+ * their address (`unified.hidden:<address>`), folders by a `FolderRef` under an id derived from
+ * it (`folderRefId`), so every device arrives at the same keys. `accounts.order` is one key
+ * holding the addresses in order; without it, mailboxes keep their usual order.
+ */
+export const ARRANGEMENT = {
+  unifiedHidden: "unified.hidden",
+  unifiedFolders: "unified.folders",
+  accountsOrder: "accounts.order",
+  favoriteFolders: "folders.favorite",
+  hiddenFolders: "folders.hidden",
+} as const;
+export type ArrangementField = keyof typeof ARRANGEMENT;
+const FOLDER_LISTS = ["unifiedFolders", "favoriteFolders", "hiddenFolders"] as const;
+type FolderList = (typeof FOLDER_LISTS)[number];
+
 /** Everything that follows the account. The rest of the settings stays on this device. */
-export type SyncedSettings = Pick<Settings, SyncedChoice | KeyedChoice | SyncedList>;
+export type SyncedSettings = Pick<Settings, SyncedChoice | KeyedChoice | SyncedList | ArrangementField>;
 export const SYNCED_FIELDS: readonly (keyof SyncedSettings)[] = [
   ...SYNCED_CHOICES,
   ...(Object.keys(KEYED_CHOICES) as KeyedChoice[]),
   ...SYNCED_LISTS,
+  ...(Object.keys(ARRANGEMENT) as ArrangementField[]),
 ];
 
 /** The setting a key of `KEYED_CHOICES` stands for; the key itself for every other choice. */
@@ -155,6 +173,86 @@ function isSignatureValue(value: unknown): boolean {
   );
 }
 
+const FOLDER_MAX = 1024;
+const ORDER_MAX = 200;
+
+/** `{account, folder}`: a mailbox's address and a folder path in it ("/" between levels). */
+export function isFolderRef(value: unknown): value is FolderRef {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const ref = value as Record<string, unknown>;
+  return (
+    Object.keys(ref).length === 2 &&
+    typeof ref.account === "string" &&
+    isSyncableAddress(ref.account) &&
+    typeof ref.folder === "string" &&
+    ref.folder.length > 0 &&
+    [...ref.folder].length <= FOLDER_MAX &&
+    !hasControl(ref.folder)
+  );
+}
+
+/** Mailbox addresses in order: lower case, each once, at most 200. */
+function isAccountOrder(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length <= ORDER_MAX &&
+    new Set(value).size === value.length &&
+    value.every((entry) => typeof entry === "string" && isSyncableAddress(entry))
+  );
+}
+
+/** SHA-256 of a text's UTF-8 bytes, hex. Synchronous, so keys can be made anywhere. */
+function sha256Hex(text: string): string {
+  const K = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,
+    0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8,
+    0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819,
+    0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+    0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+    0xc67178f2,
+  ];
+  const bytes = new TextEncoder().encode(text);
+  const padded = new Uint8Array(Math.ceil((bytes.length + 9) / 64) * 64);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const view = new DataView(padded.buffer);
+  view.setUint32(padded.length - 8, Math.floor(bytes.length / 0x20000000));
+  view.setUint32(padded.length - 4, (bytes.length * 8) >>> 0);
+  const h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+  const w = new Uint32Array(64);
+  const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n));
+  for (let offset = 0; offset < padded.length; offset += 64) {
+    for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i - 15]!, 7) ^ rotr(w[i - 15]!, 18) ^ (w[i - 15]! >>> 3);
+      const s1 = rotr(w[i - 2]!, 17) ^ rotr(w[i - 2]!, 19) ^ (w[i - 2]! >>> 10);
+      w[i] = (w[i - 16]! + s0 + w[i - 7]! + s1) | 0;
+    }
+    let [a, b, c, d, e, f, g, k] = h as [number, number, number, number, number, number, number, number];
+    for (let i = 0; i < 64; i++) {
+      const t1 = (k + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[i]! + w[i]!) | 0;
+      const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      k = g;
+      g = f;
+      f = e;
+      e = (d + t1) | 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (t1 + t2) | 0;
+    }
+    [a, b, c, d, e, f, g, k].forEach((value, i) => (h[i] = (h[i]! + value) | 0));
+  }
+  return h.map((value) => (value >>> 0).toString(16).padStart(8, "0")).join("");
+}
+
+/** The id of a folder's keys: the same on every device (16 hex digits of SHA-256 of address, newline, path). */
+export function folderRefId(ref: FolderRef): string {
+  return sha256Hex(`${ref.account}\n${ref.folder}`).slice(0, 16);
+}
+
 /** Bytes a value takes on the server, as UTF-8 JSON. */
 export function valueBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
@@ -168,6 +266,7 @@ export function isSyncable(key: string, value: unknown): boolean {
   if (value === null || value === undefined) return false;
   if (valueBytes(value) > MAX_VALUE_BYTES) return false;
   if (Object.hasOwn(CHOICES, key)) return CHOICES[key as keyof typeof CHOICES](value);
+  if (key === ARRANGEMENT.accountsOrder) return isAccountOrder(value);
   const colon = key.indexOf(":");
   if (colon < 0) return false;
   const entry = key.slice(colon + 1);
@@ -180,6 +279,12 @@ export function isSyncable(key: string, value: unknown): boolean {
       return value === true && isAsciiHost(entry);
     case "signature":
       return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isSignatureValue(value);
+    case ARRANGEMENT.unifiedHidden:
+      return value === true && isSyncableAddress(entry);
+    case ARRANGEMENT.unifiedFolders:
+    case ARRANGEMENT.favoriteFolders:
+    case ARRANGEMENT.hiddenFolders:
+      return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isFolderRef(value);
     default:
       return false;
   }
@@ -207,6 +312,11 @@ export function settingsToValues(settings: SyncedSettings): SettingsValues {
   for (const entry of settings.trustedSenders) values[`trustedSenders:${entry}`] = true;
   for (const [address, look] of Object.entries(settings.senderAppearance)) values[`senderAppearance:${address}`] = look;
   for (const domain of settings.linkDomains) values[`linkDomains:${domain}`] = true;
+  for (const address of settings.unifiedHidden) values[`${ARRANGEMENT.unifiedHidden}:${address}`] = true;
+  for (const field of FOLDER_LISTS) {
+    for (const ref of settings[field]) values[`${ARRANGEMENT[field]}:${folderRefId(ref)}`] = ref;
+  }
+  if (settings.accountsOrder.length > 0) values[ARRANGEMENT.accountsOrder] = settings.accountsOrder;
   return syncableValues(values);
 }
 
@@ -219,8 +329,14 @@ export function applyToSettings(settings: SyncedSettings, patch: SettingsPatch):
   let trusted: Set<string> | null = null;
   let domains: Set<string> | null = null;
   let looks: Record<string, "light" | "dark"> | null = null;
+  let hidden: Set<string> | null = null;
+  const folders: Partial<Record<FolderList, Map<string, FolderRef>>> = {};
   for (const [key, value] of Object.entries(patch)) {
     if (value !== null && !isSyncable(key, value)) continue;
+    if (key === ARRANGEMENT.accountsOrder) {
+      changed.accountsOrder = value === null ? [] : (value as string[]);
+      continue;
+    }
     if (isChoiceKey(key)) {
       // A choice is never removed, only changed.
       const field = fieldOf(key);
@@ -244,7 +360,22 @@ export function applyToSettings(settings: SyncedSettings, patch: SettingsPatch):
       looks ??= { ...settings.senderAppearance };
       if (value === null) delete looks[entry];
       else looks[entry] = value as "light" | "dark";
+    } else if (list === ARRANGEMENT.unifiedHidden) {
+      hidden ??= new Set(settings.unifiedHidden);
+      if (value === null) hidden.delete(entry);
+      else hidden.add(entry);
+    } else {
+      const field = FOLDER_LISTS.find((each) => ARRANGEMENT[each] === list);
+      if (!field) continue;
+      const refs = (folders[field] ??= new Map(settings[field].map((ref) => [folderRefId(ref), ref])));
+      if (value === null) refs.delete(entry);
+      else refs.set(entry, value as FolderRef);
     }
+  }
+  if (hidden) changed.unifiedHidden = [...hidden];
+  for (const field of FOLDER_LISTS) {
+    const refs = folders[field];
+    if (refs) changed[field] = [...refs.values()];
   }
   if (trusted) changed.trustedSenders = [...trusted];
   if (domains) changed.linkDomains = [...domains];

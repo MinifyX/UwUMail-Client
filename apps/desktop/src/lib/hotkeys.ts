@@ -18,15 +18,17 @@ export function isTyping(target: EventTarget | null) {
 }
 
 /**
- * Keys use the format "mod+k", "shift+3" or plain "j". "mod" is Cmd on macOS
+ * Keys use the format "mod+k", "shift+i" or plain "j". "mod" is Cmd on macOS
  * and Ctrl elsewhere. Single keys are ignored while the user types. "g i" is
  * a sequence: g, then i within a second. A key held down runs its handler once,
  * so holding Delete can't delete one conversation after the other.
  */
-function comboOf(event: KeyboardEvent) {
+export function comboOf(event: KeyboardEvent) {
   const parts: string[] = [];
   if (event.metaKey || event.ctrlKey) parts.push("mod");
   if (event.altKey) parts.push("alt");
+  // Shift only counts with letters: "?" and "#" already tell it.
+  if (event.shiftKey && /^[a-z]$/i.test(event.key)) parts.push("shift");
   parts.push(event.key.length === 1 ? event.key.toLowerCase() : event.key);
   return parts.join("+");
 }

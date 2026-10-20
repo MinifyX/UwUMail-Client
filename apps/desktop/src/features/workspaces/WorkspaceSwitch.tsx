@@ -3,6 +3,7 @@ import { Icon } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { useFolders } from "@/lib/queries";
 import { unreadInboxes, WORKSPACES } from "@/lib/workspaces";
+import { useUnifiedTally } from "@/state/arrangement";
 import { useSettings } from "@/state/settings";
 import { switchWorkspace, useWorkspaceName, WORKSPACE_ICONS } from "./workspaces";
 
@@ -21,9 +22,10 @@ export function WorkspaceSwitch({ size = "md", onCanvas = false, className }: Wo
   const businessAccounts = useSettings((s) => s.businessAccounts);
   const { data: folders = [] } = useFolders();
   const nameOf = useWorkspaceName();
+  const tally = useUnifiedTally();
   if (!enabled) return null;
 
-  const unread = unreadInboxes(folders, businessAccounts);
+  const unread = unreadInboxes(folders, businessAccounts, tally);
   return (
     <div
       role="radiogroup"

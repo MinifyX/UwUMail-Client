@@ -40,6 +40,14 @@ export const CURRENCY_CHOICES = ["EUR", "USD"] as const;
 export type CurrencyChoice = (typeof CURRENCY_CHOICES)[number];
 /** Mailboxes shown apart, see lib/workspaces. */
 export type Workspace = "private" | "business";
+/**
+ * A folder as every device knows it: its mailbox's address (lower case) and its path, levels
+ * joined by "/" (see lib/arrangement).
+ */
+export interface FolderRef {
+  account: string;
+  folder: string;
+}
 
 export interface Settings {
   onboarded: boolean;
@@ -130,6 +138,21 @@ export interface Settings {
   font: FontChoice;
   /** Serif fonts in HTML mails become `font`, or stay as the sender wrote them. This device only. */
   senderFonts: SenderFonts;
+  /**
+   * Mailboxes (addresses, lower case) left out of the unified views and their counts; they stay
+   * in the sidebar. Follows the account as `unified.hidden:<address>`.
+   */
+  unifiedHidden: string[];
+  /** Folders the unified inbox shows besides the inboxes. Follows the account as `unified.folders:<id>`. */
+  unifiedFolders: FolderRef[];
+  /** Mailbox addresses in the sidebar's order; empty keeps the usual order. Follows the account as `accounts.order`. */
+  accountsOrder: string[];
+  /** Folders pinned to "Favorites" atop the sidebar. Follows the account as `folders.favorite:<id>`. */
+  favoriteFolders: FolderRef[];
+  /** Folders the sidebar leaves out. Follows the account as `folders.hidden:<id>`. */
+  hiddenFolders: FolderRef[];
+  /** The sidebar shows hidden folders anyway (dimmed). This device only. */
+  showHiddenFolders: boolean;
 }
 
 interface SettingsActions {
@@ -192,6 +215,12 @@ export const DEFAULT_SETTINGS: Settings = {
   labelsCollapsed: false,
   font: "uwu",
   senderFonts: "replace",
+  unifiedHidden: [],
+  unifiedFolders: [],
+  accountsOrder: [],
+  favoriteFolders: [],
+  hiddenFolders: [],
+  showHiddenFolders: false,
 };
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -259,6 +288,12 @@ export const useSettings = create<Settings & SettingsActions>()(
         if (!["system", "normal", "high"].includes(state.contrast)) state.contrast = DEFAULT_SETTINGS.contrast;
         if (!isFontChoice(state.font)) state.font = DEFAULT_SETTINGS.font;
         if (!isSenderFonts(state.senderFonts)) state.senderFonts = DEFAULT_SETTINGS.senderFonts;
+        const isText = (value: unknown) => typeof value === "string";
+        state.unifiedHidden = state.unifiedHidden.filter(isText);
+        state.accountsOrder = state.accountsOrder.filter(isText);
+        for (const field of ["unifiedFolders", "favoriteFolders", "hiddenFolders"] as const) {
+          state[field] = state[field].filter((ref) => isText(ref?.account) && isText(ref?.folder));
+        }
         return state;
       },
     },
