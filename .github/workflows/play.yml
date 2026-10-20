@@ -67,12 +67,13 @@ jobs:
           save-if: false
       - run: pnpm install --frozen-lockfile
 
-      # Above every GitHub APK of the same version, below the next version (scripts/play.mjs).
+      # From the version alone, the same as the GitHub APK's (scripts/play.mjs, docs/play-store.md).
       - name: Version code
         id: version
         run: |
           echo "version=$(node -p 'require("./apps/desktop/src-tauri/tauri.conf.json").version')" >> "$GITHUB_OUTPUT"
-          echo "code=$(node scripts/play.mjs version-code "$GITHUB_RUN_NUMBER")" >> "$GITHUB_OUTPUT"
+          code=$(node scripts/play.mjs version-code)
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
       - uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
