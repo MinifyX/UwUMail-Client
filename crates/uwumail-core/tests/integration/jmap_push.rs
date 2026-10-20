@@ -284,16 +284,14 @@ impl Setup {
     }
 
     /// Waits until the engine's own first sync of the account is done, so it doesn't run into
-    /// what a test counts.
+    /// what a test counts. That is `SyncFinished`, the last thing a round announces: the `Idle`
+    /// status comes just before it, and a test going on from there could still see the first
+    /// round's `SyncFinished` and take it for one of its own.
     async fn synced(&self, events: &mut tokio::sync::broadcast::Receiver<EngineEvent>) {
         tokio::time::timeout(std::time::Duration::from_secs(20), async {
             loop {
                 match events.recv().await {
-                    Ok(EngineEvent::AccountStatus { account_id, status: AccountStatus::Idle })
-                        if account_id == self.account_id =>
-                    {
-                        return;
-                    }
+                    Ok(EngineEvent::SyncFinished { account_id }) if account_id == self.account_id => return,
                     Ok(_) => {}
                     Err(error) => panic!("events ended: {error}"),
                 }
