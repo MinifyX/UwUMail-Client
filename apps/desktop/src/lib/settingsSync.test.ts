@@ -4,6 +4,7 @@ import {
   MAX_VALUE_BYTES,
   applyToSettings,
   diffValues,
+  folderRefId,
   isSyncable,
   mergeWithServer,
   settingsToValues,
@@ -29,6 +30,16 @@ const base: SyncedSettings = {
   trustedSenders: [],
   senderAppearance: {},
   linkDomains: [],
+  unifiedHidden: [],
+  unifiedFolders: [],
+  accountsOrder: [],
+  favoriteFolders: [],
+  hiddenFolders: [],
+  attachmentReminder: true,
+  templates: {},
+  notifyMuted: [],
+  quietHours: { enabled: false, from: "22:00", to: "07:00", days: [0, 1, 2, 3, 4, 5, 6] },
+  snoozes: {},
 };
 
 const signature = { email: "mini@uwumail.test", name: "Kurz", html: "<p>Mini</p>", forNew: true, forReplies: false };
@@ -122,6 +133,7 @@ describe("settings as keys", () => {
       [
         "assist.currency",
         "assist.refineEvents",
+        "compose.attachmentReminder",
         "conversations",
         "darkImages",
         "language",
@@ -180,6 +192,31 @@ describe("settings as keys", () => {
     expect(settingsToValues(base)).not.toHaveProperty("detectEvents");
     expect(applyToSettings(base, { "mail.detectEvents": false })).toEqual({ detectEvents: false });
     expect(applyToSettings(base, { detectEvents: false })).toEqual({});
+  });
+
+  it("syncs the attachment reminder under the composer's namespace", () => {
+    expect(settingsToValues(base)["compose.attachmentReminder"]).toBe(true);
+    expect(isSyncable("compose.attachmentReminder", "yes")).toBe(false);
+    expect(applyToSettings(base, { "compose.attachmentReminder": false })).toEqual({ attachmentReminder: false });
+  });
+
+  it("syncs templates one key each and checks their shape", () => {
+    const template = { name: "Thanks", subject: "", html: "<p>Hi {firstName}</p>" };
+    expect(settingsToValues({ ...base, templates: { "aB3_-xYz0123456Q": template } })).toMatchObject({
+      "template:aB3_-xYz0123456Q": template,
+    });
+    expect(isSyncable("template:abc", template)).toBe(true);
+    expect(isSyncable("template:a/b", template)).toBe(false);
+    expect(isSyncable("template:abc", { ...template, name: "" })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, name: "x".repeat(101) })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, subject: "a\nb" })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, subject: "s".repeat(999) })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, extra: 1 })).toBe(false);
+    expect(isSyncable("template:abc", { ...template, html: "x".repeat(MAX_VALUE_BYTES) })).toBe(false);
+    const current = { ...base, templates: { old: template, keep: template } };
+    expect(applyToSettings(current, { "template:old": null, "template:new": template })).toEqual({
+      templates: { keep: template, new: template },
+    });
   });
 
   it("diffs into a patch with null for removals", () => {
@@ -250,5 +287,187 @@ describe("merging with the server", () => {
       keep: new Set(["signature:big", "trustedSenders:@refused.example"]),
     });
     expect(result).toEqual({ apply: {}, pending: {} });
+  });
+});
+
+describe("arrangement of mailboxes and folders", () => {
+  const inbox = { account: "mini@uwumail.test", folder: "INBOX" };
+  const projects = { account: "mini@uwumail.test", folder: "Projekte/Ünïcode" };
+
+  it("names folders by the start of a SHA-256 of address and path", () => {
+    expect(folderRefId(inbox)).toBe("312f4066a41e0e45");
+    expect(folderRefId(projects)).toBe("256ba3c7a0ede822");
+    // Longer than one block of the hash.
+    expect(folderRefId({ account: inbox.account, folder: "Archiv/".repeat(20) })).toBe("6c14943694dd13fa");
+  });
+
+  it("takes the keys in the server's shape", () => {
+    expect(isSyncable("unified.hidden:mini@uwumail.test", true)).toBe(true);
+    expect(isSyncable("unified.hidden:mini@uwumail.test", false)).toBe(false);
+    expect(isSyncable("unified.folders:312f4066a41e0e45", inbox)).toBe(true);
+    expect(isSyncable("folders.favorite:312f4066a41e0e45", { account: "x", folder: "" })).toBe(false);
+    expect(isSyncable("folders.hidden:312f4066a41e0e45", { account: "x", folder: "a\u0007b" })).toBe(false);
+    expect(isSyncable("folders.hidden:bad id!", inbox)).toBe(false);
+    expect(isSyncable("accounts.order", ["a@uwumail.test", "b@uwumail.test"])).toBe(true);
+    expect(isSyncable("accounts.order", ["a@uwumail.test", "a@uwumail.test"])).toBe(false);
+    expect(isSyncable("accounts.order", ["A@uwumail.test"])).toBe(false);
+    expect(
+      isSyncable(
+        "accounts.order",
+        Array.from({ length: 201 }, (_, i) => `${i}@uwumail.test`),
+      ),
+    ).toBe(false);
+  });
+
+  it("writes and reads them back", () => {
+    const settings = {
+      ...base,
+      unifiedHidden: ["work@uwumail.test"],
+      unifiedFolders: [projects],
+      accountsOrder: ["work@uwumail.test", "mini@uwumail.test"],
+      favoriteFolders: [inbox],
+      hiddenFolders: [projects],
+    };
+    const values = settingsToValues(settings);
+    expect(values).toMatchObject({
+      "unified.hidden:work@uwumail.test": true,
+      "unified.folders:256ba3c7a0ede822": projects,
+      "accounts.order": ["work@uwumail.test", "mini@uwumail.test"],
+      "folders.favorite:312f4066a41e0e45": inbox,
+      "folders.hidden:256ba3c7a0ede822": projects,
+    });
+    expect(applyToSettings(base, values)).toMatchObject({
+      unifiedHidden: settings.unifiedHidden,
+      unifiedFolders: settings.unifiedFolders,
+      accountsOrder: settings.accountsOrder,
+      favoriteFolders: settings.favoriteFolders,
+      hiddenFolders: settings.hiddenFolders,
+    });
+  });
+
+  it("goes back to the usual order when the order is gone", () => {
+    const ordered = { ...base, accountsOrder: ["work@uwumail.test"] };
+    expect(applyToSettings(ordered, { "accounts.order": null })).toMatchObject({ accountsOrder: [] });
+  });
+});
+
+describe("notifications and snooze", () => {
+  const quiet = { enabled: true, from: "22:00", to: "07:00", days: [0, 6] };
+  const snooze = {
+    account: "mini@uwumail.test",
+    messageId: "abc@uwumail.test",
+    folder: "INBOX",
+    until: "2026-10-21T07:00:00Z",
+  };
+
+  it("takes muted mailboxes, quiet hours and snoozes in their shape only", () => {
+    expect(isSyncable("notify.muted:mini@uwumail.test", true)).toBe(true);
+    expect(isSyncable("notify.muted:Mini@uwumail.test", true)).toBe(false);
+    expect(isSyncable("notify.muted:mini@uwumail.test", false)).toBe(false);
+    expect(isSyncable("notify.quietHours", quiet)).toBe(true);
+    expect(isSyncable("notify.quietHours", { ...quiet, enabled: false })).toBe(true);
+    expect(isSyncable("notify.quietHours", { ...quiet, from: "24:00" })).toBe(false);
+    expect(isSyncable("notify.quietHours", { ...quiet, to: "7:00" })).toBe(false);
+    expect(isSyncable("notify.quietHours", { ...quiet, days: [0, 0] })).toBe(false);
+    expect(isSyncable("notify.quietHours", { ...quiet, days: [7] })).toBe(false);
+    expect(isSyncable("notify.quietHours", { ...quiet, extra: 1 })).toBe(false);
+    expect(isSyncable("snooze:Ab_-0123456789xy", snooze)).toBe(true);
+    expect(isSyncable("snooze:a b", snooze)).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, account: "Mini@uwumail.test" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "<abc@uwumail.test>" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "a b" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "a".repeat(999) })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, folder: "" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, folder: "a\nb" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, until: "2026-10-21T09:00:00+02:00" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, until: "2026-10-21T07:00:00.123Z" })).toBe(true);
+    expect(isSyncable("snooze:a", { ...snooze, until: "2026-13-45T07:00:00Z" })).toBe(false);
+    // Like the server: real days and times only, a leap second is fine.
+    expect(isSyncable("snooze:a", { ...snooze, until: "2026-02-30T07:00:00Z" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, until: "2028-02-29T07:00:00Z" })).toBe(true);
+    expect(isSyncable("snooze:a", { ...snooze, until: "2026-10-21T24:00:00Z" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, until: "2026-12-31T23:59:60Z" })).toBe(true);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "a\u0085b" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "a\u3000b" })).toBe(false);
+    expect(isSyncable("snooze:a", { ...snooze, messageId: "a\ufeffb" })).toBe(true);
+    expect(isSyncable("snooze:a", { ...snooze, folder: "a\u0090b" })).toBe(false);
+  });
+
+  it("writes quiet hours only while they are on", () => {
+    expect(settingsToValues(base)).not.toHaveProperty(["notify.quietHours"]);
+    const values = settingsToValues({
+      ...base,
+      notifyMuted: ["mini@uwumail.test"],
+      quietHours: quiet,
+      snoozes: { s1: snooze },
+    });
+    expect(values).toMatchObject({
+      "notify.muted:mini@uwumail.test": true,
+      "notify.quietHours": quiet,
+      "snooze:s1": snooze,
+    });
+  });
+
+  it("applies them, and a removed key switches quiet hours off but keeps the times", () => {
+    const current = { ...base, notifyMuted: ["a@uwumail.test"], quietHours: quiet, snoozes: { s1: snooze } };
+    expect(
+      applyToSettings(current, {
+        "notify.muted:a@uwumail.test": null,
+        "notify.muted:b@uwumail.test": true,
+        "notify.quietHours": null,
+        "snooze:s1": null,
+        "snooze:s2": { ...snooze, until: "2026-10-22T07:00:00Z" },
+      }),
+    ).toEqual({
+      notifyMuted: ["b@uwumail.test"],
+      quietHours: { ...quiet, enabled: false },
+      snoozes: { s2: { ...snooze, until: "2026-10-22T07:00:00Z" } },
+    });
+    expect(applyToSettings(base, { "notify.quietHours": quiet })).toEqual({ quietHours: quiet });
+    expect(applyToSettings(base, { "notify.quietHours": null })).toEqual({});
+  });
+
+  it("drops a snooze another device finished", () => {
+    const result = mergeWithServer({
+      server: {},
+      local: { "snooze:s1": snooze, "notify.quietHours": quiet },
+      pending: {},
+      firstSync: false,
+    });
+    expect(result.apply).toEqual({ "snooze:s1": null, "notify.quietHours": null });
+    expect(result.pending).toEqual({});
+  });
+});
+
+describe("entry ids", () => {
+  const template = { name: "Thanks", subject: "", html: "<p>Hi</p>" };
+  const snooze = {
+    account: "mini@uwumail.test",
+    messageId: "abc@uwumail.test",
+    folder: "INBOX",
+    until: "2026-10-21T07:00:00Z",
+  };
+
+  it("never takes __proto__ as the id of an entry", () => {
+    const folder = { account: "mini@uwumail.test", folder: "INBOX" };
+    const lists: [string, unknown][] = [
+      ["template", template],
+      ["snooze", snooze],
+      ["signature", signature],
+      ["unified.folders", folder],
+      ["folders.favorite", folder],
+      ["folders.hidden", folder],
+    ];
+    for (const [list, value] of lists) {
+      expect(isSyncable(`${list}:proto`, value)).toBe(true);
+      expect(isSyncable(`${list}:__proto__`, value)).toBe(false);
+    }
+    const changed = applyToSettings(base, { "template:__proto__": template, "snooze:__proto__": snooze });
+    expect(changed.templates).toBeUndefined();
+    expect(changed.snoozes).toBeUndefined();
+    const templates = applyToSettings(base, { "template:a": template, "template:__proto__": template }).templates!;
+    expect(Object.getPrototypeOf(templates)).toBe(Object.prototype);
+    expect(Object.keys(templates)).toEqual(["a"]);
   });
 });

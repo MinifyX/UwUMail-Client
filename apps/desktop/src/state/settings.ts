@@ -30,7 +30,31 @@ export type MailAppearance = "auto" | "light" | "dark";
 export const UNDO_SEND_CHOICES = [0, 5, 10, 20, 30] as const;
 export type UndoSendSeconds = (typeof UNDO_SEND_CHOICES)[number];
 /** What swiping a mail in the phone list does. */
-export type SwipeAction = "read" | "archive" | "spam" | "trash" | "flag" | "none";
+export type SwipeAction = "read" | "archive" | "spam" | "trash" | "flag" | "snooze" | "none";
+
+/**
+ * Times of the week without new-mail notifications, local time: from `from` to `to` ("HH:MM") on
+ * `days` (0 = Sunday). Past midnight belongs to the day it starts on; `from === to` is the whole
+ * day. Follows the account as `notify.quietHours` while enabled.
+ */
+export interface QuietHours {
+  enabled: boolean;
+  from: string;
+  to: string;
+  days: number[];
+}
+
+/** A snoozed mail, as `snooze:<id>` keeps it on the server. */
+export interface SnoozeEntry {
+  /** The mailbox, by its lower-case address. */
+  account: string;
+  /** The Message-ID header without angle brackets. */
+  messageId: string;
+  /** Where it came from: the IMAP path, or the JMAP mailbox names joined by "/". */
+  folder: string;
+  /** When it comes back, RFC 3339 in UTC (`2026-10-21T07:00:00Z`). */
+  until: string;
+}
 /** Minutes in the background before the app lock asks again; 0 locks right away. */
 export type LockAfter = 0 | 1 | 5 | 15;
 /** Android: days of mail kept complete on the phone; 0 keeps everything. */
@@ -40,6 +64,22 @@ export const CURRENCY_CHOICES = ["EUR", "USD"] as const;
 export type CurrencyChoice = (typeof CURRENCY_CHOICES)[number];
 /** Mailboxes shown apart, see lib/workspaces. */
 export type Workspace = "private" | "business";
+/**
+ * A folder as every device knows it: its mailbox's address (lower case) and its path, levels
+ * joined by "/" (see lib/arrangement).
+ */
+export interface FolderRef {
+  account: string;
+  folder: string;
+}
+
+/** A text snippet the composer inserts, see lib/templates. Follows the account as `template:<id>`. */
+export interface MailTemplate {
+  name: string;
+  /** Put in when the mail has no subject yet; may be empty. */
+  subject: string;
+  html: string;
+}
 
 export interface Settings {
   onboarded: boolean;
@@ -95,6 +135,11 @@ export interface Settings {
   runInBackground: boolean;
   /** New-mail notifications name sender and subject; off, they only say that new mail came. */
   notifyShowContent: boolean;
+  /** Mailboxes (lower-case addresses) whose new mail doesn't notify. Follows the account as `notify.muted:<addr>`. */
+  notifyMuted: string[];
+  quietHours: QuietHours;
+  /** Snoozed mail by its random id. Follows the account as `snooze:<id>`. */
+  snoozes: Record<string, SnoozeEntry>;
   updateChannel: UpdateChannel;
   /** UwUMail looks for new versions by itself. */
   updateChecks: boolean;
@@ -130,6 +175,28 @@ export interface Settings {
   font: FontChoice;
   /** Serif fonts in HTML mails become `font`, or stay as the sender wrote them. This device only. */
   senderFonts: SenderFonts;
+  /**
+   * Mailboxes (addresses, lower case) left out of the unified views and their counts; they stay
+   * in the sidebar. Follows the account as `unified.hidden:<address>`.
+   */
+  unifiedHidden: string[];
+  /** Folders the unified inbox shows besides the inboxes. Follows the account as `unified.folders:<id>`. */
+  unifiedFolders: FolderRef[];
+  /** Mailbox addresses in the sidebar's order; empty keeps the usual order. Follows the account as `accounts.order`. */
+  accountsOrder: string[];
+  /** Folders pinned to "Favorites" atop the sidebar. Follows the account as `folders.favorite:<id>`. */
+  favoriteFolders: FolderRef[];
+  /** Folders the sidebar leaves out. Follows the account as `folders.hidden:<id>`. */
+  hiddenFolders: FolderRef[];
+  /** The sidebar shows hidden folders anyway (dimmed). This device only. */
+  showHiddenFolders: boolean;
+  /**
+   * Sending asks first when the text mentions an attachment and none is there. Follows the account
+   * as `compose.attachmentReminder`.
+   */
+  attachmentReminder: boolean;
+  /** Text snippets by id (16 random characters), see lib/templates. */
+  templates: Record<string, MailTemplate>;
 }
 
 interface SettingsActions {
@@ -144,6 +211,8 @@ interface SettingsActions {
   toggleFolder: (folderId: string) => void;
   toggleAccount: (accountId: string) => void;
   setAccountWorkspace: (accountId: string, workspace: Workspace) => void;
+  saveTemplate: (id: string, template: MailTemplate) => void;
+  deleteTemplate: (id: string) => void;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -172,6 +241,9 @@ export const DEFAULT_SETTINGS: Settings = {
   privacyProxy: "",
   runInBackground: true,
   notifyShowContent: true,
+  notifyMuted: [],
+  quietHours: { enabled: false, from: "22:00", to: "07:00", days: [0, 1, 2, 3, 4, 5, 6] },
+  snoozes: {},
   // Someone who installed a beta wants the next beta too.
   updateChannel: pkg.version.includes("-") ? "beta" : "stable",
   updateChecks: true,
@@ -192,6 +264,14 @@ export const DEFAULT_SETTINGS: Settings = {
   labelsCollapsed: false,
   font: "uwu",
   senderFonts: "replace",
+  unifiedHidden: [],
+  unifiedFolders: [],
+  accountsOrder: [],
+  favoriteFolders: [],
+  hiddenFolders: [],
+  showHiddenFolders: false,
+  attachmentReminder: true,
+  templates: {},
 };
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -229,6 +309,13 @@ export const useSettings = create<Settings & SettingsActions>()(
           const others = state.businessAccounts.filter((id) => id !== accountId);
           return { businessAccounts: workspace === "business" ? [...others, accountId] : others };
         }),
+      saveTemplate: (id, template) => set((state) => ({ templates: { ...state.templates, [id]: template } })),
+      deleteTemplate: (id) =>
+        set((state) => {
+          const rest = { ...state.templates };
+          delete rest[id];
+          return { templates: rest };
+        }),
     }),
     {
       name: "uwumail.settings",
@@ -259,11 +346,48 @@ export const useSettings = create<Settings & SettingsActions>()(
         if (!["system", "normal", "high"].includes(state.contrast)) state.contrast = DEFAULT_SETTINGS.contrast;
         if (!isFontChoice(state.font)) state.font = DEFAULT_SETTINGS.font;
         if (!isSenderFonts(state.senderFonts)) state.senderFonts = DEFAULT_SETTINGS.senderFonts;
+        const isText = (value: unknown) => typeof value === "string";
+        state.unifiedHidden = state.unifiedHidden.filter(isText);
+        state.accountsOrder = state.accountsOrder.filter(isText);
+        state.notifyMuted = state.notifyMuted.filter(isText);
+        for (const field of ["unifiedFolders", "favoriteFolders", "hiddenFolders"] as const) {
+          state[field] = state[field].filter((ref) => isText(ref?.account) && isText(ref?.folder));
+        }
+        state.templates = Object.fromEntries(
+          Object.entries(state.templates).filter(([, template]) => isTemplateShape(template)),
+        );
+        state.snoozes = Object.fromEntries(Object.entries(state.snoozes).filter(([, entry]) => isSnoozeShape(entry)));
+        const quiet = state.quietHours as Partial<QuietHours>;
+        if (
+          typeof quiet.enabled !== "boolean" ||
+          typeof quiet.from !== "string" ||
+          typeof quiet.to !== "string" ||
+          !Array.isArray(quiet.days)
+        ) {
+          state.quietHours = DEFAULT_SETTINGS.quietHours;
+        }
         return state;
       },
     },
   ),
 );
+
+function isTemplateShape(value: unknown): value is MailTemplate {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return typeof entry.name === "string" && typeof entry.subject === "string" && typeof entry.html === "string";
+}
+
+function isSnoozeShape(value: unknown): value is SnoozeEntry {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.account === "string" &&
+    typeof entry.messageId === "string" &&
+    typeof entry.folder === "string" &&
+    typeof entry.until === "string"
+  );
+}
 
 /** The layout in use: the stored one, except on a phone, which has no choice (see `layoutChoice`). */
 export function useLayout(): LayoutMode {

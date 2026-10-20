@@ -133,9 +133,17 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
 }
 
 /// Kotlin builds the notifications, also while no window is open, so it keeps the choice; its
-/// texts come from the app's own resources.
-pub fn set_notification_prefs(show_content: bool, _new_mail: &str, _hidden: &str, _many: &str) -> Result<(), Error> {
-    call("setPrefs", json!({ "showContent": show_content }))?;
+/// texts come from the app's own resources. Muted accounts and quiet hours go along, so mail the
+/// background watch finds keeps quiet too.
+pub fn set_notification_prefs(prefs: uwumail_core::notify::NotifyPrefs) -> Result<(), Error> {
+    let quiet = prefs.quiet.map(|quiet| {
+        json!({
+            "from": quiet.from,
+            "to": quiet.to,
+            "days": quiet.days,
+        })
+    });
+    call("setPrefs", json!({ "showContent": prefs.show_content, "mutedAccounts": prefs.muted, "quietHours": quiet }))?;
     Ok(())
 }
 

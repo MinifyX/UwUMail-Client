@@ -38,6 +38,7 @@ fn folder_query(account_id: &str, folder_id: &str) -> ThreadQuery {
         cursor: None,
         limit: 50,
         labels: Vec::new(),
+        include_folder_ids: Vec::new(),
     }
 }
 

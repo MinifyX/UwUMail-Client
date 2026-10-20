@@ -61,6 +61,7 @@ import type {
   EventDeleteScope,
   EventInput,
   FlagChange,
+  MarkReadScope,
   Folder,
   Identity,
   ImageSizeProbe,
@@ -68,6 +69,8 @@ import type {
   LocalModelServer,
   MailtoDraft,
   MovedMessage,
+  SnoozedMessage,
+  UnsnoozeOutcome,
   Message,
   ParticipationStatus,
   NewAccount,
@@ -89,6 +92,7 @@ import type {
   UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
+import { matchesSearch, parseSearch } from "@/lib/searchQuery";
 
 const OAUTH_DOMAINS: Record<string, "microsoft" | "google"> = {
   "gmail.com": "google",
@@ -1081,6 +1085,28 @@ export class DemoBackend implements Backend {
     this.emitChanged(messageIds);
   }
 
+  async markAllRead(scope: MarkReadScope): Promise<string[]> {
+    const writable = (accountId: string) => !this.accounts.find((account) => account.id === accountId)?.readOnly;
+    const marked = this.messages.filter((message) => {
+      if (message.flags.seen || !writable(message.accountId)) return false;
+      if (scope.kind === "account") {
+        const role = this.roleOf(message);
+        return message.accountId === scope.accountId && role !== "trash" && role !== "junk";
+      }
+      return this.inView(message, {
+        view: scope.view,
+        filter: "all",
+        conversations: false,
+        limit: 0,
+        accountIds: scope.accountIds,
+        includeFolderIds: scope.includeFolderIds,
+      });
+    });
+    const ids = marked.map((message) => message.id);
+    await this.setFlags(ids, { seen: true });
+    return ids;
+  }
+
   async archive(messageIds: string[]) {
     return this.moveToRole(messageIds, "archive");
   }
@@ -1114,6 +1140,72 @@ export class DemoBackend implements Backend {
     }
     this.emitChanged(messageIds);
     return moved;
+  }
+
+  /** Like the engine: a "Snoozed" folder per mailbox, mail found again by its Message-ID. */
+  async snoozeMessages(messageIds: string[]) {
+    await wait(120);
+    const snoozed: SnoozedMessage[] = [];
+    for (const message of this.messages) {
+      if (!messageIds.includes(message.id)) continue;
+      const folder = this.snoozedFolder(message.accountId, true)!;
+      snoozed.push({
+        id: message.id,
+        accountId: message.accountId,
+        headerId: demoHeaderId(message),
+        folderId: message.folderId === folder.id ? null : message.folderId,
+      });
+      message.folderId = folder.id;
+    }
+    this.emitChanged(messageIds);
+    return snoozed;
+  }
+
+  async unsnooze(accountId: string, headerId: string, folderId: string | null): Promise<UnsnoozeOutcome> {
+    await wait(60);
+    const folder = this.snoozedFolder(accountId, false);
+    const found = this.messages.filter((m) => m.folderId === folder?.id && demoHeaderId(m) === headerId);
+    if (found.length === 0) return "gone";
+    const target =
+      this.folders.find((f) => f.id === folderId && f.accountId === accountId && f.selectable) ??
+      this.folders.find((f) => f.accountId === accountId && f.role === "inbox");
+    if (!target) return "waiting";
+    for (const message of found) {
+      message.flags.seen = false;
+      message.folderId = target.id;
+    }
+    this.emitChanged(found.map((m) => m.id));
+    return "moved";
+  }
+
+  async folderHeaderIds(folderId: string): Promise<[string, string][]> {
+    return this.messages
+      .filter((m) => m.folderId === folderId)
+      .flatMap((m): [string, string][] => [
+        [m.threadId, demoHeaderId(m)],
+        [`m:${m.id}`, demoHeaderId(m)],
+      ]);
+  }
+
+  private snoozedFolder(accountId: string, create: boolean): Folder | undefined {
+    const found = this.folders.find(
+      (f) => f.accountId === accountId && f.role === null && f.name.toLowerCase() === "snoozed",
+    );
+    if (found || !create) return found;
+    const folder: Folder = {
+      id: `${accountId}:snoozed`,
+      accountId,
+      name: "Snoozed",
+      path: "Snoozed",
+      role: null,
+      parentId: null,
+      selectable: true,
+      unread: 0,
+      total: 0,
+    };
+    this.folders.push(folder);
+    this.emit({ type: "mail:changed", accountId });
+    return folder;
   }
 
   async markSpam(messageIds: string[], spam: boolean) {
@@ -2032,11 +2124,12 @@ export class DemoBackend implements Backend {
     if (view.kind === "folder") return message.folderId === view.folderId;
     const role = this.roleOf(message);
     if (view.kind === "label") return role !== "trash" && role !== "junk" && hasLabel(message, view);
+    const included = query.includeFolderIds?.includes(message.folderId) ?? false;
     switch (view.role) {
       case "inbox":
-        return role === "inbox";
+        return role === "inbox" || included;
       case "unread":
-        return role === "inbox" && !message.flags.seen;
+        return (role === "inbox" || included) && !message.flags.seen;
       case "flagged":
         return message.flags.flagged && role !== "trash";
       case "drafts":
@@ -2051,12 +2144,22 @@ export class DemoBackend implements Backend {
     if (query.filter === "flagged" && !message.flags.flagged) return false;
     if (query.filter === "attachments" && message.attachments.length === 0) return false;
     if (query.labels && !matchesLabels(message, query.labels)) return false;
-    const search = query.search?.trim().toLowerCase();
-    if (!search) return true;
-    return [message.subject, message.from.name ?? "", message.from.email, message.bodyText ?? ""]
-      .join("\n")
-      .toLowerCase()
-      .includes(search);
+    if (!query.search?.trim()) return true;
+    const names = (list: { name?: string | null; email: string }[]) =>
+      list.map((a) => `${a.name ?? ""} ${a.email}`).join("\n");
+    return matchesSearch(
+      {
+        subject: message.subject,
+        from: names([message.from]),
+        to: names([...message.to, ...message.cc]),
+        body: message.bodyText ?? "",
+        date: message.date,
+        seen: message.flags.seen,
+        flagged: message.flags.flagged,
+        attachments: message.attachments.length,
+      },
+      parseSearch(query.search),
+    );
   }
 
   private threadMessages(threadId: string, trashed: boolean) {
@@ -2084,4 +2187,9 @@ export class DemoBackend implements Backend {
       keywords: [...new Set(sorted.flatMap((m) => m.keywords ?? []))].sort(),
     };
   }
+}
+
+/** The demo's mail has no headers; a Message-ID made from its id stands in. */
+function demoHeaderId(message: Message): string {
+  return `${message.id.replace(/[^A-Za-z0-9.-]/g, "-")}@demo.uwumail.example`;
 }

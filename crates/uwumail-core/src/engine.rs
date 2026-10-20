@@ -212,6 +212,8 @@ pub use refresh_ops::RefreshOutcome;
 mod jmap_shared_ops;
 mod send_later_ops;
 mod shared_ops;
+mod snooze_ops;
+pub use snooze_ops::{SNOOZED_FOLDER, SnoozedMessage, UnsnoozeOutcome};
 
 impl Engine {
     /// Must be called inside a Tokio runtime.
@@ -783,8 +785,11 @@ impl Engine {
     /// view's folder, or everywhere but trash and junk for unified views, and
     /// only in the query's mailboxes when it names some.
     pub async fn search_server(&self, query: &ThreadQuery) -> Result<ThreadPage> {
-        let text = query.search.as_deref().map(str::trim).filter(|text| !text.is_empty());
-        let Some(text) = text else { return Err(Error::invalid("Enter something to search for.")) };
+        let search = crate::search_query::SearchQuery::parse(query.search.as_deref().unwrap_or_default());
+        if search.is_empty() {
+            return Err(Error::invalid("Enter something to search for."));
+        }
+        let text = &search;
         let mut found = Vec::new();
         for account in self.inner.store.accounts()? {
             if query.account_ids.as_ref().is_some_and(|ids| !ids.contains(&account.id)) {
@@ -810,7 +815,12 @@ impl Engine {
         self.inner.store.list_threads_of(query, &found)
     }
 
-    async fn search_jmap(&self, account_id: &str, text: &str, folder_id: Option<&str>) -> Result<Vec<String>> {
+    async fn search_jmap(
+        &self,
+        account_id: &str,
+        text: &crate::search_query::SearchQuery,
+        folder_id: Option<&str>,
+    ) -> Result<Vec<String>> {
         let client = self.inner.jmap_client(account_id).await?;
         let mailbox = match folder_id {
             Some(id) => Some(self.inner.store.folder(id)?.path),
@@ -819,7 +829,12 @@ impl Engine {
         jmap_sync::search(&client, &self.inner.store, account_id, text, mailbox.as_deref()).await
     }
 
-    async fn search_imap(&self, account_id: &str, text: &str, folder_id: Option<&str>) -> Result<Vec<String>> {
+    async fn search_imap(
+        &self,
+        account_id: &str,
+        text: &crate::search_query::SearchQuery,
+        folder_id: Option<&str>,
+    ) -> Result<Vec<String>> {
         let folders: Vec<FolderRecord> = match folder_id {
             Some(id) => vec![self.inner.store.folder(id)?],
             None => self
@@ -906,6 +921,27 @@ impl Engine {
             }
         }
         Ok(())
+    }
+
+    /// Marks every unread mail of a view or mailbox as read, on the servers too. Shared mailboxes
+    /// that may only be read are left as they are. Returns the marked ids, for undoing.
+    pub async fn mark_all_read(&self, scope: &MarkReadScope) -> Result<Vec<String>> {
+        let unread = self.inner.store.unread_ids(scope)?;
+        if unread.is_empty() {
+            return Ok(unread);
+        }
+        let mut writable = HashMap::new();
+        let mut ids = Vec::with_capacity(unread.len());
+        for location in self.inner.store.locations(&unread)? {
+            let ok = *writable
+                .entry(location.account_id.clone())
+                .or_insert_with(|| self.inner.refuse_read_only_account(&location.account_id).is_ok());
+            if ok {
+                ids.push(location.id);
+            }
+        }
+        self.set_flags(&ids, FlagChange { seen: Some(true), flagged: None }).await?;
+        Ok(ids)
     }
 
     /// Moves mail into the archive. Returns what moved and from where, for undoing.

@@ -304,6 +304,27 @@ pub struct ThreadQuery {
     /// label chip, `label:<name>` in the search).
     #[serde(default)]
     pub labels: Vec<Vec<LabelRef>>,
+    /// More folders the unified inbox (and its unread view) takes in besides the inboxes, e.g.
+    /// ones mail rules sort into. Ignored by every other view.
+    #[serde(default)]
+    pub include_folder_ids: Vec<String>,
+}
+
+/// Where "mark all as read" marks: the mail of a view (with the same mailboxes and extra
+/// folders as its list), or every folder of a mailbox but trash and junk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase", rename_all_fields = "camelCase")]
+pub enum MarkReadScope {
+    View {
+        view: MailboxView,
+        #[serde(default)]
+        account_ids: Option<Vec<String>>,
+        #[serde(default)]
+        include_folder_ids: Vec<String>,
+    },
+    Account {
+        account_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1140,6 +1161,25 @@ mod tests {
 
         let some: ThreadQuery = serde_json::from_str(&format!(r#"{{{view},"accountIds":["a1"]}}"#)).unwrap();
         assert_eq!(some.account_ids, Some(vec!["a1".to_string()]));
+        assert!(some.include_folder_ids.is_empty());
+
+        let more: ThreadQuery = serde_json::from_str(&format!(r#"{{{view},"includeFolderIds":["f9"]}}"#)).unwrap();
+        assert_eq!(more.include_folder_ids, vec!["f9".to_string()]);
+    }
+
+    #[test]
+    fn mark_read_scopes_match_the_ui_json() {
+        let view: MarkReadScope = serde_json::from_str(
+            r#"{"kind":"view","view":{"kind":"unified","role":"inbox"},"accountIds":["a1"],"includeFolderIds":["f9"]}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            view,
+            MarkReadScope::View { ref account_ids, ref include_folder_ids, .. }
+                if account_ids.as_deref() == Some(&["a1".to_string()][..]) && include_folder_ids == &["f9".to_string()]
+        ));
+        let account: MarkReadScope = serde_json::from_str(r#"{"kind":"account","accountId":"a1"}"#).unwrap();
+        assert!(matches!(account, MarkReadScope::Account { ref account_id } if account_id == "a1"));
     }
 
     #[test]

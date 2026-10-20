@@ -164,6 +164,8 @@ export function mailMenu({
           ...entry("goSent"),
           ...entry("goDrafts"),
           ...entry("goFlagged"),
+          "separator",
+          ...entry("markAllRead"),
         ],
       },
       {

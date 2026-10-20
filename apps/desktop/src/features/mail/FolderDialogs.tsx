@@ -13,6 +13,7 @@ import { useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { folderNameProblem, folderNameRules, type FolderNameProblem } from "./folderName";
+import { folderLabel } from "./view";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -57,10 +58,6 @@ function NameTitle({ request }: { request: FolderRequest }) {
     return <>{t("folders.newIn", { name: folderLabel(request.parent, t) })}</>;
   }
   return <>{t("folders.new")}</>;
-}
-
-function folderLabel(folder: Folder, t: (key: string) => string) {
-  return folder.role ? t(`folder.${folder.role}`) : folder.name;
 }
 
 function NameForm({ request, onDone }: { request: FolderRequest & { kind: "create" | "rename" }; onDone: () => void }) {

@@ -5,7 +5,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { useFolders } from "@/lib/queries";
 import { buildFolderTree, type FolderNode } from "@/features/mail/folderTree";
-import { folderIcon } from "@/features/mail/view";
+import { folderIcon, folderLabel } from "@/features/mail/view";
 
 function flatten(nodes: FolderNode[]): FolderNode[] {
   return nodes.flatMap((node) => [node, ...flatten(node.children)]);
@@ -32,7 +32,7 @@ function FolderChoices({ accountId, onPick }: { accountId: string; onPick: (fold
   const { t } = useT();
   const { data: folders = [] } = useFolders();
   const [search, setSearch] = useState("");
-  const label = (folder: Folder) => (folder.role ? t(`folder.${folder.role}`) : folder.name);
+  const label = (folder: Folder) => folderLabel(folder, t);
   const nodes = useMemo(
     () => flatten(buildFolderTree(folders.filter((folder) => folder.accountId === accountId))),
     [folders, accountId],

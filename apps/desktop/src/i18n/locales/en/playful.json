@@ -349,5 +349,26 @@
       "newMail": "New mail for you! ✉",
       "many": "{{n}}× mail for you! ✉"
     }
+  },
+  "markAllRead": {
+    "done_one": "All caught up, {{count}} message read (^ω^)",
+    "done_other": "All caught up, {{count}} messages read (^ω^)",
+    "nothing": "Nothing unread here, all cozy"
+  },
+  "templates": {
+    "none": "No templates yet (・ω・)",
+    "saved": "Tucked away as template “{{name}}” ✿"
+  },
+  "attachmentReminder": {
+    "title": "Forgot something? (・・;)",
+    "body": "Your mail talks about an attachment, but there’s nothing attached yet."
+  },
+  "snooze": {
+    "title": "Nap until when? (˘ω˘)",
+    "done": "Nyu tucked it in until {{time}} (˘ω˘)",
+    "back": "Rise and shine, the mail is back (｡･ω･｡)"
+  },
+  "notify": {
+    "quietDesc": "Shh, Nyu is sleeping (˘ω˘) No notifications during these hours, midnight included."
   }
 }

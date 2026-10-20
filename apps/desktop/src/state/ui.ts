@@ -62,6 +62,13 @@ export interface MoveRequest {
   onMoved?: () => void;
 }
 
+/** Mail waiting for "Snooze until…". */
+export interface SnoozeRequest {
+  messages: Message[];
+  /** Runs once snoozed, e.g. to close the conversation. */
+  onSnoozed?: () => void;
+}
+
 export type SettingsSection =
   | "appearance"
   | "mail"
@@ -102,6 +109,7 @@ interface UiState {
   /** Where a Shift range ends: the row Shift+↑/↓ last reached. */
   selectionCursor: string | null;
   moving: MoveRequest | null;
+  snoozing: SnoozeRequest | null;
   /** The label chip the list is filtered by, if any. */
   labelFilter: LabelChoice | null;
   labeling: LabelRequest | null;
@@ -132,6 +140,8 @@ interface UiState {
   checkAllVisible: () => void;
   openMove: (request: MoveRequest) => void;
   closeMove: () => void;
+  openSnooze: (request: SnoozeRequest) => void;
+  closeSnooze: () => void;
   setLabelFilter: (choice: LabelChoice | null) => void;
   openLabeling: (request: LabelRequest) => void;
   closeLabeling: () => void;
@@ -156,6 +166,7 @@ export const useUi = create<UiState>()((set, get) => ({
   selectionAnchor: null,
   selectionCursor: null,
   moving: null,
+  snoozing: null,
   labelFilter: null,
   labeling: null,
 
@@ -212,6 +223,8 @@ export const useUi = create<UiState>()((set, get) => ({
   checkAllVisible: () => set((state) => ({ checkedThreadIds: [...state.visibleThreadIds] })),
   openMove: (request) => set({ moving: request }),
   closeMove: () => set({ moving: null }),
+  openSnooze: (request) => set({ snoozing: request.messages.length > 0 ? request : null }),
+  closeSnooze: () => set({ snoozing: null }),
   setLabelFilter: (choice) =>
     set({
       labelFilter: choice,

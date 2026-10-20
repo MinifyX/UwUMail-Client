@@ -468,6 +468,11 @@ async fn set_flags(engine: State<'_, Engine>, message_ids: Vec<String>, change: 
 }
 
 #[tauri::command]
+async fn mark_all_read(engine: State<'_, Engine>, scope: MarkReadScope) -> CommandResult<Vec<String>> {
+    engine.mark_all_read(&scope).await
+}
+
+#[tauri::command]
 async fn archive_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<Vec<MovedMessage>> {
     engine.archive(&message_ids).await
 }
@@ -480,6 +485,33 @@ async fn trash_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> 
 #[tauri::command]
 async fn delete_messages_forever(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<usize> {
     engine.delete_forever(&message_ids).await
+}
+
+/// Snooze: into the mailbox's "Snoozed" folder; the page keeps when it comes back.
+#[tauri::command]
+async fn snooze_messages(
+    engine: State<'_, Engine>,
+    message_ids: Vec<String>,
+) -> CommandResult<Vec<uwumail_core::SnoozedMessage>> {
+    engine.snooze_messages(&message_ids).await
+}
+
+/// Brings snoozed mail back to the folder `folder_id` (the inbox without one), unread, found by
+/// its Message-ID.
+#[tauri::command]
+async fn unsnooze_message(
+    engine: State<'_, Engine>,
+    account_id: String,
+    header_id: String,
+    folder_id: Option<String>,
+) -> CommandResult<uwumail_core::UnsnoozeOutcome> {
+    engine.unsnooze(&account_id, &header_id, folder_id.as_deref()).await
+}
+
+/// Thread id and Message-ID of the mail in a folder, for "Snoozed until …" on its rows.
+#[tauri::command]
+fn folder_header_ids(engine: State<'_, Engine>, folder_id: String) -> CommandResult<Vec<(String, String)>> {
+    engine.folder_header_ids(&folder_id)
 }
 
 #[tauri::command]
@@ -1155,10 +1187,22 @@ fn set_mobile_prefs(language: String, tone: String, app_lock: bool) -> CommandRe
 /// How new-mail notifications read: sender and subject, or only that new mail came (with the
 /// texts for that in the page's language). The app lock leaves them be: what a locked screen
 /// shows is the system's to say (iOS "Show Previews", Android's sensitive content), and hiding
-/// them in UwUMail too left only "New mail" to read.
+/// them in UwUMail too left only "New mail" to read. `muted_accounts` (account ids) and
+/// `quiet_hours` (`{"from":"HH:MM","to":"HH:MM","days":[0-6]}`, or nothing for none) keep mail
+/// silent; quiet hours in another shape count as none.
 #[tauri::command]
-fn set_notification_prefs(show_content: bool, new_mail: String, hidden: String, many: String) -> CommandResult<()> {
-    platform::set_notification_prefs(show_content, &new_mail, &hidden, &many)
+fn set_notification_prefs(
+    show_content: bool,
+    new_mail: String,
+    hidden: String,
+    many: String,
+    muted_accounts: Option<Vec<String>>,
+    quiet_hours: Option<serde_json::Value>,
+) -> CommandResult<()> {
+    let quiet = quiet_hours.as_ref().and_then(uwumail_core::notify::QuietHours::from_value);
+    let prefs = uwumail_core::notify::NotifyPrefs::new(show_content, &new_mail, &hidden, &many)
+        .with_filter(muted_accounts.unwrap_or_default(), quiet);
+    platform::set_notification_prefs(prefs)
 }
 
 /// Android: colors behind the status and navigation bars.
@@ -1392,10 +1436,14 @@ pub fn run() {
             set_offline_days,
             get_thread,
             set_flags,
+            mark_all_read,
             archive_messages,
             trash_messages,
             delete_messages_forever,
             move_messages,
+            snooze_messages,
+            unsnooze_message,
+            folder_header_ids,
             mark_spam,
             blocked_senders,
             unsubscribe,

@@ -387,21 +387,18 @@ async fn store_previews(
     Ok(added)
 }
 
-/// Asks the server for emails containing `query`, in one mailbox or everywhere,
+/// Asks the server for emails matching `query` (text, operators), in one mailbox or everywhere,
 /// including mail UwUMail never downloaded; those are stored as previews.
 /// Returns the local ids of the matches, newest first.
 pub async fn search(
     client: &Client,
     store: &Store,
     account_id: &str,
-    query: &str,
+    query: &crate::search_query::SearchQuery,
     mailbox: Option<&str>,
 ) -> Result<Vec<String>> {
     let account = client.account_id();
-    let mut filter = json!({ "text": query });
-    if let Some(mailbox) = mailbox {
-        filter["inMailbox"] = json!(mailbox);
-    }
+    let filter = query.jmap_filter(mailbox, &chrono::Local);
     let responses = client
         .call(vec![
             (
@@ -794,9 +791,15 @@ pub async fn identities(client: &Client) -> Result<Vec<(String, String, String)>
         .collect())
 }
 
-/// Emails in the Drafts mailbox with this Message-ID (without angle brackets). The mailbox is
-/// read page by page and compared here, because servers don't reliably support a header filter.
+/// Emails in the Drafts mailbox with this Message-ID (without angle brackets).
 async fn drafts_with_message_id(client: &Client, mailbox_id: &str, message_id: &str) -> Result<Vec<String>> {
+    emails_with_message_id(client, mailbox_id, message_id).await
+}
+
+/// Emails in a mailbox with this Message-ID (without angle brackets), newest first, looking at the
+/// newest 2000. The mailbox is read page by page and compared here, because servers don't
+/// reliably support a header filter.
+pub async fn emails_with_message_id(client: &Client, mailbox_id: &str, message_id: &str) -> Result<Vec<String>> {
     const PAGE: usize = 200;
     const MAX_DRAFTS: usize = 2000;
     let account = client.account_id();

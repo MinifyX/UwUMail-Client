@@ -10,6 +10,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter, typ
 use crate::error::{Error, Result};
 use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
+use crate::search_query::SearchQuery;
 
 mod assist;
 mod invites;
@@ -238,6 +239,8 @@ pub struct CalendarPrefs {
 /// Prefix of the conversation ids the trash lists: those conversations hold only
 /// their trashed messages, while everywhere else they leave them out.
 const TRASHED_THREAD: &str = "trash:";
+/// At most this many extra folders join the unified inbox (each is a query parameter).
+const MAX_INCLUDED_FOLDERS: usize = 200;
 
 /// A stable positive stand-in for IMAP's uid, so JMAP emails fit the same table.
 fn remote_uid(remote_id: &str) -> i64 {
@@ -383,17 +386,6 @@ fn from_json<T: serde::de::DeserializeOwned + Default>(text: &str) -> T {
 /// Text for a `LIKE … ESCAPE '\'` pattern that matches it literally.
 fn like_escaped(text: &str) -> String {
     text.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
-}
-
-/// Turns user input into an FTS5 prefix query: `leni clip` → `"leni"* "clip"*`.
-fn fts_query(input: &str) -> Option<String> {
-    let terms: Vec<String> = input
-        .split_whitespace()
-        .map(|term| term.replace('"', ""))
-        .filter(|term| !term.is_empty())
-        .map(|term| format!("\"{term}\"*"))
-        .collect();
-    (!terms.is_empty()).then(|| terms.join(" "))
 }
 
 /// Best effort: the data folder 0700, the database and its journal files 0600 (Unix only; elsewhere
@@ -1319,6 +1311,20 @@ impl Store {
         Ok(ids)
     }
 
+    /// Thread id and Message-ID of the mail in a folder, newest first (at most `limit`); mail
+    /// without a Message-ID is left out.
+    pub fn header_ids_in_folder(&self, folder_id: &str, limit: usize) -> Result<Vec<(String, String, String)>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT thread_id, id, message_id FROM messages WHERE folder_id = ?1 AND message_id IS NOT NULL
+             ORDER BY date DESC LIMIT ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![folder_id, limit as i64], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
     /// The local id of the message with this IMAP uid in a folder.
     pub fn id_by_uid(&self, folder_id: &str, uid: u32) -> Result<Option<String>> {
         let conn = self.conn();
@@ -1417,15 +1423,22 @@ impl Store {
     }
 
     pub fn apply_flag_change(&self, ids: &[String], change: FlagChange) -> Result<()> {
-        let conn = self.conn();
-        for id in ids {
-            if let Some(seen) = change.seen {
-                conn.execute("UPDATE messages SET seen = ?1 WHERE id = ?2", params![seen, id])?;
-            }
-            if let Some(flagged) = change.flagged {
-                conn.execute("UPDATE messages SET flagged = ?1 WHERE id = ?2", params![flagged, id])?;
+        let mut conn = self.conn();
+        // One transaction: "mark all as read" can touch tens of thousands of rows.
+        let tx = conn.transaction()?;
+        {
+            let mut seen_stmt = tx.prepare("UPDATE messages SET seen = ?1 WHERE id = ?2")?;
+            let mut flagged_stmt = tx.prepare("UPDATE messages SET flagged = ?1 WHERE id = ?2")?;
+            for id in ids {
+                if let Some(seen) = change.seen {
+                    seen_stmt.execute(params![seen, id])?;
+                }
+                if let Some(flagged) = change.flagged {
+                    flagged_stmt.execute(params![flagged, id])?;
+                }
             }
         }
+        tx.commit()?;
         Ok(())
     }
 
@@ -1537,6 +1550,48 @@ impl Store {
         self.threads(query, Some(message_ids))
     }
 
+    /// The view's clause, with the folders the unified inbox takes in besides the inboxes.
+    fn list_view_clause(view: &MailboxView, include_folder_ids: &[String], values: &mut Vec<Value>) -> String {
+        match view {
+            MailboxView::Unified { role: role @ (UnifiedRole::Inbox | UnifiedRole::Unread) }
+                if !include_folder_ids.is_empty() =>
+            {
+                let ids: Vec<String> = include_folder_ids.iter().take(MAX_INCLUDED_FOLDERS).cloned().collect();
+                let extra = Self::placeholders(&ids, values);
+                let unread = if *role == UnifiedRole::Unread { " AND m.seen = 0" } else { "" };
+                format!("(f.role = 'inbox' OR m.folder_id IN ({extra})){unread}")
+            }
+            _ => Self::view_clause(view, values),
+        }
+    }
+
+    /// The unread mail "mark all as read" marks: a view's, as its list shows it (search and
+    /// list filters aside), or a whole mailbox's but in trash and junk.
+    pub fn unread_ids(&self, scope: &MarkReadScope) -> Result<Vec<String>> {
+        let mut values: Vec<Value> = Vec::new();
+        let clause = match scope {
+            MarkReadScope::View { view, account_ids, include_folder_ids } => {
+                let mut clauses = vec![Self::list_view_clause(view, include_folder_ids, &mut values)];
+                match account_ids.as_deref() {
+                    Some([]) => return Ok(Vec::new()),
+                    Some(ids) => clauses.push(format!("m.account_id IN ({})", Self::placeholders(ids, &mut values))),
+                    None => {}
+                }
+                clauses.join(" AND ")
+            }
+            MarkReadScope::Account { account_id } => {
+                values.push(Value::Text(account_id.clone()));
+                format!("m.account_id = ?{} AND COALESCE(f.role, '') NOT IN ('trash', 'junk')", values.len())
+            }
+        };
+        let sql =
+            format!("SELECT m.id FROM messages m JOIN folders f ON f.id = m.folder_id WHERE m.seen = 0 AND {clause}");
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(values.iter()), |row| row.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     /// `?n, ?n+1, …` for each id, whose values join `values`.
     fn placeholders(ids: &[String], values: &mut Vec<Value>) -> String {
         ids.iter()
@@ -1546,6 +1601,43 @@ impl Store {
             })
             .collect::<Vec<_>>()
             .join(", ")
+    }
+
+    /// The search's operators as conditions on `m`. The text goes through the full-text index,
+    /// unless the server already searched for it (`with_text` false: its results are what it
+    /// found, also mail whose text isn't stored here).
+    fn search_clauses<Tz: chrono::TimeZone>(
+        search: &SearchQuery,
+        zone: &Tz,
+        with_text: bool,
+        clauses: &mut Vec<String>,
+        values: &mut Vec<Value>,
+    ) {
+        if search.unread {
+            clauses.push("m.seen = 0".into());
+        }
+        if search.flagged {
+            clauses.push("m.flagged = 1".into());
+        }
+        if search.has_attachment {
+            clauses.push("m.attachments_json != '[]'".into());
+        }
+        let (before, after) = search.bounds(zone);
+        if let Some(before) = before {
+            values.push(Value::Integer(before));
+            clauses.push(format!("m.date < ?{}", values.len()));
+        }
+        if let Some(after) = after {
+            values.push(Value::Integer(after));
+            clauses.push(format!("m.date >= ?{}", values.len()));
+        }
+        if let Some(fts) = search.fts().filter(|_| with_text) {
+            values.push(Value::Text(fts));
+            clauses.push(format!(
+                "m.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?{})",
+                values.len()
+            ));
+        }
     }
 
     fn threads(&self, query: &ThreadQuery, only: Option<&[String]>) -> Result<ThreadPage> {
@@ -1561,7 +1653,7 @@ impl Store {
                     clauses.push(Self::view_clause(&query.view, &mut values));
                 }
             }
-            None => clauses.push(Self::view_clause(&query.view, &mut values)),
+            None => clauses.push(Self::list_view_clause(&query.view, &query.include_folder_ids, &mut values)),
         }
         for any in query.labels.iter().take(10) {
             clauses.push(Self::any_label_clause(any, &mut values));
@@ -1577,13 +1669,8 @@ impl Store {
             ListFilter::Flagged => clauses.push("m.flagged = 1".into()),
             ListFilter::Attachments => clauses.push("m.attachments_json != '[]'".into()),
         }
-        if let Some(search) = query.search.as_deref().and_then(fts_query).filter(|_| only.is_none()) {
-            values.push(Value::Text(search));
-            clauses.push(format!(
-                "m.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?{})",
-                values.len()
-            ));
-        }
+        let search = SearchQuery::parse(query.search.as_deref().unwrap_or_default());
+        Self::search_clauses(&search, &chrono::Local, only.is_none(), &mut clauses, &mut values);
         let limit = query.limit.clamp(1, 500);
         let offset: u32 = query.cursor.as_deref().and_then(|c| c.parse().ok()).unwrap_or(0);
         let group = if query.conversations { "m.thread_id" } else { "m.id" };
@@ -2241,6 +2328,7 @@ mod tests {
             cursor: None,
             limit: 50,
             labels,
+            include_folder_ids: Vec::new(),
         };
         let subjects = |page: ThreadPage| page.threads.into_iter().map(|t| t.subject).collect::<Vec<_>>();
 
@@ -2401,6 +2489,7 @@ mod tests {
                 cursor: None,
                 limit: 50,
                 labels: Vec::new(),
+                include_folder_ids: Vec::new(),
             })
             .unwrap();
         assert_eq!(page.threads.len(), 1);
@@ -2431,6 +2520,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                 cursor: None,
                 limit: 50,
                 labels: Vec::new(),
+                include_folder_ids: Vec::new(),
             })
             .unwrap();
         let detail = store.get_thread(&page.threads[0].id, true).unwrap();
@@ -2479,6 +2569,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                     cursor: None,
                     limit: 50,
                     labels: Vec::new(),
+                    include_folder_ids: Vec::new(),
                 })
                 .unwrap()
                 .threads
@@ -2505,6 +2596,66 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         let bytes = raw("a@x", "Hi", "leni@x.example", None, "Hallo", "Mon, 14 Sep 2026 09:00:00 +0000");
         assert!(insert(&store, &inbox, 1, &bytes).is_some());
         assert!(insert(&store, &inbox, 1, &bytes).is_none());
+    }
+
+    #[test]
+    fn search_operators_narrow_the_list() {
+        let (store, _, inbox, _) = store_with_account();
+        let bill = insert(
+            &store,
+            &inbox,
+            1,
+            &raw("a@x", "Rechnung Mai", "Shop <shop@x.example>", None, "Anbei", "Thu, 10 Sep 2026 12:00:00 +0000"),
+        )
+        .unwrap();
+        insert(
+            &store,
+            &inbox,
+            2,
+            &raw(
+                "b@x",
+                "Spieleabend",
+                "Noah <noah@x.example>",
+                None,
+                "Rechnung folgt",
+                "Sun, 20 Sep 2026 12:00:00 +0000",
+            ),
+        );
+        store
+            .apply_flag_change(std::slice::from_ref(&bill), FlagChange { seen: Some(true), flagged: Some(true) })
+            .unwrap();
+
+        let subjects = |text: &str| -> Vec<String> {
+            store
+                .list_threads(&ThreadQuery {
+                    view: MailboxView::Unified { role: UnifiedRole::Inbox },
+                    filter: ListFilter::All,
+                    search: Some(text.into()),
+                    conversations: false,
+                    account_ids: None,
+                    cursor: None,
+                    limit: 50,
+                    labels: Vec::new(),
+                    include_folder_ids: Vec::new(),
+                })
+                .unwrap()
+                .threads
+                .into_iter()
+                .map(|t| t.subject)
+                .collect()
+        };
+        assert_eq!(subjects("rechnung").len(), 2);
+        assert_eq!(subjects("rechnung from:shop"), vec!["Rechnung Mai"]);
+        assert_eq!(subjects("from:noah@x.example"), vec!["Spieleabend"]);
+        assert_eq!(subjects("subject:rechnung"), vec!["Rechnung Mai"]);
+        assert_eq!(subjects("to:mini"), subjects("rechnung"));
+        assert_eq!(subjects("is:unread"), vec!["Spieleabend"]);
+        assert_eq!(subjects("is:flagged"), vec!["Rechnung Mai"]);
+        assert!(subjects("has:attachment").is_empty());
+        assert_eq!(subjects("after:2026-09-15"), vec!["Spieleabend"]);
+        assert_eq!(subjects("before:2026-09-15 rechnung"), vec!["Rechnung Mai"]);
+        assert_eq!(subjects("\"rechnung folgt\""), vec!["Spieleabend"]);
+        assert!(subjects("\"folgt rechnung\"").is_empty());
     }
 
     #[test]
@@ -2541,6 +2692,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                     cursor: None,
                     limit: 50,
                     labels: Vec::new(),
+                    include_folder_ids: Vec::new(),
                 })
                 .unwrap()
                 .threads
@@ -2621,6 +2773,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                 cursor: None,
                 limit: 50,
                 labels: Vec::new(),
+                include_folder_ids: Vec::new(),
             };
             store.list_threads(&query).unwrap().threads.into_iter().map(|t| t.subject).collect()
         };
@@ -2629,6 +2782,57 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         assert_eq!(subjects(Some(vec!["acc".into()]), Some("freitag")), vec!["Spieleabend"]);
         // A workspace without mailboxes shows nothing rather than everything.
         assert!(subjects(Some(Vec::new()), None).is_empty());
+    }
+
+    #[test]
+    fn unified_inbox_takes_in_extra_folders_and_marks_all_read() {
+        let (store, _, inbox, _) = store_with_account();
+        let sorted = folder(&store, "Newsletters", None, ".");
+        let other = folder(&store, "Projects", None, ".");
+        let trash = folder(&store, "Trash", Some(FolderRole::Trash), ".");
+        let mail = |id: &str, subject: &str, hour: u32| {
+            raw(id, subject, "noah@x.example", None, "Hallo", &format!("Mon, 14 Sep 2026 {hour:02}:00:00 +0000"))
+        };
+        insert(&store, &inbox, 1, &mail("a@x", "Inbox", 9)).unwrap();
+        let news = insert(&store, &sorted, 1, &mail("b@x", "News", 10)).unwrap();
+        insert(&store, &other, 1, &mail("c@x", "Elsewhere", 11)).unwrap();
+        insert(&store, &trash, 1, &mail("d@x", "Gone", 12)).unwrap();
+
+        let query = |role: UnifiedRole, include: Vec<String>| ThreadQuery {
+            view: MailboxView::Unified { role },
+            filter: ListFilter::All,
+            search: None,
+            conversations: false,
+            account_ids: None,
+            cursor: None,
+            limit: 50,
+            labels: Vec::new(),
+            include_folder_ids: include,
+        };
+        let subjects = |query: ThreadQuery| -> Vec<String> {
+            store.list_threads(&query).unwrap().threads.into_iter().map(|t| t.subject).collect()
+        };
+        assert_eq!(subjects(query(UnifiedRole::Inbox, Vec::new())), vec!["Inbox"]);
+        assert_eq!(subjects(query(UnifiedRole::Inbox, vec![sorted.clone()])), vec!["News", "Inbox"]);
+        // Only the inbox views take them in.
+        assert!(subjects(query(UnifiedRole::Sent, vec![sorted.clone()])).is_empty());
+
+        // Marking the unified inbox read covers the extra folder, nothing else.
+        let scope = |include: Vec<String>, account_ids: Option<Vec<String>>| MarkReadScope::View {
+            view: MailboxView::Unified { role: UnifiedRole::Unread },
+            account_ids,
+            include_folder_ids: include,
+        };
+        assert_eq!(store.unread_ids(&scope(vec![sorted.clone()], None)).unwrap().len(), 2);
+        assert!(store.unread_ids(&scope(vec![sorted.clone()], Some(Vec::new()))).unwrap().is_empty());
+        assert!(store.unread_ids(&scope(Vec::new(), Some(vec!["other".into()]))).unwrap().is_empty());
+        // A whole mailbox: every folder but trash and junk.
+        let whole = store.unread_ids(&MarkReadScope::Account { account_id: "acc".into() }).unwrap();
+        assert_eq!(whole.len(), 3);
+
+        store.apply_flag_change(std::slice::from_ref(&news), FlagChange { seen: Some(true), flagged: None }).unwrap();
+        assert_eq!(subjects(query(UnifiedRole::Unread, vec![sorted.clone()])), vec!["Inbox"]);
+        assert_eq!(store.unread_ids(&scope(vec![sorted], None)).unwrap().len(), 1);
     }
 
     #[test]

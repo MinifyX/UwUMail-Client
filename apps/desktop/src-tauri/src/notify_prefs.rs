@@ -1,17 +1,18 @@
 //! How new-mail notifications read on the desktop and on iOS, as the page last said (Settings →
 //! "Show sender and subject"). Kept in a small file next to the engine's data, so a start with a
 //! hidden window honours it before the page has loaded. Only when nothing was ever stored do they
-//! show sender and subject.
+//! show sender and subject. Muted accounts and quiet hours (synced settings `notify.muted:<addr>`,
+//! `notify.quietHours`) live here too, so mail that comes while no page runs keeps quiet as well.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
 use serde_json::{Value, json};
-use uwumail_core::notify::NotifyPrefs;
+use uwumail_core::notify::{NotifyPrefs, QuietHours};
 
 const FILE: &str = "notification-prefs.json";
-/// The file only ever holds a switch and three short lines.
-const MAX_FILE: u64 = 8 * 1024;
+/// The file holds a switch, three short lines, account ids and quiet hours.
+const MAX_FILE: u64 = 64 * 1024;
 
 struct State {
     file: Option<PathBuf>,
@@ -57,7 +58,13 @@ fn read(file: &Path) -> Option<NotifyPrefs> {
     let value: Value = serde_json::from_slice(&std::fs::read(file).ok()?).ok()?;
     let show_content = value.get("showContent")?.as_bool()?;
     let text = |key: &str| value.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
-    Some(NotifyPrefs::new(show_content, &text("newMail"), &text("hidden"), &text("many")))
+    let muted = value
+        .get("muted")
+        .and_then(Value::as_array)
+        .map(|ids| ids.iter().filter_map(Value::as_str).map(str::to_string).collect())
+        .unwrap_or_default();
+    let quiet = value.get("quietHours").and_then(QuietHours::from_value);
+    Some(NotifyPrefs::new(show_content, &text("newMail"), &text("hidden"), &text("many")).with_filter(muted, quiet))
 }
 
 /// Written next to the file and moved over it, so a crash never leaves half of it.
@@ -67,6 +74,8 @@ fn write(file: &Path, prefs: &NotifyPrefs) -> std::io::Result<()> {
         "newMail": prefs.new_mail,
         "hidden": prefs.hidden,
         "many": prefs.many,
+        "muted": prefs.muted,
+        "quietHours": prefs.quiet.as_ref().map(QuietHours::to_value),
     });
     let temporary = file.with_extension("json.tmp");
     std::fs::write(&temporary, serde_json::to_vec(&body)?)?;
@@ -100,6 +109,13 @@ mod tests {
         // Texts from the file go through the same cleaning as the page's.
         std::fs::write(&file, r#"{"showContent":false,"newMail":"a\u202eb","hidden":""}"#).unwrap();
         assert_eq!(read(&file).unwrap().new_mail, "ab");
+        // Muted accounts and quiet hours come back as they were kept.
+        let quiet = QuietHours::parse("22:00", "07:00", &[0, 6]);
+        let filtered = NotifyPrefs::default().with_filter(vec!["acc-1".into()], quiet);
+        write(&file, &filtered).unwrap();
+        assert_eq!(read(&file), Some(filtered));
+        std::fs::write(&file, r#"{"showContent":true,"quietHours":{"from":"25:00","to":"07:00","days":[1]}}"#).unwrap();
+        assert_eq!(read(&file).unwrap().quiet, None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

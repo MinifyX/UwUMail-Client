@@ -77,6 +77,84 @@ pub struct NotifyPrefs {
     pub hidden: String,
     /// The title for two or more mails, `{n}` standing for how many: "{n} new mails".
     pub many: String,
+    /// Accounts (by id) whose mail doesn't notify.
+    pub muted: Vec<String>,
+    /// When no mail notifies.
+    pub quiet: Option<QuietHours>,
+}
+
+/// The longest list of muted accounts the prefs keep.
+pub const MAX_MUTED: usize = 256;
+/// The longest account id the muted list keeps.
+pub const MAX_MUTED_ID: usize = 128;
+
+/// Times of the week without notifications: from `from` to `to` (minutes after midnight, local
+/// time) on the listed days. A span past midnight belongs to the day it starts on; `from == to`
+/// means the whole day.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QuietHours {
+    pub from: u16,
+    pub to: u16,
+    /// Bit `d` set: day `d` (0 = Sunday) is quiet.
+    pub days: u8,
+}
+
+impl QuietHours {
+    /// From the settings' form: "HH:MM" times and days 0–6 (0 = Sunday). `None` for anything else.
+    pub fn parse(from: &str, to: &str, days: &[u64]) -> Option<Self> {
+        let mut mask = 0u8;
+        for &day in days {
+            if day > 6 {
+                return None;
+            }
+            mask |= 1 << day;
+        }
+        Some(Self { from: parse_time(from)?, to: parse_time(to)?, days: mask })
+    }
+
+    /// From the settings' JSON, `{"from":"HH:MM","to":"HH:MM","days":[0-6]}`; `None` for anything
+    /// else (other fields, like `enabled`, are the caller's).
+    pub fn from_value(value: &serde_json::Value) -> Option<Self> {
+        let days: Option<Vec<u64>> = value.get("days")?.as_array()?.iter().map(serde_json::Value::as_u64).collect();
+        Self::parse(value.get("from")?.as_str()?, value.get("to")?.as_str()?, &days?)
+    }
+
+    /// The settings' JSON form.
+    pub fn to_value(&self) -> serde_json::Value {
+        serde_json::json!({ "from": Self::time(self.from), "to": Self::time(self.to), "days": self.day_list() })
+    }
+
+    /// "HH:MM" of `minutes` after midnight.
+    pub fn time(minutes: u16) -> String {
+        format!("{:02}:{:02}", minutes / 60, minutes % 60)
+    }
+
+    /// The listed days, 0 = Sunday.
+    pub fn day_list(&self) -> Vec<u8> {
+        (0..7).filter(|day| self.days & (1 << day) != 0).collect()
+    }
+
+    /// Whether `minute` (after midnight) of `weekday` (0 = Sunday) is quiet.
+    pub fn contains(&self, weekday: u8, minute: u16) -> bool {
+        let listed = |day: u8| self.days & (1 << (day % 7)) != 0;
+        let yesterday = (weekday + 6) % 7;
+        match self.from.cmp(&self.to) {
+            std::cmp::Ordering::Equal => listed(weekday),
+            std::cmp::Ordering::Less => listed(weekday) && self.from <= minute && minute < self.to,
+            std::cmp::Ordering::Greater => {
+                (listed(weekday) && minute >= self.from) || (listed(yesterday) && minute < self.to)
+            }
+        }
+    }
+}
+
+fn parse_time(text: &str) -> Option<u16> {
+    let (hours, minutes) = text.split_once(':')?;
+    if hours.len() != 2 || minutes.len() != 2 || !text.bytes().all(|b| b.is_ascii_digit() || b == b':') {
+        return None;
+    }
+    let (hours, minutes) = (hours.parse::<u16>().ok()?, minutes.parse::<u16>().ok()?);
+    (hours < 24 && minutes < 60).then_some(hours * 60 + minutes)
 }
 
 impl Default for NotifyPrefs {
@@ -86,6 +164,8 @@ impl Default for NotifyPrefs {
             new_mail: "New mail".into(),
             hidden: "Open UwUMail to read it.".into(),
             many: "{n} new mails".into(),
+            muted: Vec::new(),
+            quiet: None,
         }
     }
 }
@@ -100,7 +180,43 @@ impl NotifyPrefs {
             if plain.is_empty() { fallback } else { plain }
         };
         let many = Some(line(many, fallback.many.clone())).filter(|many| many.contains("{n}")).unwrap_or(fallback.many);
-        Self { show_content, new_mail: line(new_mail, fallback.new_mail), hidden: line(hidden, fallback.hidden), many }
+        Self {
+            show_content,
+            new_mail: line(new_mail, fallback.new_mail),
+            hidden: line(hidden, fallback.hidden),
+            many,
+            muted: Vec::new(),
+            quiet: None,
+        }
+    }
+
+    /// The same texts with muted accounts and quiet hours.
+    pub fn with_filter(mut self, muted: Vec<String>, quiet: Option<QuietHours>) -> Self {
+        let mut muted = muted;
+        // Ids are short; the cap keeps the kept file (notification-prefs.json) well under its limit.
+        muted.retain(|id| !id.is_empty() && id.len() <= MAX_MUTED_ID);
+        muted.sort();
+        muted.dedup();
+        muted.truncate(MAX_MUTED);
+        self.muted = muted;
+        self.quiet = quiet;
+        self
+    }
+
+    /// Whether new mail of `account_id` notifies at `minute` (after midnight) of `weekday`
+    /// (0 = Sunday).
+    pub fn rings(&self, account_id: &str, weekday: u8, minute: u16) -> bool {
+        !self.muted.iter().any(|id| id == account_id)
+            && !self.quiet.is_some_and(|quiet| quiet.contains(weekday, minute))
+    }
+
+    /// Whether new mail of `account_id` notifies now, in local time.
+    pub fn rings_now(&self, account_id: &str) -> bool {
+        use chrono::{Datelike, Timelike};
+        let now = chrono::Local::now();
+        let weekday = now.weekday().num_days_from_sunday() as u8;
+        let minute = (now.hour() * 60 + now.minute()) as u16;
+        self.rings(account_id, weekday, minute)
     }
 }
 
@@ -303,5 +419,68 @@ mod tests {
         unseen.clear();
         let (count, newest) = unseen.add("a", &[mail("Leni", "Noch was")]);
         assert_eq!(mail_notification(&prefs, count, &newest), Some(("Leni".into(), "Noch was".into())));
+    }
+
+    #[test]
+    fn quiet_hours_parse_only_the_settings_form() {
+        let quiet = QuietHours::parse("22:00", "07:30", &[0, 6]).unwrap();
+        assert_eq!((quiet.from, quiet.to, quiet.day_list()), (22 * 60, 7 * 60 + 30, vec![0, 6]));
+        assert_eq!(QuietHours::time(quiet.to), "07:30");
+        for (from, to) in [("24:00", "07:00"), ("7:00", "08:00"), ("07:60", "08:00"), ("+1:00", "08:00"), ("", "08:00")]
+        {
+            assert!(QuietHours::parse(from, to, &[1]).is_none(), "{from}");
+        }
+        assert!(QuietHours::parse("07:00", "08:00", &[7]).is_none());
+        assert_eq!(QuietHours::from_value(&quiet.to_value()), Some(quiet));
+        assert!(QuietHours::from_value(&serde_json::json!({"from": "22:00", "to": "07:00", "days": [-1]})).is_none());
+    }
+
+    #[test]
+    fn quiet_hours_within_a_day() {
+        let quiet = QuietHours::parse("12:00", "13:00", &[1]).unwrap();
+        assert!(quiet.contains(1, 12 * 60));
+        assert!(quiet.contains(1, 12 * 60 + 59));
+        assert!(!quiet.contains(1, 13 * 60));
+        assert!(!quiet.contains(1, 11 * 60 + 59));
+        assert!(!quiet.contains(2, 12 * 60 + 30));
+    }
+
+    #[test]
+    fn quiet_hours_past_midnight_belong_to_the_day_they_start() {
+        // Friday night until Saturday morning.
+        let quiet = QuietHours::parse("22:00", "07:00", &[5]).unwrap();
+        assert!(quiet.contains(5, 23 * 60));
+        assert!(quiet.contains(6, 6 * 60 + 59));
+        assert!(!quiet.contains(6, 7 * 60));
+        assert!(!quiet.contains(5, 6 * 60));
+        assert!(!quiet.contains(6, 23 * 60));
+        // Saturday night runs into Sunday (day 0).
+        let quiet = QuietHours::parse("22:00", "07:00", &[6]).unwrap();
+        assert!(quiet.contains(0, 60));
+        // The same start and end mean the whole day.
+        let quiet = QuietHours::parse("00:00", "00:00", &[3]).unwrap();
+        assert!(quiet.contains(3, 0) && quiet.contains(3, 24 * 60 - 1) && !quiet.contains(4, 0));
+    }
+
+    #[test]
+    fn muted_accounts_and_quiet_hours_keep_mail_silent() {
+        let quiet = QuietHours::parse("22:00", "07:00", &[0, 1, 2, 3, 4, 5, 6]);
+        let prefs = NotifyPrefs::default().with_filter(vec!["b".into(), "a".into(), "a".into(), String::new()], quiet);
+        assert_eq!(prefs.muted, ["a", "b"]);
+        assert!(!prefs.rings("a", 1, 12 * 60));
+        assert!(prefs.rings("c", 1, 12 * 60));
+        assert!(!prefs.rings("c", 1, 23 * 60));
+        assert!(NotifyPrefs::default().rings("a", 1, 23 * 60));
+    }
+
+    #[test]
+    fn muted_list_stays_small() {
+        let ids = (0..MAX_MUTED * 2).map(|i| format!("{i:0>width$}", width = MAX_MUTED_ID + 1)).collect();
+        assert!(NotifyPrefs::default().with_filter(ids, None).muted.is_empty(), "overlong ids are dropped");
+        let ids = (0..MAX_MUTED * 2).map(|i| format!("{i:0>width$}", width = MAX_MUTED_ID)).collect();
+        let prefs = NotifyPrefs::default().with_filter(ids, None);
+        assert_eq!(prefs.muted.len(), MAX_MUTED);
+        // The whole list fits the file the desktop app keeps (64 KiB).
+        assert!(serde_json::to_vec(&prefs.muted).unwrap().len() < 48 * 1024);
     }
 }

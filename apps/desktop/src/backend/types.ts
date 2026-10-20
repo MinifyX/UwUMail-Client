@@ -144,7 +144,17 @@ export interface ThreadQuery {
   limit: number;
   /** Label filters that must all hold; one holds when any of its labels is on the mail. */
   labels?: LabelRef[][];
+  /** More folders the unified inbox (and its unread view) takes in, see lib/unifiedScope. */
+  includeFolderIds?: string[];
 }
+
+/**
+ * Where "mark all as read" marks: a view's mail (with the mailboxes and extra folders of its
+ * list), or every folder of a mailbox but trash and junk.
+ */
+export type MarkReadScope =
+  | { kind: "view"; view: MailboxView; accountIds?: string[]; includeFolderIds?: string[] }
+  | { kind: "account"; accountId: string };
 
 export interface ThreadSummary {
   id: string;
@@ -275,6 +285,19 @@ export interface MovedMessage {
   id: string;
   fromFolderId: string;
 }
+
+/** A mail that went into the Snoozed folder, with what bringing it back needs. */
+export interface SnoozedMessage {
+  id: string;
+  accountId: string;
+  /** The Message-ID header, without angle brackets. */
+  headerId: string;
+  /** Where it came from; null when it already was in the Snoozed folder. */
+  folderId: string | null;
+}
+
+/** Back in its folder; not in the Snoozed folder (any more); or this device can't tell yet. */
+export type UnsnoozeOutcome = "moved" | "gone" | "waiting";
 
 /** A mail waiting for its "undo send" time. */
 export interface QueuedSend {

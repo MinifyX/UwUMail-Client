@@ -42,11 +42,21 @@ export function inWorkspace<T extends { id: string }>(
   return accounts.filter((account) => workspaceOf(account.id, businessAccounts) === workspace);
 }
 
-/** Unread mail in the inboxes of each workspace. */
-export function unreadInboxes(folders: readonly Folder[], businessAccounts: readonly string[]) {
+/**
+ * Unread mail in the unified inbox of each workspace: the inboxes and the extra folders it takes
+ * in (`extraFolderIds`), without the mailboxes left out of it (`leftOut`, ids).
+ */
+export function unreadInboxes(
+  folders: readonly Folder[],
+  businessAccounts: readonly string[],
+  { leftOut = [], extraFolderIds = [] }: { leftOut?: readonly string[]; extraFolderIds?: readonly string[] } = {},
+) {
   const unread: Record<Workspace, number> = { private: 0, business: 0 };
   for (const folder of folders) {
-    if (folder.role === "inbox") unread[workspaceOf(folder.accountId, businessAccounts)] += folder.unread;
+    if (leftOut.includes(folder.accountId)) continue;
+    if (folder.role === "inbox" || extraFolderIds.includes(folder.id)) {
+      unread[workspaceOf(folder.accountId, businessAccounts)] += folder.unread;
+    }
   }
   return unread;
 }

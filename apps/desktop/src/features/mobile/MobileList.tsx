@@ -3,6 +3,8 @@ import { Button, EmptyState, Icon, IconButton, ICONS, Pill } from "@uwusuite/des
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@/backend/backend";
 import { searchServer } from "@/backend/mobile";
+import { withSearchTerm } from "@/lib/searchQuery";
+import { SearchHelp } from "../mail/SearchHelp";
 import type { ListFilter, ThreadSummary } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
 import { NyuScene } from "@/components/nyu/scenes";
@@ -15,6 +17,7 @@ import {
   useMessageActions,
   useThreadActions as useCardActions,
   useThreads,
+  useListScope,
   useVisibleAccounts,
 } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
@@ -25,6 +28,7 @@ import { ThreadRow } from "../mail/ThreadRow";
 import { useViewInfo } from "../mail/view";
 import { openDraftThread } from "../compose/openDraft";
 import { useSelectionActions } from "../mail/selection";
+import { useSnoozedRows } from "../mail/snooze";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { PullToRefresh } from "./PullToRefresh";
@@ -66,10 +70,12 @@ export function MobileList() {
   const activeWorkspace = useSettings((s) => s.activeWorkspace);
   const workspaceName = useWorkspaceName();
   const info = useViewInfo(view);
+  const snoozedRows = useSnoozedRows(view);
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
   const emptiable = view.kind === "folder" ? folders.find((f) => f.id === view.folderId && canEmpty(f)) : undefined;
-  const { accounts: shown, loaded: accountsLoaded, accountIds } = useVisibleAccounts();
+  const { accounts: shown, loaded: accountsLoaded } = useVisibleAccounts();
+  const { accountIds, includeFolderIds } = useListScope(view);
   const { refresh } = useMessageActions();
   const threadActions = useThreadActions();
   const selectionActions = useSelectionActions();
@@ -93,7 +99,7 @@ export function MobileList() {
 
   const query = useThreads(view, filter, search);
   const local = flattenThreads(query.data?.pages);
-  const searchKey = JSON.stringify([view, filter, search, conversations, accountIds]);
+  const searchKey = JSON.stringify([view, filter, search, conversations, accountIds, includeFolderIds]);
   const fromServer = server?.key === searchKey ? server.threads : null;
   // Server matches join the local ones in the same list, newest first.
   const threads = fromServer
@@ -111,6 +117,7 @@ export function MobileList() {
         search,
         conversations,
         accountIds: accountIds ?? undefined,
+        includeFolderIds,
         limit: 200,
       });
       if (page) {
@@ -230,16 +237,14 @@ export function MobileList() {
             onChange={(event) => setDraftSearch(event.target.value)}
             placeholder={t("list.search")}
             enterKeyHint="search"
-            className="h-11 w-full rounded-full border border-transparent bg-canvas pr-11 pl-10 text-[15px] placeholder:text-muted focus:border-pink focus:bg-surface focus:shadow-focus focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+            className="h-11 w-full rounded-full border border-transparent bg-canvas pr-[5.5rem] pl-10 text-[15px] placeholder:text-muted focus:border-pink focus:bg-surface focus:shadow-focus focus:outline-none [&::-webkit-search-cancel-button]:hidden"
           />
-          {draftSearch && (
-            <IconButton
-              icon={ICONS.close}
-              label={t("list.clearSearch")}
-              onClick={() => setDraftSearch("")}
-              className="absolute top-1/2 right-1 -translate-y-1/2"
-            />
-          )}
+          <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center">
+            <SearchHelp onInsert={(term) => setDraftSearch(withSearchTerm(draftSearch, term))} />
+            {draftSearch && (
+              <IconButton icon={ICONS.close} label={t("list.clearSearch")} onClick={() => setDraftSearch("")} />
+            )}
+          </div>
         </div>
 
         <div className="-mx-3 flex [scrollbar-width:none] gap-2 overflow-x-auto px-3 pb-0.5" role="toolbar">
@@ -317,6 +322,7 @@ export function MobileList() {
                           actions={cardActions}
                           inTrash={info.isTrash}
                           inJunk={info.isJunk}
+                          snoozedUntil={snoozedRows?.get(thread.id)}
                           onSelect={() =>
                             selecting
                               ? toggle(thread.id)

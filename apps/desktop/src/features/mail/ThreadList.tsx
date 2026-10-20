@@ -15,6 +15,8 @@ import {
   useVisibleAccounts,
 } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
+import { withSearchTerm } from "@/lib/searchQuery";
+import { SearchHelp } from "./SearchHelp";
 import { groupByLabel, labelGroups, labelRef, splitLabelSearch, type LabelEntry } from "@/lib/labelFilter";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
@@ -24,6 +26,7 @@ import { labelsFor, useLabelDirectory } from "../labels/useLabels";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { useSelectionActions } from "./selection";
+import { useSnoozedRows } from "./snooze";
 import { ThreadRow } from "./ThreadRow";
 import { useViewInfo } from "./view";
 
@@ -62,6 +65,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
     openSettings,
   } = useUi.getState();
   const info = useViewInfo(view);
+  const snoozedRows = useSnoozedRows(view);
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
   const emptiable = view.kind === "folder" ? folders.find((f) => f.id === view.folderId && canEmpty(f)) : undefined;
@@ -148,6 +152,10 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
         onSelect: () => void selection.read(threadIds, unread).then(done),
       },
       { label: t("reader.move"), onSelect: () => void selection.move(threadIds, done) },
+      { label: t("snooze.action"), onSelect: () => void selection.snooze(threadIds, done) },
+      ...(info.isSnoozed
+        ? [{ label: t("snooze.unsnooze"), onSelect: () => void selection.unsnooze(threadIds).then(done) }]
+        : []),
       {
         label: info.isJunk ? t("reader.notSpam") : t("reader.spam"),
         onSelect: () => void selection.spam(threadIds, !info.isJunk).then(done),
@@ -173,6 +181,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
       dragIds={checked.includes(thread.id) ? checked : [thread.id]}
       inTrash={info.isTrash}
       inJunk={info.isJunk}
+      snoozedUntil={snoozedRows?.get(thread.id)}
       onContextMenu={(event) => {
         event.preventDefault();
         const threadIds = checked.includes(thread.id) ? checked : [thread.id];
@@ -288,17 +297,19 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
               }
             }}
             placeholder={t("list.search")}
-            className="h-10 w-full rounded-full border border-transparent bg-canvas pr-10 pl-10 text-[13.5px] placeholder:text-muted focus:border-pink focus:bg-surface focus:shadow-focus focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+            className="h-10 w-full rounded-full border border-transparent bg-canvas pr-[4.5rem] pl-10 text-[13.5px] placeholder:text-muted focus:border-pink focus:bg-surface focus:shadow-focus focus:outline-none [&::-webkit-search-cancel-button]:hidden"
           />
-          {draft && (
-            <IconButton
-              icon={ICONS.close}
-              size="sm"
-              label={t("list.clearSearch")}
-              onClick={() => setDraft("")}
-              className="absolute top-1/2 right-1 -translate-y-1/2"
+          <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center">
+            <SearchHelp
+              onInsert={(term) => {
+                setDraft(withSearchTerm(draft, term));
+                document.getElementById(SEARCH_INPUT_ID)?.focus();
+              }}
             />
-          )}
+            {draft && (
+              <IconButton icon={ICONS.close} size="sm" label={t("list.clearSearch")} onClick={() => setDraft("")} />
+            )}
+          </div>
         </div>
 
         {checked.length > 0 ? (
