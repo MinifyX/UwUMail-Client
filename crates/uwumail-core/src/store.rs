@@ -10,6 +10,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter, typ
 use crate::error::{Error, Result};
 use crate::mime::{ParsedMessage, iso8601};
 use crate::model::*;
+use crate::search_query::SearchQuery;
 
 mod assist;
 mod invites;
@@ -383,17 +384,6 @@ fn from_json<T: serde::de::DeserializeOwned + Default>(text: &str) -> T {
 /// Text for a `LIKE … ESCAPE '\'` pattern that matches it literally.
 fn like_escaped(text: &str) -> String {
     text.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
-}
-
-/// Turns user input into an FTS5 prefix query: `leni clip` → `"leni"* "clip"*`.
-fn fts_query(input: &str) -> Option<String> {
-    let terms: Vec<String> = input
-        .split_whitespace()
-        .map(|term| term.replace('"', ""))
-        .filter(|term| !term.is_empty())
-        .map(|term| format!("\"{term}\"*"))
-        .collect();
-    (!terms.is_empty()).then(|| terms.join(" "))
 }
 
 /// Best effort: the data folder 0700, the database and its journal files 0600 (Unix only; elsewhere
@@ -1548,6 +1538,43 @@ impl Store {
             .join(", ")
     }
 
+    /// The search's operators as conditions on `m`. The text goes through the full-text index,
+    /// unless the server already searched for it (`with_text` false: its results are what it
+    /// found, also mail whose text isn't stored here).
+    fn search_clauses<Tz: chrono::TimeZone>(
+        search: &SearchQuery,
+        zone: &Tz,
+        with_text: bool,
+        clauses: &mut Vec<String>,
+        values: &mut Vec<Value>,
+    ) {
+        if search.unread {
+            clauses.push("m.seen = 0".into());
+        }
+        if search.flagged {
+            clauses.push("m.flagged = 1".into());
+        }
+        if search.has_attachment {
+            clauses.push("m.attachments_json != '[]'".into());
+        }
+        let (before, after) = search.bounds(zone);
+        if let Some(before) = before {
+            values.push(Value::Integer(before));
+            clauses.push(format!("m.date < ?{}", values.len()));
+        }
+        if let Some(after) = after {
+            values.push(Value::Integer(after));
+            clauses.push(format!("m.date >= ?{}", values.len()));
+        }
+        if let Some(fts) = search.fts().filter(|_| with_text) {
+            values.push(Value::Text(fts));
+            clauses.push(format!(
+                "m.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?{})",
+                values.len()
+            ));
+        }
+    }
+
     fn threads(&self, query: &ThreadQuery, only: Option<&[String]>) -> Result<ThreadPage> {
         let nothing = || Ok(ThreadPage { threads: Vec::new(), next_cursor: None });
         let mut values: Vec<Value> = Vec::new();
@@ -1577,13 +1604,8 @@ impl Store {
             ListFilter::Flagged => clauses.push("m.flagged = 1".into()),
             ListFilter::Attachments => clauses.push("m.attachments_json != '[]'".into()),
         }
-        if let Some(search) = query.search.as_deref().and_then(fts_query).filter(|_| only.is_none()) {
-            values.push(Value::Text(search));
-            clauses.push(format!(
-                "m.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?{})",
-                values.len()
-            ));
-        }
+        let search = SearchQuery::parse(query.search.as_deref().unwrap_or_default());
+        Self::search_clauses(&search, &chrono::Local, only.is_none(), &mut clauses, &mut values);
         let limit = query.limit.clamp(1, 500);
         let offset: u32 = query.cursor.as_deref().and_then(|c| c.parse().ok()).unwrap_or(0);
         let group = if query.conversations { "m.thread_id" } else { "m.id" };
@@ -2505,6 +2527,65 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         let bytes = raw("a@x", "Hi", "leni@x.example", None, "Hallo", "Mon, 14 Sep 2026 09:00:00 +0000");
         assert!(insert(&store, &inbox, 1, &bytes).is_some());
         assert!(insert(&store, &inbox, 1, &bytes).is_none());
+    }
+
+    #[test]
+    fn search_operators_narrow_the_list() {
+        let (store, _, inbox, _) = store_with_account();
+        let bill = insert(
+            &store,
+            &inbox,
+            1,
+            &raw("a@x", "Rechnung Mai", "Shop <shop@x.example>", None, "Anbei", "Thu, 10 Sep 2026 12:00:00 +0000"),
+        )
+        .unwrap();
+        insert(
+            &store,
+            &inbox,
+            2,
+            &raw(
+                "b@x",
+                "Spieleabend",
+                "Noah <noah@x.example>",
+                None,
+                "Rechnung folgt",
+                "Sun, 20 Sep 2026 12:00:00 +0000",
+            ),
+        );
+        store
+            .apply_flag_change(std::slice::from_ref(&bill), FlagChange { seen: Some(true), flagged: Some(true) })
+            .unwrap();
+
+        let subjects = |text: &str| -> Vec<String> {
+            store
+                .list_threads(&ThreadQuery {
+                    view: MailboxView::Unified { role: UnifiedRole::Inbox },
+                    filter: ListFilter::All,
+                    search: Some(text.into()),
+                    conversations: false,
+                    account_ids: None,
+                    cursor: None,
+                    limit: 50,
+                    labels: Vec::new(),
+                })
+                .unwrap()
+                .threads
+                .into_iter()
+                .map(|t| t.subject)
+                .collect()
+        };
+        assert_eq!(subjects("rechnung").len(), 2);
+        assert_eq!(subjects("rechnung from:shop"), vec!["Rechnung Mai"]);
+        assert_eq!(subjects("from:noah@x.example"), vec!["Spieleabend"]);
+        assert_eq!(subjects("subject:rechnung"), vec!["Rechnung Mai"]);
+        assert_eq!(subjects("to:mini"), subjects("rechnung"));
+        assert_eq!(subjects("is:unread"), vec!["Spieleabend"]);
+        assert_eq!(subjects("is:flagged"), vec!["Rechnung Mai"]);
+        assert!(subjects("has:attachment").is_empty());
+        assert_eq!(subjects("after:2026-09-15"), vec!["Spieleabend"]);
+        assert_eq!(subjects("before:2026-09-15 rechnung"), vec!["Rechnung Mai"]);
+        assert_eq!(subjects("\"rechnung folgt\""), vec!["Spieleabend"]);
+        assert!(subjects("\"folgt rechnung\"").is_empty());
     }
 
     #[test]

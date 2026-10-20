@@ -3,6 +3,8 @@ import { Button, EmptyState, Icon, IconButton, ICONS, Pill } from "@uwusuite/des
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@/backend/backend";
 import { searchServer } from "@/backend/mobile";
+import { withSearchTerm } from "@/lib/searchQuery";
+import { SearchHelp } from "../mail/SearchHelp";
 import type { ListFilter, ThreadSummary } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
 import { NyuScene } from "@/components/nyu/scenes";
@@ -230,16 +232,14 @@ export function MobileList() {
             onChange={(event) => setDraftSearch(event.target.value)}
             placeholder={t("list.search")}
             enterKeyHint="search"
-            className="h-11 w-full rounded-full border border-transparent bg-canvas pr-11 pl-10 text-[15px] placeholder:text-muted focus:border-pink focus:bg-surface focus:shadow-focus focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+            className="h-11 w-full rounded-full border border-transparent bg-canvas pr-[5.5rem] pl-10 text-[15px] placeholder:text-muted focus:border-pink focus:bg-surface focus:shadow-focus focus:outline-none [&::-webkit-search-cancel-button]:hidden"
           />
-          {draftSearch && (
-            <IconButton
-              icon={ICONS.close}
-              label={t("list.clearSearch")}
-              onClick={() => setDraftSearch("")}
-              className="absolute top-1/2 right-1 -translate-y-1/2"
-            />
-          )}
+          <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center">
+            <SearchHelp onInsert={(term) => setDraftSearch(withSearchTerm(draftSearch, term))} />
+            {draftSearch && (
+              <IconButton icon={ICONS.close} label={t("list.clearSearch")} onClick={() => setDraftSearch("")} />
+            )}
+          </div>
         </div>
 
         <div className="-mx-3 flex [scrollbar-width:none] gap-2 overflow-x-auto px-3 pb-0.5" role="toolbar">

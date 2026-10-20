@@ -41,11 +41,12 @@ export const KEYED_CHOICES = {
   assistRefineEvents: "assist.refineEvents",
   detectEvents: "mail.detectEvents",
   nyuAnimations: "nyu.animations",
+  attachmentReminder: "compose.attachmentReminder",
 } as const;
 export type KeyedChoice = keyof typeof KEYED_CHOICES;
 
 /** Lists that are one key per entry. */
-export const SYNCED_LISTS = ["trustedSenders", "senderAppearance", "linkDomains"] as const;
+export const SYNCED_LISTS = ["trustedSenders", "senderAppearance", "linkDomains", "templates"] as const;
 export type SyncedList = (typeof SYNCED_LISTS)[number];
 
 /** Everything that follows the account. The rest of the settings stays on this device. */
@@ -63,6 +64,7 @@ function fieldOf(key: string): keyof SyncedSettings {
 }
 
 export const SIGNATURE_PREFIX = "signature:";
+export const TEMPLATE_PREFIX = "template:";
 /** The largest value the server keeps (`maxValueSize`), measured as JSON. */
 export const MAX_VALUE_BYTES = 262_144;
 
@@ -87,6 +89,7 @@ const CHOICES: Record<SyncedChoice | (typeof KEYED_CHOICES)[KeyedChoice], (value
   "assist.refineEvents": isBoolean,
   "mail.detectEvents": isBoolean,
   "nyu.animations": oneOf(...NYU_ANIMATIONS),
+  "compose.attachmentReminder": isBoolean,
 };
 
 const ENTRY_MAX = 254;
@@ -155,6 +158,23 @@ function isSignatureValue(value: unknown): boolean {
   );
 }
 
+/** A template: `{name: 1–100 characters, subject: 0–998, html}`, nothing else. */
+function isTemplateValue(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  if (Object.keys(entry).some((key) => !["name", "subject", "html"].includes(key))) return false;
+  return (
+    typeof entry.name === "string" &&
+    [...entry.name].length >= 1 &&
+    [...entry.name].length <= 100 &&
+    !hasControl(entry.name) &&
+    typeof entry.subject === "string" &&
+    [...entry.subject].length <= 998 &&
+    !hasControl(entry.subject) &&
+    typeof entry.html === "string"
+  );
+}
+
 /** Bytes a value takes on the server, as UTF-8 JSON. */
 export function valueBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
@@ -180,6 +200,8 @@ export function isSyncable(key: string, value: unknown): boolean {
       return value === true && isAsciiHost(entry);
     case "signature":
       return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isSignatureValue(value);
+    case "template":
+      return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isTemplateValue(value);
     default:
       return false;
   }
@@ -207,6 +229,9 @@ export function settingsToValues(settings: SyncedSettings): SettingsValues {
   for (const entry of settings.trustedSenders) values[`trustedSenders:${entry}`] = true;
   for (const [address, look] of Object.entries(settings.senderAppearance)) values[`senderAppearance:${address}`] = look;
   for (const domain of settings.linkDomains) values[`linkDomains:${domain}`] = true;
+  for (const [id, template] of Object.entries(settings.templates)) {
+    values[`${TEMPLATE_PREFIX}${id}`] = { name: template.name, subject: template.subject, html: template.html };
+  }
   return syncableValues(values);
 }
 
@@ -219,6 +244,7 @@ export function applyToSettings(settings: SyncedSettings, patch: SettingsPatch):
   let trusted: Set<string> | null = null;
   let domains: Set<string> | null = null;
   let looks: Record<string, "light" | "dark"> | null = null;
+  let templates: SyncedSettings["templates"] | null = null;
   for (const [key, value] of Object.entries(patch)) {
     if (value !== null && !isSyncable(key, value)) continue;
     if (isChoiceKey(key)) {
@@ -244,11 +270,16 @@ export function applyToSettings(settings: SyncedSettings, patch: SettingsPatch):
       looks ??= { ...settings.senderAppearance };
       if (value === null) delete looks[entry];
       else looks[entry] = value as "light" | "dark";
+    } else if (list === "template") {
+      templates ??= { ...settings.templates };
+      if (value === null) delete templates[entry];
+      else templates[entry] = value as SyncedSettings["templates"][string];
     }
   }
   if (trusted) changed.trustedSenders = [...trusted];
   if (domains) changed.linkDomains = [...domains];
   if (looks) changed.senderAppearance = looks;
+  if (templates) changed.templates = templates;
   return changed;
 }
 

@@ -89,6 +89,7 @@ import type {
   UnsubscribeOutcome,
   UpdateInfo,
 } from "./types";
+import { matchesSearch, parseSearch } from "@/lib/searchQuery";
 
 const OAUTH_DOMAINS: Record<string, "microsoft" | "google"> = {
   "gmail.com": "google",
@@ -2051,12 +2052,22 @@ export class DemoBackend implements Backend {
     if (query.filter === "flagged" && !message.flags.flagged) return false;
     if (query.filter === "attachments" && message.attachments.length === 0) return false;
     if (query.labels && !matchesLabels(message, query.labels)) return false;
-    const search = query.search?.trim().toLowerCase();
-    if (!search) return true;
-    return [message.subject, message.from.name ?? "", message.from.email, message.bodyText ?? ""]
-      .join("\n")
-      .toLowerCase()
-      .includes(search);
+    if (!query.search?.trim()) return true;
+    const names = (list: { name?: string | null; email: string }[]) =>
+      list.map((a) => `${a.name ?? ""} ${a.email}`).join("\n");
+    return matchesSearch(
+      {
+        subject: message.subject,
+        from: names([message.from]),
+        to: names([...message.to, ...message.cc]),
+        body: message.bodyText ?? "",
+        date: message.date,
+        seen: message.flags.seen,
+        flagged: message.flags.flagged,
+        attachments: message.attachments.length,
+      },
+      parseSearch(query.search),
+    );
   }
 
   private threadMessages(threadId: string, trashed: boolean) {

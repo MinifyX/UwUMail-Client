@@ -349,5 +349,13 @@
       "newMail": "New mail for you! ✉",
       "many": "{{n}}× mail for you! ✉"
     }
+  },
+  "templates": {
+    "none": "No templates yet (・ω・)",
+    "saved": "Tucked away as template “{{name}}” ✿"
+  },
+  "attachmentReminder": {
+    "title": "Forgot something? (・・;)",
+    "body": "Your mail talks about an attachment, but there’s nothing attached yet."
   }
 }

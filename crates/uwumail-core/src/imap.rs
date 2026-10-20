@@ -634,17 +634,17 @@ fn quoted(text: &str) -> String {
     format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// Asks the server for messages in a folder that contain `text` anywhere,
+/// Asks the server for messages in a folder that match `search` (text anywhere, operators),
 /// including mail UwUMail never downloaded; those are stored as previews.
 /// Returns the local ids of the matches, newest first.
 pub async fn search_folder(
     session: &mut ImapSession,
     store: &Store,
     folder: &FolderRecord,
-    text: &str,
+    search: &crate::search_query::SearchQuery,
 ) -> Result<Vec<String>> {
     session.select(&folder.path).await?;
-    let criteria = format!("TEXT {}", quoted(text));
+    let criteria = search.imap_criteria(quoted);
     let found = match session.uid_search(format!("CHARSET UTF-8 {criteria}")).await {
         Ok(found) => found,
         // Servers that only search in US-ASCII refuse the charset.

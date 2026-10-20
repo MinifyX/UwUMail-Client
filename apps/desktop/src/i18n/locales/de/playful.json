@@ -349,5 +349,13 @@
       "newMail": "Post für dich! ✉",
       "many": "{{n}}× Post für dich! ✉"
     }
+  },
+  "templates": {
+    "none": "Noch keine Vorlagen (・ω・)",
+    "saved": "Als Vorlage „{{name}}“ verstaut ✿"
+  },
+  "attachmentReminder": {
+    "title": "Etwas vergessen? (・・;)",
+    "body": "Deine Mail spricht von einem Anhang, aber angehängt ist noch nichts."
   }
 }

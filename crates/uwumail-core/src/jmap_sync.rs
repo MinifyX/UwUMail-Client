@@ -387,21 +387,18 @@ async fn store_previews(
     Ok(added)
 }
 
-/// Asks the server for emails containing `query`, in one mailbox or everywhere,
+/// Asks the server for emails matching `query` (text, operators), in one mailbox or everywhere,
 /// including mail UwUMail never downloaded; those are stored as previews.
 /// Returns the local ids of the matches, newest first.
 pub async fn search(
     client: &Client,
     store: &Store,
     account_id: &str,
-    query: &str,
+    query: &crate::search_query::SearchQuery,
     mailbox: Option<&str>,
 ) -> Result<Vec<String>> {
     let account = client.account_id();
-    let mut filter = json!({ "text": query });
-    if let Some(mailbox) = mailbox {
-        filter["inMailbox"] = json!(mailbox);
-    }
+    let filter = query.jmap_filter(mailbox, &chrono::Local);
     let responses = client
         .call(vec![
             (

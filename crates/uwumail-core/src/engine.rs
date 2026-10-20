@@ -783,8 +783,11 @@ impl Engine {
     /// view's folder, or everywhere but trash and junk for unified views, and
     /// only in the query's mailboxes when it names some.
     pub async fn search_server(&self, query: &ThreadQuery) -> Result<ThreadPage> {
-        let text = query.search.as_deref().map(str::trim).filter(|text| !text.is_empty());
-        let Some(text) = text else { return Err(Error::invalid("Enter something to search for.")) };
+        let search = crate::search_query::SearchQuery::parse(query.search.as_deref().unwrap_or_default());
+        if search.is_empty() {
+            return Err(Error::invalid("Enter something to search for."));
+        }
+        let text = &search;
         let mut found = Vec::new();
         for account in self.inner.store.accounts()? {
             if query.account_ids.as_ref().is_some_and(|ids| !ids.contains(&account.id)) {
@@ -810,7 +813,12 @@ impl Engine {
         self.inner.store.list_threads_of(query, &found)
     }
 
-    async fn search_jmap(&self, account_id: &str, text: &str, folder_id: Option<&str>) -> Result<Vec<String>> {
+    async fn search_jmap(
+        &self,
+        account_id: &str,
+        text: &crate::search_query::SearchQuery,
+        folder_id: Option<&str>,
+    ) -> Result<Vec<String>> {
         let client = self.inner.jmap_client(account_id).await?;
         let mailbox = match folder_id {
             Some(id) => Some(self.inner.store.folder(id)?.path),
@@ -819,7 +827,12 @@ impl Engine {
         jmap_sync::search(&client, &self.inner.store, account_id, text, mailbox.as_deref()).await
     }
 
-    async fn search_imap(&self, account_id: &str, text: &str, folder_id: Option<&str>) -> Result<Vec<String>> {
+    async fn search_imap(
+        &self,
+        account_id: &str,
+        text: &crate::search_query::SearchQuery,
+        folder_id: Option<&str>,
+    ) -> Result<Vec<String>> {
         let folders: Vec<FolderRecord> = match folder_id {
             Some(id) => vec![self.inner.store.folder(id)?],
             None => self

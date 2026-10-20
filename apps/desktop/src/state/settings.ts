@@ -40,6 +40,13 @@ export const CURRENCY_CHOICES = ["EUR", "USD"] as const;
 export type CurrencyChoice = (typeof CURRENCY_CHOICES)[number];
 /** Mailboxes shown apart, see lib/workspaces. */
 export type Workspace = "private" | "business";
+/** A text snippet the composer inserts, see lib/templates. Follows the account as `template:<id>`. */
+export interface MailTemplate {
+  name: string;
+  /** Put in when the mail has no subject yet; may be empty. */
+  subject: string;
+  html: string;
+}
 
 export interface Settings {
   onboarded: boolean;
@@ -130,6 +137,13 @@ export interface Settings {
   font: FontChoice;
   /** Serif fonts in HTML mails become `font`, or stay as the sender wrote them. This device only. */
   senderFonts: SenderFonts;
+  /**
+   * Sending asks first when the text mentions an attachment and none is there. Follows the account
+   * as `compose.attachmentReminder`.
+   */
+  attachmentReminder: boolean;
+  /** Text snippets by id (16 random characters), see lib/templates. */
+  templates: Record<string, MailTemplate>;
 }
 
 interface SettingsActions {
@@ -144,6 +158,8 @@ interface SettingsActions {
   toggleFolder: (folderId: string) => void;
   toggleAccount: (accountId: string) => void;
   setAccountWorkspace: (accountId: string, workspace: Workspace) => void;
+  saveTemplate: (id: string, template: MailTemplate) => void;
+  deleteTemplate: (id: string) => void;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -192,6 +208,8 @@ export const DEFAULT_SETTINGS: Settings = {
   labelsCollapsed: false,
   font: "uwu",
   senderFonts: "replace",
+  attachmentReminder: true,
+  templates: {},
 };
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -229,6 +247,13 @@ export const useSettings = create<Settings & SettingsActions>()(
           const others = state.businessAccounts.filter((id) => id !== accountId);
           return { businessAccounts: workspace === "business" ? [...others, accountId] : others };
         }),
+      saveTemplate: (id, template) => set((state) => ({ templates: { ...state.templates, [id]: template } })),
+      deleteTemplate: (id) =>
+        set((state) => {
+          const rest = { ...state.templates };
+          delete rest[id];
+          return { templates: rest };
+        }),
     }),
     {
       name: "uwumail.settings",
@@ -259,11 +284,20 @@ export const useSettings = create<Settings & SettingsActions>()(
         if (!["system", "normal", "high"].includes(state.contrast)) state.contrast = DEFAULT_SETTINGS.contrast;
         if (!isFontChoice(state.font)) state.font = DEFAULT_SETTINGS.font;
         if (!isSenderFonts(state.senderFonts)) state.senderFonts = DEFAULT_SETTINGS.senderFonts;
+        state.templates = Object.fromEntries(
+          Object.entries(state.templates).filter(([, template]) => isTemplateShape(template)),
+        );
         return state;
       },
     },
   ),
 );
+
+function isTemplateShape(value: unknown): value is MailTemplate {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return typeof entry.name === "string" && typeof entry.subject === "string" && typeof entry.html === "string";
+}
 
 /** The layout in use: the stored one, except on a phone, which has no choice (see `layoutChoice`). */
 export function useLayout(): LayoutMode {

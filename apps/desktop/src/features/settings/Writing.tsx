@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, IconButton, ICONS, Segmented, TextInput } from "@uwusuite/design";
+import { Button, IconButton, ICONS, Segmented, TextInput, Toggle } from "@uwusuite/design";
 import { useState, type FormEvent } from "react";
 import { backend } from "@/backend/backend";
 import type { Account, Identity } from "@/backend/types";
@@ -10,10 +10,12 @@ import { UNDO_SEND_CHOICES, useSettings, type UndoSendSeconds } from "@/state/se
 import { toast } from "@/state/toasts";
 import { Row } from "./Row";
 import { Signatures } from "./Signatures";
+import { Templates } from "./Templates";
 
 export function Writing() {
   const { t } = useT();
   const undoSendSeconds = useSettings((s) => s.undoSendSeconds);
+  const attachmentReminder = useSettings((s) => s.attachmentReminder);
   const update = useSettings((s) => s.update);
   return (
     <>
@@ -28,8 +30,17 @@ export function Writing() {
           }))}
         />
       </Row>
+      <div className="border-b border-hairline py-4">
+        <Toggle
+          checked={attachmentReminder}
+          onChange={(checked) => update({ attachmentReminder: checked })}
+          label={t("attachmentReminder.setting")}
+          description={t("attachmentReminder.settingDesc")}
+        />
+      </div>
       <Senders />
       <Signatures />
+      <Templates />
     </>
   );
 }
