@@ -238,6 +238,8 @@ pub struct CalendarPrefs {
 /// Prefix of the conversation ids the trash lists: those conversations hold only
 /// their trashed messages, while everywhere else they leave them out.
 const TRASHED_THREAD: &str = "trash:";
+/// At most this many extra folders join the unified inbox (each is a query parameter).
+const MAX_INCLUDED_FOLDERS: usize = 200;
 
 /// A stable positive stand-in for IMAP's uid, so JMAP emails fit the same table.
 fn remote_uid(remote_id: &str) -> i64 {
@@ -1537,6 +1539,48 @@ impl Store {
         self.threads(query, Some(message_ids))
     }
 
+    /// The view's clause, with the folders the unified inbox takes in besides the inboxes.
+    fn list_view_clause(view: &MailboxView, include_folder_ids: &[String], values: &mut Vec<Value>) -> String {
+        match view {
+            MailboxView::Unified { role: role @ (UnifiedRole::Inbox | UnifiedRole::Unread) }
+                if !include_folder_ids.is_empty() =>
+            {
+                let ids: Vec<String> = include_folder_ids.iter().take(MAX_INCLUDED_FOLDERS).cloned().collect();
+                let extra = Self::placeholders(&ids, values);
+                let unread = if *role == UnifiedRole::Unread { " AND m.seen = 0" } else { "" };
+                format!("(f.role = 'inbox' OR m.folder_id IN ({extra})){unread}")
+            }
+            _ => Self::view_clause(view, values),
+        }
+    }
+
+    /// The unread mail "mark all as read" marks: a view's, as its list shows it (search and
+    /// list filters aside), or a whole mailbox's but in trash and junk.
+    pub fn unread_ids(&self, scope: &MarkReadScope) -> Result<Vec<String>> {
+        let mut values: Vec<Value> = Vec::new();
+        let clause = match scope {
+            MarkReadScope::View { view, account_ids, include_folder_ids } => {
+                let mut clauses = vec![Self::list_view_clause(view, include_folder_ids, &mut values)];
+                match account_ids.as_deref() {
+                    Some([]) => return Ok(Vec::new()),
+                    Some(ids) => clauses.push(format!("m.account_id IN ({})", Self::placeholders(ids, &mut values))),
+                    None => {}
+                }
+                clauses.join(" AND ")
+            }
+            MarkReadScope::Account { account_id } => {
+                values.push(Value::Text(account_id.clone()));
+                format!("m.account_id = ?{} AND COALESCE(f.role, '') NOT IN ('trash', 'junk')", values.len())
+            }
+        };
+        let sql =
+            format!("SELECT m.id FROM messages m JOIN folders f ON f.id = m.folder_id WHERE m.seen = 0 AND {clause}");
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(values.iter()), |row| row.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     /// `?n, ?n+1, …` for each id, whose values join `values`.
     fn placeholders(ids: &[String], values: &mut Vec<Value>) -> String {
         ids.iter()
@@ -1561,7 +1605,7 @@ impl Store {
                     clauses.push(Self::view_clause(&query.view, &mut values));
                 }
             }
-            None => clauses.push(Self::view_clause(&query.view, &mut values)),
+            None => clauses.push(Self::list_view_clause(&query.view, &query.include_folder_ids, &mut values)),
         }
         for any in query.labels.iter().take(10) {
             clauses.push(Self::any_label_clause(any, &mut values));
@@ -2241,6 +2285,7 @@ mod tests {
             cursor: None,
             limit: 50,
             labels,
+            include_folder_ids: Vec::new(),
         };
         let subjects = |page: ThreadPage| page.threads.into_iter().map(|t| t.subject).collect::<Vec<_>>();
 
@@ -2401,6 +2446,7 @@ mod tests {
                 cursor: None,
                 limit: 50,
                 labels: Vec::new(),
+                include_folder_ids: Vec::new(),
             })
             .unwrap();
         assert_eq!(page.threads.len(), 1);
@@ -2431,6 +2477,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                 cursor: None,
                 limit: 50,
                 labels: Vec::new(),
+                include_folder_ids: Vec::new(),
             })
             .unwrap();
         let detail = store.get_thread(&page.threads[0].id, true).unwrap();
@@ -2479,6 +2526,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                     cursor: None,
                     limit: 50,
                     labels: Vec::new(),
+                    include_folder_ids: Vec::new(),
                 })
                 .unwrap()
                 .threads
@@ -2541,6 +2589,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                     cursor: None,
                     limit: 50,
                     labels: Vec::new(),
+                    include_folder_ids: Vec::new(),
                 })
                 .unwrap()
                 .threads
@@ -2621,6 +2670,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
                 cursor: None,
                 limit: 50,
                 labels: Vec::new(),
+                include_folder_ids: Vec::new(),
             };
             store.list_threads(&query).unwrap().threads.into_iter().map(|t| t.subject).collect()
         };
@@ -2629,6 +2679,57 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         assert_eq!(subjects(Some(vec!["acc".into()]), Some("freitag")), vec!["Spieleabend"]);
         // A workspace without mailboxes shows nothing rather than everything.
         assert!(subjects(Some(Vec::new()), None).is_empty());
+    }
+
+    #[test]
+    fn unified_inbox_takes_in_extra_folders_and_marks_all_read() {
+        let (store, _, inbox, _) = store_with_account();
+        let sorted = folder(&store, "Newsletters", None, ".");
+        let other = folder(&store, "Projects", None, ".");
+        let trash = folder(&store, "Trash", Some(FolderRole::Trash), ".");
+        let mail = |id: &str, subject: &str, hour: u32| {
+            raw(id, subject, "noah@x.example", None, "Hallo", &format!("Mon, 14 Sep 2026 {hour:02}:00:00 +0000"))
+        };
+        insert(&store, &inbox, 1, &mail("a@x", "Inbox", 9)).unwrap();
+        let news = insert(&store, &sorted, 1, &mail("b@x", "News", 10)).unwrap();
+        insert(&store, &other, 1, &mail("c@x", "Elsewhere", 11)).unwrap();
+        insert(&store, &trash, 1, &mail("d@x", "Gone", 12)).unwrap();
+
+        let query = |role: UnifiedRole, include: Vec<String>| ThreadQuery {
+            view: MailboxView::Unified { role },
+            filter: ListFilter::All,
+            search: None,
+            conversations: false,
+            account_ids: None,
+            cursor: None,
+            limit: 50,
+            labels: Vec::new(),
+            include_folder_ids: include,
+        };
+        let subjects = |query: ThreadQuery| -> Vec<String> {
+            store.list_threads(&query).unwrap().threads.into_iter().map(|t| t.subject).collect()
+        };
+        assert_eq!(subjects(query(UnifiedRole::Inbox, Vec::new())), vec!["Inbox"]);
+        assert_eq!(subjects(query(UnifiedRole::Inbox, vec![sorted.clone()])), vec!["News", "Inbox"]);
+        // Only the inbox views take them in.
+        assert!(subjects(query(UnifiedRole::Sent, vec![sorted.clone()])).is_empty());
+
+        // Marking the unified inbox read covers the extra folder, nothing else.
+        let scope = |include: Vec<String>, account_ids: Option<Vec<String>>| MarkReadScope::View {
+            view: MailboxView::Unified { role: UnifiedRole::Unread },
+            account_ids,
+            include_folder_ids: include,
+        };
+        assert_eq!(store.unread_ids(&scope(vec![sorted.clone()], None)).unwrap().len(), 2);
+        assert!(store.unread_ids(&scope(vec![sorted.clone()], Some(Vec::new()))).unwrap().is_empty());
+        assert!(store.unread_ids(&scope(Vec::new(), Some(vec!["other".into()]))).unwrap().is_empty());
+        // A whole mailbox: every folder but trash and junk.
+        let whole = store.unread_ids(&MarkReadScope::Account { account_id: "acc".into() }).unwrap();
+        assert_eq!(whole.len(), 3);
+
+        store.apply_flag_change(std::slice::from_ref(&news), FlagChange { seen: Some(true), flagged: None }).unwrap();
+        assert_eq!(subjects(query(UnifiedRole::Unread, vec![sorted.clone()])), vec!["Inbox"]);
+        assert_eq!(store.unread_ids(&scope(vec![sorted], None)).unwrap().len(), 1);
     }
 
     #[test]

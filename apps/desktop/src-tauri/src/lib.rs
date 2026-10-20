@@ -468,6 +468,11 @@ async fn set_flags(engine: State<'_, Engine>, message_ids: Vec<String>, change: 
 }
 
 #[tauri::command]
+async fn mark_all_read(engine: State<'_, Engine>, scope: MarkReadScope) -> CommandResult<Vec<String>> {
+    engine.mark_all_read(&scope).await
+}
+
+#[tauri::command]
 async fn archive_messages(engine: State<'_, Engine>, message_ids: Vec<String>) -> CommandResult<Vec<MovedMessage>> {
     engine.archive(&message_ids).await
 }
@@ -1392,6 +1397,7 @@ pub fn run() {
             set_offline_days,
             get_thread,
             set_flags,
+            mark_all_read,
             archive_messages,
             trash_messages,
             delete_messages_forever,

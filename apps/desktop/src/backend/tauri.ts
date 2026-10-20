@@ -87,6 +87,7 @@ import type {
   EventDeleteScope,
   EventInput,
   FlagChange,
+  MarkReadScope,
   Folder,
   Identity,
   ImageSizeProbe,
@@ -662,6 +663,10 @@ export class TauriBackend implements Backend {
 
   setFlags(messageIds: string[], change: FlagChange) {
     return call<void>("set_flags", { messageIds, change });
+  }
+
+  markAllRead(scope: MarkReadScope) {
+    return call<string[]>("mark_all_read", { scope });
   }
 
   archive(messageIds: string[]) {

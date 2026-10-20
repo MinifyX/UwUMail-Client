@@ -144,7 +144,17 @@ export interface ThreadQuery {
   limit: number;
   /** Label filters that must all hold; one holds when any of its labels is on the mail. */
   labels?: LabelRef[][];
+  /** More folders the unified inbox (and its unread view) takes in, see lib/unifiedScope. */
+  includeFolderIds?: string[];
 }
+
+/**
+ * Where "mark all as read" marks: a view's mail (with the mailboxes and extra folders of its
+ * list), or every folder of a mailbox but trash and junk.
+ */
+export type MarkReadScope =
+  | { kind: "view"; view: MailboxView; accountIds?: string[]; includeFolderIds?: string[] }
+  | { kind: "account"; accountId: string };
 
 export interface ThreadSummary {
   id: string;

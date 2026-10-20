@@ -58,6 +58,7 @@ import type {
   EventDeleteScope,
   EventInput,
   FlagChange,
+  MarkReadScope,
   Folder,
   Identity,
   ImageSizeProbe,
@@ -377,6 +378,11 @@ export interface Backend {
   getThread(threadId: string, conversations: boolean): Promise<ThreadDetail>;
 
   setFlags(messageIds: string[], change: FlagChange): Promise<void>;
+  /**
+   * Marks every unread mail of a view or mailbox as read, on the servers too; read-only shared
+   * mailboxes stay as they are. Returns the marked ids, for undoing.
+   */
+  markAllRead(scope: MarkReadScope): Promise<string[]>;
   /** These return what moved and from where, for undoing. Mail already in that folder stays and isn't returned. */
   archive(messageIds: string[]): Promise<MovedMessage[]>;
   trash(messageIds: string[]): Promise<MovedMessage[]>;

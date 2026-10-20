@@ -908,6 +908,27 @@ impl Engine {
         Ok(())
     }
 
+    /// Marks every unread mail of a view or mailbox as read, on the servers too. Shared mailboxes
+    /// that may only be read are left as they are. Returns the marked ids, for undoing.
+    pub async fn mark_all_read(&self, scope: &MarkReadScope) -> Result<Vec<String>> {
+        let unread = self.inner.store.unread_ids(scope)?;
+        if unread.is_empty() {
+            return Ok(unread);
+        }
+        let mut writable = HashMap::new();
+        let mut ids = Vec::with_capacity(unread.len());
+        for location in self.inner.store.locations(&unread)? {
+            let ok = *writable
+                .entry(location.account_id.clone())
+                .or_insert_with(|| self.inner.refuse_read_only_account(&location.account_id).is_ok());
+            if ok {
+                ids.push(location.id);
+            }
+        }
+        self.set_flags(&ids, FlagChange { seen: Some(true), flagged: None }).await?;
+        Ok(ids)
+    }
+
     /// Moves mail into the archive. Returns what moved and from where, for undoing.
     pub async fn archive(&self, message_ids: &[String]) -> Result<Vec<MovedMessage>> {
         self.inner.move_to(message_ids, MoveTarget::Role(FolderRole::Archive)).await

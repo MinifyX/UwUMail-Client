@@ -61,6 +61,7 @@ import type {
   EventDeleteScope,
   EventInput,
   FlagChange,
+  MarkReadScope,
   Folder,
   Identity,
   ImageSizeProbe,
@@ -1081,6 +1082,28 @@ export class DemoBackend implements Backend {
     this.emitChanged(messageIds);
   }
 
+  async markAllRead(scope: MarkReadScope): Promise<string[]> {
+    const writable = (accountId: string) => !this.accounts.find((account) => account.id === accountId)?.readOnly;
+    const marked = this.messages.filter((message) => {
+      if (message.flags.seen || !writable(message.accountId)) return false;
+      if (scope.kind === "account") {
+        const role = this.roleOf(message);
+        return message.accountId === scope.accountId && role !== "trash" && role !== "junk";
+      }
+      return this.inView(message, {
+        view: scope.view,
+        filter: "all",
+        conversations: false,
+        limit: 0,
+        accountIds: scope.accountIds,
+        includeFolderIds: scope.includeFolderIds,
+      });
+    });
+    const ids = marked.map((message) => message.id);
+    await this.setFlags(ids, { seen: true });
+    return ids;
+  }
+
   async archive(messageIds: string[]) {
     return this.moveToRole(messageIds, "archive");
   }
@@ -2032,11 +2055,12 @@ export class DemoBackend implements Backend {
     if (view.kind === "folder") return message.folderId === view.folderId;
     const role = this.roleOf(message);
     if (view.kind === "label") return role !== "trash" && role !== "junk" && hasLabel(message, view);
+    const included = query.includeFolderIds?.includes(message.folderId) ?? false;
     switch (view.role) {
       case "inbox":
-        return role === "inbox";
+        return role === "inbox" || included;
       case "unread":
-        return role === "inbox" && !message.flags.seen;
+        return (role === "inbox" || included) && !message.flags.seen;
       case "flagged":
         return message.flags.flagged && role !== "trash";
       case "drafts":

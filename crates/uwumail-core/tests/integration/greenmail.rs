@@ -38,6 +38,7 @@ fn inbox_query(search: Option<&str>) -> ThreadQuery {
         cursor: None,
         limit: 50,
         labels: Vec::new(),
+        include_folder_ids: Vec::new(),
     }
 }
 
