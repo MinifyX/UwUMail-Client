@@ -635,7 +635,8 @@
     "contactsNext": "Nächster Kontakt",
     "contactsPrevious": "Vorheriger Kontakt",
     "label": "Label vergeben",
-    "markAllRead": "Alle als gelesen markieren"
+    "markAllRead": "Alle als gelesen markieren",
+    "snooze": "Zurückstellen"
   },
   "palette": {
     "placeholder": "Befehl eingeben",
@@ -655,7 +656,8 @@
     "drafts": "Entwürfe",
     "archive": "Archiv",
     "trash": "Papierkorb",
-    "junk": "Spam"
+    "junk": "Spam",
+    "snoozed": "Zurückgestellt"
   },
   "attachment": {
     "open": "Mit App öffnen",
@@ -784,7 +786,8 @@
       "flag": "Markieren",
       "none": "Nichts",
       "spam": "Spam",
-      "notSpam": "Kein Spam"
+      "notSpam": "Kein Spam",
+      "snooze": "Zurückstellen"
     },
     "pull": {
       "pull": "Zum Aktualisieren ziehen",
@@ -2440,5 +2443,36 @@
     "attach": "Datei anhängen",
     "setting": "Anhang-Erinnerung",
     "settingDesc": "Fragt vor dem Senden nach, wenn dein Text einen Anhang erwähnt und keiner da ist. Zitate und Signaturen zählen nicht."
+  },
+  "snooze": {
+    "title": "Zurückstellen bis …",
+    "action": "Zurückstellen",
+    "unsnooze": "Jetzt zurück in den Posteingang",
+    "pick": "Datum und Uhrzeit wählen",
+    "confirm": "Zurückstellen",
+    "until": "Zurückgestellt bis {{time}}",
+    "done": "Zurückgestellt bis {{time}}",
+    "back": "Die Mail ist zurück",
+    "failed": "Die Mail konnte nicht zurückgestellt werden. {{reason}}",
+    "preset": {
+      "laterToday": "Später heute",
+      "tomorrow": "Morgen",
+      "weekend": "Am Wochenende",
+      "nextWeek": "Nächste Woche"
+    },
+    "problem": {
+      "invalid": "Wähle ein Datum und eine Uhrzeit.",
+      "past": "Dieser Zeitpunkt ist schon vorbei."
+    }
+  },
+  "notify": {
+    "accounts": "Mitteilungen pro Postfach",
+    "accountsDesc": "Ausgeschaltete Postfächer bleiben auf allen deinen Geräten still.",
+    "quiet": "Ruhezeiten",
+    "quietDesc": "In dieser Zeit gibt es keine Mitteilungen. Über Mitternacht geht auch.",
+    "from": "Von",
+    "to": "bis",
+    "days": "Tage",
+    "noDays": "Wähle mindestens einen Tag, sonst beginnen die Ruhezeiten nie."
   }
 }

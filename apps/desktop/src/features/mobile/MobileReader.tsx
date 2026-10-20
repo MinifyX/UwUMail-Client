@@ -11,6 +11,7 @@ import { ThreadAssistButton, ThreadSummary } from "../assist/ReaderAssist";
 import { AssistForAccount } from "../assist/useAssist";
 import { MessageView } from "../mail/MessageView";
 import { requestMove } from "../mail/selection";
+import { requestSnooze, someSnoozed, useSnooze } from "../mail/snooze";
 import { useNyuOnOpen } from "../mail/nyuOnOpen";
 
 /** Messages that start expanded: the newest one plus every unread one. */
@@ -70,6 +71,7 @@ export function MobileReader({ threadId }: { threadId: string }) {
   }, [loadedThreadId]);
 
   const back = () => selectThread(null);
+  const { unsnooze } = useSnooze();
 
   if (isError && !data) {
     return (
@@ -165,6 +167,30 @@ export function MobileReader({ threadId }: { threadId: string }) {
                 <Icon icon={ICONS.move} size="md" className="text-muted" />
                 {t("reader.move")}
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  requestSnooze(all, back);
+                }}
+                className="flex h-12 w-full items-center gap-3 px-4 text-left text-[14px] font-medium active:bg-pink-tint"
+              >
+                <Icon icon={ICONS.reminder} size="md" className="text-muted" />
+                {t("snooze.action")}
+              </button>
+              {someSnoozed(all, folders) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    leaveAfter(unsnooze(all, [data.thread.id]));
+                  }}
+                  className="flex h-12 w-full items-center gap-3 px-4 text-left text-[14px] font-medium active:bg-pink-tint"
+                >
+                  <Icon icon={ICONS.inbox} size="md" className="text-muted" />
+                  {t("snooze.unsnooze")}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => leaveAfter(actions.spam(ids, !inJunk))}

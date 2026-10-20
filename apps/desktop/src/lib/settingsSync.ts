@@ -10,7 +10,15 @@
  * same time never overwrite each other. Removing an entry sets its key to `null`.
  */
 
-import { CURRENCY_CHOICES, NYU_ANIMATIONS, UNDO_SEND_CHOICES, type FolderRef, type Settings } from "@/state/settings";
+import {
+  CURRENCY_CHOICES,
+  NYU_ANIMATIONS,
+  UNDO_SEND_CHOICES,
+  type FolderRef,
+  type QuietHours,
+  type Settings,
+  type SnoozeEntry,
+} from "@/state/settings";
 
 /** Keys and their values, as the server holds them. */
 export type SettingsValues = Record<string, unknown>;
@@ -66,13 +74,27 @@ export type ArrangementField = keyof typeof ARRANGEMENT;
 const FOLDER_LISTS = ["unifiedFolders", "favoriteFolders", "hiddenFolders"] as const;
 type FolderList = (typeof FOLDER_LISTS)[number];
 
+/**
+ * Notifications and snooze (one key per entry, like the lists): `notify.muted:<addr>`, the single
+ * key `notify.quietHours` (only while on; removing it switches them off) and `snooze:<id>`.
+ */
+export const NOTIFY_MUTED_PREFIX = "notify.muted:";
+export const QUIET_HOURS_KEY = "notify.quietHours";
+export const SNOOZE_PREFIX = "snooze:";
+export const NOTIFY_SNOOZE_FIELDS = ["notifyMuted", "quietHours", "snoozes"] as const;
+export type NotifySnoozeField = (typeof NOTIFY_SNOOZE_FIELDS)[number];
+
 /** Everything that follows the account. The rest of the settings stays on this device. */
-export type SyncedSettings = Pick<Settings, SyncedChoice | KeyedChoice | SyncedList | ArrangementField>;
+export type SyncedSettings = Pick<
+  Settings,
+  SyncedChoice | KeyedChoice | SyncedList | ArrangementField | NotifySnoozeField
+>;
 export const SYNCED_FIELDS: readonly (keyof SyncedSettings)[] = [
   ...SYNCED_CHOICES,
   ...(Object.keys(KEYED_CHOICES) as KeyedChoice[]),
   ...SYNCED_LISTS,
   ...(Object.keys(ARRANGEMENT) as ArrangementField[]),
+  ...NOTIFY_SNOOZE_FIELDS,
 ];
 
 /** The setting a key of `KEYED_CHOICES` stands for; the key itself for every other choice. */
@@ -140,10 +162,13 @@ function isMailDomain(domain: string): boolean {
   );
 }
 
-/** Control characters (U+0000 to U+001F and U+007F). */
+/** Control characters (U+0000 to U+001F and U+007F to U+009F), as Rust's `char::is_control`. */
 function hasControl(text: string): boolean {
-  return [...text].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f);
+  return [...text].some((c) => c.charCodeAt(0) < 0x20 || (c.charCodeAt(0) >= 0x7f && c.charCodeAt(0) <= 0x9f));
 }
+
+/** White space as Rust's `char::is_whitespace` sees it (unlike `\s`, without U+FEFF). */
+const WHITE_SPACE = /[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/;
 
 /** A lower-case mail address `local@domain.tld`, the way the server checks it. */
 export function isSyncableAddress(entry: string): boolean {
@@ -152,7 +177,8 @@ export function isSyncableAddress(entry: string): boolean {
   const local = entry.slice(0, at);
   return (
     [...local].length <= 64 &&
-    !/[@\s]/.test(local) &&
+    !local.includes("@") &&
+    !WHITE_SPACE.test(local) &&
     !hasControl(local) &&
     local === local.toLowerCase() &&
     isMailDomain(entry.slice(at + 1))
@@ -256,7 +282,6 @@ export function folderRefId(ref: FolderRef): string {
   return sha256Hex(`${ref.account}\n${ref.folder}`).slice(0, 16);
 }
 
-
 /** A template: `{name: 1–100 characters, subject: 0–998, html}`, nothing else. */
 function isTemplateValue(value: unknown): boolean {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -274,6 +299,80 @@ function isTemplateValue(value: unknown): boolean {
   );
 }
 
+/** "HH:MM", 00:00 to 23:59. */
+function isClockTime(value: unknown): boolean {
+  return typeof value === "string" && /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value);
+}
+
+/** Quiet hours as `notify.quietHours` holds them: days 0–6 (0 = Sunday), each once. */
+export function isQuietHours(value: unknown): value is QuietHours {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  if (Object.keys(entry).some((key) => !["enabled", "from", "to", "days"].includes(key))) return false;
+  return (
+    typeof entry.enabled === "boolean" &&
+    isClockTime(entry.from) &&
+    isClockTime(entry.to) &&
+    Array.isArray(entry.days) &&
+    entry.days.length <= 7 &&
+    entry.days.every((day) => Number.isInteger(day) && day >= 0 && day <= 6) &&
+    new Set(entry.days).size === entry.days.length
+  );
+}
+
+/** A Message-ID without angle brackets: 1–998 characters, no controls, spaces or brackets. */
+export function isMessageIdValue(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    [...value].length <= 998 &&
+    !/[<>]/.test(value) &&
+    !WHITE_SPACE.test(value) &&
+    !hasControl(value)
+  );
+}
+
+/**
+ * RFC 3339 in UTC, `2026-10-21T07:00:00Z` (fractions of a second allowed), a real day and time
+ * as the server's check sees it: no 30 February or 24:00, a leap second 60 is fine.
+ */
+export function isUtcTime(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,9})?Z$/.exec(value);
+  if (!match) return false;
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const daysInMonth = new Date(Date.UTC(2000, month, 0)).getUTCDate() - (month === 2 && !isLeapYear(year) ? 1 : 0);
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth && hour < 24 && minute < 60 && second <= 60;
+}
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+/** A snooze as `snooze:<id>` holds it. */
+export function isSnoozeValue(value: unknown): value is SnoozeEntry {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  if (Object.keys(entry).some((key) => !["account", "messageId", "folder", "until"].includes(key))) return false;
+  return (
+    typeof entry.account === "string" &&
+    isSyncableAddress(entry.account) &&
+    isMessageIdValue(entry.messageId) &&
+    typeof entry.folder === "string" &&
+    entry.folder.length > 0 &&
+    [...entry.folder].length <= 1024 &&
+    !hasControl(entry.folder) &&
+    isUtcTime(entry.until)
+  );
+}
+
 /** Bytes a value takes on the server, as UTF-8 JSON. */
 export function valueBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
@@ -288,6 +387,7 @@ export function isSyncable(key: string, value: unknown): boolean {
   if (valueBytes(value) > MAX_VALUE_BYTES) return false;
   if (Object.hasOwn(CHOICES, key)) return CHOICES[key as keyof typeof CHOICES](value);
   if (key === ARRANGEMENT.accountsOrder) return isAccountOrder(value);
+  if (key === QUIET_HOURS_KEY) return isQuietHours(value);
   const colon = key.indexOf(":");
   if (colon < 0) return false;
   const entry = key.slice(colon + 1);
@@ -308,6 +408,10 @@ export function isSyncable(key: string, value: unknown): boolean {
       return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isFolderRef(value);
     case "template":
       return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isTemplateValue(value);
+    case "notify.muted":
+      return value === true && isSyncableAddress(entry);
+    case "snooze":
+      return /^[A-Za-z0-9_-]{1,64}$/.test(entry) && isSnoozeValue(value);
     default:
       return false;
   }
@@ -343,6 +447,9 @@ export function settingsToValues(settings: SyncedSettings): SettingsValues {
   for (const [id, template] of Object.entries(settings.templates)) {
     values[`${TEMPLATE_PREFIX}${id}`] = { name: template.name, subject: template.subject, html: template.html };
   }
+  for (const address of settings.notifyMuted) values[`${NOTIFY_MUTED_PREFIX}${address}`] = true;
+  if (settings.quietHours.enabled) values[QUIET_HOURS_KEY] = settings.quietHours;
+  for (const [id, snooze] of Object.entries(settings.snoozes)) values[`${SNOOZE_PREFIX}${id}`] = snooze;
   return syncableValues(values);
 }
 
@@ -358,10 +465,18 @@ export function applyToSettings(settings: SyncedSettings, patch: SettingsPatch):
   let hidden: Set<string> | null = null;
   const folders: Partial<Record<FolderList, Map<string, FolderRef>>> = {};
   let templates: SyncedSettings["templates"] | null = null;
+  let muted: Set<string> | null = null;
+  let snoozes: Record<string, SnoozeEntry> | null = null;
   for (const [key, value] of Object.entries(patch)) {
     if (value !== null && !isSyncable(key, value)) continue;
     if (key === ARRANGEMENT.accountsOrder) {
       changed.accountsOrder = value === null ? [] : (value as string[]);
+      continue;
+    }
+    if (key === QUIET_HOURS_KEY) {
+      // Removed means off; the times stay for switching them on again.
+      const next = value === null ? { ...settings.quietHours, enabled: false } : (value as QuietHours);
+      if (!sameValue(next, settings.quietHours)) changed.quietHours = next;
       continue;
     }
     if (isChoiceKey(key)) {
@@ -395,6 +510,14 @@ export function applyToSettings(settings: SyncedSettings, patch: SettingsPatch):
       templates ??= { ...settings.templates };
       if (value === null) delete templates[entry];
       else templates[entry] = value as SyncedSettings["templates"][string];
+    } else if (list === "notify.muted") {
+      muted ??= new Set(settings.notifyMuted);
+      if (value === null) muted.delete(entry);
+      else muted.add(entry);
+    } else if (list === "snooze") {
+      snoozes ??= { ...settings.snoozes };
+      if (value === null) delete snoozes[entry];
+      else snoozes[entry] = value as SnoozeEntry;
     } else {
       const field = FOLDER_LISTS.find((each) => ARRANGEMENT[each] === list);
       if (!field) continue;
@@ -408,6 +531,8 @@ export function applyToSettings(settings: SyncedSettings, patch: SettingsPatch):
     const refs = folders[field];
     if (refs) changed[field] = [...refs.values()];
   }
+  if (muted) changed.notifyMuted = [...muted];
+  if (snoozes) changed.snoozes = snoozes;
   if (trusted) changed.trustedSenders = [...trusted];
   if (domains) changed.linkDomains = [...domains];
   if (looks) changed.senderAppearance = looks;

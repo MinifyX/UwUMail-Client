@@ -45,6 +45,6 @@ pub mod tls;
 pub mod tnef;
 pub mod uwumail_login;
 
-pub use engine::{Engine, EngineOptions};
+pub use engine::{Engine, EngineOptions, SNOOZED_FOLDER, SnoozedMessage, UnsnoozeOutcome};
 pub use error::{Error, ErrorCode, Result};
 pub use ocr::TextRecognizer;

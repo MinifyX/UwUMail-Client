@@ -4,6 +4,7 @@ import type { ThreadSummary } from "@/backend/types";
 import { queryKeys, useMessageActions } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
 import type { SwipeAction } from "@/state/settings";
+import { requestSnooze } from "../mail/snooze";
 
 /** Swipe and selection actions work on whole conversations, so they first look up the messages. */
 export function useThreadActions() {
@@ -49,6 +50,8 @@ export function useThreadActions() {
         return actions.spam(ids, !inJunk);
       case "trash":
         return actions.trash(messages);
+      case "snooze":
+        return requestSnooze(messages);
     }
   };
 

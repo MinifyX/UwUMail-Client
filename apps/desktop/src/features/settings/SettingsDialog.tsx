@@ -21,6 +21,7 @@ import { workspaceOf } from "@/lib/workspaces";
 import { accountLabel } from "@/lib/accountLabel";
 import { PrivacyProxy } from "./PrivacyProxy";
 import { MacIntegration } from "./MacIntegration";
+import { NotificationSettings } from "./NotificationSettings";
 import { useUpdatesInApp } from "@/lib/distribution";
 import { confirmIdentity } from "@/state/lock";
 import {
@@ -226,7 +227,7 @@ function TrustedSenders() {
   );
 }
 
-const SWIPE_ACTIONS: SwipeAction[] = ["read", "archive", "spam", "trash", "flag", "none"];
+const SWIPE_ACTIONS: SwipeAction[] = ["read", "archive", "spam", "trash", "flag", "snooze", "none"];
 
 function SwipeSelect({ value, onChange }: { value: SwipeAction; onChange: (value: SwipeAction) => void }) {
   const { t } = useT();
@@ -444,6 +445,7 @@ function Reading() {
           description={t("push.showContentDesc")}
         />
       </div>
+      <NotificationSettings />
     </>
   );
 }

@@ -18,6 +18,7 @@ const LOOKS: Record<Exclude<SwipeAction, "none">, { icon: IconProps["icon"]; cla
   spam: { icon: ICONS.spam, className: "bg-account-coral" },
   trash: { icon: ICONS.delete, className: "bg-danger" },
   flag: { icon: ICONS.favorite, className: "bg-account-amber" },
+  snooze: { icon: ICONS.reminder, className: "bg-account-sky" },
 };
 /** "Spam" in junk takes the mail back out. */
 const NOT_SPAM_LOOK = { icon: ICONS.notSpam, className: "bg-account-mint" };

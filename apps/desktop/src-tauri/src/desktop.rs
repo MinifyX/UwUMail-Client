@@ -133,6 +133,11 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
     if focused {
         return;
     }
+    // Muted accounts and quiet hours (Settings → Notifications) keep the mail silent.
+    let prefs = crate::notify_prefs::get();
+    if !prefs.rings_now(account_id) {
+        return;
+    }
     if let Ok(messages) = engine.messages(message_ids) {
         let mails: Vec<notify::NotifiedMail<'_>> = messages
             .iter()
@@ -146,7 +151,7 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
         // One notification per account until UwUMail is looked at again (mail_notifications.rs).
         let (count, newest) = crate::mail_notifications::add(account_id, &mails);
         // Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
-        if let Some((title, body)) = notify::mail_notification(&crate::notify_prefs::get(), count, &newest) {
+        if let Some((title, body)) = notify::mail_notification(&prefs, count, &newest) {
             // Linux notification servers may read the body as markup (security review 0.10 NT-1).
             // The title (summary) is plain text by the freedesktop spec; escaping it would show `&amp;`.
             #[cfg(target_os = "linux")]
@@ -248,8 +253,8 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
     None
 }
 
-pub fn set_notification_prefs(show_content: bool, new_mail: &str, hidden: &str, many: &str) -> Result<(), Error> {
-    crate::notify_prefs::set(notify::NotifyPrefs::new(show_content, new_mail, hidden, many));
+pub fn set_notification_prefs(prefs: notify::NotifyPrefs) -> Result<(), Error> {
+    crate::notify_prefs::set(prefs);
     Ok(())
 }
 

@@ -112,8 +112,14 @@ fn disable_pinch_zoom(app: &App) {
 /// up in the background to look (ios_refresh.rs). Nothing rings while it is in front, so a banner
 /// never lands on top of the mail itself.
 pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
-    let EngineEvent::MailReceived { message_ids, .. } = event else { return };
+    let EngineEvent::MailReceived { account_id, message_ids } = event else { return };
     if crate::ios_refresh::in_foreground() {
+        return;
+    }
+    // Muted accounts and quiet hours (Settings → Notifications) keep the mail silent. All of
+    // UwUMail's notifications on iOS are local ones from here, so this covers them all.
+    let prefs = crate::notify_prefs::get();
+    if !prefs.rings_now(account_id) {
         return;
     }
     if let Ok(messages) = engine.messages(message_ids) {
@@ -129,7 +135,7 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
         // Written by whoever sent the mail: plain, on one line and short (see uwumail_core::notify).
         if let Some((title, body)) = {
             let (count, newest) = notify::lines(&mails);
-            notify::mail_notification(&crate::notify_prefs::get(), count, &newest)
+            notify::mail_notification(&prefs, count, &newest)
         } {
             let _ = app.notification().builder().title(title).body(body).show();
         }
@@ -236,8 +242,8 @@ pub fn take_launch_action() -> Option<serde_json::Value> {
 
 /// Notifications only go out while UwUMail itself runs, so iOS needs no copy
 /// of the language, the tone or the app lock.
-pub fn set_notification_prefs(show_content: bool, new_mail: &str, hidden: &str, many: &str) -> Result<(), Error> {
-    crate::notify_prefs::set(notify::NotifyPrefs::new(show_content, new_mail, hidden, many));
+pub fn set_notification_prefs(prefs: notify::NotifyPrefs) -> Result<(), Error> {
+    crate::notify_prefs::set(prefs);
     Ok(())
 }
 

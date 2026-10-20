@@ -79,9 +79,11 @@ object Notifications {
      */
     fun showMail(context: Context, args: JSONObject) {
         if (MainActivity.visible || !allowed(context)) return
+        val accountId = args.getString("accountId")
+        // Muted accounts and quiet hours (Settings → Notifications) keep the mail silent.
+        if (Prefs.muted(context, accountId) || Prefs.quietNow(context)) return
         val text = Prefs.localized(context)
         val hideContent = !Prefs.showContent(context)
-        val accountId = args.getString("accountId")
         val account = args.optString("accountEmail", "")
         val group = "mail:$accountId"
         val manager = NotificationManagerCompat.from(context)

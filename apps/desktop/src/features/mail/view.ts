@@ -2,6 +2,7 @@ import { type IconProps, ICONS } from "@uwusuite/design";
 import type { Account, Folder, FolderRole, MailboxView } from "@/backend/types";
 import { useT } from "@/i18n";
 import { useAccounts, useFolders } from "@/lib/queries";
+import { isSnoozedFolder } from "@/lib/snooze";
 import { useSettings } from "@/state/settings";
 import { useLabelDirectory } from "../labels/useLabels";
 import { useWorkspaceName } from "../workspaces/workspaces";
@@ -23,8 +24,15 @@ export const UNIFIED_ICONS = {
   sent: ICONS.send,
 } as const;
 
+/** A folder's name as the app shows it: the roles and the Snoozed folder in the app's language. */
+export function folderLabel(folder: Folder, t: (key: string) => string): string {
+  if (folder.role) return t(`folder.${folder.role}`);
+  return isSnoozedFolder(folder) ? t("folder.snoozed") : folder.name;
+}
+
 export function folderIcon(folder: Folder): IconProps["icon"] {
-  return folder.role ? ROLE_ICONS[folder.role] : ICONS.folder;
+  if (folder.role) return ROLE_ICONS[folder.role];
+  return isSnoozedFolder(folder) ? ICONS.reminder : ICONS.folder;
 }
 
 export function sameView(a: MailboxView, b: MailboxView): boolean {
@@ -45,6 +53,8 @@ export interface ViewInfo {
   isTrash: boolean;
   /** Mail here is spam already, so "spam" means "not spam". */
   isJunk: boolean;
+  /** Mail here waits for its snooze to end; rows say until when. */
+  isSnoozed: boolean;
 }
 
 export function useViewInfo(view: MailboxView): ViewInfo {
@@ -65,6 +75,7 @@ export function useViewInfo(view: MailboxView): ViewInfo {
       isDrafts: view.role === "drafts",
       isTrash: false,
       isJunk: false,
+      isSnoozed: false,
     };
   }
   if (view.kind === "label") {
@@ -77,17 +88,19 @@ export function useViewInfo(view: MailboxView): ViewInfo {
       isDrafts: false,
       isTrash: false,
       isJunk: false,
+      isSnoozed: false,
     };
   }
   const folder = folders.find((f) => f.id === view.folderId);
   const account = accounts.find((a) => a.id === view.accountId);
   return {
-    title: folder?.name ?? "",
+    title: folder && isSnoozedFolder(folder) ? t("folder.snoozed") : (folder?.name ?? ""),
     subtitle: account?.email,
     account,
     isInbox: folder?.role === "inbox",
     isDrafts: folder?.role === "drafts",
     isTrash: folder?.role === "trash",
     isJunk: folder?.role === "junk",
+    isSnoozed: !!folder && isSnoozedFolder(folder),
   };
 }

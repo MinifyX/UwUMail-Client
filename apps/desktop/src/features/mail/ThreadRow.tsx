@@ -8,6 +8,7 @@ import type { useThreadActions } from "@/lib/queries";
 import type { ListDensity } from "@/state/settings";
 import { isReadOnly } from "@/state/sharedMailboxes";
 import { ThreadLabelChips } from "../assist/LabelChips";
+import { formatSnoozeTime } from "./snooze";
 import { endThreadDrag, startThreadDrag } from "./threadDrag";
 
 interface ThreadRowProps {
@@ -27,6 +28,8 @@ interface ThreadRowProps {
   inTrash?: boolean;
   /** The row sits in junk, where "spam" means "not spam". */
   inJunk?: boolean;
+  /** When the row's snooze ends (in the Snoozed folder): shown instead of its date. */
+  snoozedUntil?: string;
   onContextMenu?: (event: React.MouseEvent) => void;
 }
 
@@ -75,6 +78,7 @@ export function ThreadRow({
   dragIds,
   inTrash = false,
   inJunk = false,
+  snoozedUntil,
   onContextMenu,
 }: ThreadRowProps) {
   const { t, i18n } = useT();
@@ -87,7 +91,9 @@ export function ThreadRow({
   const people = others.length > 0 ? others : thread.hasDraft ? [] : thread.participants;
   const lead = people[people.length - 1] ?? thread.participants[0] ?? { email: "?" };
   const names = people.map(displayName).join(", ");
-  const date = formatListDate(thread.lastDate, i18n.language, t("common.yesterday"));
+  const date = snoozedUntil
+    ? t("snooze.until", { time: formatSnoozeTime(snoozedUntil) })
+    : formatListDate(thread.lastDate, i18n.language, t("common.yesterday"));
   const account = showAccount ? accounts.find((a) => a.id === thread.accountIds[0]) : undefined;
   // A read-only shared mailbox's mail only reads.
   const readOnly = thread.accountIds.length > 0 && thread.accountIds.every((id) => isReadOnly(accounts, id));
@@ -170,10 +176,11 @@ export function ThreadRow({
           <span className="flex shrink-0 items-center gap-1.5 self-center transition-opacity group-hover:opacity-0">
             {thread.hasAttachments && <Icon icon={ICONS.attachment} size="xs" className="text-muted" />}
             {thread.flagged && <Icon icon={ICONS.favorite} size="xs" className="fill-pink text-pink" />}
+            {snoozedUntil && <Icon icon={ICONS.reminder} size="xs" className="text-pink-ink" />}
             <span
               className={clsx(
                 "text-[12px] tabular-nums",
-                unread ? "font-bold text-pink-ink" : "font-medium text-muted",
+                unread || snoozedUntil ? "font-bold text-pink-ink" : "font-medium text-muted",
               )}
             >
               {date}

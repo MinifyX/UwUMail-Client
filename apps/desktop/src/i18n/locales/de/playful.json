@@ -362,5 +362,13 @@
   "attachmentReminder": {
     "title": "Etwas vergessen? (・・;)",
     "body": "Deine Mail spricht von einem Anhang, aber angehängt ist noch nichts."
+  },
+  "snooze": {
+    "title": "Schläfchen bis wann? (˘ω˘)",
+    "done": "Nyu hat sie bis {{time}} zugedeckt (˘ω˘)",
+    "back": "Aufgewacht, die Mail ist zurück (｡･ω･｡)"
+  },
+  "notify": {
+    "quietDesc": "Pssst, Nyu schläft (˘ω˘) In dieser Zeit gibt es keine Mitteilungen, auch über Mitternacht."
   }
 }

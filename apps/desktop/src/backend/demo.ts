@@ -69,6 +69,8 @@ import type {
   LocalModelServer,
   MailtoDraft,
   MovedMessage,
+  SnoozedMessage,
+  UnsnoozeOutcome,
   Message,
   ParticipationStatus,
   NewAccount,
@@ -1140,6 +1142,72 @@ export class DemoBackend implements Backend {
     return moved;
   }
 
+  /** Like the engine: a "Snoozed" folder per mailbox, mail found again by its Message-ID. */
+  async snoozeMessages(messageIds: string[]) {
+    await wait(120);
+    const snoozed: SnoozedMessage[] = [];
+    for (const message of this.messages) {
+      if (!messageIds.includes(message.id)) continue;
+      const folder = this.snoozedFolder(message.accountId, true)!;
+      snoozed.push({
+        id: message.id,
+        accountId: message.accountId,
+        headerId: demoHeaderId(message),
+        folderId: message.folderId === folder.id ? null : message.folderId,
+      });
+      message.folderId = folder.id;
+    }
+    this.emitChanged(messageIds);
+    return snoozed;
+  }
+
+  async unsnooze(accountId: string, headerId: string, folderId: string | null): Promise<UnsnoozeOutcome> {
+    await wait(60);
+    const folder = this.snoozedFolder(accountId, false);
+    const found = this.messages.filter((m) => m.folderId === folder?.id && demoHeaderId(m) === headerId);
+    if (found.length === 0) return "gone";
+    const target =
+      this.folders.find((f) => f.id === folderId && f.accountId === accountId && f.selectable) ??
+      this.folders.find((f) => f.accountId === accountId && f.role === "inbox");
+    if (!target) return "waiting";
+    for (const message of found) {
+      message.flags.seen = false;
+      message.folderId = target.id;
+    }
+    this.emitChanged(found.map((m) => m.id));
+    return "moved";
+  }
+
+  async folderHeaderIds(folderId: string): Promise<[string, string][]> {
+    return this.messages
+      .filter((m) => m.folderId === folderId)
+      .flatMap((m): [string, string][] => [
+        [m.threadId, demoHeaderId(m)],
+        [`m:${m.id}`, demoHeaderId(m)],
+      ]);
+  }
+
+  private snoozedFolder(accountId: string, create: boolean): Folder | undefined {
+    const found = this.folders.find(
+      (f) => f.accountId === accountId && f.role === null && f.name.toLowerCase() === "snoozed",
+    );
+    if (found || !create) return found;
+    const folder: Folder = {
+      id: `${accountId}:snoozed`,
+      accountId,
+      name: "Snoozed",
+      path: "Snoozed",
+      role: null,
+      parentId: null,
+      selectable: true,
+      unread: 0,
+      total: 0,
+    };
+    this.folders.push(folder);
+    this.emit({ type: "mail:changed", accountId });
+    return folder;
+  }
+
   async markSpam(messageIds: string[], spam: boolean) {
     return this.moveToRole(messageIds, spam ? "junk" : "inbox");
   }
@@ -2119,4 +2187,9 @@ export class DemoBackend implements Backend {
       keywords: [...new Set(sorted.flatMap((m) => m.keywords ?? []))].sort(),
     };
   }
+}
+
+/** The demo's mail has no headers; a Message-ID made from its id stands in. */
+function demoHeaderId(message: Message): string {
+  return `${message.id.replace(/[^A-Za-z0-9.-]/g, "-")}@demo.uwumail.example`;
 }

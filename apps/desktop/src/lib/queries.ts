@@ -509,6 +509,14 @@ export function useBackendEvents() {
   }, [runInBackground]);
 
   const notifyShowContent = useSettings((s) => s.notifyShowContent);
+  const notifyMuted = useSettings((s) => s.notifyMuted);
+  const quietHours = useSettings((s) => s.quietHours);
+  // Muted mailboxes are named by address in the settings and by id where the shell rings.
+  const mutedAccounts = useMemo(() => {
+    const muted = new Set(notifyMuted);
+    return (accounts ?? []).filter((account) => muted.has(account.email.toLowerCase())).map((account) => account.id);
+  }, [accounts, notifyMuted]);
+  const mutedKey = mutedAccounts.join("\n");
   useEffect(() => {
     void backend()
       .setNotificationPrefs({
@@ -516,9 +524,11 @@ export function useBackendEvents() {
         newMail: t("push.notification.newMail"),
         hidden: t("push.notification.hidden"),
         many: t("push.notification.many", { n: "{n}" }),
+        mutedAccounts: mutedKey ? mutedKey.split("\n") : [],
+        quietHours: quietHours.enabled ? { from: quietHours.from, to: quietHours.to, days: quietHours.days } : null,
       })
       .catch(() => {});
-  }, [notifyShowContent, t]);
+  }, [notifyShowContent, t, mutedKey, quietHours]);
 
   // Remote pictures wait for this before they go anywhere. A kept address was checked when it was
   // saved; should the app still turn it down, they stay away rather than leave without it.

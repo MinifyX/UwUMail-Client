@@ -22,6 +22,8 @@ import { LabelPicker } from "../labels/LabelPicker";
 import { MailboxNav } from "../mail/MailboxNav";
 import { scrollReader, wantsTextSelectAll } from "../mail/readerKeys";
 import { MoveDialog } from "../mail/MoveDialog";
+import { useSnoozeRunner } from "../mail/snooze";
+import { SnoozeDialog } from "../mail/SnoozeDialog";
 import { MobileShell } from "../mobile/MobileShell";
 import { ThreadList } from "../mail/ThreadList";
 import { ThreadReader } from "../mail/ThreadReader";
@@ -122,6 +124,7 @@ export function MailShell() {
   useSignatures();
   useDomainSignatures();
   useBackendEvents();
+  useSnoozeRunner();
   useWorkspaceGuard();
 
   // A draft that never reached the Drafts folder (offline, or UwUMail was closed) comes back.
@@ -273,6 +276,7 @@ export function MailShell() {
       <CommandPalette commands={commands} />
       <ShortcutsDialog />
       <MoveDialog />
+      <SnoozeDialog />
       <LabelPicker />
     </div>
   );

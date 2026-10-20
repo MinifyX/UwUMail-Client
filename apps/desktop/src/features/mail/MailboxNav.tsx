@@ -33,7 +33,7 @@ import { buildFolderTree, countsUnread, type FolderNode } from "./folderTree";
 import { useSelectionActions } from "./selection";
 import { droppedThreads, isThreadDrag } from "./threadDrag";
 import { ScheduledNavItem } from "../compose/ScheduledSends";
-import { folderIcon, sameView, UNIFIED_ICONS } from "./view";
+import { folderIcon, folderLabel, sameView, UNIFIED_ICONS } from "./view";
 import { accountLabel, sharedMailboxLabel } from "@/lib/accountLabel";
 import { markAllRead, viewScope } from "./markAllRead";
 
@@ -194,7 +194,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   const icon = folder.selectable ? folderIcon(folder) : ICONS.folderOpen;
   // A collapsed folder also shows what's unread inside it.
   const count = hasChildren && collapsed ? node.unreadInside : countsUnread(folder) ? folder.unread : 0;
-  const label = folder.role ? t(`folder.${folder.role}`) : folder.name;
+  const label = folderLabel(folder, t);
   const selection = useSelectionActions();
   const actions = useMessageActions();
   const [dropping, setDropping] = useState(false);

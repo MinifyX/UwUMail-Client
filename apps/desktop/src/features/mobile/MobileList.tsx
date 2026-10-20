@@ -28,6 +28,7 @@ import { ThreadRow } from "../mail/ThreadRow";
 import { useViewInfo } from "../mail/view";
 import { openDraftThread } from "../compose/openDraft";
 import { useSelectionActions } from "../mail/selection";
+import { useSnoozedRows } from "../mail/snooze";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { PullToRefresh } from "./PullToRefresh";
@@ -69,6 +70,7 @@ export function MobileList() {
   const activeWorkspace = useSettings((s) => s.activeWorkspace);
   const workspaceName = useWorkspaceName();
   const info = useViewInfo(view);
+  const snoozedRows = useSnoozedRows(view);
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
   const emptiable = view.kind === "folder" ? folders.find((f) => f.id === view.folderId && canEmpty(f)) : undefined;
@@ -320,6 +322,7 @@ export function MobileList() {
                           actions={cardActions}
                           inTrash={info.isTrash}
                           inJunk={info.isJunk}
+                          snoozedUntil={snoozedRows?.get(thread.id)}
                           onSelect={() =>
                             selecting
                               ? toggle(thread.id)
