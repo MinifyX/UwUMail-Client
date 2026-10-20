@@ -23,10 +23,26 @@ never holds up a GitHub release. The `apk` job (named like android.yml's, same c
 Rust and Gradle caches main saves, so only x86_64 and UwUMail itself compile again. Pushes to main
 don't run it.
 
-- **versionCode**: `major·10⁹ + minor·10⁷ + patch·10⁵ + 50 000 + run number of play.yml`
-  (`node scripts/play.mjs version-code <run>`). The GitHub APK has the same scheme with the
-  android.yml run number and no 50 000, so a Play build is always above every APK of its version
-  and below every build of the next. Betas count as their version (`0.11.0-beta.4` → `0.11.0`).
+- **versionCode**: `10⁹ + major·10⁸ + minor·10⁶ + patch·10⁴ + n`, the same for the GitHub APK
+  and the Play build (`node scripts/play.mjs version-code [--apk] <run>`); betas count as their
+  version (`0.11.0-beta.4` → `0.11.0`).
+
+  | Build                    | n                                          | 0.11.0, run 5   |
+  | ------------------------ | ------------------------------------------ | --------------- |
+  | GitHub APK (android.yml) | run number 1…7999, then from 1 again       | `1 011 000 005` |
+  | Play (play.yml)          | 8000 + run number (1…1999)                 | `1 011 008 005` |
+
+  So a Play build is always above every APK of its version and below every build of the next
+  one, and the two update each other. Minor and patch go up to 99; the largest code, 10.99.99,
+  is `2 099 999 999`, under Play's limit of 2 100 000 000 (and Android's int maximum). The base
+  10⁹ lies above everything the old scheme (`major·10⁹ + minor·10⁷ + patch·10⁵ + run`) gave out,
+  up to `110 050 002` (0.11.0-beta.4, internal testing), so no code ever sinks.
+  Run numbers count for the whole repository, not per version. android.yml runs on every push to
+  main (about 1200 a year in 2026), so its n wraps after 7999 instead of failing CI: only a
+  version that is current right at the wrap gets one APK build below the previous one (fixed by
+  its Play build or the next version). play.yml runs only on tags, Run workflow and PRs touching
+  it; its run number 2000 is decades away, and from there `version-code` fails loudly (then move
+  play.yml to a new workflow file, which counts from 1, or raise the base).
   Before uploading, `scripts/play.mjs` checks the new code is above every one Play has seen and
   stops otherwise. A re-run of only the `play` job reuses the bundle and its code; Play refuses it
   once that code is in.
@@ -118,9 +134,12 @@ aktualisieren sich Play-App und GitHub-APK gegenseitig.
   signiert es auf einem frischen Runner mit `jarsigner`, prüft das Zertifikat, legt es als
   Artefakt `UwUMail-Play-<sha>` ab und lädt es mit `scripts/play.mjs` hoch. Läuft neben dem
   Release, hält ihn also nie auf.
-- **versionCode** = Version·10ⁿ wie bei der APK + 50 000 + Laufnummer von `play.yml`: immer über
-  jeder APK derselben Version und unter der nächsten Version. Das Skript bricht ab, wenn der Code
-  nicht über allen bisherigen liegt.
+- **versionCode** = `10⁹ + Major·10⁸ + Minor·10⁶ + Patch·10⁴ + n`, für APK und Play gleich:
+  APK n = Laufnummer von `android.yml` (1…7999, danach wieder ab 1), Play n = 8000 + Laufnummer
+  von `play.yml` (1…1999). Damit liegt der Play-Build immer über jeder APK derselben Version und
+  unter der nächsten Version; Minor/Patch bis 99, höchster Code (10.99.99) `2 099 999 999` unter
+  Plays Grenze. Die Basis 10⁹ liegt über allem aus dem alten Schema (bis `110 050 002`). Das
+  Skript bricht ab, wenn der Code nicht über allen bisherigen liegt.
 - **Neuigkeiten** aus `release-notes/<version>.json` (de/en, auf 500 Zeichen gekürzt).
 - **Status** `completed`; solange die App in der Console noch ein Entwurf ist, legt das Skript den
   Release als Entwurf an.

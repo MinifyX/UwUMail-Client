@@ -1,12 +1,12 @@
 // Google Play, from CI and from a terminal: the App Bundle of a release into a
 // test track, and what the tracks hold.
 //
-//   node scripts/play.mjs version-code <run number>
-//       The versionCode of the Play build of the version in tauri.conf.json:
-//       the APK's scheme (android.yml: major·10⁹ + minor·10⁷ + patch·10⁵ +
-//       run number) with the play.yml run number above 50 000. So a Play build
-//       is always newer than every GitHub APK of the same version (those count
-//       from 1) and older than every build of the next one.
+//   node scripts/play.mjs version-code [--apk] <run number>
+//       The versionCode of the version in tauri.conf.json, for the Play build
+//       (play.yml's run number) or with --apk for the GitHub APK (android.yml's):
+//       10⁹ + major·10⁸ + minor·10⁶ + patch·10⁴ + n, n = 8000 + run for Play,
+//       1…7999 for the APK. So a Play build is always newer than every GitHub
+//       APK of the same version and older than every build of the next one.
 //   node scripts/play.mjs upload <app.aab>
 //       Uploads the bundle and rolls it out in PLAY_TRACK (default internal)
 //       with PLAY_STATUS (default completed), the release notes of the version
@@ -32,24 +32,39 @@ const UPLOAD = `https://androidpublisher.googleapis.com/upload/androidpublisher/
 const SCOPE = "https://www.googleapis.com/auth/androidpublisher";
 /** Play's limit for "What's new", per language. */
 export const NOTES_LIMIT = 500;
-/** play.yml's run numbers start above the APK's (android.yml), which stay below this. */
-export const PLAY_OFFSET = 50_000;
+/**
+ * Every versionCode starts here: above everything the old scheme (major·10⁹ + minor·10⁷ +
+ * patch·10⁵ + run, up to 0.11.0-beta.4 → 110 050 002 on Play) ever gave out, so codes never sink.
+ */
+const BASE = 1_000_000_000;
+/** Codes per version (patch step); the last part `n` of a code stays below it. */
+const SLOT = 10_000;
+/** The APK's n (android.yml) stays below this, the Play build's starts at it. */
+export const PLAY_OFFSET = 8_000;
+/** Play's limit for versionCodes (below Android's int maximum). */
+const PLAY_LIMIT = 2_100_000_000;
 
 function fail(message) {
   console.error(`::error::${message}`);
   process.exit(1);
 }
 
-/** The versionCode of the Play build `run` of `version` ("0.11.0-beta.4" counts as 0.11.0). */
-export function versionCode(version, run) {
+/**
+ * The versionCode of build `run` of `version` ("0.11.0-beta.4" counts as 0.11.0): the Play
+ * build's (play.yml run numbers 1…1999) or with `apk` the GitHub APK's (android.yml run numbers,
+ * which wrap after 7999 so CI never stops on them).
+ */
+export function versionCode(version, run, { apk = false } = {}) {
   const [major, minor, patch] = version.split("-")[0].split(".").map(Number);
   const number = Number(run);
-  if (![major, minor, patch, number].every(Number.isInteger) || number < 1 || number >= PLAY_OFFSET)
+  if (![major, minor, patch, number].every(Number.isInteger) || number < 1)
     throw new Error(`No versionCode for version ${version}, run ${run}`);
   if (minor > 99 || patch > 99) throw new Error(`Version ${version}: minor and patch go up to 99`);
-  const code = major * 1e9 + minor * 1e7 + patch * 1e5 + PLAY_OFFSET + number;
-  // Play's own limit.
-  if (code > 2_100_000_000) throw new Error(`versionCode ${code} is above Play's limit`);
+  if (!apk && number >= SLOT - PLAY_OFFSET)
+    throw new Error(`play.yml run ${run}: Play builds have run numbers up to ${SLOT - PLAY_OFFSET - 1}`);
+  const n = apk ? ((number - 1) % (PLAY_OFFSET - 1)) + 1 : PLAY_OFFSET + number;
+  const code = BASE + major * 1e8 + minor * 1e6 + patch * 1e4 + n;
+  if (code > PLAY_LIMIT) throw new Error(`versionCode ${code} is above Play's limit`);
   return code;
 }
 
@@ -222,10 +237,12 @@ async function tracks() {
 if (import.meta.main) {
   const [command, ...args] = process.argv.slice(2);
   try {
-    if (command === "version-code") console.log(versionCode(version(), args[0]));
-    else if (command === "upload") await upload(args[0]);
+    if (command === "version-code") {
+      const apk = args[0] === "--apk";
+      console.log(versionCode(version(), args[apk ? 1 : 0], { apk }));
+    } else if (command === "upload") await upload(args[0]);
     else if (command === "tracks") await tracks();
-    else fail("Usage: node scripts/play.mjs version-code <run> | upload <app.aab> | tracks");
+    else fail("Usage: node scripts/play.mjs version-code [--apk] <run> | upload <app.aab> | tracks");
   } catch (error) {
     fail(error.message);
   }
