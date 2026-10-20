@@ -55,6 +55,7 @@ never happen. See [Why this exists](../README.md#why-this-exists).
 ## Android
 
 - [x] Same app and engine on Android, signed APK from CI, emulator smoke test
+- [x] App Bundle (arm64, x86_64) to Google Play's internal testing on every tag ([play-store.md](play-store.md))
 - [x] Phone layout: list with filters, conversation with thumb-height actions, drawer, full-screen composer
 - [x] Swipe actions (configurable), long press to select, Nyu pull to refresh, back gesture
 - [x] Instant new mail through a foreground service; notifications with "Mark as read" and "Archive"

@@ -20,6 +20,7 @@ date afterwards. On Linux UwUMail comes as a package for your distribution.
 | Android | `UwUMail-android.apk` | see the Android section of the [roadmap](roadmap.md) |
 | iPhone | `UwUMail-ios.ipa` | sideload only (AltStore or Sideloadly), see [ios.md](ios.md) |
 | iPhone, iPad, Mac | TestFlight (App Store build) | invited testers for now, see [app-store.md](app-store.md) |
+| Android | Google Play, internal testing | invited testers for now, see [play-store.md](play-store.md) |
 
 The Mac setup is universal: the same file for Apple chips and Intel Macs.
 

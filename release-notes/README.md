@@ -34,6 +34,10 @@ without it. The text appears under "What's new" in UwUMail's update hint and on 
    signature names the versioned file they expect (`UwUMail-Setup-<version>.exe`, ...), so the workflow signs
    a copy under that name and publishes the same bytes under the stable one (`scripts/release-feeds.mjs`).
 
+5. The same tag sends the store builds on their own, beside the release: TestFlight for iPhone, iPad and Mac
+   (`ios.yml`, `mas.yml`, [docs/app-store.md](../docs/app-store.md)) and Google Play's internal testing
+   (`play.yml`, [docs/play-store.md](../docs/play-store.md)). Its "What's new" is this file, too.
+
 If GitHub can't run the workflow, publish the Windows setup from a PC instead: with the tag checked out,
 run `pnpm release`. That publishes Windows x64 only; ARM PCs, Macs and Linux PCs then skip this version. It needs the update signing key, either as `TAURI_SIGNING_PRIVATE_KEY` +
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` or as a folder with `uwumail-update.key` and `PASSWORT.txt` in

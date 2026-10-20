@@ -104,7 +104,9 @@ macOS wants one extra click the first time. That, the Linux details and how to
 uninstall are in [docs/install.md](docs/install.md). The iPhone build is
 unsigned and has to be sideloaded; how that works, and what iOS doesn't allow,
 is in [docs/ios.md](docs/ios.md). Signed builds for iPhone, iPad and the Mac App
-Store go to TestFlight for now ([docs/app-store.md](docs/app-store.md)). What
+Store go to TestFlight for now ([docs/app-store.md](docs/app-store.md)), the
+Android App Bundle to Google Play's internal testing
+([docs/play-store.md](docs/play-store.md)). What
 UwUMail does with your data: [PRIVACY.md](PRIVACY.md).
 
 ## AI assistant
@@ -197,6 +199,7 @@ data.
 - [Installing](docs/install.md) — the setup on each system, first start on a Mac, updates, uninstalling
 - [iPhone](docs/ios.md) — sideloading and what iOS doesn't allow
 - [App Store and TestFlight](docs/app-store.md) — the store builds, signing in CI, what's left to click
+- [Google Play](docs/play-store.md) — the App Bundle, signing and upload in CI, setting up the Play Console
 - [Privacy](PRIVACY.md) — what UwUMail does with your data (English and German)
 - [Microsoft and Google sign-in](docs/oauth.md) — client ids, redirects, Microsoft 365
 - [Architecture](docs/architecture.md) — how the pieces fit together

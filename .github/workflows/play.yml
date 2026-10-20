@@ -1,0 +1,182 @@
+name: Google Play
+
+# UwUMail for Google Play, into the internal test track: a tag starts it beside
+# the release (neither waits for the other, so Play can't hold up a GitHub
+# release), and so does Actions → Google Play → Run workflow. Pull requests that
+# touch this workflow or its script build the bundle unsigned, so a change that
+# breaks it shows before a tag does.
+#
+#   apk (builds the App Bundle, no signing secret) ── play (signs, checks, uploads)
+#
+# The bundle holds arm64 (phones, tablets) and x86_64 (Chromebooks, emulators).
+# `play` runs on a fresh runner that has built and installed nothing, like the
+# APK's signing job in android.yml: the upload key and the service account never
+# share a machine with thousands of third-party build scripts. Play signs what
+# it delivers with the same release key (Play App Signing with our own key), so
+# an APK from GitHub and the app from Play update each other. Nothing goes
+# beyond the internal track. docs/play-store.md.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/play.yml"
+      - "scripts/play.mjs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Named `apk` with the key `android` like android.yml's build job: rust-cache keys carry the job's
+  # name, so the arm64 half comes from main's cache. x86_64 builds from scratch.
+  apk:
+    name: App Bundle (arm64, x86_64)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      code: ${{ steps.version.outputs.code }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      # android.yml's cache (saved by main); this build only reads it.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          prefix-key: v2-rust
+          key: android
+          save-if: false
+      - run: pnpm install --frozen-lockfile
+
+      # Above every GitHub APK of the same version, below the next version (scripts/play.mjs).
+      - name: Version code
+        id: version
+        run: |
+          echo "version=$(node -p 'require("./apps/desktop/src-tauri/tauri.conf.json").version')" >> "$GITHUB_OUTPUT"
+          echo "code=$(node scripts/play.mjs version-code "$GITHUB_RUN_NUMBER")" >> "$GITHUB_OUTPUT"
+
+      - uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-provider: basic
+          cache-read-only: true
+          validate-wrappers: false
+          add-job-summary: on-failure
+
+      # Built without the signing key: thousands of third-party build scripts run here.
+      - name: Build
+        env:
+          UWUMAIL_ANDROID_VERSION_CODE: ${{ steps.version.outputs.code }}
+          UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
+          UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
+          UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          pnpm tauri android build --aab --target aarch64 --target x86_64 --ci
+
+      - name: Find the bundle
+        run: |
+          aab=$(find apps/desktop/src-tauri/gen/android/app/build/outputs/bundle -name '*release*.aab' | head -n 1)
+          test -n "$aab" || { echo "::error::No App Bundle was built"; exit 1; }
+          mkdir -p unsigned
+          cp "$aab" unsigned/UwUMail-unsigned.aab
+          # Both ABIs, or Play would quietly offer UwUMail to fewer devices.
+          for abi in arm64-v8a x86_64; do
+            unzip -l unsigned/UwUMail-unsigned.aab | grep -q "base/lib/$abi/" \
+              || { echo "::error::The bundle has no $abi libraries"; exit 1; }
+          done
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: UwUMail-Play-unsigned-${{ github.sha }}
+          retention-days: 1
+          if-no-files-found: error
+          path: unsigned/UwUMail-unsigned.aab
+
+  play:
+    name: Sign and upload to Google Play
+    needs: apk
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      # Only what the upload reads, not the workspace: nothing here installs or builds.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/play.mjs
+            apps/desktop/src-tauri/tauri.conf.json
+            release-notes
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: UwUMail-Play-unsigned-${{ github.sha }}
+          path: unsigned
+
+      # The release key is the upload key, and Play's app signing key too (docs/play-store.md). Only
+      # the JDK's jarsigner sees it, and it's gone again right after.
+      - name: Sign
+        env:
+          KEYSTORE: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.UWUMAIL_ANDROID_KEYSTORE_PASSWORD }}
+          # As in android.yml: the certificate of every released UwUMail.
+          CERTIFICATE_SHA256: de1cd496582140c9004e05ff087656cdb0b0f575a98dc664e809b5f9b510e301
+          VERSION: ${{ needs.apk.outputs.version }}
+          CODE: ${{ needs.apk.outputs.code }}
+        run: |
+          test -n "$KEYSTORE" || { echo "::error::No release keystore (UWUMAIL_ANDROID_KEYSTORE_BASE64)"; exit 1; }
+          bin="${JAVA_HOME:+$JAVA_HOME/bin/}"
+          keystore="$RUNNER_TEMP/uwumail-android.p12"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$KEYSTORE" | base64 -d > "$keystore"
+          mkdir -p out
+          signed="out/UwUMail-$VERSION-$CODE.aab"
+          cp unsigned/UwUMail-unsigned.aab "$signed"
+          "${bin}jarsigner" -keystore "$keystore" -storetype PKCS12 -storepass:env KEYSTORE_PASSWORD \
+            -keypass:env KEYSTORE_PASSWORD -sigalg SHA256withRSA -digestalg SHA-256 "$signed" uwumail
+          "${bin}jarsigner" -verify "$signed" > /dev/null
+          fingerprint=$("${bin}keytool" -printcert -jarfile "$signed" | grep -m1 'SHA256:' | awk '{print $2}' | tr -d : | tr 'A-F' 'a-f')
+          echo "Certificate SHA-256: $fingerprint"
+          [ "$fingerprint" = "$CERTIFICATE_SHA256" ] \
+            || { echo "::error::The bundle isn't signed with UwUMail's certificate"; exit 1; }
+          ls -la out
+
+      # Kept either way: until the service account exists, this is the bundle to upload by hand.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: UwUMail-Play-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: out/*.aab
+
+      - name: Upload to the internal track
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.UWUMAIL_PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_TRACK: internal
+          PLAY_STATUS: completed
+        run: |
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::notice::No UWUMAIL_PLAY_SERVICE_ACCOUNT_JSON secret: the signed bundle is in the artifact UwUMail-Play-$GITHUB_SHA, not in Play."
+            exit 0
+          fi
+          node scripts/play.mjs upload out/*.aab
