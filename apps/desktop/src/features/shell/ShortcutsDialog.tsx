@@ -40,6 +40,7 @@ const SHORTCUTS: [string, string, string?][] = [
   ["e", "archive"],
   ["#", "trash"],
   ["v", "move"],
+  ["b", "snooze"],
   ["l", "label"],
   ["!", "spam"],
   ["s", "flag"],
