@@ -135,7 +135,7 @@ export function EventsBar({ messageId, accountId, found, onAdd }: EventsBarProps
             <Icon icon={ICONS.expand} size="xs" className={clsx("transition-transform", expanded && "rotate-180")} />
           </button>
         )}
-        <span className="ml-auto flex items-center gap-1.5">
+        <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
           {refine}
           {found.refineFailed && (
             <span role="status" className="text-[12px] text-muted">
@@ -224,7 +224,7 @@ function SearchStatus({
           t("dates.noneFound")
         )}
       </p>
-      <span className="ml-auto flex items-center gap-1.5">
+      <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
         {found.refineFailed && !found.refining && (
           <EstimateTip request={estimate}>
             <Button size="sm" variant="ghost" icon={ICONS.ai} onClick={found.refine}>

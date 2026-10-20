@@ -101,7 +101,7 @@ const BILLING =
 const STOP_EDGE = new Set(
   (
     "am um vom von bis ab zum zur den dem der die das des ist sind wird werden findet statt beginnt startet läuft endet gilt " +
-    "jeweils ca circa bereits schon noch nur und oder on at from to until till the is are will be starts start begins " +
+    "jeweils ca circa bereits schon noch nur und oder and or but on at from to until till the is are will be starts start begins " +
     "runs ends takes place happens held a an this next kommenden nächsten diesen im in bei for of " +
     "fällig zahlbar spätestens bitte please due by zwischen zw between ab gegen vor nach sollte soll muss wurde"
   ).split(/\s+/),

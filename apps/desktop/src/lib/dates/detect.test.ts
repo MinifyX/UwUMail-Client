@@ -28,6 +28,11 @@ describe("detectEvents", () => {
     });
   });
 
+  it("doesn't take a lone leading conjunction for the title", () => {
+    const event = only("And next Tuesday at 6pm we still wanted to call", { subject: "Hello", locale: "en-US" });
+    expect(event.title).not.toBe("And");
+  });
+
   it("gives a time without an end one hour", () => {
     const event = only("Konzert am Freitag, 16.10. um 19:30 Uhr im Café Lindenblüte.");
     expect(event).toMatchObject({
