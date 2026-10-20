@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Folder, MailboxView } from "@/backend/types";
-import { moveInOrder, orderAccounts, resolveRefs, scopeFor, withRef } from "./arrangement";
+import { folderRefOf, moveInOrder, orderAccounts, resolveRefs, scopeFor, withRef } from "./arrangement";
 
-const home = { id: "a1", email: "Mini@Home.test" };
-const work = { id: "a2", email: "mini@work.test" };
-const club = { id: "a3", email: "mini@club.test" };
+const home = { id: "a1", email: "Mini@Home.test", protocol: "imap" as const };
+const work = { id: "a2", email: "mini@work.test", protocol: "imap" as const };
+const club = { id: "a3", email: "mini@club.test", protocol: "imap" as const };
 
 function folder(id: string, accountId: string, path: string, role: Folder["role"] = null): Folder {
   return { id, accountId, path, name: path, role, unread: 1, total: 1, selectable: true } as Folder;
@@ -42,6 +42,16 @@ describe("folder refs", () => {
       { account: "else@other.test", folder: "INBOX" },
     ];
     expect(resolveRefs(refs, [home, work], folders).map((f) => f.id)).toEqual(["f3", "f2"]);
+  });
+
+  it("names JMAP folders by their names, not by the mailbox id", () => {
+    const jmap = { id: "j1", email: "mini@jmap.test", protocol: "jmap" as const };
+    const parent = { ...folder("m1", "j1", "Mb1"), name: "Projekte" };
+    const child = { ...folder("m2", "j1", "Mb2"), name: "Bugs", parentId: "m1" };
+    const all = [...folders, parent, child];
+    expect(folderRefOf(child, jmap, all)).toEqual({ account: "mini@jmap.test", folder: "Projekte/Bugs" });
+    expect(resolveRefs([{ account: "mini@jmap.test", folder: "Projekte/Bugs" }], [jmap], all)).toEqual([child]);
+    expect(folderRefOf(folders[1]!, home, all)).toEqual({ account: "mini@home.test", folder: "Projekte" });
   });
 });
 

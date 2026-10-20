@@ -4,17 +4,8 @@ import { backend } from "@/backend/backend";
 import type { Account, Folder, MailboxView, Message } from "@/backend/types";
 import { i18n, translate } from "@/i18n";
 import { queryKeys, useAccounts, useFolders } from "@/lib/queries";
-import {
-  accountAddress,
-  dueSnoozes,
-  findSnooze,
-  folderBySyncPath,
-  isSnoozedFolder,
-  newSnoozeId,
-  snoozedUntil,
-  syncFolderPath,
-  toUtc,
-} from "@/lib/snooze";
+import { accountAddress, folderBySyncPath, syncFolderPath } from "@/lib/arrangement";
+import { dueSnoozes, findSnooze, isSnoozedFolder, newSnoozeId, snoozedUntil, toUtc } from "@/lib/snooze";
 import { type SnoozeEntry, useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { moveBack, rememberUndo } from "@/state/undo";

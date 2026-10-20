@@ -1,5 +1,4 @@
-import type { Account, Folder } from "@/backend/types";
-import { folderDisplayPath } from "@/features/rules/folderPath";
+import type { Folder } from "@/backend/types";
 import type { SnoozeEntry } from "@/state/settings";
 
 /** The folder snoozed mail waits in; found by this name (any case) on every device. */
@@ -15,11 +14,6 @@ const ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456
 export function newSnoozeId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (byte) => ID_ALPHABET[byte & 63]).join("");
-}
-
-/** The address a snooze names its mailbox by: the account's address in lower case. */
-export function accountAddress(account: Pick<Account, "email">): string {
-  return account.email.trim().toLowerCase();
 }
 
 /** A time as the synced value keeps it: RFC 3339 in UTC, to the second. */
@@ -65,25 +59,6 @@ export function dueSnoozes(snoozes: Record<string, SnoozeEntry>, now: Date): [st
   return Object.entries(snoozes)
     .filter(([, entry]) => Date.parse(entry.until) <= time)
     .sort(([, a], [, b]) => Date.parse(a.until) - Date.parse(b.until));
-}
-
-/**
- * How a synced setting names a folder: its IMAP path, or for JMAP (whose folder path is the
- * mailbox id) the mailbox names from the top joined by "/".
- */
-export function syncFolderPath(folder: Folder, folders: Folder[], protocol: Account["protocol"]): string {
-  return protocol === "jmap" ? folderDisplayPath(folder, folders, (f) => f.name) : folder.path;
-}
-
-/** The account's folder a synced path names, if this device knows it. */
-export function folderBySyncPath(
-  path: string,
-  accountId: string,
-  folders: Folder[],
-  protocol: Account["protocol"],
-): Folder | undefined {
-  const own = folders.filter((folder) => folder.accountId === accountId);
-  return own.find((folder) => syncFolderPath(folder, own, protocol) === path);
 }
 
 /**

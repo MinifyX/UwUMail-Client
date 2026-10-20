@@ -2,25 +2,17 @@
 // setting, so it follows the account to the other devices.
 
 import { useMemo } from "react";
-import type { Account, Folder } from "@/backend/types";
-import {
-  accountAddress,
-  folderRefOf,
-  hiddenFromUnified,
-  moveInOrder,
-  orderAccounts,
-  resolveRefs,
-  withRef,
-} from "@/lib/arrangement";
+import type { Account } from "@/backend/types";
+import { accountAddress, hiddenFromUnified, moveInOrder, orderAccounts, resolveRefs, withRef } from "@/lib/arrangement";
 import { useAccounts, useFolders } from "@/lib/queries";
-import { useSettings } from "@/state/settings";
+import { type FolderRef, useSettings } from "@/state/settings";
 
 type FolderList = "unifiedFolders" | "favoriteFolders" | "hiddenFolders";
 
-/** Adds a folder to one of the folder lists, or takes it out. */
-export function setFolderListed(list: FolderList, folder: Folder, account: Account, on: boolean) {
+/** Adds a folder (see `folderRefOf`) to one of the folder lists, or takes it out. */
+export function setFolderListed(list: FolderList, ref: FolderRef, on: boolean) {
   const settings = useSettings.getState();
-  settings.update({ [list]: withRef(settings[list], folderRefOf(folder, account), on) });
+  settings.update({ [list]: withRef(settings[list], ref, on) });
 }
 
 /** Leaves a mailbox out of the unified views and their counts, or takes it back in. */

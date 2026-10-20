@@ -4,15 +4,41 @@
 // path (`FolderRef`), since ids differ from device to device.
 
 import type { Account, Folder, MailboxView } from "@/backend/types";
+import { folderDisplayPath } from "@/features/rules/folderPath";
 import type { FolderRef } from "@/state/settings";
+
+type RefAccount = Pick<Account, "id" | "email" | "protocol">;
 
 /** The address a mailbox goes by in synced settings: its own, lower case. */
 export function accountAddress(account: Pick<Account, "email">): string {
   return account.email.trim().toLowerCase();
 }
 
-export function folderRefOf(folder: Pick<Folder, "path">, account: Pick<Account, "email">): FolderRef {
-  return { account: accountAddress(account), folder: folder.path };
+/**
+ * How a synced setting names a folder: its IMAP path, or for JMAP (whose folder path is the
+ * mailbox id, different on every device) the mailbox names from the top joined by "/".
+ */
+export function syncFolderPath(folder: Folder, folders: readonly Folder[], protocol: Account["protocol"]): string {
+  return protocol === "jmap" ? folderDisplayPath(folder, [...folders], (f) => f.name) : folder.path;
+}
+
+/** The account's folder a synced path names, if this device knows it. */
+export function folderBySyncPath(
+  path: string,
+  accountId: string,
+  folders: readonly Folder[],
+  protocol: Account["protocol"],
+): Folder | undefined {
+  const own = folders.filter((folder) => folder.accountId === accountId);
+  return own.find((folder) => syncFolderPath(folder, own, protocol) === path);
+}
+
+export function folderRefOf(
+  folder: Folder,
+  account: Pick<Account, "email" | "protocol">,
+  folders: readonly Folder[],
+): FolderRef {
+  return { account: accountAddress(account), folder: syncFolderPath(folder, folders, account.protocol) };
 }
 
 export function sameRef(a: FolderRef, b: FolderRef): boolean {
@@ -32,28 +58,18 @@ export function withRef(refs: readonly FolderRef[], ref: FolderRef, on: boolean)
 /** The folders here that the refs point at, in the refs' order. Refs of other devices' mailboxes are skipped. */
 export function resolveRefs(
   refs: readonly FolderRef[],
-  accounts: readonly Pick<Account, "id" | "email">[],
+  accounts: readonly RefAccount[],
   folders: readonly Folder[],
 ): Folder[] {
   const found: Folder[] = [];
   for (const ref of refs) {
     for (const account of accounts) {
       if (accountAddress(account) !== ref.account) continue;
-      const folder = folders.find((each) => each.accountId === account.id && each.path === ref.folder);
+      const folder = folderBySyncPath(ref.folder, account.id, folders, account.protocol);
       if (folder && !found.includes(folder)) found.push(folder);
     }
   }
   return found;
-}
-
-/** Whether a folder is one of the refs. */
-export function isListed(
-  refs: readonly FolderRef[],
-  folder: Folder,
-  accounts: readonly Pick<Account, "id" | "email">[],
-): boolean {
-  const account = accounts.find((each) => each.id === folder.accountId);
-  return account !== undefined && hasRef(refs, folderRefOf(folder, account));
 }
 
 /** Whether the unified views leave the mailbox out. */
@@ -149,8 +165,8 @@ export function scopeFor(
     hidden,
     extra,
   }: {
-    accounts: readonly Pick<Account, "id" | "email">[];
-    visible: readonly Pick<Account, "id" | "email">[];
+    accounts: readonly RefAccount[];
+    visible: readonly RefAccount[];
     filtered: boolean;
     folders: readonly Folder[];
     hidden: readonly string[];

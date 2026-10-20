@@ -22,7 +22,7 @@ import { moveAccount, setFolderListed, setHiddenFromUnified, topLevel, useUnifie
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
 import { nestAccounts, takesSharedMailboxes, useSharedMailboxes } from "@/state/sharedMailboxes";
 import { toast } from "@/state/toasts";
-import { useSettings } from "@/state/settings";
+import { type FolderRef, useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { LabelNav } from "../labels/LabelNav";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
@@ -122,6 +122,7 @@ interface FolderPlace {
 function folderMenuItems(
   folder: Folder,
   account: Account,
+  ref: FolderRef,
   place: FolderPlace,
   t: (key: string) => string,
   client: QueryClient,
@@ -141,13 +142,13 @@ function folderMenuItems(
     items.push({
       label: place.favorite ? t("folders.unfavorite") : t("folders.favorite"),
       icon: ICONS.favorite,
-      onSelect: () => setFolderListed("favoriteFolders", folder, account, !place.favorite),
+      onSelect: () => setFolderListed("favoriteFolders", ref, !place.favorite),
     });
     if (folder.role !== "inbox") {
       items.push({
         label: place.unified ? t("folders.leaveUnified") : t("folders.joinUnified"),
         icon: ICONS.allMailboxes,
-        onSelect: () => setFolderListed("unifiedFolders", folder, account, !place.unified),
+        onSelect: () => setFolderListed("unifiedFolders", ref, !place.unified),
       });
     }
   }
@@ -155,7 +156,7 @@ function folderMenuItems(
     items.push({
       label: place.hidden ? t("folders.unhide") : t("folders.hide"),
       icon: place.hidden ? ICONS.show : ICONS.hide,
-      onSelect: () => setFolderListed("hiddenFolders", folder, account, !place.hidden),
+      onSelect: () => setFolderListed("hiddenFolders", ref, !place.hidden),
     });
   }
   items.push("separator", {
@@ -200,7 +201,8 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
   const [dropping, setDropping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const client = useQueryClient();
-  const ref = folderRefOf(folder, account);
+  const { data: folders = [] } = useFolders();
+  const ref = folderRefOf(folder, account, folders);
   const place: FolderPlace = {
     favorite: useSettings((s) => hasRef(s.favoriteFolders, ref)),
     hidden: useSettings((s) => hasRef(s.hiddenFolders, ref)),
@@ -284,7 +286,7 @@ function FolderItem({ node, account }: { node: FolderNode; account: Account }) {
           onOpenChange={setMenuOpen}
           align="end"
           className="mr-1"
-          items={folderMenuItems(folder, account, place, t, client)}
+          items={folderMenuItems(folder, account, ref, place, t, client)}
           trigger={({ toggle, ...aria }) => (
             <IconButton
               icon={ICONS.more}
@@ -634,7 +636,8 @@ export function MailboxNav({
                       {
                         label: t("folders.unfavorite"),
                         icon: ICONS.favorite,
-                        onSelect: () => setFolderListed("favoriteFolders", folder, account, false),
+                        onSelect: () =>
+                          setFolderListed("favoriteFolders", folderRefOf(folder, account, folders), false),
                       },
                     ],
                   }}

@@ -1,17 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Folder } from "@/backend/types";
 import type { SnoozeEntry } from "@/state/settings";
-import {
-  dueSnoozes,
-  findSnooze,
-  folderBySyncPath,
-  isSnoozedFolder,
-  newSnoozeId,
-  snoozedUntil,
-  snoozePresets,
-  syncFolderPath,
-  toUtc,
-} from "./snooze";
+import { folderBySyncPath, syncFolderPath } from "./arrangement";
+import { dueSnoozes, findSnooze, isSnoozedFolder, newSnoozeId, snoozedUntil, snoozePresets, toUtc } from "./snooze";
 
 const entry = (until: string, messageId = "a@example.com", account = "me@example.com"): SnoozeEntry => ({
   account,
