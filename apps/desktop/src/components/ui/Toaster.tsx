@@ -4,11 +4,13 @@ import {
   MobileToaster as PackageMobileToaster,
   type Toast as PackageToast,
   Toaster as PackageToaster,
+  type MobilePlatform,
   type ToastStore,
 } from "@uwusuite/design";
 import { useEffect, useState } from "react";
 import { LogoSymbol } from "@/components/ui/Logo";
 import { useT } from "@/i18n";
+import { useIsPhone } from "@/lib/device";
 import { type Toast, useToasts } from "@/state/toasts";
 
 // Most of UwUMail's notes are about a mail (archived, sent, moved), so "info" shows the envelope.
@@ -69,14 +71,15 @@ function createStoreView(): ToastStore {
 
 export const toastStore = createStoreView();
 
-/** Desktop: the package's toast stack, bottom centre. */
+/** Desktop: the package's toast stack, bottom centre. Phones show theirs in the shell. */
 export function Toaster() {
-  return <PackageToaster store={toastStore} />;
+  const phone = useIsPhone();
+  return phone ? null : <PackageToaster store={toastStore} />;
 }
 
 /** Phones: the package's platform toast (iOS glass pill at the top, M3 snackbar at the bottom). */
-export function MobileToaster() {
-  return <PackageMobileToaster store={toastStore} />;
+export function MobileToaster({ platform }: { platform?: MobilePlatform }) {
+  return <PackageMobileToaster store={toastStore} platform={platform} />;
 }
 
 /** Whole seconds left until `to`, e.g. until a held-back mail goes out. */
