@@ -823,7 +823,8 @@
       "searching": "Suche auf dem Server",
       "nothingMore": "Auf dem Server gibt es keine weiteren Treffer.",
       "failed": "Die Suche auf dem Server hat nicht geklappt. {{reason}}"
-    }
+    },
+    "mailboxes": "Postfächer"
   },
   "move": {
     "title": "Verschieben nach …",

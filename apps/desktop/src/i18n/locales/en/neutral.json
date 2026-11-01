@@ -823,7 +823,8 @@
       "searching": "Searching the server",
       "nothingMore": "The server has no further matches.",
       "failed": "Searching the server didn't work. {{reason}}"
-    }
+    },
+    "mailboxes": "Mailboxes"
   },
   "move": {
     "title": "Move to …",

@@ -614,6 +614,12 @@ export interface Backend {
     mutedAccounts: string[];
     /** When nothing notifies; null for never. */
     quietHours: { from: string; to: string; days: number[] } | null;
+    /** Mails with a sign-in code: titles (`{sender}` for who sent it) and the copy button. */
+    codeTitle?: string;
+    linkTitle?: string;
+    copyCode?: string;
+    /** The lock screen shows the code itself, not only where it is from. */
+    codeOnLockScreen?: boolean;
   }): Promise<void>;
   /** The mailto: link UwUMail was opened with, handed out once. */
   takeMailto(): Promise<MailtoDraft | null>;
