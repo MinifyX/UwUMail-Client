@@ -9,7 +9,7 @@ export const PANE_WIDTHS_KEY = "uwumail.paneWidths";
 export type Pane = "nav" | "list";
 
 export const PANE_LIMITS: Record<Pane, { min: number; max: number; initial: number }> = {
-  nav: { min: 180, max: 420, initial: 240 },
+  nav: { min: 240, max: 264, initial: 240 },
   list: { min: 280, max: 720, initial: 400 },
 };
 

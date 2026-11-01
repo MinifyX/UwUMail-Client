@@ -2,6 +2,12 @@ import { TitleBar, Wordmark } from "@uwusuite/design";
 import { useTauriWindow } from "@uwusuite/design/tauri";
 import type { MouseEvent } from "react";
 import { desktopPlatform } from "@/lib/platform";
+import { useSettings } from "@/state/settings";
+import { useUi } from "@/state/ui";
+import { MailSearch } from "../mail/MailSearch";
+
+/** Windows and Linux search from the title bar; macOS keeps its native one and the list's field. */
+export const searchInTitleBar = desktopPlatform === "windows" || desktopPlatform === "linux";
 
 /**
  * Tauri maximizes on a double-click of a drag region by itself (its drag script), and the
@@ -15,9 +21,23 @@ function leaveDoubleClickToTauri(event: MouseEvent) {
 
 function FramelessTitleBar({ platform }: { platform: "windows" | "linux" }) {
   const controls = useTauriWindow();
+  const onboarded = useSettings((s) => s.onboarded);
+  const section = useUi((s) => s.section);
   return (
     <div className="shrink-0" onDoubleClickCapture={leaveDoubleClickToTauri}>
-      <TitleBar platform={platform} controls={controls} brand={<Wordmark product="Mail" shell="mail" />} />
+      <TitleBar
+        platform={platform}
+        controls={controls}
+        className="relative"
+        brand={<Wordmark product="Mail" shell="mail" />}
+      >
+        {/* Centred over the whole bar; the empty space around the field stays a drag region. */}
+        {onboarded && section === "mail" && (
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 flex w-[420px] max-w-[40%] -translate-x-1/2 items-center">
+            <MailSearch compact className="pointer-events-auto w-full" />
+          </div>
+        )}
+      </TitleBar>
     </div>
   );
 }
