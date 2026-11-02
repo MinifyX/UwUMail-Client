@@ -640,7 +640,7 @@ export interface Backend {
   checkForUpdates(): Promise<UpdateInfo | null>;
   /** Restarts into the waiting update. */
   installUpdate(): Promise<void>;
-  /** Where this copy came from: "store" gets new versions from the App Store, never from UwUMail. */
+  /** Where this copy came from: "store" gets new versions from its store, never from UwUMail. */
   distribution(): Promise<Distribution>;
   /** macOS: default mail app and opening at login; null elsewhere. */
   macIntegration(): Promise<MacIntegration | null>;

@@ -15,9 +15,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 # What every download from GitHub is: a copy that looks for its own updates and installs them
 # (updates.rs). The Mac App Store build goes without — `--no-default-features --features store`
 # (scripts/build-mas.mjs): no updater plugin, no feed, no hand-over to the setup. docs/app-store.md.
+# So does the Google Play build (play.yml, docs/play-store.md).
 default = ["self-update"]
-self-update = ["dep:minisign-verify", "dep:semver", "dep:tauri-plugin-updater"]
-# A build for the App Store: the page says new versions come from there, and on the Mac UwUMail
+self-update = ["dep:minisign-verify", "dep:semver", "dep:tauri-plugin-updater", "uwumail-android/self-update"]
+# A build for a store: the page says new versions come from there, and on the Mac UwUMail
 # opens at login through the system's login items instead of the setup's LaunchAgent.
 store = []
 

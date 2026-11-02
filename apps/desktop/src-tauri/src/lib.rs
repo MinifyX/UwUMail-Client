@@ -1279,8 +1279,8 @@ async fn install_update(app: AppHandle) -> CommandResult<()> {
     platform::install_update(&app).await
 }
 
-/// Where this copy came from, for the page's words about updates: `"store"` for an App Store
-/// build (feature `store`), `"direct"` for everything else. The iPhone's IPA is one build for
+/// Where this copy came from, for the page's words about updates: `"store"` for an App Store or
+/// Google Play build (feature `store`), `"direct"` for everything else. The iPhone's IPA is one build for
 /// sideloading and TestFlight, so it says `"direct"`; the page has no update settings there anyway.
 #[tauri::command]
 fn distribution() -> &'static str {

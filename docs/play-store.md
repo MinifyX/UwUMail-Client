@@ -3,13 +3,33 @@
 [Deutsch weiter unten](#uwumail-in-google-play-interner-test)
 
 The **GitHub APK** stays what it was: arm64, signed with UwUMail's release key in `android.yml`,
-published with every release. The **Play build** is the same app (`app.uwumail`) as an Android App
-Bundle for arm64 and x86_64 (phones, tablets, Chromebooks), uploaded to the Play Console's
+published with every release, with its own updater. The **Play build** is the same app
+(`app.uwumail`) without the updater, as an Android App Bundle for arm64 and x86_64 (phones, tablets, Chromebooks), uploaded to the Play Console's
 **internal testing** track on every `v*` tag. Nothing goes beyond the internal track, and nothing
 in CI ever sends a release to review or production.
 
 Both are signed with the same key: Play App Signing uses UwUMail's own release key (certificate
-SHA-256 `de1cd496…e301`), so the app from Play and an APK from GitHub update each other.
+SHA-256 `de1cd496…e301`), and both use the same version code, so either can be installed over the
+other.
+
+## What the Play build leaves out
+
+Play doesn't allow an app to update itself or to ask for `REQUEST_INSTALL_PACKAGES` without a
+reason it accepts, so new versions of this build come from Play alone:
+
+| | GitHub APK | Play build |
+| --- | --- | --- |
+| Cargo features | default (`self-update`) | `--no-default-features --features store` |
+| `updates.rs`, the feed, its dependencies | yes | not compiled |
+| `REQUEST_INSTALL_PACKAGES` | yes | removed by `src/play/AndroidManifest.xml` |
+| APK installer in Kotlin | yes | removed by R8 (`BuildConfig.SELF_UPDATE`) |
+| Update settings | yes | hidden (`distribution` answers `store`) |
+
+`play.yml` sets `UWUMAIL_ANDROID_PLAY=1` for Gradle and passes the features to Tauri, along with a
+config without `plugins.updater`, whose feed would otherwise be in the program. It then looks
+into the finished bundle and fails if the permission, the installer or the feed is still there.
+Installing a GitHub APK over the Play build brings the updater back with that copy, because it is
+then the GitHub build.
 
 ## How CI builds, signs and uploads
 
@@ -127,8 +147,13 @@ safety, content rating, target audience, app category (Communication). Open: the
 Die **GitHub-APK** bleibt, wie sie ist (arm64, `android.yml`, bei jedem Release). Der
 **Play-Build** ist dieselbe App `app.uwumail` als App Bundle für arm64 und x86_64. Bei jedem
 `v*`-Tag landet er im Track **Interner Test** der Play Console, weiter nicht; CI reicht nichts zur
-Prüfung oder Produktion ein. Play App Signing nutzt UwUMails eigenen Release-Key, deshalb
-aktualisieren sich Play-App und GitHub-APK gegenseitig.
+Prüfung oder Produktion ein. Play App Signing nutzt UwUMails eigenen Release-Key, beide haben
+denselben Version-Code, also lässt sich jede über die andere installieren.
+
+Der Play-Build hat keinen eigenen Updater, weil Play das nicht erlaubt: `--no-default-features
+--features store` lässt `updates.rs` samt Feed weg, `src/play/AndroidManifest.xml` entfernt
+`REQUEST_INSTALL_PACKAGES`, R8 den APK-Installer, und die Update-Einstellungen sind ausgeblendet.
+`play.yml` prüft das im fertigen Bundle. Neue Versionen kommen hier nur aus Play.
 
 - **`play.yml`**: Job `apk` baut das unsignierte Bundle (liest den Cache von main), Job `play`
   signiert es auf einem frischen Runner mit `jarsigner`, prüft das Zertifikat, legt es als

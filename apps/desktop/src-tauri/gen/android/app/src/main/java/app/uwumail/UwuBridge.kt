@@ -54,7 +54,8 @@ object UwuBridge {
             "saveToDownloads" ->
                 Files.saveToDownloads(app, args.getString("path"), args.getString("filename"), args.getString("mimeType"))
             "installApk" -> {
-                Files.installApk(app, args.getString("path"))
+                // Never asked for without the updater; R8 drops the installer from the Play build.
+                if (BuildConfig.SELF_UPDATE) Files.installApk(app, args.getString("path"))
                 null
             }
             "setPrefs" -> {

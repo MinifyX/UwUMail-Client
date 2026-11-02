@@ -12,9 +12,10 @@ name: Google Play
 # `play` runs on a fresh runner that has built and installed nothing, like the
 # APK's signing job in android.yml: the upload key and the service account never
 # share a machine with thousands of third-party build scripts. Play signs what
-# it delivers with the same release key (Play App Signing with our own key), so
-# an APK from GitHub and the app from Play update each other. Nothing goes
-# beyond the internal track. docs/play-store.md.
+# it delivers with the same release key (Play App Signing with our own key). This
+# build has no updater and may not install packages, as Play requires; `apk`
+# checks that in the finished bundle. Nothing goes beyond the internal track.
+# docs/play-store.md.
 on:
   push:
     tags: ["v*"]
@@ -23,6 +24,10 @@ on:
     paths:
       - ".github/workflows/play.yml"
       - "scripts/play.mjs"
+      - "apps/desktop/src-tauri/gen/android/app/build.gradle.kts"
+      - "apps/desktop/src-tauri/gen/android/app/src/play/**"
+      - "apps/desktop/src-tauri/src/android.rs"
+      - "crates/uwumail-android/Cargo.toml"
 
 permissions:
   contents: read
@@ -87,13 +92,16 @@ jobs:
       - name: Build
         env:
           UWUMAIL_ANDROID_VERSION_CODE: ${{ steps.version.outputs.code }}
+          UWUMAIL_ANDROID_PLAY: "1"
           UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
           UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
         run: |
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          pnpm tauri android build --aab --target aarch64 --target x86_64 --ci
+          # The config goes into the program, so the desktop updater's feed has to leave it too.
+          pnpm tauri android build --aab --target aarch64 --target x86_64 --ci --config '{"plugins":{"updater":null}}' \
+            --features store -- --no-default-features
 
       - name: Find the bundle
         run: |
@@ -106,6 +114,21 @@ jobs:
             unzip -l unsigned/UwUMail-unsigned.aab | grep -q "base/lib/$abi/" \
               || { echo "::error::The bundle has no $abi libraries"; exit 1; }
           done
+
+      # Gone, not merely unused: Play refuses an app that can update itself or install packages.
+      - name: Check that the updater is gone
+        run: |
+          unzip -q unsigned/UwUMail-unsigned.aab 'base/manifest/*' 'base/dex/*' 'base/lib/*' -d bundle
+          # The manifest's strings are readable in its binary form; this one proves the check can see them.
+          grep -qa android.permission.INTERNET bundle/base/manifest/AndroidManifest.xml \
+            || { echo "::error::Can't read the bundle's manifest"; exit 1; }
+          ! grep -qa REQUEST_INSTALL_PACKAGES bundle/base/manifest/AndroidManifest.xml \
+            || { echo "::error::The bundle still asks to install packages"; exit 1; }
+          ! grep -qra MANAGE_UNKNOWN_APP_SOURCES bundle/base/dex \
+            || { echo "::error::The bundle still has the APK installer"; exit 1; }
+          ! grep -qra raw.githubusercontent.com/MinifyX/UwUMail-Client/updates bundle/base/lib \
+            || { echo "::error::The bundle still has the update feed"; exit 1; }
+          rm -rf bundle
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

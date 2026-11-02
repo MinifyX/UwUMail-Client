@@ -7,16 +7,20 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+# The updater of the GitHub APK (updates.rs). The Play build goes without it; docs/play-store.md.
+self-update = ["dep:reqwest", "dep:semver", "dep:sha2"]
+
 [dependencies]
 base64.workspace = true
 # Same version as tao and wry; 0.22 failed its class lookups on Android.
 jni = "0.21"
 ndk-context = "0.1"
-reqwest.workspace = true
-semver = "1"
+reqwest = { workspace = true, optional = true }
+semver = { version = "1", optional = true }
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
+sha2 = { workspace = true, optional = true }
 tokio.workspace = true
 tracing.workspace = true
 uwumail-core.workspace = true

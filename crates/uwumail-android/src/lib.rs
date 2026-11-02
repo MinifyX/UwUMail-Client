@@ -14,6 +14,7 @@ pub mod launch;
 pub mod native;
 mod ocr;
 mod secrets;
+#[cfg(feature = "self-update")]
 pub mod updates;
 
 pub use bridge::{call, call_json};
