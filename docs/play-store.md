@@ -25,7 +25,8 @@ reason it accepts, so new versions of this build come from Play alone:
 | APK installer in Kotlin | yes | removed by R8 (`BuildConfig.SELF_UPDATE`) |
 | Update settings | yes | hidden (`distribution` answers `store`) |
 
-`play.yml` sets `UWUMAIL_ANDROID_PLAY=1` for Gradle and passes the features to Tauri, then looks
+`play.yml` sets `UWUMAIL_ANDROID_PLAY=1` for Gradle and passes the features to Tauri, along with a
+config without `plugins.updater`, whose feed would otherwise be in the program. It then looks
 into the finished bundle and fails if the permission, the installer or the feed is still there.
 Installing a GitHub APK over the Play build brings the updater back with that copy, because it is
 then the GitHub build.

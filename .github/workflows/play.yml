@@ -99,7 +99,9 @@ jobs:
           UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
         run: |
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          pnpm tauri android build --aab --target aarch64 --target x86_64 --ci --features store -- --no-default-features
+          # The config goes into the program, so the desktop updater's feed has to leave it too.
+          pnpm tauri android build --aab --target aarch64 --target x86_64 --ci --config '{"plugins":{"updater":null}}' \
+            --features store -- --no-default-features
 
       - name: Find the bundle
         run: |
