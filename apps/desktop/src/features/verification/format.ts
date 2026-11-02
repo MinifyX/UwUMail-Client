@@ -22,14 +22,37 @@ export function activeCodes(codes: readonly VerificationCode[], now: number): Ve
   return codes.filter((code) => secondsLeft(code, now) > 0).sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
 }
 
-/** Copies `text`; false when the clipboard turned it down. The code itself is never logged. */
+/** How long a copied code stays on the clipboard. */
+export const CLIPBOARD_CLEAR_MS = 60_000;
+
+let clearTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Empties the clipboard if it still holds `text`. Best effort: where reading the clipboard isn't
+ * allowed (or asks the user), it stays as it is rather than wiping something else.
+ */
+async function clearClipboardIf(text: string) {
+  try {
+    if ((await navigator.clipboard.readText()) === text) await navigator.clipboard.writeText("");
+  } catch {
+    // Not allowed to read it: leave it alone.
+  }
+}
+
+/**
+ * Copies `text`; false when the clipboard turned it down. The code itself is never logged.
+ * A minute later the clipboard is emptied again if it still holds the code (security review:
+ * codes left on the clipboard).
+ */
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
-    return true;
   } catch {
     return false;
   }
+  clearTimeout(clearTimer);
+  clearTimer = setTimeout(() => void clearClipboardIf(text), CLIPBOARD_CLEAR_MS);
+  return true;
 }
 
 /** The working code of a conversation, for the mark on its row. */

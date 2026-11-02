@@ -2,9 +2,12 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/i18n";
 import { useToasts } from "@/state/toasts";
-import { groupCode } from "./format";
+import { CLIPBOARD_CLEAR_MS, groupCode } from "./format";
 import type { VerificationCode } from "./types";
 import { ReaderCodeHint, VerificationCodeBar } from "./VerificationCodeBar";
+
+const links = vi.hoisted(() => ({ requestOpenLink: vi.fn(() => "asked") }));
+vi.mock("@/state/links", () => links);
 
 const NOW = Date.parse("2026-11-02T10:00:00Z");
 
@@ -63,8 +66,30 @@ describe("VerificationCodeBar", () => {
   it("offers to open a sign-in link instead of copying it", () => {
     const link = code({ kind: "link", code: undefined, url: "https://forum.example.net/login", autofill: false });
     render(<VerificationCodeBar codes={[link]} />);
-    expect(screen.getByRole("button", { name: "Open sign-in link for bank.example" }).textContent).toBe("Open");
+    const open = screen.getByRole("button", { name: "Open sign-in link for bank.example" });
+    expect(open.textContent).toBe("Open");
     expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
+    // Through the reader's link checks and dialog, never straight to the browser.
+    fireEvent.click(open);
+    expect(links.requestOpenLink).toHaveBeenCalledWith(
+      "https://forum.example.net/login",
+      "https://forum.example.net/login",
+    );
+  });
+
+  it("offers no Open for a sign-in link the server only guessed", () => {
+    const guessed = code({
+      kind: "link",
+      code: undefined,
+      url: "https://forum.example.net/login",
+      source: "heuristic",
+      autofill: false,
+    });
+    render(<VerificationCodeBar codes={[guessed]} />);
+    expect(screen.queryByRole("button")).toBeNull();
+    cleanup();
+    render(<ReaderCodeHint code={guessed} />);
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("copies the code to the clipboard", async () => {
@@ -76,6 +101,36 @@ describe("VerificationCodeBar", () => {
     });
     expect(writeText).toHaveBeenCalledWith("482913");
     expect(useToasts.getState().toasts.at(-1)?.message).toBe(`Code ${groupCode("482913")} copied`);
+  });
+
+  it("empties the clipboard a minute later if it still holds the code", async () => {
+    let clipboard = "";
+    const writeText = vi.fn((text: string) => {
+      clipboard = text;
+      return Promise.resolve();
+    });
+    const readText = vi.fn(() => Promise.resolve(clipboard));
+    Object.defineProperty(navigator, "clipboard", { value: { writeText, readText }, configurable: true });
+    render(<VerificationCodeBar codes={[code({ expiresAt: new Date(NOW + 600_000).toISOString() })]} />);
+    const button = () => screen.getByRole("button", { name: /Copy code/ });
+    await act(async () => {
+      fireEvent.click(button());
+    });
+    expect(clipboard).toBe("482913");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CLIPBOARD_CLEAR_MS);
+    });
+    expect(clipboard).toBe("");
+
+    // Something else copied meanwhile stays.
+    await act(async () => {
+      fireEvent.click(button());
+    });
+    clipboard = "my notes";
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CLIPBOARD_CLEAR_MS);
+    });
+    expect(clipboard).toBe("my notes");
   });
 
   it("says in the reader when a code has expired", () => {

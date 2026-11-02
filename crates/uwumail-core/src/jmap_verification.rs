@@ -110,6 +110,7 @@ impl VerificationCode {
 }
 
 /// A host name as the server gives it: lower case letters, digits, dashes and dots, with a dot.
+/// Not an IP address: no top-level domain is all digits (security review: IP literal origins).
 fn origin(value: &str) -> Option<String> {
     let host = value.trim().trim_end_matches('.').to_ascii_lowercase();
     let fits = (3..=MAX_ORIGIN).contains(&host.len())
@@ -120,7 +121,8 @@ fn origin(value: &str) -> Option<String> {
                 && !label.starts_with('-')
                 && !label.ends_with('-')
                 && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-        });
+        })
+        && !host.rsplit('.').next().is_some_and(|tld| tld.chars().all(|c| c.is_ascii_digit()));
     fits.then_some(host)
 }
 
@@ -145,9 +147,14 @@ fn link(value: &str, origin: &str) -> Option<String> {
 }
 
 /// Reads and checks an Email's `verification`. `received` is when the mail came in, if known:
-/// a code never outlives it by more than a day, whatever the server says. `None` for `null` and
-/// for anything that doesn't pass.
+/// a code never outlives it by more than a day, whatever the server says; without it, never
+/// more than a day from now. `None` for `null` and for anything that doesn't pass.
 pub fn parse(value: &Value, received: Option<DateTime<Utc>>) -> Option<ServerCode> {
+    parse_at(value, received, Utc::now())
+}
+
+/// [`parse`] at `now`.
+fn parse_at(value: &Value, received: Option<DateTime<Utc>>, now: DateTime<Utc>) -> Option<ServerCode> {
     let text = |key: &str| value.get(key).and_then(Value::as_str);
     let origin = origin(text("origin")?)?;
     let kind = match text("kind")? {
@@ -161,10 +168,10 @@ pub fn parse(value: &Value, received: Option<DateTime<Utc>>) -> Option<ServerCod
     };
     let purpose = text("purpose").filter(|purpose| PURPOSES.contains(purpose)).unwrap_or("other").to_string();
     let heuristic = text("source") != Some("header");
-    let mut expires_at = DateTime::parse_from_rfc3339(text("expiresAt")?).ok()?.with_timezone(&Utc);
-    if let Some(received) = received {
-        expires_at = expires_at.min(received + MAX_LIFETIME);
-    }
+    let expires_at = DateTime::parse_from_rfc3339(text("expiresAt")?)
+        .ok()?
+        .with_timezone(&Utc)
+        .min(received.unwrap_or(now) + MAX_LIFETIME);
     Some(ServerCode {
         kind,
         code,
@@ -293,6 +300,12 @@ mod tests {
         assert!(parse(&with("origin", json!("")), None).is_none());
         assert!(parse(&with("origin", json!("localhost")), None).is_none());
         assert!(parse(&with("origin", json!("shop.example/path")), None).is_none());
+        // IP addresses aren't origins (the last label is all digits); a digit-only label elsewhere is.
+        assert!(parse(&with("origin", json!("192.0.2.1")), None).is_none());
+        assert!(parse(&with("origin", json!("192.0.2.1.")), None).is_none());
+        assert!(parse(&with("origin", json!("shop.123")), None).is_none());
+        assert_eq!(parse(&with("origin", json!("123.example")), None).unwrap().origin, "123.example");
+        assert_eq!(parse(&with("origin", json!("shop.x1")), None).unwrap().origin, "shop.x1");
         assert!(parse(&with("kind", json!("password")), None).is_none());
         assert!(parse(&with("expiresAt", json!("soon")), None).is_none());
         // An unknown purpose is "other", not a reason to drop the code.
@@ -305,6 +318,11 @@ mod tests {
         value["expiresAt"] = json!("2026-11-09T10:00:00Z");
         let code = parse(&value, Some(at("2026-11-02T10:00:00Z"))).unwrap();
         assert_eq!(code.expires_at, at("2026-11-03T10:00:00Z"));
+        // Without receivedAt, a day from now at most.
+        let code = parse_at(&value, None, at("2026-11-04T08:00:00Z")).unwrap();
+        assert_eq!(code.expires_at, at("2026-11-05T08:00:00Z"));
+        let code = parse_at(&otp_value(), None, at("2026-11-02T10:00:00Z")).unwrap();
+        assert_eq!(code.expires_at, at("2026-11-02T10:10:00Z"));
     }
 
     #[test]

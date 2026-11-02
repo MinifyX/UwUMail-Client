@@ -2,11 +2,24 @@ import clsx from "clsx";
 import { Hint, Icon, IconButton, ICONS, Tag, Tooltip } from "@uwusuite/design";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n";
-import { openExternal } from "@/lib/platform";
+import { requestOpenLink } from "@/state/links";
 import { toast } from "@/state/toasts";
 import { activeCodes, copyToClipboard, formatRemaining, groupCode, secondsLeft } from "./format";
 import type { VerificationCode } from "./types";
 import { useNow } from "./useVerificationCodes";
+
+/**
+ * Opens a sign-in link the sender declared (DKIM/DMARC-checked on the server) the way the reader
+ * opens links: through its checks and, where the settings say so, the link dialog. A link the
+ * server only guessed from the text gets no button at all (security review: code bar links).
+ */
+function openSignInLink(code: VerificationCode) {
+  if (code.source !== "header" || !code.url) return;
+  requestOpenLink(code.url, code.url);
+}
+
+/** Whether a link chip offers "Open". */
+const opensLink = (code: VerificationCode) => code.source === "header" && Boolean(code.url);
 
 /** Copies a code: a toast says so, and the button shows a tick for a moment. */
 function useCopy() {
@@ -81,14 +94,16 @@ function CodeChip({
         </Tooltip>
       )}
       {link ? (
-        <button
-          type="button"
-          aria-label={t("codes.openLabel", { origin: code.origin })}
-          onClick={() => code.url && void openExternal(code.url)}
-          className="h-8 rounded-xl bg-pink-tint px-3 text-[12.5px] font-bold text-pink-ink hover:bg-pink-tint-strong focus-visible:shadow-focus focus-visible:outline-none"
-        >
-          {t("codes.open")}
-        </button>
+        opensLink(code) && (
+          <button
+            type="button"
+            aria-label={t("codes.openLabel", { origin: code.origin })}
+            onClick={() => openSignInLink(code)}
+            className="h-8 rounded-xl bg-pink-tint px-3 text-[12.5px] font-bold text-pink-ink hover:bg-pink-tint-strong focus-visible:shadow-focus focus-visible:outline-none"
+          >
+            {t("codes.open")}
+          </button>
+        )
       ) : (
         <IconButton
           size="sm"
@@ -173,14 +188,16 @@ export function ReaderCodeHint({ code, className }: { code: VerificationCode; cl
       </span>
       {!expired &&
         (code.kind === "link" ? (
-          <button
-            type="button"
-            aria-label={t("codes.openLabel", { origin: code.origin })}
-            onClick={() => code.url && void openExternal(code.url)}
-            className="h-8 shrink-0 rounded-xl px-3 text-[12.5px] font-bold hover:bg-ink/5"
-          >
-            {t("codes.open")}
-          </button>
+          opensLink(code) && (
+            <button
+              type="button"
+              aria-label={t("codes.openLabel", { origin: code.origin })}
+              onClick={() => openSignInLink(code)}
+              className="h-8 shrink-0 rounded-xl px-3 text-[12.5px] font-bold hover:bg-ink/5"
+            >
+              {t("codes.open")}
+            </button>
+          )
         ) : (
           <IconButton
             size="sm"

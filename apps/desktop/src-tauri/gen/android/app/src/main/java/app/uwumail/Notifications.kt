@@ -1,12 +1,15 @@
 package app.uwumail
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
@@ -14,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 object Notifications {
     const val CHANNEL_MAIL = "mail"
@@ -21,8 +25,20 @@ object Notifications {
     const val WATCH_ID = 1
     private const val TAG_MAIL = "mail"
     private const val PINK = 0xFFFF4D8D.toInt()
-    /** A sign-in code notification goes away after this; the server caps codes at a day anyway. */
+    /** A sign-in code notification goes away after this at the latest, earlier when the code expires. */
     private const val CODE_TIMEOUT_MS = 15L * 60 * 1000
+
+    /**
+     * Sign-in code notifications that keep their code off a locked phone ("Code on lock screen"
+     * off), by notification id. With "show all notification content" Android would show the
+     * private version on the lock screen, so the posted notification itself holds no code while
+     * the phone is locked: it is posted again with the code on unlock and without it when the
+     * screen goes off (security review: code on lock screen).
+     */
+    private class HeldCode(val account: String, val group: String, val message: JSONObject, val postedAt: Long)
+
+    private val held = ConcurrentHashMap<Int, HeldCode>()
+    private var lockWatch: BroadcastReceiver? = null
 
     fun createChannels(context: Context) {
         val text = Prefs.localized(context)
@@ -111,60 +127,9 @@ object Notifications {
         val manager = NotificationManagerCompat.from(context)
         val messages = args.getJSONArray("messages")
 
+        val now = System.currentTimeMillis()
         for (index in 0 until messages.length()) {
-            val message = messages.getJSONObject(index)
-            val id = message.getString("id")
-            val code = id.hashCode()
-            val archive = NotificationCompat.Action.Builder(
-                0,
-                text.getString(R.string.action_archive),
-                actionIntent(context, "archive", listOf(id), code + 2),
-            )
-                // Archiving from the lock screen asks to unlock the phone first; "read" doesn't.
-                .setAuthenticationRequired(true)
-                .build()
-            val builder = NotificationCompat.Builder(context, CHANNEL_MAIL)
-                .setSmallIcon(R.drawable.ic_stat_nyu)
-                .setColor(PINK)
-                .setSubText(account)
-                .setCategory(NotificationCompat.CATEGORY_EMAIL)
-                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-                .setPublicVersion(lockScreenVersion(context, text))
-                .setGroup(group)
-                .setAutoCancel(true)
-                .setContentIntent(openIntent(context, code, message.getString("threadId"), id))
-                .addAction(0, text.getString(R.string.action_read), actionIntent(context, "read", listOf(id), code + 1))
-                .addAction(archive)
-            // A sign-in code the server found (only there with "Show sender and subject" on):
-            // the code instead of the subject, and the lock screen only where it is for.
-            val signIn = message.optJSONObject("code")
-            if (signIn != null && !hideContent) {
-                val title = signIn.getString("title")
-                builder
-                    .setContentTitle(title)
-                    .setContentText(signIn.getString("body"))
-                    .setPublicVersion(lockedCodeVersion(context, title, signIn.getString("lockedBody")))
-                    .setTimeoutAfter(CODE_TIMEOUT_MS)
-                val copy = signIn.optString("copy").takeIf { !signIn.isNull("copy") && it.isNotEmpty() }
-                if (copy != null) {
-                    // First, so it shows even where only one button fits.
-                    builder.clearActions()
-                        .addAction(0, signIn.optString("copyLabel").ifEmpty { "Copy code" }, copyIntent(context, id, copy, code + 3))
-                        .addAction(0, text.getString(R.string.action_read), actionIntent(context, "read", listOf(id), code + 1))
-                        .addAction(archive)
-                }
-            } else if (hideContent) {
-                builder
-                    .setContentTitle(text.getString(R.string.hidden_mail_title))
-                    .setContentText(text.getString(R.string.hidden_mail_text))
-            } else {
-                val subject = message.optString("subject").ifEmpty { text.getString(R.string.no_subject) }
-                builder
-                    .setContentTitle(message.getString("from"))
-                    .setContentText(subject)
-                    .setStyle(NotificationCompat.BigTextStyle().bigText("$subject\n${message.optString("snippet")}"))
-            }
-            manager.notify(TAG_MAIL, code, builder.build())
+            postMessage(context, text, account, group, messages.getJSONObject(index), hideContent, reveal = null, postedAt = now)
         }
 
         val inGroup = context.getSystemService(NotificationManager::class.java).activeNotifications
@@ -187,15 +152,185 @@ object Notifications {
         }
     }
 
+    /**
+     * One mail's notification. `reveal` says whether a sign-in code may be in it: null decides by
+     * whether the phone is locked right now; a repost (`reveal` set) doesn't alert again.
+     */
+    private fun postMessage(
+        context: Context,
+        text: Context,
+        account: String,
+        group: String,
+        message: JSONObject,
+        hideContent: Boolean,
+        reveal: Boolean?,
+        postedAt: Long,
+    ) {
+        if (!allowed(context)) return
+        val manager = NotificationManagerCompat.from(context)
+        val id = message.getString("id")
+        val code = id.hashCode()
+        val archive = NotificationCompat.Action.Builder(
+            0,
+            text.getString(R.string.action_archive),
+            actionIntent(context, "archive", listOf(id), code + 2),
+        )
+            // Archiving from the lock screen asks to unlock the phone first; "read" doesn't.
+            .setAuthenticationRequired(true)
+            .build()
+        val builder = NotificationCompat.Builder(context, CHANNEL_MAIL)
+            .setSmallIcon(R.drawable.ic_stat_nyu)
+            .setColor(PINK)
+            .setSubText(account)
+            .setCategory(NotificationCompat.CATEGORY_EMAIL)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(lockScreenVersion(context, text))
+            .setGroup(group)
+            .setAutoCancel(true)
+            .setWhen(postedAt)
+            .setOnlyAlertOnce(reveal != null)
+            .setContentIntent(openIntent(context, code, message.getString("threadId"), id))
+            .addAction(0, text.getString(R.string.action_read), actionIntent(context, "read", listOf(id), code + 1))
+            .addAction(archive)
+        // A sign-in code the server found (only there with "Show sender and subject" on):
+        // the code instead of the subject, and the lock screen only where it is for.
+        val signIn = message.optJSONObject("code")
+        if (signIn != null && !hideContent) {
+            val timeout = codeTimeout(signIn)
+            if (timeout <= 0) {
+                held.remove(code)
+                manager.cancel(TAG_MAIL, code)
+                return
+            }
+            val title = signIn.getString("title")
+            val lockedBody = signIn.getString("lockedBody")
+            // "Code on lock screen" off: no code in the notification while the phone is locked.
+            val guarded = !signIn.optBoolean("onLockScreen", false)
+            val showCode = !guarded || (reveal ?: !locked(context))
+            builder
+                .setContentTitle(title)
+                .setContentText(if (showCode) signIn.getString("body") else lockedBody)
+                .setPublicVersion(lockedCodeVersion(context, title, lockedBody))
+                .setTimeoutAfter(timeout)
+            val copy = signIn.optString("copy").takeIf { !signIn.isNull("copy") && it.isNotEmpty() }
+            if (copy != null && showCode) {
+                // Copying asks to unlock the phone first (Android 12 and later; a no-op before).
+                val copyAction = NotificationCompat.Action.Builder(
+                    0,
+                    signIn.optString("copyLabel").ifEmpty { "Copy code" },
+                    copyIntent(context, id, copy, code + 3),
+                )
+                    .setAuthenticationRequired(true)
+                    .build()
+                // First, so it shows even where only one button fits.
+                builder.clearActions()
+                    .addAction(copyAction)
+                    .addAction(0, text.getString(R.string.action_read), actionIntent(context, "read", listOf(id), code + 1))
+                    .addAction(archive)
+            }
+            if (guarded) {
+                held[code] = HeldCode(account, group, message, postedAt)
+                watchLock(context)
+            }
+        } else if (hideContent) {
+            builder
+                .setContentTitle(text.getString(R.string.hidden_mail_title))
+                .setContentText(text.getString(R.string.hidden_mail_text))
+        } else {
+            val subject = message.optString("subject").ifEmpty { text.getString(R.string.no_subject) }
+            builder
+                .setContentTitle(message.getString("from"))
+                .setContentText(subject)
+                .setStyle(NotificationCompat.BigTextStyle().bigText("$subject\n${message.optString("snippet")}"))
+        }
+        manager.notify(TAG_MAIL, code, builder.build())
+    }
+
+    /** How long a code notification stays: until the code expires, 15 minutes at most; 0 once expired. */
+    private fun codeTimeout(signIn: JSONObject): Long {
+        if (signIn.isNull("expiresAt") || !signIn.has("expiresAt")) return CODE_TIMEOUT_MS
+        val left = signIn.getLong("expiresAt") * 1000 - System.currentTimeMillis()
+        return left.coerceAtMost(CODE_TIMEOUT_MS).coerceAtLeast(0)
+    }
+
+    /** Whether the phone shows its lock screen; locked when Android won't say. */
+    private fun locked(context: Context): Boolean =
+        context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked ?: true
+
+    /**
+     * Listens for the screen going off and the phone being unlocked while a held code is shown.
+     * These broadcasts only reach receivers registered at run time, never the manifest.
+     */
+    @Synchronized
+    private fun watchLock(context: Context) {
+        if (lockWatch != null) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    // The keyguard may lock a little later; hide the code right away.
+                    Intent.ACTION_SCREEN_OFF -> repostHeld(context, reveal = false)
+                    // Without a keyguard (or before it locked) there may be no USER_PRESENT.
+                    Intent.ACTION_SCREEN_ON -> if (!locked(context)) repostHeld(context, reveal = true)
+                    Intent.ACTION_USER_PRESENT -> repostHeld(context, reveal = true)
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        // System broadcasts still arrive at a receiver that isn't exported.
+        ContextCompat.registerReceiver(context.applicationContext, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        lockWatch = receiver
+    }
+
+    /** Stops listening once no held code is left. */
+    @Synchronized
+    private fun unwatchLock(context: Context) {
+        if (held.isNotEmpty()) return
+        val receiver = lockWatch ?: return
+        lockWatch = null
+        runCatching { context.applicationContext.unregisterReceiver(receiver) }
+    }
+
+    /** Posts the held codes that are still shown again, with or without the code. */
+    private fun repostHeld(context: Context, reveal: Boolean) {
+        val active = context.getSystemService(NotificationManager::class.java).activeNotifications
+            .filter { it.tag == TAG_MAIL }
+            .map { it.id }
+            .toSet()
+        val text = Prefs.localized(context)
+        val hideContent = !Prefs.showContent(context)
+        for ((id, entry) in held) {
+            if (id !in active || hideContent) {
+                // Dismissed, timed out or opened meanwhile, or the settings changed: leave it be.
+                held.remove(id)
+                continue
+            }
+            postMessage(
+                context, text, entry.account, entry.group, entry.message,
+                hideContent = false, reveal = reveal, postedAt = entry.postedAt,
+            )
+        }
+        unwatchLock(context)
+    }
+
     /** Called when UwUMail comes on screen. */
     fun clearMail(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.activeNotifications.filter { it.tag == TAG_MAIL }.forEach { manager.cancel(it.tag, it.id) }
+        held.clear()
+        unwatchLock(context)
     }
 
     fun cancel(context: Context, messageIds: Array<String>) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        messageIds.forEach { manager.cancel(TAG_MAIL, it.hashCode()) }
+        messageIds.forEach {
+            manager.cancel(TAG_MAIL, it.hashCode())
+            held.remove(it.hashCode())
+        }
+        unwatchLock(context)
         // Drop summaries that have nothing left to summarize.
         val active = manager.activeNotifications.filter { it.tag == TAG_MAIL }
         active.filter { it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 }.forEach { summary ->

@@ -171,6 +171,11 @@ struct NotifiedCode {
     /// What "Copy code" puts on the clipboard; none for a sign-in link.
     copy: Option<String>,
     copy_label: String,
+    /// "Code on lock screen": without it Kotlin keeps the code out of the notification while the
+    /// phone is locked, whatever the system shows there.
+    on_lock_screen: bool,
+    /// When the code expires (Unix seconds): the notification goes away then.
+    expires_at: Option<i64>,
 }
 
 /// Hands new mail to Kotlin, which shows it unless UwUMail is on screen.
@@ -190,13 +195,15 @@ fn notify(engine: &Engine, account_id: &str, message_ids: &[String]) -> Result<(
             from: notify::notification_sender(message.from.name.as_deref(), &message.from.email),
             subject: notify::notification_text(&message.subject, notify::MAX_LINE),
             snippet: notify::notification_text(&message.snippet, notify::MAX_LINE),
-            code: engine.code_notification(&prefs, &message.id, notify::NotifyPlatform::Android).map(|(_, note)| {
+            code: engine.code_notification(&prefs, &message.id, notify::NotifyPlatform::Android).map(|(code, note)| {
                 NotifiedCode {
                     title: note.title,
                     body: note.body,
                     locked_body: note.locked_body,
                     copy: note.copy,
                     copy_label: prefs.copy_code.clone(),
+                    on_lock_screen: prefs.code_on_lock_screen,
+                    expires_at: code.for_notification().expires_at,
                 }
             }),
         })
