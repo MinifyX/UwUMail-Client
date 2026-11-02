@@ -1,5 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { backend } from "@/backend/backend";
+import { queryKeys } from "@/lib/queries";
 import type { VerificationCode } from "./types";
+
+/** At the latest this often the list is asked again; the earliest expiry asks sooner. */
+const MAX_REFRESH_MS = 60_000;
+const NO_CODES: VerificationCode[] = [];
 
 /**
  * Placeholder codes for looking at the design: dev builds with `?demoCodes` in the address only.
@@ -55,15 +62,37 @@ function wantsDemo() {
   return new URLSearchParams(window.location.search).has("demoCodes");
 }
 
+/** How long until the first of `codes` runs out (then the list is asked again), at most a minute. */
+export function nextRefreshMs(codes: readonly VerificationCode[], now = Date.now()): number {
+  let next = MAX_REFRESH_MS;
+  for (const code of codes) {
+    const left = Date.parse(code.expiresAt) - now;
+    if (Number.isFinite(left)) next = Math.min(next, Math.max(left, 0) + 500);
+  }
+  return Math.max(next, 1_000);
+}
+
+/** The codes still valid at `now`. */
+export function validCodes(codes: readonly VerificationCode[], now = Date.now()): VerificationCode[] {
+  return codes.filter((code) => Date.parse(code.expiresAt) > now);
+}
+
 /**
- * The sign-in codes of recent mail, across accounts.
- *
- * TODO(main session): fill from JMAP `VerificationCode/query` (and `Email/verification` for the
- * reader) once the server offers it; until then production builds have none.
+ * The sign-in codes of recent mail, across accounts: what the UwUMail servers found
+ * (`urn:uwumail:jmap:verification`, see Backend.verificationCodes). Asked again when mail comes
+ * or changes (lib/queries.ts) and when the earliest code runs out; the countdown runs here.
  */
 export function useVerificationCodes(): VerificationCode[] {
-  const [codes] = useState<VerificationCode[]>(() => (wantsDemo() ? demoCodes() : []));
-  return codes;
+  const [demo] = useState<VerificationCode[] | null>(() => (wantsDemo() ? demoCodes() : null));
+  const { data } = useQuery({
+    queryKey: queryKeys.verificationCodes,
+    queryFn: async () => validCodes(await backend().verificationCodes()),
+    enabled: demo === null,
+    refetchInterval: (query) => nextRefreshMs(query.state.data ?? NO_CODES),
+    // A code is a secret for minutes: never kept once nothing shows it.
+    gcTime: 0,
+  });
+  return demo ?? data ?? NO_CODES;
 }
 
 /** `Date.now()`, again every `ms` while `active`. */

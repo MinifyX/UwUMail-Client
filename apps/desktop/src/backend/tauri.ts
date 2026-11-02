@@ -42,6 +42,7 @@ import {
   toLocalModelServers,
 } from "./assistConvert";
 import type {
+  VerificationCode,
   AccountDomainSignatures,
   LabelCount,
   LabelRef,
@@ -836,6 +837,10 @@ export class TauriBackend implements Backend {
 
   imageText(messageId: string, remote: boolean) {
     return call<ImageTextResult>("image_text", { messageId, remote });
+  }
+
+  verificationCodes() {
+    return call<VerificationCode[]>("verification_codes");
   }
 
   async assistFeatures(accountId: string) {

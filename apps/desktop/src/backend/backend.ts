@@ -1,4 +1,5 @@
 import type {
+  VerificationCode,
   AiConsent,
   AiDestination,
   AiDestinationState,
@@ -485,6 +486,12 @@ export interface Backend {
    * passes only once they may load.
    */
   imageText(messageId: string, remote: boolean): Promise<ImageTextResult>;
+  /**
+   * The sign-in codes and links still valid that the servers found in recent mail
+   * (`urn:uwumail:jmap:verification`), newest first, across accounts. Empty for mailboxes
+   * whose server doesn't find them; the app never looks for codes itself.
+   */
+  verificationCodes(): Promise<VerificationCode[]>;
   /**
    * Per feature whether the AI assistant can do it now for this mailbox: its UwUMail server's
    * (`urn:uwumail:jmap:assist`) or the providers set up on this device. Null without an assistant,

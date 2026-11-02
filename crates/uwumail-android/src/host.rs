@@ -6,7 +6,7 @@
 //! borrows it while it's open.
 
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,19 @@ const OAUTH_REDIRECT: &str = uwumail_core::oauth::APP_LINK;
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
+/// The notification settings of the window, for the texts of sign-in code notifications. Until
+/// a window passed them (process started by push), the defaults apply: English texts and no
+/// code on the lock screen.
+static NOTIFY_PREFS: Mutex<Option<notify::NotifyPrefs>> = Mutex::new(None);
+
+/// Keeps the window's notification settings for mail that comes while no window is open.
+pub fn set_notify_prefs(prefs: notify::NotifyPrefs) {
+    *NOTIFY_PREFS.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(prefs);
+}
+
+fn notify_prefs() -> notify::NotifyPrefs {
+    NOTIFY_PREFS.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone().unwrap_or_default()
+}
 
 /// The Tokio runtime shared with Tauri (see `tauri::async_runtime::set`).
 pub fn runtime() -> &'static tokio::runtime::Runtime {
@@ -143,6 +156,21 @@ struct NotifiedMessage<'a> {
     from: String,
     subject: String,
     snippet: String,
+    /// A sign-in code the server found in it: Kotlin shows it instead of sender and subject.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<NotifiedCode>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NotifiedCode {
+    title: String,
+    body: String,
+    /// What the lock screen shows: only where the code is for, unless the settings allow more.
+    locked_body: String,
+    /// What "Copy code" puts on the clipboard; none for a sign-in link.
+    copy: Option<String>,
+    copy_label: String,
 }
 
 /// Hands new mail to Kotlin, which shows it unless UwUMail is on screen.
@@ -153,6 +181,7 @@ fn notify(engine: &Engine, account_id: &str, message_ids: &[String]) -> Result<(
         return Ok(());
     }
     let account = engine.list_accounts()?.into_iter().find(|account| account.id == account_id);
+    let prefs = notify_prefs();
     let notified: Vec<NotifiedMessage> = messages
         .iter()
         .map(|message| NotifiedMessage {
@@ -161,6 +190,15 @@ fn notify(engine: &Engine, account_id: &str, message_ids: &[String]) -> Result<(
             from: notify::notification_sender(message.from.name.as_deref(), &message.from.email),
             subject: notify::notification_text(&message.subject, notify::MAX_LINE),
             snippet: notify::notification_text(&message.snippet, notify::MAX_LINE),
+            code: engine.code_notification(&prefs, &message.id, notify::NotifyPlatform::Android).map(|(_, note)| {
+                NotifiedCode {
+                    title: note.title,
+                    body: note.body,
+                    locked_body: note.locked_body,
+                    copy: note.copy,
+                    copy_label: prefs.copy_code.clone(),
+                }
+            }),
         })
         .collect();
     bridge::call(

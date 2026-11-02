@@ -193,6 +193,14 @@ impl Engine {
                 }
                 Ok(())
             }
+            // A new sign-in code: the mail and its code are read right away, and its notification
+            // follows from the sync. The StateChange that comes along then finds nothing new.
+            Message::VerificationCode { account_id: pushed } => {
+                if pushed == client.session.account_id {
+                    inner.sync_jmap(&client, account_id).await?;
+                }
+                Ok(())
+            }
         }
     }
 
