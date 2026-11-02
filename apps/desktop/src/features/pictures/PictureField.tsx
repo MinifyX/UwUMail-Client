@@ -97,7 +97,7 @@ export function PictureField({
         onDrop={drop}
         aria-label={hasPicture ? t("picture.change") : t("picture.choose")}
         className={clsx(
-          "group relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-pink-tint text-pink-ink transition-shadow focus-visible:shadow-focus focus-visible:outline-none",
+          "group relative grid shrink-0 grid-cols-1 grid-rows-1 place-items-center overflow-hidden rounded-full bg-pink-tint text-pink-ink transition-shadow focus-visible:shadow-focus focus-visible:outline-none",
           large ? "size-24" : "size-[72px]",
           over && "ring-4 ring-pink",
         )}

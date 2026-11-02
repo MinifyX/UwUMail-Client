@@ -56,7 +56,7 @@ export function Avatar({ address, size = "md", className }: AvatarProps) {
       {shown && (
         <span
           className={clsx(
-            "absolute inset-0 grid place-items-center rounded-full transition-opacity duration-200",
+            "absolute inset-0 grid grid-cols-1 grid-rows-1 place-items-center rounded-full transition-opacity duration-200",
             !fill && "ring-1 ring-inset",
             !fill && (look?.light ? "bg-[#2b2530] ring-white/10 dark:bg-[#3a3340]" : "bg-white ring-black/5"),
             ready ? "opacity-100" : "opacity-0",
