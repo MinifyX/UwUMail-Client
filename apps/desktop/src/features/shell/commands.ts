@@ -13,7 +13,7 @@ import { startNewContact } from "../contacts/state";
 import { markAllRead, viewScope } from "../mail/markAllRead";
 import { requestMove } from "../mail/selection";
 import { requestSnooze } from "../mail/snooze";
-import { SEARCH_INPUT_ID } from "../mail/ThreadList";
+import { SEARCH_INPUT_ID } from "../mail/MailSearch";
 import { switchWorkspace, WORKSPACE_ICONS, WORKSPACE_KEYS, workspaceName } from "../workspaces/workspaces";
 
 export interface Command {

@@ -156,9 +156,41 @@ pub fn utc_date(time: DateTime<Utc>) -> String {
     time.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
+/// Every type a UwUMail server pushes, named one by one: `null` ("everything") leaves out the
+/// sign-in codes (UwUMail-Server docs/jmap-verification.md), which only come when asked for by name.
+pub const TYPES_WITH_CODES: &[&str] = &[
+    "Mailbox",
+    "Email",
+    "Thread",
+    "Identity",
+    "EmailSubmission",
+    "EmailDelivery",
+    "VacationResponse",
+    "UserSettings",
+    "Calendar",
+    "CalendarEvent",
+    "CalendarEventNotification",
+    "CalendarAlert",
+    "ParticipantIdentity",
+    "AddressBook",
+    "ContactCard",
+    "SieveScript",
+    "MaskedEmail",
+    "ProfilePicture",
+    "AssistLabel",
+    "VerificationCode",
+];
+
+/// The `types` of a subscription: every type, and the sign-in codes too when the server finds
+/// them (`codes`). The endpoint always has keys, so the codes only ever travel encrypted.
+pub fn types(codes: bool) -> Value {
+    if codes { json!(TYPES_WITH_CODES) } else { Value::Null }
+}
+
 /// `PushSubscription/set` arguments that create a subscription (creation id `push`). Every type is
-/// pushed: the engine sorts out what is mail and what is settings, calendars or contacts.
-pub fn create_arguments(device_client_id: &str, endpoint: &Endpoint, expires: &str) -> Value {
+/// pushed: the engine sorts out what is mail and what is settings, calendars or contacts. With
+/// `codes`, new sign-in codes as well (see [`types`]).
+pub fn create_arguments(device_client_id: &str, endpoint: &Endpoint, expires: &str, codes: bool) -> Value {
     json!({
         "create": {
             "push": {
@@ -166,7 +198,7 @@ pub fn create_arguments(device_client_id: &str, endpoint: &Endpoint, expires: &s
                 "url": endpoint.url.trim(),
                 "keys": { "p256dh": endpoint.p256dh.trim(), "auth": endpoint.auth.trim() },
                 "expires": expires,
-                "types": null,
+                "types": types(codes),
             }
         }
     })
@@ -177,9 +209,14 @@ pub fn verify_arguments(id: &str, code: &str) -> Value {
     json!({ "update": { id: { "verificationCode": code } } })
 }
 
-/// `PushSubscription/set` arguments that move a subscription's end.
-pub fn renew_arguments(id: &str, expires: &str) -> Value {
-    json!({ "update": { id: { "expires": expires } } })
+/// `PushSubscription/set` arguments that move a subscription's end. With `codes`, they also ask
+/// for the sign-in codes, for a subscription made before the server found codes.
+pub fn renew_arguments(id: &str, expires: &str, codes: bool) -> Value {
+    if codes {
+        json!({ "update": { id: { "expires": expires, "types": types(true) } } })
+    } else {
+        json!({ "update": { id: { "expires": expires } } })
+    }
 }
 
 pub fn destroy_arguments(ids: &[String]) -> Value {
@@ -193,6 +230,9 @@ pub enum Message {
     Verification { subscription_id: String, code: String },
     /// New states per account and type (RFC 8620 §7.1).
     StateChange(HashMap<String, HashMap<String, String>>),
+    /// A new sign-in code in the account's mail (UwUMail-Server docs/jmap-verification.md). Only
+    /// a reason to sync now: the code is read again from the server, which also says which mail.
+    VerificationCode { account_id: String },
 }
 
 /// Reads a decrypted push message.
@@ -224,6 +264,9 @@ pub fn parse_message(body: &[u8]) -> Result<Message> {
                     })
                     .collect(),
             ))
+        }
+        Some("VerificationCode") => {
+            Ok(Message::VerificationCode { account_id: text("accountId").ok_or_else(unreadable)?.to_string() })
         }
         _ => Err(unreadable()),
     }
@@ -269,7 +312,7 @@ pub async fn create(
     endpoint: &Endpoint,
     expires: &str,
 ) -> Result<(String, Option<String>)> {
-    let arguments = create_arguments(device_client_id, endpoint, expires);
+    let arguments = create_arguments(device_client_id, endpoint, expires, client.session.verification);
     let responses = client.call(vec![("PushSubscription/set", arguments)]).await?;
     let answer = responses.get(0, "PushSubscription/set")?;
     let Some(created) = answer.pointer("/created/push") else {
@@ -304,7 +347,8 @@ pub enum Renewal {
 }
 
 pub async fn renew(client: &Client, id: &str, expires: &str) -> Result<Renewal> {
-    let responses = client.call(vec![("PushSubscription/set", renew_arguments(id, expires))]).await?;
+    let arguments = renew_arguments(id, expires, client.session.verification);
+    let responses = client.call(vec![("PushSubscription/set", arguments)]).await?;
     let answer = responses.get(0, "PushSubscription/set")?;
     match jmap::set_errors(answer) {
         Some(error) if error.kind == "notFound" => Ok(Renewal::Gone),
@@ -346,7 +390,7 @@ mod tests {
     fn builds_the_subscription_requests() {
         let endpoint = endpoint();
         let device = device_client_id("install-1", "account-1");
-        let create = create_arguments(&device, &endpoint, "2026-10-04T12:00:00Z");
+        let create = create_arguments(&device, &endpoint, "2026-10-04T12:00:00Z", false);
         assert_eq!(
             create,
             json!({ "create": { "push": {
@@ -358,12 +402,21 @@ mod tests {
             } } })
         );
         assert!(create.get("accountId").is_none(), "push subscriptions belong to no account");
+        // A server that finds sign-in codes gets every type by name, the codes among them.
+        let with_codes = create_arguments(&device, &endpoint, "2026-10-04T12:00:00Z", true);
+        let types = with_codes.pointer("/create/push/types").and_then(Value::as_array).unwrap();
+        assert!(types.contains(&json!("VerificationCode")));
+        assert!(types.contains(&json!("Email")) && types.contains(&json!("CalendarAlert")));
+        assert_eq!(
+            renew_arguments("P43", "2026-10-11T00:00:00Z", true).pointer("/update/P43/types"),
+            Some(&json!(TYPES_WITH_CODES))
+        );
         assert_eq!(
             verify_arguments("P43", "da1f097b"),
             json!({ "update": { "P43": { "verificationCode": "da1f097b" } } })
         );
         assert_eq!(
-            renew_arguments("P43", "2026-10-11T00:00:00Z"),
+            renew_arguments("P43", "2026-10-11T00:00:00Z", false),
             json!({ "update": { "P43": { "expires": "2026-10-11T00:00:00Z" } } })
         );
         assert_eq!(destroy_arguments(&["P43".into()]), json!({ "destroy": ["P43"] }));
@@ -412,6 +465,18 @@ mod tests {
         );
         let without_code = br#"{ "@type": "PushVerification", "pushSubscriptionId": "P43" }"#;
         assert!(parse_message(without_code).is_err());
+    }
+
+    #[test]
+    fn reads_a_sign_in_code_push_as_a_reason_to_sync() {
+        let body = br#"{
+            "@type": "VerificationCode",
+            "accountId": "a1",
+            "emailId": "e93",
+            "verification": { "kind": "otp", "origin": "login.shop.example", "code": "482913" }
+        }"#;
+        assert_eq!(parse_message(body).unwrap(), Message::VerificationCode { account_id: "a1".into() });
+        assert!(parse_message(br#"{ "@type": "VerificationCode", "emailId": "e93" }"#).is_err());
     }
 
     #[test]

@@ -752,14 +752,8 @@ function About() {
   );
 }
 
-export function SettingsDialog() {
-  const { t } = useT();
-  const section = useUi((s) => s.settingsOpen);
-  const openSettings = useUi((s) => s.openSettings);
-  const closeSettings = useUi((s) => s.closeSettings);
-  const formDirty = useUi((s) => s.settingsFormDirty);
-  // What the question is standing in front of: closing the window, or the section to switch to.
-  const [pending, setPending] = useState<"close" | SettingsSection | null>(null);
+/** The sections this device and these mailboxes have. */
+export function useSettingsSections() {
   // Rules only where a server runs them.
   const { data: rulesAccounts = [] } = useMailRulesAccounts();
   // The AI assistant only where one can be set up: a server's, or this device's for other mailboxes.
@@ -775,6 +769,41 @@ export function SettingsDialog() {
       (item.id !== "masked" || maskedAccounts.length > 0) &&
       (item.id !== "profile" || profileAccounts.length > 0),
   );
+  return sections;
+}
+
+/** One section's content, in the dialog on the desktop and on a pushed page on phones. */
+export function SettingsSectionBody({ section }: { section: SettingsSection }) {
+  return (
+    <>
+      {section === "appearance" && <Appearance />}
+      {section === "mail" && <Reading />}
+      {section === "compose" && <Writing />}
+      {section === "rules" && (
+        <Suspense fallback={null}>
+          <MailRules />
+        </Suspense>
+      )}
+      {section === "labels" && <LabelsSettings />}
+      {section === "assistant" && <AssistantSettings />}
+      {section === "security" && <Security />}
+      {section === "accounts" && <Accounts />}
+      {section === "profile" && <ProfileSettings />}
+      {section === "masked" && <MaskedSettings />}
+      {section === "about" && <About />}
+    </>
+  );
+}
+
+export function SettingsDialog() {
+  const { t } = useT();
+  const section = useUi((s) => s.settingsOpen);
+  const openSettings = useUi((s) => s.openSettings);
+  const closeSettings = useUi((s) => s.closeSettings);
+  const formDirty = useUi((s) => s.settingsFormDirty);
+  // What the question is standing in front of: closing the window, or the section to switch to.
+  const [pending, setPending] = useState<"close" | SettingsSection | null>(null);
+  const sections = useSettingsSections();
 
   const requestClose = () => {
     if (formDirty) setPending("close");
@@ -819,23 +848,7 @@ export function SettingsDialog() {
               </button>
             ))}
           </nav>
-          <div className="min-w-0 flex-1">
-            {section === "appearance" && <Appearance />}
-            {section === "mail" && <Reading />}
-            {section === "compose" && <Writing />}
-            {section === "rules" && (
-              <Suspense fallback={null}>
-                <MailRules />
-              </Suspense>
-            )}
-            {section === "labels" && <LabelsSettings />}
-            {section === "assistant" && <AssistantSettings />}
-            {section === "security" && <Security />}
-            {section === "accounts" && <Accounts />}
-            {section === "profile" && <ProfileSettings />}
-            {section === "masked" && <MaskedSettings />}
-            {section === "about" && <About />}
-          </div>
+          <div className="min-w-0 flex-1">{section && <SettingsSectionBody section={section} />}</div>
         </div>
       </Dialog>
       <ConfirmDiscardDialog open={pending !== null} onKeepEditing={() => setPending(null)} onDiscard={discard} />

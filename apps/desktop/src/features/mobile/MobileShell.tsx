@@ -1,89 +1,154 @@
-import clsx from "clsx";
-import { useEffect, useRef, useState } from "react";
+import {
+  currentDeviceKind,
+  GroupedList,
+  ICONS,
+  ListRow,
+  ListSection,
+  MobileShell as Shell,
+  NavButton,
+  SearchBar,
+  Sheet,
+  TabBar,
+  type MobilePlatform,
+  type TabItem,
+} from "@uwusuite/design";
+import { useEffect, useState } from "react";
+import type { MailboxView } from "@/backend/types";
+import { Avatar } from "@/components/ui/Avatar";
+import { MobileToaster } from "@/components/ui/Toaster";
 import { useT } from "@/i18n";
+import { accountLabel } from "@/lib/accountLabel";
 import { useBackLayer } from "@/lib/backStack";
-import { useUi } from "@/state/ui";
+import { isAndroid } from "@/lib/device";
+import { useFolders, useVisibleAccounts } from "@/lib/queries";
+import { useUi, type AppSection } from "@/state/ui";
 import { loadLocalDraft } from "../compose/localDraft";
 import { reopenSavedDraft } from "../compose/openDraft";
-import { MailboxNav } from "../mail/MailboxNav";
 import { LazyCalendar } from "../shell/LazyCalendar";
 import { LazyContacts } from "../shell/LazyContacts";
+import { SECTIONS, useAvailableSections } from "../shell/AppSwitch";
 import { MobileList } from "./MobileList";
+import { MobileMailboxes } from "./MobileMailboxes";
 import { MobileReader } from "./MobileReader";
-import { EDGE_ZONE } from "./SwipeRow";
+import { MobileSettings } from "./MobileSettings";
 
-const DRAWER_WIDTH = 300;
+type Tab = AppSection | "settings";
 
-/** The drawer with mailboxes and folders. Opens from ☰ or by swiping in from the left edge. */
-function Drawer() {
+const platform: MobilePlatform = isAndroid ? "android" : "ios";
+// In a desktop browser (development, the demo) the package would see no phone: pin it then.
+// On a real phone the shell detects it itself and follows the keyboard.
+const pinnedKind = currentDeviceKind() === "desktop" ? (isAndroid ? "phone-android" : "phone-ios") : undefined;
+
+/** The account avatar: top left on the iPhone, at the end of the search bar on Android. */
+function AccountButton({ onClick }: { onClick: () => void }) {
   const { t } = useT();
-  const open = useUi((s) => s.folderDrawerOpen);
-  const setOpen = useUi((s) => s.setFolderDrawerOpen);
-  const [drag, setDrag] = useState<number | null>(null);
-  const start = useRef<{ x: number; id: number } | null>(null);
-  useBackLayer(open, () => setOpen(false));
-
-  if (!open) return null;
+  const { accounts } = useVisibleAccounts();
+  const first = accounts[0];
   return (
-    <div className="fixed inset-0 z-30" role="presentation">
-      <button
-        type="button"
-        aria-label={t("common.close")}
-        onClick={() => setOpen(false)}
-        className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
-      />
-      <div
-        className={clsx(
-          "absolute inset-y-0 left-0 max-w-[85vw] animate-[uwu-drawer_220ms_cubic-bezier(0.2,0.9,0.3,1)] overflow-hidden rounded-r-[24px] bg-surface shadow-float",
-          drag === null && "transition-transform duration-200",
-        )}
-        style={{ width: DRAWER_WIDTH, transform: `translateX(${Math.min(0, drag ?? 0)}px)`, touchAction: "pan-y" }}
-        onPointerDown={(event) => {
-          start.current = { x: event.clientX, id: event.pointerId };
-        }}
-        onPointerMove={(event) => {
-          if (!start.current || start.current.id !== event.pointerId) return;
-          const dx = event.clientX - start.current.x;
-          if (dx < -12) {
-            if (drag === null) event.currentTarget.setPointerCapture(event.pointerId);
-            setDrag(dx);
-          }
-        }}
-        onPointerUp={() => {
-          if (drag !== null && drag < -80) setOpen(false);
-          start.current = null;
-          setDrag(null);
-        }}
-        onPointerCancel={() => {
-          start.current = null;
-          setDrag(null);
-        }}
-      >
-        {/* Taller rows for thumbs than in the desktop sidebar. */}
-        <MailboxNav className="h-full pt-3 [&_.h-9]:h-11 [&_.h-9]:text-[15px]" />
-      </div>
-    </div>
+    <NavButton label={t("nav.accounts")} platform={platform} onClick={onClick} className="overflow-hidden p-0!">
+      {first ? <Avatar address={{ name: first.displayName || first.name, email: first.email }} size="sm" /> : undefined}
+    </NavButton>
   );
 }
 
-/** UwUMail on a phone: the list, the conversation on top of it, the drawer beside it. */
+/** The account switcher behind the avatar: each mailbox's inbox, and a new one. */
+function AccountSheet({
+  open,
+  onClose,
+  onOpen,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onOpen: (view: MailboxView) => void;
+}) {
+  const { t } = useT();
+  const { accounts } = useVisibleAccounts();
+  const { data: folders = [] } = useFolders();
+  const setAddAccountOpen = useUi((s) => s.setAddAccountOpen);
+  const openSettings = useUi((s) => s.openSettings);
+  return (
+    <Sheet open={open} onClose={onClose} title={t("nav.accounts")} detents={["medium", "large"]} platform={platform}>
+      <GroupedList platform={platform}>
+        <ListSection>
+          {accounts
+            .filter((account) => !account.parentId)
+            .map((account) => {
+              const inbox = folders.find((f) => f.accountId === account.id && f.role === "inbox");
+              return (
+                <ListRow
+                  key={account.id}
+                  icon={
+                    <Avatar address={{ name: account.displayName || account.name, email: account.email }} size="sm" />
+                  }
+                  title={accountLabel(account)}
+                  subtitle={account.email !== accountLabel(account) ? account.email : undefined}
+                  disabled={!inbox}
+                  onClick={() => {
+                    onClose();
+                    if (inbox) onOpen({ kind: "folder", accountId: account.id, folderId: inbox.id });
+                  }}
+                />
+              );
+            })}
+        </ListSection>
+        <ListSection>
+          <ListRow
+            icon={ICONS.account}
+            iconTone="neutral"
+            title={t("settings.accounts")}
+            onClick={() => {
+              onClose();
+              openSettings("accounts");
+            }}
+          />
+          <ListRow
+            tone="accent"
+            title={t("nav.addAccount")}
+            onClick={() => {
+              onClose();
+              setAddAccountOpen(true);
+            }}
+          />
+        </ListSection>
+      </GroupedList>
+    </Sheet>
+  );
+}
+
+/**
+ * UwUMail on a phone: tabs for mail, calendar, contacts and the settings. The mail tab starts with
+ * the mailbox overview and pushes the list and the conversation on top of it; there is no drawer.
+ */
 export function MobileShell() {
+  const { t } = useT();
   const section = useUi((s) => s.section);
+  const setSection = useUi((s) => s.setSection);
+  const setView = useUi((s) => s.setView);
+  const search = useUi((s) => s.search);
+  const setSearch = useUi((s) => s.setSearch);
   const selectedThreadId = useUi((s) => s.selectedThreadId);
   const selectThread = useUi((s) => s.selectThread);
   const settingsOpen = useUi((s) => s.settingsOpen);
+  const closeSettings = useUi((s) => s.closeSettings);
   const addAccountOpen = useUi((s) => s.addAccountOpen);
-  const compose = useUi((s) => s.compose);
-  const edge = useRef<{ x: number; y: number; id: number } | null>(null);
+  const available = useAvailableSections();
+  const [onSettingsTab, setOnSettingsTab] = useState(false);
+  // Opens on the inbox, with the overview one step back.
+  const [listOpen, setListOpen] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [draft, setDraft] = useState(search);
+  const [accountsOpen, setAccountsOpen] = useState(false);
+
+  const tab: Tab = settingsOpen !== null || onSettingsTab ? "settings" : section;
 
   useBackLayer(selectedThreadId !== null, () => selectThread(null));
-  useBackLayer(settingsOpen !== null, () => useUi.getState().closeSettings());
   useBackLayer(addAccountOpen, () => useUi.getState().setAddAccountOpen(false));
+  useBackLayer(tab === "mail" && listOpen && selectedThreadId === null && !searching, () => setListOpen(false));
 
-  // Whatever opens on top of the drawer closes it.
   useEffect(() => {
-    if (settingsOpen || addAccountOpen || compose) useUi.getState().setFolderDrawerOpen(false);
-  }, [settingsOpen, addAccountOpen, compose]);
+    const timer = setTimeout(() => setSearch(draft), 180);
+    return () => clearTimeout(timer);
+  }, [draft, setSearch]);
 
   // A draft Android didn't let us finish comes back as the bar above the write button.
   useEffect(() => {
@@ -99,43 +164,106 @@ export function MobileShell() {
     ui.setComposeMinimized(true);
   }, []);
 
+  const tabs: TabItem<Tab>[] = [
+    ...SECTIONS.filter(({ id }) => available.includes(id)).map(({ id, icon }) => ({
+      id: id as Tab,
+      icon,
+      label: t(`nav.section.${id}`),
+    })),
+    { id: "settings", icon: ICONS.settings, label: t("nav.settings") },
+  ];
+  const changeTab = (next: Tab) => {
+    if (next === "settings") {
+      setOnSettingsTab(true);
+      return;
+    }
+    setOnSettingsTab(false);
+    if (settingsOpen !== null) closeSettings();
+    // Tapping the mail tab again goes back to the overview.
+    if (next === "mail" && tab === "mail") setListOpen(false);
+    setSection(next);
+  };
+  const openView = (view: MailboxView) => {
+    setView(view);
+    setOnSettingsTab(false);
+    if (settingsOpen !== null) closeSettings();
+    setSection("mail");
+    setListOpen(true);
+  };
+  const startSearch = (open: boolean) => {
+    setSearching(open);
+    if (open) {
+      setListOpen(true);
+    } else {
+      setDraft("");
+    }
+  };
+
+  const avatar = <AccountButton onClick={() => setAccountsOpen(true)} />;
+  const androidSearch =
+    platform === "android" ? (
+      <SearchBar value={draft} onChange={setDraft} placeholder={t("list.search")} trailing={avatar} />
+    ) : undefined;
+
   return (
-    <div
-      className="relative h-full overflow-hidden bg-surface"
-      onPointerDown={(event) => {
-        edge.current = event.clientX < EDGE_ZONE ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
-      }}
-      onPointerMove={(event) => {
-        const start = edge.current;
-        if (!start || start.id !== event.pointerId) return;
-        const dx = event.clientX - start.x;
-        if (Math.abs(event.clientY - start.y) > 40) edge.current = null;
-        else if (dx > 48) {
-          edge.current = null;
-          useUi.getState().setFolderDrawerOpen(true);
-        }
-      }}
-      onPointerUp={() => {
-        edge.current = null;
-      }}
-    >
-      {section === "calendar" ? (
-        // The calendar brings its own drawer, which the edge swipe opens as well.
+    <Shell kind={pinnedKind} className="h-full">
+      {tab === "settings" ? (
+        <MobileSettings platform={platform} />
+      ) : tab === "calendar" ? (
         <LazyCalendar />
-      ) : section === "contacts" ? (
-        // So do the contacts.
+      ) : tab === "contacts" ? (
         <LazyContacts />
       ) : (
         <>
-          <MobileList />
+          {listOpen ? (
+            <MobileList platform={platform} onBack={() => setListOpen(false)} searchBar={androidSearch} />
+          ) : (
+            <MobileMailboxes
+              platform={platform}
+              leading={platform === "ios" ? avatar : undefined}
+              trailing={
+                platform === "ios" ? (
+                  <NavButton
+                    icon={ICONS.compose}
+                    label={t("nav.compose")}
+                    platform={platform}
+                    onClick={() => useUi.getState().openCompose({ mode: "new" })}
+                  />
+                ) : undefined
+              }
+              onOpen={openView}
+            />
+          )}
           {selectedThreadId && (
-            <div className="absolute inset-0 z-10 animate-[uwu-screen-in_220ms_cubic-bezier(0.2,0.9,0.3,1)]">
+            <div className="absolute inset-0 z-30 animate-[uwu-screen-in_220ms_cubic-bezier(0.2,0.9,0.3,1)]">
               <MobileReader key={selectedThreadId} threadId={selectedThreadId} />
             </div>
           )}
-          <Drawer />
         </>
       )}
-    </div>
+
+      {!selectedThreadId && (
+        <TabBar
+          tabs={tabs}
+          value={tab}
+          onChange={changeTab}
+          platform={platform}
+          label={t("nav.apps")}
+          search={
+            tab === "mail"
+              ? {
+                  open: searching,
+                  onOpenChange: startSearch,
+                  value: draft,
+                  onChange: setDraft,
+                  placeholder: t("list.search"),
+                }
+              : undefined
+          }
+        />
+      )}
+      <AccountSheet open={accountsOpen} onClose={() => setAccountsOpen(false)} onOpen={openView} />
+      <MobileToaster platform={platform} />
+    </Shell>
   );
 }

@@ -28,6 +28,7 @@ import { MobileShell } from "../mobile/MobileShell";
 import { ThreadList } from "../mail/ThreadList";
 import { ThreadReader } from "../mail/ThreadReader";
 import { SettingsDialog } from "../settings/SettingsDialog";
+import { SectionRail } from "./SectionRail";
 import { useWorkspaceGuard } from "../workspaces/workspaces";
 import { buildCommands } from "./commands";
 import { CommandPalette } from "./CommandPalette";
@@ -35,6 +36,7 @@ import { LazyCalendar, LazyCalendarDialogs } from "./LazyCalendar";
 import { LazyContactDialogs, LazyContacts } from "./LazyContacts";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { useMacMenu } from "./useMacShell";
+import { searchInTitleBar } from "./WindowTitleBar";
 
 /** Keys that scroll the open mail from the list as well. */
 const SCROLL_KEYS = [" ", "PageDown", "PageUp", "Home", "End"];
@@ -76,19 +78,32 @@ function AddAccountDialog() {
   );
 }
 
-/** Sidebar | list | reader, the first two as wide as the person dragged them on this device. */
+/** Room the rail and the card's outer gap take beside the panes. */
+const CHROME_WIDTH = 64 + 12;
+
+/**
+ * Sidebar on the canvas | list and reader together in one card. The sidebar and the list are as
+ * wide as the person dragged them on this device.
+ */
 function ProColumns() {
   const { t } = useT();
   const saved = usePaneWidths((s) => s.widths);
   const windowWidth = useWindowWidth();
-  const { nav, list } = fitPanes(saved, windowWidth);
+  const { nav, list } = fitPanes(saved, windowWidth - CHROME_WIDTH);
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 min-w-0 flex-1 pt-2 pr-3 pb-3">
       <MailboxNav workspaceSwitch className="min-h-0 shrink-0 bg-canvas" style={{ width: nav }} />
       <ResizeHandle pane="nav" width={nav} label={t("layout.resizeNav")} />
-      <ThreadList variant="pro" className="min-h-0 shrink-0" style={{ width: list }} />
-      <ResizeHandle pane="list" width={list} label={t("layout.resizeList")} />
-      <ThreadReader variant="pro" className="min-h-0 min-w-0 flex-1" />
+      <div className="flex min-w-0 flex-1 overflow-hidden rounded-[16px] border border-hairline bg-surface">
+        <ThreadList
+          variant="pro"
+          searchInTitleBar={searchInTitleBar}
+          className="min-h-0 shrink-0 border-r border-hairline"
+          style={{ width: list }}
+        />
+        <ResizeHandle pane="list" width={list} label={t("layout.resizeList")} />
+        <ThreadReader variant="pro" className="min-h-0 min-w-0 flex-1" />
+      </div>
     </div>
   );
 }
@@ -229,47 +244,54 @@ export function MailShell() {
 
       {phone ? (
         <MobileShell />
-      ) : section === "calendar" ? (
-        <LazyCalendar />
-      ) : section === "contacts" ? (
-        <LazyContacts />
-      ) : pro ? (
-        <ProColumns />
       ) : (
-        <div className="relative flex min-h-0 flex-1 gap-3 p-3">
-          <ThreadList
-            variant="simple"
-            className={clsx(
-              "rounded-[22px] border border-hairline",
-              selectedThreadId
-                ? "hidden w-[380px] shrink-0 lg:flex"
-                : "w-full max-w-[560px] shrink-0 max-lg:max-w-none",
-            )}
-          />
-          <ThreadReader
-            variant="simple"
-            className={clsx(
-              "min-w-0 flex-1 overflow-hidden rounded-[22px] border border-hairline",
-              !selectedThreadId && "max-lg:hidden",
-            )}
-          />
-
-          {drawerOpen && (
-            <div className="absolute inset-0 z-30 flex" role="presentation">
-              <button
-                type="button"
-                aria-label={t("common.close")}
-                onClick={() => setDrawerOpen(false)}
-                className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
+        <div className="flex min-h-0 flex-1">
+          <SectionRail />
+          {section === "calendar" ? (
+            <LazyCalendar />
+          ) : section === "contacts" ? (
+            <LazyContacts />
+          ) : pro ? (
+            <ProColumns />
+          ) : (
+            <div className="relative flex min-h-0 min-w-0 flex-1 gap-3 py-2 pr-3 pb-3">
+              <ThreadList
+                variant="simple"
+                searchInTitleBar={searchInTitleBar}
+                className={clsx(
+                  "rounded-[22px] border border-hairline",
+                  selectedThreadId
+                    ? "hidden w-[380px] shrink-0 lg:flex"
+                    : "w-full max-w-[560px] shrink-0 max-lg:max-w-none",
+                )}
               />
-              <MailboxNav className="relative w-[280px] animate-slide-up rounded-r-[22px] bg-surface shadow-float" />
+              <ThreadReader
+                variant="simple"
+                className={clsx(
+                  "min-w-0 flex-1 overflow-hidden rounded-[22px] border border-hairline",
+                  !selectedThreadId && "max-lg:hidden",
+                )}
+              />
+
+              {drawerOpen && (
+                <div className="absolute inset-0 z-30 flex" role="presentation">
+                  <button
+                    type="button"
+                    aria-label={t("common.close")}
+                    onClick={() => setDrawerOpen(false)}
+                    className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
+                  />
+                  <MailboxNav className="relative w-[280px] animate-slide-up rounded-r-[22px] bg-surface shadow-float" />
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
       <Composer />
-      <SettingsDialog />
+      {/* Phones have their settings tab instead. */}
+      {!phone && <SettingsDialog />}
       <LazyContactDialogs />
       <LazyCalendarDialogs />
       <AddAccountDialog />

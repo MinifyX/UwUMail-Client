@@ -18,6 +18,7 @@ import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMes
 import { DEMO_PROFILE_PICTURES, DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
 import type {
+  VerificationCode,
   AiConsent,
   AiDestination,
   AiDestinationState,
@@ -1632,6 +1633,11 @@ export class DemoBackend implements Backend {
       images: text ? [{ source: "cid:poster@kaffeekuchen.example", text, width: 420, height: 560 }] : [],
       skipped: 0,
     };
+  }
+
+  async verificationCodes(): Promise<VerificationCode[]> {
+    // The demo's mailboxes have no server finding codes; `?demoCodes` shows the design instead.
+    return [];
   }
 
   /**

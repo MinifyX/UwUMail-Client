@@ -81,6 +81,15 @@ pub struct NotifyPrefs {
     pub muted: Vec<String>,
     /// When no mail notifies.
     pub quiet: Option<QuietHours>,
+    /// The title of a mail with a sign-in code, `{sender}` standing for who sent it:
+    /// "Sign-in code from {sender}".
+    pub code_title: String,
+    /// The title of a mail with a sign-in link: "Sign-in link from {sender}".
+    pub link_title: String,
+    /// The button that copies the code: "Copy code".
+    pub copy_code: String,
+    /// Whether the lock screen shows the code itself (off: only where it is from).
+    pub code_on_lock_screen: bool,
 }
 
 /// The longest list of muted accounts the prefs keep.
@@ -166,6 +175,10 @@ impl Default for NotifyPrefs {
             many: "{n} new mails".into(),
             muted: Vec::new(),
             quiet: None,
+            code_title: "Sign-in code from {sender}".into(),
+            link_title: "Sign-in link from {sender}".into(),
+            copy_code: "Copy code".into(),
+            code_on_lock_screen: false,
         }
     }
 }
@@ -185,8 +198,7 @@ impl NotifyPrefs {
             new_mail: line(new_mail, fallback.new_mail),
             hidden: line(hidden, fallback.hidden),
             many,
-            muted: Vec::new(),
-            quiet: None,
+            ..fallback
         }
     }
 
@@ -200,6 +212,21 @@ impl NotifyPrefs {
         muted.truncate(MAX_MUTED);
         self.muted = muted;
         self.quiet = quiet;
+        self
+    }
+
+    /// The same prefs with the texts for mails with a sign-in code (an empty one or a title without
+    /// `{sender}` keeps the default) and whether the lock screen shows the code.
+    pub fn with_codes(mut self, code_title: &str, link_title: &str, copy_code: &str, on_lock_screen: bool) -> Self {
+        let fallback = Self::default();
+        let title = |text: &str, fallback: String| {
+            Some(notification_text(text, MAX_LINE)).filter(|title| title.contains("{sender}")).unwrap_or(fallback)
+        };
+        self.code_title = title(code_title, fallback.code_title);
+        self.link_title = title(link_title, fallback.link_title);
+        let copy = notification_text(copy_code, MAX_NAME);
+        self.copy_code = if copy.is_empty() { fallback.copy_code } else { copy };
+        self.code_on_lock_screen = on_lock_screen;
         self
     }
 
@@ -299,6 +326,131 @@ pub fn mail_notification(prefs: &NotifyPrefs, count: usize, newest: &[MailLine])
             Some((title, body.join("\n")))
         }
     }
+}
+
+/// What a mail is for when it carries a sign-in code: a one-time code to type, or a link to open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerificationKind {
+    Otp,
+    Link,
+}
+
+/// The sign-in code of a new mail as the server found it (JMAP `Email/verification`). The app only
+/// hands it on; finding codes in mail text is the server's job.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Verification {
+    pub kind: VerificationKind,
+    /// The code itself (one-time codes only).
+    pub code: Option<String>,
+    /// Where the code is for, e.g. `bank.example`.
+    pub origin: String,
+    /// When the code stops working (Unix seconds); `None` when the mail doesn't say.
+    pub expires_at: Option<i64>,
+}
+
+/// The longest code a notification shows and copies.
+pub const MAX_CODE: usize = 16;
+
+/// A button on a notification. The ids are what the platform hands back when it is pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotifyAction {
+    /// Copies the code to the clipboard, without opening the app.
+    CopyCode,
+    /// Opens the mail.
+    OpenMail,
+    /// Android: marks the mail read.
+    MarkRead,
+    /// Android: archives the mail.
+    Archive,
+}
+
+impl NotifyAction {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::CopyCode => "copy-code",
+            Self::OpenMail => "open",
+            Self::MarkRead => "read",
+            Self::Archive => "archive",
+        }
+    }
+}
+
+/// Where a notification shows: the buttons differ per platform.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotifyPlatform {
+    Desktop,
+    Ios,
+    Android,
+}
+
+/// The notification of a mail with a sign-in code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeNotification {
+    pub title: String,
+    /// The code and where it is for: "482 913 · bank.example".
+    pub body: String,
+    /// What the lock screen shows: the body, or only where the code is for.
+    pub locked_body: String,
+    /// What "Copy code" puts on the clipboard: the code without the space.
+    pub copy: Option<String>,
+    pub actions: Vec<NotifyAction>,
+}
+
+/// A code as a notification may carry it: letters, digits and dashes only, at most [`MAX_CODE`].
+fn plain_code(code: &str) -> Option<String> {
+    let code: String = code.chars().filter(|c| !c.is_whitespace()).collect();
+    let fits =
+        (4..=MAX_CODE).contains(&code.chars().count()) && code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+    fits.then_some(code)
+}
+
+/// The code grouped for reading: a space after every three characters of a digits-only code.
+fn grouped_code(code: &str) -> String {
+    if !code.chars().all(|c| c.is_ascii_digit()) || code.len() < 6 {
+        return code.to_string();
+    }
+    let chunks: Vec<&str> = code.as_bytes().chunks(3).map(|chunk| std::str::from_utf8(chunk).unwrap_or("")).collect();
+    chunks.join("\u{2002}")
+}
+
+/// The notification of one new mail from `sender` (see [`notification_sender`]) with the sign-in
+/// code `verification`, at `now` (Unix seconds). `None` where the mail notifies as usual: content
+/// hidden, the code already expired, or nothing usable in it.
+pub fn code_notification(
+    prefs: &NotifyPrefs,
+    sender: &str,
+    verification: &Verification,
+    platform: NotifyPlatform,
+    now: i64,
+) -> Option<CodeNotification> {
+    if !prefs.show_content || verification.expires_at.is_some_and(|at| at <= now) {
+        return None;
+    }
+    let origin = notification_text(&verification.origin, MAX_NAME);
+    let sender = notification_text(sender, MAX_NAME);
+    if origin.is_empty() {
+        return None;
+    }
+    let sender = if sender.is_empty() { origin.clone() } else { sender };
+    let (title, body, copy) = match verification.kind {
+        VerificationKind::Otp => {
+            let code = plain_code(verification.code.as_deref()?)?;
+            let title = prefs.code_title.replace("{sender}", &sender);
+            (title, format!("{} · {origin}", grouped_code(&code)), Some(code))
+        }
+        VerificationKind::Link => (prefs.link_title.replace("{sender}", &sender), origin.clone(), None),
+    };
+    let locked_body = if prefs.code_on_lock_screen { body.clone() } else { origin };
+    let mut actions = Vec::new();
+    if copy.is_some() {
+        actions.push(NotifyAction::CopyCode);
+    }
+    match platform {
+        NotifyPlatform::Desktop => actions.push(NotifyAction::OpenMail),
+        NotifyPlatform::Ios => {}
+        NotifyPlatform::Android => actions.extend([NotifyAction::MarkRead, NotifyAction::Archive]),
+    }
+    Some(CodeNotification { title, body, locked_body, copy, actions })
 }
 
 /// Escapes `&`, `<`, `>`, `"` and `'` for notification servers that read the text as markup.
@@ -482,5 +634,79 @@ mod tests {
         assert_eq!(prefs.muted.len(), MAX_MUTED);
         // The whole list fits the file the desktop app keeps (64 KiB).
         assert!(serde_json::to_vec(&prefs.muted).unwrap().len() < 48 * 1024);
+    }
+
+    fn otp(code: &str) -> Verification {
+        Verification {
+            kind: VerificationKind::Otp,
+            code: Some(code.into()),
+            origin: "bank.example".into(),
+            expires_at: Some(1_000),
+        }
+    }
+
+    #[test]
+    fn a_code_mail_names_the_code_and_where_it_is_for() {
+        let prefs = NotifyPrefs::default().with_codes(
+            "Anmeldecode von {sender}",
+            "Anmeldelink von {sender}",
+            "Code kopieren",
+            false,
+        );
+        let note = code_notification(&prefs, "Bank Beispiel", &otp("482913"), NotifyPlatform::Desktop, 900).unwrap();
+        assert_eq!(note.title, "Anmeldecode von Bank Beispiel");
+        assert_eq!(note.body, "482\u{2002}913 · bank.example");
+        assert_eq!(note.copy.as_deref(), Some("482913"));
+        assert_eq!(note.actions, [NotifyAction::CopyCode, NotifyAction::OpenMail]);
+        assert_eq!(prefs.copy_code, "Code kopieren");
+        // The lock screen keeps the code to itself unless asked.
+        assert_eq!(note.locked_body, "bank.example");
+        let shown = prefs.clone().with_codes("", "", "", true);
+        assert_eq!(shown.code_title, NotifyPrefs::default().code_title, "an empty title keeps the default");
+        let note = code_notification(&shown, "Bank", &otp("482913"), NotifyPlatform::Ios, 900).unwrap();
+        assert_eq!(note.locked_body, note.body);
+        assert_eq!(note.actions, [NotifyAction::CopyCode]);
+    }
+
+    #[test]
+    fn android_can_also_mark_read_and_archive() {
+        let prefs = NotifyPrefs::default();
+        let note = code_notification(&prefs, "Bank", &otp("A7-K2Q"), NotifyPlatform::Android, 0).unwrap();
+        assert_eq!(note.body, "A7-K2Q · bank.example", "only digit codes are grouped");
+        let ids: Vec<_> = note.actions.iter().map(|action| action.id()).collect();
+        assert_eq!(ids, ["copy-code", "read", "archive"]);
+    }
+
+    #[test]
+    fn links_have_nothing_to_copy() {
+        let link = Verification {
+            kind: VerificationKind::Link,
+            code: None,
+            origin: "forum.example.net".into(),
+            expires_at: None,
+        };
+        let note = code_notification(&NotifyPrefs::default(), "Forum", &link, NotifyPlatform::Desktop, 0).unwrap();
+        assert_eq!(note.title, "Sign-in link from Forum");
+        assert_eq!(note.copy, None);
+        assert_eq!(note.actions, [NotifyAction::OpenMail]);
+    }
+
+    #[test]
+    fn odd_or_expired_codes_notify_as_usual() {
+        let prefs = NotifyPrefs::default();
+        let at = |code: &str, now| code_notification(&prefs, "Bank", &otp(code), NotifyPlatform::Desktop, now);
+        assert!(at("482913", 1_000).is_none(), "expired");
+        assert!(at("12", 0).is_none(), "too short");
+        assert!(at(&"1".repeat(MAX_CODE + 1), 0).is_none(), "too long");
+        assert!(at("48<b>2", 0).is_none(), "markup");
+        assert!(at("48\u{202E}291", 0).is_none(), "direction marks");
+        let hidden = NotifyPrefs::new(false, "", "", "");
+        assert!(code_notification(&hidden, "Bank", &otp("482913"), NotifyPlatform::Desktop, 0).is_none());
+        let titles = NotifyPrefs::default().with_codes("Code!", "Link!", "Copy", false);
+        assert_eq!(
+            titles.code_title,
+            NotifyPrefs::default().code_title,
+            "a title without {{sender}} keeps the default"
+        );
     }
 }

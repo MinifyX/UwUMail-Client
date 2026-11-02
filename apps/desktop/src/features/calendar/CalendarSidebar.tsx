@@ -3,7 +3,6 @@ import { Button, Icon, type IconProps, ICONS, Wordmark } from "@uwusuite/design"
 import { useT } from "@/i18n";
 import { addMinutes, localWall, withClock } from "@/lib/calendarDates";
 import { useUi } from "@/state/ui";
-import { AppSwitch } from "../shell/AppSwitch";
 import { CalendarList } from "./CalendarList";
 import { MiniMonth } from "./MiniMonth";
 import { useCalendarUi } from "./state";
@@ -41,7 +40,6 @@ export function CalendarSidebar({ className, onNavigate }: { className?: string;
       <div className="flex items-center justify-between px-2">
         <Wordmark product="Mail" shell="mail" className="text-[19px]" />
       </div>
-      <AppSwitch />
       <Button
         variant="primary"
         size="lg"

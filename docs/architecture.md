@@ -784,6 +784,46 @@ app starts:
 | Android | ML Kit Latin text recognition from Google Play services (`PictureText.kt`, through `UwuBridge`) | The unbundled `play-services-mlkit-text-recognition`: the model comes with Play services (a few hundred KB in the APK instead of several MB per ABI for the bundled one). Without Play services the feature is `unavailable`. The picture crosses the bridge as a file in the app's cache, deleted right after. |
 | Linux | none | `unavailable`: the feature stays quietly off. |
 
+## Sign-in codes
+
+A UwUMail server finds sign-in codes and links in incoming mail
+(`urn:uwumail:jmap:verification`, UwUMail-Server `docs/jmap-verification.md`);
+the app never looks for them itself. Other servers and IMAP have none.
+
+- **Asking:** only when the session announces the capability (then it goes into
+  every request's `using`). After a sync that brought or changed mail, after the
+  first sync and when the earliest code ran out, `jmap_verification::fetch`
+  sends `VerificationCode/query` (`{expired: false}`) with `Email/get` of the
+  `verification` property in one request. Every field is checked again on the
+  device (origin a host name, code 4–16 letters, digits or dashes, link `https`
+  on the origin or below it, expiry at most a day after the mail came,
+  `autofill` only for `source: header`). Codes of mail this device doesn't have
+  are left out. `engine/verification_ops.rs` keeps them **in memory only**,
+  never on disk; `Engine::verification_codes` (command `verification_codes`)
+  gives the valid ones, newest first.
+- **Push:** a Web Push subscription names `VerificationCode` in `types` when the
+  server has the capability (existing ones get it on their next renewal); the
+  pushed code itself is not trusted, it only starts a sync of that account.
+- **UI:** `useVerificationCodes` (react-query) asks again on `mail:changed`,
+  `mail:received`, `accounts:changed` and when the earliest code runs out; the
+  code bar, the row chip and the reader hint count down on their own. `?demoCodes`
+  in a dev build still shows the design with made-up codes.
+- **Notifications:** a new mail with a code notifies as the code
+  (`notify::code_notification`): title "Sign-in code from {sender}", body
+  "482 913 · origin". With "Show sender and subject" off it is an ordinary
+  hidden mail notification. The lock screen shows only the origin unless
+  "Show code on the lock screen" is on (off by default).
+
+| Platform | What the notification does |
+| --- | --- |
+| Android | Own notification with "Copy code" first, then "Mark as read" and "Archive". Copy goes to `NotificationActionReceiver`, which puts the code on the clipboard marked sensitive (`EXTRA_IS_SENSITIVE`) without opening UwUMail; the public (lock screen) version has the origin only, unless the setting allows the code. It goes away after 15 minutes. The texts come from the window's settings, kept in the engine process (`uwumail_android::set_notify_prefs`); a process started by push before any window opened uses the English defaults and never shows the code on the lock screen. |
+| macOS, Windows, Linux | No buttons: `tauri-plugin-notification` has no actions on the desktop. The notification always shows the lock screen text (origin only by default, the whole code with the setting on); clicking opens UwUMail, where the code bar copies it. |
+| iOS | No buttons either: the notification plugin has no action categories wired up yet. Same text as on the desktop; tapping opens UwUMail. |
+
+**Autofill** (`autofill: true`) is not offered anywhere yet: the app has no
+autofill mechanism (no Android `AutofillService`, no iOS one-time-code
+provider), so the flag is only carried along.
+
 ## Installer and updates
 
 `apps/setup` is UwUMail's own installer, the same small Tauri app with Nyu on

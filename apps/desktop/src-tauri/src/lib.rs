@@ -1085,6 +1085,14 @@ async fn image_text(engine: State<'_, Engine>, message_id: String, remote: bool)
     engine.image_text(&message_id, remote).await
 }
 
+/// The sign-in codes still valid that the mail servers found (code bar, list rows, reader).
+#[tauri::command]
+fn verification_codes(
+    engine: State<'_, Engine>,
+) -> CommandResult<Vec<uwumail_core::jmap_verification::VerificationCode>> {
+    engine.verification_codes()
+}
+
 /// The proxy remote pictures, sender pictures and one-click unsubscribes take; empty for none.
 #[tauri::command]
 fn set_privacy_proxy(engine: State<'_, Engine>, proxy: String) -> CommandResult<()> {
@@ -1189,8 +1197,11 @@ fn set_mobile_prefs(language: String, tone: String, app_lock: bool) -> CommandRe
 /// shows is the system's to say (iOS "Show Previews", Android's sensitive content), and hiding
 /// them in UwUMail too left only "New mail" to read. `muted_accounts` (account ids) and
 /// `quiet_hours` (`{"from":"HH:MM","to":"HH:MM","days":[0-6]}`, or nothing for none) keep mail
-/// silent; quiet hours in another shape count as none.
+/// silent; quiet hours in another shape count as none. `code_title`, `link_title` and `copy_code`
+/// are the texts for mail with a sign-in code; `code_on_lock_screen` lets a notification show the
+/// code itself where the system may show it locked (off unless the person switched it on).
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn set_notification_prefs(
     show_content: bool,
     new_mail: String,
@@ -1198,10 +1209,20 @@ fn set_notification_prefs(
     many: String,
     muted_accounts: Option<Vec<String>>,
     quiet_hours: Option<serde_json::Value>,
+    code_title: Option<String>,
+    link_title: Option<String>,
+    copy_code: Option<String>,
+    code_on_lock_screen: Option<bool>,
 ) -> CommandResult<()> {
     let quiet = quiet_hours.as_ref().and_then(uwumail_core::notify::QuietHours::from_value);
     let prefs = uwumail_core::notify::NotifyPrefs::new(show_content, &new_mail, &hidden, &many)
-        .with_filter(muted_accounts.unwrap_or_default(), quiet);
+        .with_filter(muted_accounts.unwrap_or_default(), quiet)
+        .with_codes(
+            code_title.as_deref().unwrap_or_default(),
+            link_title.as_deref().unwrap_or_default(),
+            copy_code.as_deref().unwrap_or_default(),
+            code_on_lock_screen.unwrap_or(false),
+        );
     platform::set_notification_prefs(prefs)
 }
 
@@ -1509,6 +1530,7 @@ pub fn run() {
             image_sizes,
             cancel_image_sizes,
             image_text,
+            verification_codes,
             clear_sender_pictures,
             set_privacy_proxy,
             get_company_domain,

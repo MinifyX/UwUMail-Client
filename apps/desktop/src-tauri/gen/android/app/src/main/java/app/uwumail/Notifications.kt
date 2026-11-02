@@ -21,6 +21,8 @@ object Notifications {
     const val WATCH_ID = 1
     private const val TAG_MAIL = "mail"
     private const val PINK = 0xFFFF4D8D.toInt()
+    /** A sign-in code notification goes away after this; the server caps codes at a day anyway. */
+    private const val CODE_TIMEOUT_MS = 15L * 60 * 1000
 
     fun createChannels(context: Context) {
         val text = Prefs.localized(context)
@@ -62,6 +64,26 @@ object Notifications {
         }
         return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
+
+    /** "Copy code" on a sign-in code notification: copies without opening UwUMail. */
+    private fun copyIntent(context: Context, id: String, code: String, requestCode: Int): PendingIntent {
+        val intent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = "app.uwumail.NOTIFICATION_${NotificationActionReceiver.ACTION_COPY_CODE}"
+            putExtra(NotificationActionReceiver.EXTRA_ACTION, NotificationActionReceiver.ACTION_COPY_CODE)
+            putExtra(NotificationActionReceiver.EXTRA_MESSAGE_IDS, arrayOf(id))
+            putExtra(NotificationActionReceiver.EXTRA_CODE, code)
+        }
+        return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    /** The lock screen version of a sign-in code: by default only where the code is for. */
+    private fun lockedCodeVersion(context: Context, title: String, lockedBody: String): Notification =
+        NotificationCompat.Builder(context, CHANNEL_MAIL)
+            .setSmallIcon(R.drawable.ic_stat_nyu)
+            .setColor(PINK)
+            .setContentTitle(title)
+            .setContentText(lockedBody)
+            .build()
 
     /** What a secure lock screen shows when the phone hides sensitive content. */
     private fun lockScreenVersion(context: Context, text: Context): Notification =
@@ -113,7 +135,25 @@ object Notifications {
                 .setContentIntent(openIntent(context, code, message.getString("threadId"), id))
                 .addAction(0, text.getString(R.string.action_read), actionIntent(context, "read", listOf(id), code + 1))
                 .addAction(archive)
-            if (hideContent) {
+            // A sign-in code the server found (only there with "Show sender and subject" on):
+            // the code instead of the subject, and the lock screen only where it is for.
+            val signIn = message.optJSONObject("code")
+            if (signIn != null && !hideContent) {
+                val title = signIn.getString("title")
+                builder
+                    .setContentTitle(title)
+                    .setContentText(signIn.getString("body"))
+                    .setPublicVersion(lockedCodeVersion(context, title, signIn.getString("lockedBody")))
+                    .setTimeoutAfter(CODE_TIMEOUT_MS)
+                val copy = signIn.optString("copy").takeIf { !signIn.isNull("copy") && it.isNotEmpty() }
+                if (copy != null) {
+                    // First, so it shows even where only one button fits.
+                    builder.clearActions()
+                        .addAction(0, signIn.optString("copyLabel").ifEmpty { "Copy code" }, copyIntent(context, id, copy, code + 3))
+                        .addAction(0, text.getString(R.string.action_read), actionIntent(context, "read", listOf(id), code + 1))
+                        .addAction(archive)
+                }
+            } else if (hideContent) {
                 builder
                     .setContentTitle(text.getString(R.string.hidden_mail_title))
                     .setContentText(text.getString(R.string.hidden_mail_text))

@@ -15,8 +15,7 @@ import {
   useVisibleAccounts,
 } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
-import { withSearchTerm } from "@/lib/searchQuery";
-import { SearchHelp } from "./SearchHelp";
+import { groupByDay } from "@/lib/dayGroups";
 import { groupByLabel, labelGroups, labelRef, splitLabelSearch, type LabelEntry } from "@/lib/labelFilter";
 import { useSettings } from "@/state/settings";
 import { useUi } from "@/state/ui";
@@ -25,6 +24,10 @@ import { LabelDot } from "../labels/LabelNav";
 import { labelsFor, useLabelDirectory } from "../labels/useLabels";
 import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
+import { codeFor } from "../verification/format";
+import { useVerificationCodes } from "../verification/useVerificationCodes";
+import { VerificationCodeBar } from "../verification/VerificationCodeBar";
+import { MailSearch, SEARCH_INPUT_ID } from "./MailSearch";
 import { useSelectionActions } from "./selection";
 import { useSnoozedRows } from "./snooze";
 import { ThreadRow } from "./ThreadRow";
@@ -41,29 +44,24 @@ const EMPTY_SCENES = {
   other: "emptyFolder",
 } as const satisfies Record<string, SceneName>;
 
-export const SEARCH_INPUT_ID = "uwu-search";
+export { SEARCH_INPUT_ID };
 
 interface ThreadListProps {
   variant: "simple" | "pro";
   className?: string;
   style?: CSSProperties;
+  /** The search sits in the title bar (Windows, Linux), not in the list header. */
+  searchInTitleBar?: boolean;
 }
 
-export function ThreadList({ variant, className, style }: ThreadListProps) {
+export function ThreadList({ variant, className, style, searchInTitleBar = false }: ThreadListProps) {
   const { t } = useT();
   const view = useUi((s) => s.view);
   const filter = useUi((s) => s.filter);
   const search = useUi((s) => s.search);
   const selectedThreadId = useUi((s) => s.selectedThreadId);
-  const {
-    setFilter,
-    setSearch,
-    selectThread,
-    setVisibleThreadIds,
-    setFolderDrawerOpen,
-    setAddAccountOpen,
-    openSettings,
-  } = useUi.getState();
+  const { setFilter, selectThread, setVisibleThreadIds, setFolderDrawerOpen, setAddAccountOpen, openSettings } =
+    useUi.getState();
   const info = useViewInfo(view);
   const snoozedRows = useSnoozedRows(view);
   const { data: accounts = [] } = useAccounts();
@@ -82,12 +80,6 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
   // Where a Shift+click range starts, and where Shift+↑/↓ last got to.
   const cursor = useUi((s) => s.selectionCursor);
   const setAnchor = useUi((s) => s.setSelectionAnchor);
-
-  const [draft, setDraft] = useState(search);
-  useEffect(() => {
-    const timer = setTimeout(() => setSearch(draft), 180);
-    return () => clearTimeout(timer);
-  }, [draft, setSearch]);
 
   const { entries: labelEntries, loaded: labelsLoaded } = useLabelDirectory();
   const labelFilter = useUi((s) => s.labelFilter);
@@ -113,6 +105,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
   const query = useThreads(view, filter, searchText, labelFilters, labelNames.length === 0 || labelsLoaded);
   const loaded = flattenThreads(query.data?.pages);
   const sections = groupedByLabel ? groupByLabel(loaded, labelEntries) : null;
+  const codes = useVerificationCodes();
   const threads = sections ? sections.flatMap((section) => section.items) : loaded;
   const ids = threads.map((thread) => thread.id).join("|");
   useEffect(() => {
@@ -182,6 +175,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
       inTrash={info.isTrash}
       inJunk={info.isJunk}
       snoozedUntil={snoozedRows?.get(thread.id)}
+      code={codeFor(codes, thread.id)}
       onContextMenu={(event) => {
         event.preventDefault();
         const threadIds = checked.includes(thread.id) ? checked : [thread.id];
@@ -280,37 +274,7 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
         {/* Pro has the switch in the sidebar; here the sidebar is folded away. */}
         {variant === "simple" && <WorkspaceSwitch />}
 
-        <div className="relative">
-          <Icon
-            icon={ICONS.search}
-            className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted"
-          />
-          <input
-            id={SEARCH_INPUT_ID}
-            type="search"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setDraft("");
-                event.currentTarget.blur();
-              }
-            }}
-            placeholder={t("list.search")}
-            className="h-10 w-full rounded-full border border-transparent bg-canvas pr-[4.5rem] pl-10 text-[13.5px] placeholder:text-muted focus:border-pink focus:bg-surface focus:shadow-focus focus:outline-none [&::-webkit-search-cancel-button]:hidden"
-          />
-          <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center">
-            <SearchHelp
-              onInsert={(term) => {
-                setDraft(withSearchTerm(draft, term));
-                document.getElementById(SEARCH_INPUT_ID)?.focus();
-              }}
-            />
-            {draft && (
-              <IconButton icon={ICONS.close} size="sm" label={t("list.clearSearch")} onClick={() => setDraft("")} />
-            )}
-          </div>
-        </div>
+        {!searchInTitleBar && <MailSearch />}
 
         {checked.length > 0 ? (
           <div
@@ -389,6 +353,8 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
             })}
           </div>
         )}
+
+        <VerificationCodeBar codes={codes} className="-mx-1 px-1" />
       </header>
 
       <div
@@ -425,14 +391,23 @@ export function ThreadList({ variant, className, style }: ThreadListProps) {
           />
         ) : (
           <>
-            {(sections ?? [{ entry: undefined, items: threads }]).map((section) => (
-              <Fragment
-                key={section.entry ? `${section.entry.scope}:${section.entry.label.id}` : String(section.entry)}
-              >
-                {section.entry !== undefined && <SectionHeading entry={section.entry} count={section.items.length} />}
-                {section.items.map((thread) => renderRow(thread))}
-              </Fragment>
-            ))}
+            {sections
+              ? sections.map((section) => (
+                  <Fragment key={section.entry ? `${section.entry.scope}:${section.entry.label.id}` : "none"}>
+                    <SectionHeading entry={section.entry} count={section.items.length} />
+                    {section.items.map((thread) => renderRow(thread))}
+                  </Fragment>
+                ))
+              : snoozedRows
+                ? threads.map((thread) => renderRow(thread))
+                : groupByDay(threads, (thread) => thread.lastDate).map((day, index) => (
+                    <Fragment key={`${day.group}-${index}`}>
+                      <h2 className="sticky top-0 z-[1] bg-surface px-3 pt-3 pb-1 text-[12px] font-bold text-muted">
+                        {t(`list.day.${day.group}`)}
+                      </h2>
+                      {day.items.map((thread) => renderRow(thread))}
+                    </Fragment>
+                  ))}
             {rowMenu && (
               <div
                 className="fixed z-40"

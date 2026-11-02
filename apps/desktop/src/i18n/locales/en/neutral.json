@@ -65,7 +65,13 @@
     "count_other": "{{count}} messages",
     "selected_one": "{{count}} selected",
     "selected_other": "{{count}} selected",
-    "clearSelection": "Clear selection"
+    "clearSelection": "Clear selection",
+    "day": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "week": "This week",
+      "older": "Older"
+    }
   },
   "reader": {
     "empty": {
@@ -135,7 +141,8 @@
     "copyAddress": "Copy {{email}}",
     "addressCopied": "Address copied",
     "teamsMeeting": "Teams meeting",
-    "teamsJoin": "Join"
+    "teamsJoin": "Join",
+    "replyAllShort": "All"
   },
   "compose": {
     "new": "New message",
@@ -816,7 +823,8 @@
       "searching": "Searching the server",
       "nothingMore": "The server has no further matches.",
       "failed": "Searching the server didn't work. {{reason}}"
-    }
+    },
+    "mailboxes": "Mailboxes"
   },
   "move": {
     "title": "Move to …",
@@ -2474,5 +2482,36 @@
     "to": "to",
     "days": "Days",
     "noDays": "Pick at least one day, otherwise the quiet hours never start."
+  },
+  "codes": {
+    "bar": "Sign-in codes",
+    "copy": "Copy code {{code}}",
+    "copied": "Code {{code}} copied",
+    "copyFailed": "Couldn't copy.",
+    "remaining": "{{time}} left",
+    "noAutofill": "No autofill",
+    "noAutofillHint": "Found in the mail text, origin not confirmed: not filled in automatically.",
+    "linkNoAutofill": "Sign-in link: never filled in automatically.",
+    "link": "Sign-in link",
+    "open": "Open",
+    "openLabel": "Open sign-in link for {{origin}}",
+    "chip": "Code",
+    "banner": {
+      "signed": "Signed origin (verification info, DKIM checked). Autofill possible on {{origin}}.",
+      "signedNoAutofill": "Signed origin (verification info, DKIM checked).",
+      "link": "Signed origin. You open links yourself.",
+      "heuristic": "Found in the text. Origin not confirmed, so it isn't filled in automatically.",
+      "expired": "This code has expired."
+    },
+    "notification": {
+      "title": "Sign-in code from {sender}",
+      "linkTitle": "Sign-in link from {sender}",
+      "copy": "Copy code"
+    },
+    "lockScreen": "Show code on the lock screen",
+    "lockScreenDesc": "Off: notifications with a sign-in code only say on the lock screen what it is for."
+  },
+  "titlebar": {
+    "search": "Search"
   }
 }

@@ -42,6 +42,7 @@ import {
   toLocalModelServers,
 } from "./assistConvert";
 import type {
+  VerificationCode,
   AccountDomainSignatures,
   LabelCount,
   LabelRef,
@@ -838,6 +839,10 @@ export class TauriBackend implements Backend {
     return call<ImageTextResult>("image_text", { messageId, remote });
   }
 
+  verificationCodes() {
+    return call<VerificationCode[]>("verification_codes");
+  }
+
   async assistFeatures(accountId: string) {
     return toAssistFeaturesOrNull(await call<unknown>("assist_features", { accountId }));
   }
@@ -1060,6 +1065,12 @@ export class TauriBackend implements Backend {
     many: string;
     mutedAccounts: string[];
     quietHours: { from: string; to: string; days: number[] } | null;
+    /** Mails with a sign-in code: titles (`{sender}` for who sent it) and the copy button. */
+    codeTitle?: string;
+    linkTitle?: string;
+    copyCode?: string;
+    /** The lock screen shows the code itself, not only where it is from. */
+    codeOnLockScreen?: boolean;
   }) {
     return call<void>("set_notification_prefs", prefs);
   }

@@ -12,6 +12,8 @@ import { AssistForAccount } from "../assist/useAssist";
 import { MessageView } from "./MessageView";
 import { requestMove } from "./selection";
 import { requestSnooze, someSnoozed, useSnooze } from "./snooze";
+import { useVerificationCodes } from "../verification/useVerificationCodes";
+import { ReaderCodeHint } from "../verification/VerificationCodeBar";
 import { useNyuOnOpen } from "./nyuOnOpen";
 
 interface ThreadReaderProps {
@@ -38,6 +40,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const actions = useMessageActions();
   const { unsnooze } = useSnooze();
   const messages = data?.messages;
+  const codes = useVerificationCodes();
   const loadedThreadId = data?.thread.id;
   useNyuOnOpen(data);
 
@@ -110,6 +113,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
   const trashed = inTrash(all, folders);
   const readOnly = isReadOnly(accounts, latest.accountId);
   const snoozed = someSnoozed(all, folders);
+  const code = codes.find((each) => each.threadId === data.thread.id || ids.includes(each.emailId));
 
   return (
     <section
@@ -117,25 +121,36 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
       className={clsx("flex h-full min-w-0 flex-col bg-canvas", className)}
       aria-label={data.thread.subject}
     >
-      <header className="flex items-center gap-1 border-b border-hairline bg-surface px-3 py-2">
+      <header className="flex flex-wrap items-center gap-1 border-b border-hairline bg-surface px-3 py-2">
         {variant === "simple" && (
           <IconButton icon={ICONS.back} label={t("reader.back")} onClick={() => selectThread(null)} className="mr-1" />
         )}
-        <IconButton
+        <Button
+          size="sm"
+          variant="secondary"
           icon={ICONS.reply}
-          label={t("reader.reply")}
           onClick={() => openCompose({ mode: "reply", source: latest })}
-        />
-        <IconButton
+        >
+          {t("reader.reply")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
           icon={ICONS.replyAll}
-          label={t("reader.replyAll")}
+          aria-label={t("reader.replyAll")}
+          title={t("reader.replyAll")}
           onClick={() => openCompose({ mode: "replyAll", source: latest })}
-        />
-        <IconButton
+        >
+          {t("reader.replyAllShort")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
           icon={ICONS.forward}
-          label={t("reader.forward")}
           onClick={() => openCompose({ mode: "forward", source: latest })}
-        />
+        >
+          {t("reader.forward")}
+        </Button>
         <span className="mx-1.5 h-5 w-px bg-line" aria-hidden />
         {!readOnly && (
           <>
@@ -200,6 +215,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
           <h2 className="selectable px-1 pt-1 pb-2 text-[22px] leading-tight font-extrabold tracking-[-0.01em]">
             {data.thread.subject || t("reader.noSubject")}
           </h2>
+          {code && <ReaderCodeHint code={code} />}
           <AssistForAccount accountId={latest.accountId}>
             <ThreadSummary threadId={latest.threadId} count={all.length} />
           </AssistForAccount>

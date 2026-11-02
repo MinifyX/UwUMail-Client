@@ -25,6 +25,7 @@ pub mod jmap_settings;
 pub mod jmap_sieve;
 pub mod jmap_signatures;
 pub mod jmap_sync;
+pub mod jmap_verification;
 pub mod links;
 pub mod mail_images;
 pub mod mailto;

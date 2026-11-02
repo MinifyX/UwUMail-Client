@@ -24,3 +24,4 @@ mod uwumail_server_caldav;
 mod uwumail_server_calendar;
 mod uwumail_server_contacts;
 mod uwumail_server_imap;
+mod verification_codes;
