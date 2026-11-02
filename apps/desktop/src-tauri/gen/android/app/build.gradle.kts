@@ -17,6 +17,10 @@ val tauriProperties = Properties().apply {
 // so the key is never around while third-party build code runs.
 val keystorePath: String? = System.getenv("UWUMAIL_ANDROID_KEYSTORE")
 
+// The Google Play build (play.yml, with the Rust side's `--no-default-features --features store`): no
+// updater, so no installing of packages either. docs/play-store.md.
+val playBuild = System.getenv("UWUMAIL_ANDROID_PLAY") == "1"
+
 android {
     compileSdk = 36
     namespace = "app.uwumail"
@@ -28,6 +32,10 @@ android {
         versionCode = (System.getenv("UWUMAIL_ANDROID_VERSION_CODE")
             ?: tauriProperties.getProperty("tauri.android.versionCode", "1")).toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+        buildConfigField("boolean", "SELF_UPDATE", (!playBuild).toString())
+    }
+    if (playBuild) {
+        sourceSets.getByName("release").manifest.srcFile("src/play/AndroidManifest.xml")
     }
     signingConfigs {
         if (keystorePath != null) {

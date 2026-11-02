@@ -11,7 +11,25 @@ use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::EngineEvent;
 use uwumail_core::{Engine, Error};
 
+#[cfg(feature = "self-update")]
 pub use uwumail_android::updates::{self, Channel, ReadyUpdate};
+
+/// Without an updater (the Google Play build) the types stay, so the same UI code works everywhere.
+#[cfg(not(feature = "self-update"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Channel {
+    Stable,
+    Beta,
+}
+
+#[cfg(not(feature = "self-update"))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadyUpdate {
+    pub version: String,
+    pub notes: Option<String>,
+}
 
 /// `UwuNative.start`, called from `UwuApplication.onCreate`.
 #[unsafe(no_mangle)]
@@ -51,10 +69,13 @@ pub fn start_engine(app: &mut App) -> Result<Engine, Box<dyn std::error::Error>>
     uwumail_android::launch::on_action(move || {
         let _ = handle.emit("launch:action", ());
     });
-    let handle = app.handle().clone();
-    updates::start(move |update| {
-        let _ = handle.emit("update:ready", update);
-    });
+    #[cfg(feature = "self-update")]
+    {
+        let handle = app.handle().clone();
+        updates::start(move |update| {
+            let _ = handle.emit("update:ready", update);
+        });
+    }
     let data_dir = app.path().app_data_dir()?;
     let cache_dir = app.path().app_cache_dir()?;
     Ok(uwumail_android::engine_for_window(data_dir, cache_dir)?)
@@ -179,22 +200,49 @@ pub fn set_unified_push(enabled: bool, distributor: Option<String>) -> Result<Op
     uwumail_android::call_json("setUnifiedPush", &json!({ "enabled": enabled, "distributor": distributor }))
 }
 
+#[cfg(feature = "self-update")]
 pub fn set_update_channel(_app: &AppHandle, channel: Channel) {
     updates::set_channel(channel);
 }
 
+#[cfg(feature = "self-update")]
 pub fn set_update_checks(_app: &AppHandle, enabled: bool) {
     updates::set_automatic(enabled);
 }
 
+#[cfg(feature = "self-update")]
 pub fn update_status(_app: &AppHandle) -> Option<ReadyUpdate> {
     updates::ready()
 }
 
+#[cfg(feature = "self-update")]
 pub async fn check_for_updates(_app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
     updates::check().await
 }
 
+#[cfg(feature = "self-update")]
 pub async fn install_update(_app: &AppHandle) -> Result<(), Error> {
     updates::install_now()
+}
+
+// The Google Play build: nothing to look for, nothing waiting.
+#[cfg(not(feature = "self-update"))]
+pub fn set_update_channel(_app: &AppHandle, _channel: Channel) {}
+
+#[cfg(not(feature = "self-update"))]
+pub fn set_update_checks(_app: &AppHandle, _enabled: bool) {}
+
+#[cfg(not(feature = "self-update"))]
+pub fn update_status(_app: &AppHandle) -> Option<ReadyUpdate> {
+    None
+}
+
+#[cfg(not(feature = "self-update"))]
+pub async fn check_for_updates(_app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
+    Ok(None)
+}
+
+#[cfg(not(feature = "self-update"))]
+pub async fn install_update(_app: &AppHandle) -> Result<(), Error> {
+    Err(Error::invalid("This UwUMail gets new versions from Google Play."))
 }

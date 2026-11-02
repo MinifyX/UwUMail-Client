@@ -719,7 +719,7 @@ const PRIVACY_POLICY = "https://uwu.minifyx.de/uwumail/privacy";
 function About() {
   const { t } = useT();
   const setShortcutsOpen = useUi((s) => s.setShortcutsOpen);
-  // Not in an App Store build (the store updates it) and not on the iPhone.
+  // Not in a store build (the store updates it) and not on the iPhone.
   const updates = useUpdatesInApp();
   return (
     <div className="flex flex-col items-center gap-4 py-8 text-center">
