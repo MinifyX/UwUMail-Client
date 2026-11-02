@@ -9,7 +9,7 @@ describe("readPaneWidths", () => {
   });
 
   it("keeps saved widths inside the limits", () => {
-    expect(readPaneWidths('{"nav":300,"list":9000}')).toEqual({ nav: 300, list: PANE_LIMITS.list.max });
+    expect(readPaneWidths('{"nav":250,"list":9000}')).toEqual({ nav: 250, list: PANE_LIMITS.list.max });
     expect(clampPane("nav", 10)).toBe(PANE_LIMITS.nav.min);
     expect(clampPane("list", Number.NaN)).toBe(PANE_LIMITS.list.initial);
   });

@@ -31,8 +31,18 @@ export function NotificationSettings() {
     update({ quietHours: { ...quiet, days: days.sort((a, b) => a - b) } });
   };
 
+  const codeOnLockScreen = useSettings((s) => s.notifyCodeOnLockScreen);
+
   return (
     <>
+      <div className="border-b border-hairline py-4">
+        <Toggle
+          checked={codeOnLockScreen}
+          onChange={(notifyCodeOnLockScreen) => update({ notifyCodeOnLockScreen })}
+          label={t("codes.lockScreen")}
+          description={t("codes.lockScreenDesc")}
+        />
+      </div>
       {accounts.length > 0 && (
         <Row label={t("notify.accounts")} description={t("notify.accountsDesc")}>
           <div className="flex flex-col gap-1">

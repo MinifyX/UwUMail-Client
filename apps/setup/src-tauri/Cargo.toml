@@ -11,7 +11,7 @@ rust-version.workspace = true
 tar = { version = "0.4", default-features = false }
 tauri-build = { version = "2", features = [] }
 # Multithreaded compression of the app (build.rs); the setup itself only decompresses.
-zstd = { version = "0.13", features = ["zstdmt"] }
+zstd = { version = "0.14", features = ["zstdmt"] }
 
 [dependencies]
 semver = "1"
@@ -19,7 +19,7 @@ serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
-zstd = "0.13"
+zstd = "0.14"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

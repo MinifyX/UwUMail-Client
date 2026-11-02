@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use uwumail_core::notify::{NotifyPrefs, QuietHours};
 
 const FILE: &str = "notification-prefs.json";
-/// The file holds a switch, three short lines, account ids and quiet hours.
+/// The file holds two switches, six short lines, account ids and quiet hours.
 const MAX_FILE: u64 = 64 * 1024;
 
 struct State {
@@ -64,7 +64,12 @@ fn read(file: &Path) -> Option<NotifyPrefs> {
         .map(|ids| ids.iter().filter_map(Value::as_str).map(str::to_string).collect())
         .unwrap_or_default();
     let quiet = value.get("quietHours").and_then(QuietHours::from_value);
-    Some(NotifyPrefs::new(show_content, &text("newMail"), &text("hidden"), &text("many")).with_filter(muted, quiet))
+    let on_lock_screen = value.get("codeOnLockScreen").and_then(Value::as_bool).unwrap_or(false);
+    Some(
+        NotifyPrefs::new(show_content, &text("newMail"), &text("hidden"), &text("many"))
+            .with_filter(muted, quiet)
+            .with_codes(&text("codeTitle"), &text("linkTitle"), &text("copyCode"), on_lock_screen),
+    )
 }
 
 /// Written next to the file and moved over it, so a crash never leaves half of it.
@@ -76,6 +81,10 @@ fn write(file: &Path, prefs: &NotifyPrefs) -> std::io::Result<()> {
         "many": prefs.many,
         "muted": prefs.muted,
         "quietHours": prefs.quiet.as_ref().map(QuietHours::to_value),
+        "codeTitle": prefs.code_title,
+        "linkTitle": prefs.link_title,
+        "copyCode": prefs.copy_code,
+        "codeOnLockScreen": prefs.code_on_lock_screen,
     });
     let temporary = file.with_extension("json.tmp");
     std::fs::write(&temporary, serde_json::to_vec(&body)?)?;
@@ -116,6 +125,13 @@ mod tests {
         assert_eq!(read(&file), Some(filtered));
         std::fs::write(&file, r#"{"showContent":true,"quietHours":{"from":"25:00","to":"07:00","days":[1]}}"#).unwrap();
         assert_eq!(read(&file).unwrap().quiet, None);
+        // The texts for sign-in codes too; the code stays off the lock screen unless switched on.
+        let codes =
+            NotifyPrefs::default().with_codes("Anmeldecode von {sender}", "Link von {sender}", "Kopieren", true);
+        write(&file, &codes).unwrap();
+        assert_eq!(read(&file), Some(codes));
+        std::fs::write(&file, r#"{"showContent":true}"#).unwrap();
+        assert!(!read(&file).unwrap().code_on_lock_screen);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

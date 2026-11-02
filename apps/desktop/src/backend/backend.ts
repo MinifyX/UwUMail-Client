@@ -1,4 +1,5 @@
 import type {
+  VerificationCode,
   AiConsent,
   AiDestination,
   AiDestinationState,
@@ -486,6 +487,12 @@ export interface Backend {
    */
   imageText(messageId: string, remote: boolean): Promise<ImageTextResult>;
   /**
+   * The sign-in codes and links still valid that the servers found in recent mail
+   * (`urn:uwumail:jmap:verification`), newest first, across accounts. Empty for mailboxes
+   * whose server doesn't find them; the app never looks for codes itself.
+   */
+  verificationCodes(): Promise<VerificationCode[]>;
+  /**
    * Per feature whether the AI assistant can do it now for this mailbox: its UwUMail server's
    * (`urn:uwumail:jmap:assist`) or the providers set up on this device. Null without an assistant,
    * and everything about it stays hidden.
@@ -614,6 +621,12 @@ export interface Backend {
     mutedAccounts: string[];
     /** When nothing notifies; null for never. */
     quietHours: { from: string; to: string; days: number[] } | null;
+    /** Mails with a sign-in code: titles (`{sender}` for who sent it) and the copy button. */
+    codeTitle?: string;
+    linkTitle?: string;
+    copyCode?: string;
+    /** The lock screen shows the code itself, not only where it is from. */
+    codeOnLockScreen?: boolean;
   }): Promise<void>;
   /** The mailto: link UwUMail was opened with, handed out once. */
   takeMailto(): Promise<MailtoDraft | null>;

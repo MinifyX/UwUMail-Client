@@ -65,7 +65,13 @@
     "count_other": "{{count}} Mails",
     "selected_one": "{{count}} ausgewählt",
     "selected_other": "{{count}} ausgewählt",
-    "clearSelection": "Auswahl aufheben"
+    "clearSelection": "Auswahl aufheben",
+    "day": {
+      "today": "Heute",
+      "yesterday": "Gestern",
+      "week": "Diese Woche",
+      "older": "Älter"
+    }
   },
   "reader": {
     "empty": {
@@ -135,7 +141,8 @@
     "copyAddress": "{{email}} kopieren",
     "addressCopied": "Adresse kopiert",
     "teamsMeeting": "Teams-Besprechung",
-    "teamsJoin": "Teilnehmen"
+    "teamsJoin": "Teilnehmen",
+    "replyAllShort": "Allen"
   },
   "compose": {
     "new": "Neue Mail",
@@ -816,7 +823,8 @@
       "searching": "Suche auf dem Server",
       "nothingMore": "Auf dem Server gibt es keine weiteren Treffer.",
       "failed": "Die Suche auf dem Server hat nicht geklappt. {{reason}}"
-    }
+    },
+    "mailboxes": "Postfächer"
   },
   "move": {
     "title": "Verschieben nach …",
@@ -2474,5 +2482,36 @@
     "to": "bis",
     "days": "Tage",
     "noDays": "Wähle mindestens einen Tag, sonst beginnen die Ruhezeiten nie."
+  },
+  "codes": {
+    "bar": "Anmeldecodes",
+    "copy": "Code {{code}} kopieren",
+    "copied": "Code {{code}} kopiert",
+    "copyFailed": "Kopieren hat nicht geklappt.",
+    "remaining": "noch {{time}}",
+    "noAutofill": "Kein Autofill",
+    "noAutofillHint": "Aus dem Mailtext erkannt, Herkunft nicht bestätigt: kein automatisches Einfügen.",
+    "linkNoAutofill": "Anmeldelink: wird nicht automatisch eingefügt.",
+    "link": "Anmeldelink",
+    "open": "Öffnen",
+    "openLabel": "Anmeldelink für {{origin}} öffnen",
+    "chip": "Code",
+    "banner": {
+      "signed": "Signierte Herkunft (Verification-Info, DKIM geprüft). Autofill auf {{origin}} möglich.",
+      "signedNoAutofill": "Signierte Herkunft (Verification-Info, DKIM geprüft).",
+      "link": "Signierte Herkunft. Links öffnest du selbst.",
+      "heuristic": "Aus dem Text erkannt. Herkunft nicht bestätigt, darum kein automatisches Einfügen.",
+      "expired": "Dieser Code ist abgelaufen."
+    },
+    "notification": {
+      "title": "Anmeldecode von {sender}",
+      "linkTitle": "Anmeldelink von {sender}",
+      "copy": "Code kopieren"
+    },
+    "lockScreen": "Code auf dem Sperrbildschirm zeigen",
+    "lockScreenDesc": "Aus: Mitteilungen mit Anmeldecode zeigen auf dem Sperrbildschirm nur, wofür er ist."
+  },
+  "titlebar": {
+    "search": "Suchen"
   }
 }

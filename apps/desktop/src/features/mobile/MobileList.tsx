@@ -1,10 +1,19 @@
 import clsx from "clsx";
-import { Button, EmptyState, Icon, IconButton, ICONS, Pill } from "@uwusuite/design";
-import { useEffect, useRef, useState } from "react";
+import {
+  Button,
+  EmptyState,
+  Fab,
+  Icon,
+  IconButton,
+  ICONS,
+  NavButton,
+  Pill,
+  Screen,
+  type MobilePlatform,
+} from "@uwusuite/design";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isTauri } from "@/backend/backend";
 import { searchServer } from "@/backend/mobile";
-import { withSearchTerm } from "@/lib/searchQuery";
-import { SearchHelp } from "../mail/SearchHelp";
 import type { ListFilter, ThreadSummary } from "@/backend/types";
 import type { SceneName } from "@/components/nyu/scenes";
 import { NyuScene } from "@/components/nyu/scenes";
@@ -29,9 +38,10 @@ import { useViewInfo } from "../mail/view";
 import { openDraftThread } from "../compose/openDraft";
 import { useSelectionActions } from "../mail/selection";
 import { useSnoozedRows } from "../mail/snooze";
-import { WorkspaceSwitch } from "../workspaces/WorkspaceSwitch";
 import { useWorkspaceName } from "../workspaces/workspaces";
-import { PullToRefresh } from "./PullToRefresh";
+import { VerificationCodeBar } from "../verification/VerificationCodeBar";
+import { useVerificationCodes } from "../verification/useVerificationCodes";
+import { codeFor } from "../verification/format";
 import { SwipeRow } from "./SwipeRow";
 import { useThreadActions } from "./threadActions";
 
@@ -46,23 +56,29 @@ const EMPTY_SCENES = {
   other: "emptyFolder",
 } as const satisfies Record<string, SceneName>;
 
-/** The phone's first screen: one column of mail with search, filters, swipes and Nyu's pull to refresh. */
-export function MobileList() {
+/**
+ * A mailbox on a phone, pushed over the mailbox overview: one column of mail with filters, swipes
+ * and pull to refresh. The search sits in the shell (iPhone: beside the tab bar) or comes in as
+ * `searchBar` (Android: at the top, instead of the app bar).
+ */
+export function MobileList({
+  platform,
+  onBack,
+  leading,
+  searchBar,
+}: {
+  platform: MobilePlatform;
+  onBack: () => void;
+  leading?: ReactNode;
+  searchBar?: ReactNode;
+}) {
   const { t } = useT();
   const view = useUi((s) => s.view);
   const filter = useUi((s) => s.filter);
   const search = useUi((s) => s.search);
   const reading = useUi((s) => s.selectedThreadId !== null);
-  const {
-    setFilter,
-    setSearch,
-    selectThread,
-    setVisibleThreadIds,
-    setFolderDrawerOpen,
-    setAddAccountOpen,
-    openCompose,
-    openSettings,
-  } = useUi.getState();
+  const { setFilter, selectThread, setVisibleThreadIds, setAddAccountOpen, openCompose, openSettings } =
+    useUi.getState();
   const layout = useLayout();
   const density = useSettings((s) => s.listDensity);
   const swipeRight = useSettings((s) => s.swipeRight);
@@ -81,23 +97,30 @@ export function MobileList() {
   const selectionActions = useSelectionActions();
   // The card's own quick actions only show on hover, so they stay out of the way on touch.
   const cardActions = useCardActions();
-  const [draftSearch, setDraftSearch] = useState(search);
   // A selection belongs to one folder, filter, search and workspace; switching ends it.
   const [selection, setSelection] = useState<{ key: string; ids: Set<string> }>({ key: "", ids: new Set() });
-  const [compact, setCompact] = useState(false);
   // Results from the server search, for the folder, filter and search they were made for.
   const [server, setServer] = useState<{ key: string; threads: ThreadSummary[] } | null>(null);
   const [searchingServer, setSearchingServer] = useState(false);
   const conversations = useSettings((s) => s.conversations);
-  const scroller = useRef<HTMLDivElement>(null);
-  const lastScroll = useRef(0);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSearch(draftSearch), 180);
-    return () => clearTimeout(timer);
-  }, [draftSearch, setSearch]);
+  const codes = useVerificationCodes();
+  const end = useRef<HTMLLIElement>(null);
 
   const query = useThreads(view, filter, search);
+  // The next page loads as the end of the list comes near.
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+  useEffect(() => {
+    const node = end.current;
+    if (!node || !hasNextPage || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (seen) => {
+        if (seen.some((each) => each.isIntersecting) && !isFetchingNextPage) void fetchNextPage();
+      },
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
   const local = flattenThreads(query.data?.pages);
   const searchKey = JSON.stringify([view, filter, search, conversations, accountIds, includeFolderIds]);
   const fromServer = server?.key === searchKey ? server.threads : null;
@@ -181,10 +204,44 @@ export function MobileList() {
     setSelected(new Set());
   };
 
+  const trailing = (
+    <>
+      {emptiable && (
+        <NavButton
+          icon={ICONS.delete}
+          label={emptiable.role === "junk" ? t("folders.emptyJunk") : t("folders.emptyTrash")}
+          disabled={emptiable.total === 0}
+          platform={platform}
+          onClick={() => useFolderEdit.getState().open({ kind: "empty", folder: emptiable })}
+        />
+      )}
+      {/* iPhone: writing starts top right; Android has the FAB. */}
+      {platform !== "android" && accounts.length > 0 && (
+        <NavButton
+          icon={ICONS.compose}
+          label={t("nav.compose")}
+          platform={platform}
+          onClick={() => openCompose({ mode: "new" })}
+        />
+      )}
+    </>
+  );
+
   return (
-    <section className="flex h-full min-w-0 flex-col bg-surface" aria-label={info.title}>
-      <header className="flex flex-col gap-2.5 px-3 pt-2 pb-2">
-        {selecting ? (
+    <Screen
+      title={info.title}
+      subtitle={info.subtitle}
+      largeTitle
+      leading={leading}
+      trailing={trailing}
+      onBack={onBack}
+      onRefresh={refresh}
+      searchBar={selecting ? undefined : searchBar}
+      platform={platform}
+      className="uwu-push-in"
+    >
+      <div className="sticky top-0 z-10 flex flex-col gap-2.5 bg-[inherit] px-3 pb-2">
+        {selecting && (
           <div className="flex h-12 items-center gap-1 rounded-2xl bg-pink-tint px-1 text-pink-ink">
             <IconButton icon={ICONS.close} label={t("mobile.selection.clear")} onClick={() => setSelected(new Set())} />
             <p className="min-w-0 flex-1 truncate text-[15px] font-bold">
@@ -200,52 +257,7 @@ export function MobileList() {
             />
             <IconButton icon={ICONS.move} label={t("reader.move")} onClick={moveSelection} />
           </div>
-        ) : (
-          <div className="flex h-12 items-center gap-1">
-            <IconButton icon={ICONS.menu} label={t("nav.menu")} onClick={() => setFolderDrawerOpen(true)} />
-            <div className="min-w-0 flex-1 px-1">
-              <h1 className="truncate text-[20px] leading-tight font-extrabold tracking-[-0.01em]">{info.title}</h1>
-              {info.subtitle && <p className="truncate text-[12px] text-muted">{info.subtitle}</p>}
-            </div>
-            {emptiable && (
-              <IconButton
-                icon={ICONS.delete}
-                label={emptiable.role === "junk" ? t("folders.emptyJunk") : t("folders.emptyTrash")}
-                disabled={emptiable.total === 0}
-                onClick={() => useFolderEdit.getState().open({ kind: "empty", folder: emptiable })}
-              />
-            )}
-            <IconButton
-              icon={ICONS.refresh}
-              label={t("list.refresh")}
-              className={clsx(query.isFetching && "[&>svg]:animate-spin")}
-              onClick={() => void refresh()}
-            />
-          </div>
         )}
-
-        <WorkspaceSwitch size="lg" />
-
-        <div className="relative">
-          <Icon
-            icon={ICONS.search}
-            className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted"
-          />
-          <input
-            type="search"
-            value={draftSearch}
-            onChange={(event) => setDraftSearch(event.target.value)}
-            placeholder={t("list.search")}
-            enterKeyHint="search"
-            className="h-11 w-full rounded-full border border-transparent bg-canvas pr-[5.5rem] pl-10 text-[15px] placeholder:text-muted focus:border-pink focus:bg-surface focus:shadow-focus focus:outline-none [&::-webkit-search-cancel-button]:hidden"
-          />
-          <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center">
-            <SearchHelp onInsert={(term) => setDraftSearch(withSearchTerm(draftSearch, term))} />
-            {draftSearch && (
-              <IconButton icon={ICONS.close} label={t("list.clearSearch")} onClick={() => setDraftSearch("")} />
-            )}
-          </div>
-        </div>
 
         <div className="-mx-3 flex [scrollbar-width:none] gap-2 overflow-x-auto px-3 pb-0.5" role="toolbar">
           {FILTERS.map((item) => (
@@ -254,125 +266,105 @@ export function MobileList() {
             </Pill>
           ))}
         </div>
-      </header>
+        <VerificationCodeBar codes={codes} className="-mx-3 px-3" />
+      </div>
 
-      <PullToRefresh scrollRef={scroller} onRefresh={refresh}>
-        <div
-          ref={scroller}
-          onScroll={(event) => {
-            const top = event.currentTarget.scrollTop;
-            // The write button shrinks while scrolling down and grows again going up.
-            if (Math.abs(top - lastScroll.current) > 6) setCompact(top > lastScroll.current && top > 24);
-            lastScroll.current = top;
-            if (
-              query.hasNextPage &&
-              !query.isFetchingNextPage &&
-              top + event.currentTarget.clientHeight > event.currentTarget.scrollHeight - 600
-            ) {
-              void query.fetchNextPage();
+      <div className="pb-32">
+        {query.isPending ? (
+          <p className="px-6 py-10 text-center text-[13px] text-muted">{t("list.loading")}</p>
+        ) : threads.length === 0 ? (
+          <EmptyState
+            art={<NyuScene name={EMPTY_SCENES[empty]} />}
+            title={t(`list.empty.${empty}.title`, { name: workspaceName(activeWorkspace) })}
+            body={t(`list.empty.${empty}.body`)}
+            action={
+              empty === "noAccount" ? (
+                <Button variant="primary" icon={ICONS.add} onClick={() => setAddAccountOpen(true)}>
+                  {t("nav.addAccount")}
+                </Button>
+              ) : empty === "workspace" ? (
+                <Button variant="primary" icon={ICONS.account} onClick={() => openSettings("accounts")}>
+                  {t("workspace.assign")}
+                </Button>
+              ) : (
+                serverButton
+              )
             }
-          }}
-          className="h-full overflow-y-auto overscroll-contain pb-28"
-        >
-          {query.isPending ? (
-            <p className="px-6 py-10 text-center text-[13px] text-muted">{t("list.loading")}</p>
-          ) : threads.length === 0 ? (
-            <EmptyState
-              art={<NyuScene name={EMPTY_SCENES[empty]} />}
-              title={t(`list.empty.${empty}.title`, { name: workspaceName(activeWorkspace) })}
-              body={t(`list.empty.${empty}.body`)}
-              action={
-                empty === "noAccount" ? (
-                  <Button variant="primary" icon={ICONS.add} onClick={() => setAddAccountOpen(true)}>
-                    {t("nav.addAccount")}
-                  </Button>
-                ) : empty === "workspace" ? (
-                  <Button variant="primary" icon={ICONS.account} onClick={() => openSettings("accounts")}>
-                    {t("workspace.assign")}
-                  </Button>
-                ) : (
-                  serverButton
-                )
-              }
-              className="min-h-full"
-            />
-          ) : (
-            <ul className={clsx("flex flex-col px-2", density === "compact" ? "gap-px" : "gap-1")}>
-              {threads.map((thread) => {
-                const isSelected = selected.has(thread.id);
-                return (
-                  <li key={thread.id}>
-                    <SwipeRow
-                      right={swipeRight}
-                      left={swipeLeft}
-                      unread={thread.unreadCount > 0}
-                      selecting={selecting}
-                      inJunk={info.isJunk}
-                      onSwipe={(action) => void threadActions.run(action, [thread], info.isJunk)}
-                      onLongPress={() => toggle(thread.id)}
-                    >
-                      <div className="relative">
-                        <ThreadRow
-                          thread={thread}
-                          variant={layout}
-                          density={density}
-                          selected={isSelected}
-                          accounts={accounts}
-                          showAccount={showAccount}
-                          actions={cardActions}
-                          inTrash={info.isTrash}
-                          inJunk={info.isJunk}
-                          snoozedUntil={snoozedRows?.get(thread.id)}
-                          onSelect={() =>
-                            selecting
-                              ? toggle(thread.id)
-                              : info.isDrafts
-                                ? void openDraftThread(thread.id)
-                                : selectThread(thread.id)
-                          }
-                        />
-                        {isSelected && (
-                          // Covers the sender picture, wherever the card's density puts it.
-                          <span
-                            aria-hidden
-                            className={clsx(
-                              "pointer-events-none absolute grid animate-pop place-items-center rounded-full bg-pink-solid text-on-pink",
-                              density === "compact"
-                                ? "top-2 left-6 size-7"
-                                : clsx("top-3 left-[26px]", layout === "pro" ? "size-9" : "size-10"),
-                            )}
-                          >
-                            <Icon icon={ICONS.done} size={density === "compact" ? "sm" : "lg"} />
-                          </span>
-                        )}
-                      </div>
-                    </SwipeRow>
-                  </li>
-                );
-              })}
-              {query.isFetchingNextPage && (
-                <li className="py-4 text-center text-[12.5px] text-muted">{t("list.loading")}</li>
-              )}
-              {serverButton && !query.hasNextPage && <li className="flex justify-center px-4 py-5">{serverButton}</li>}
-            </ul>
-          )}
-        </div>
-      </PullToRefresh>
+            className="min-h-full"
+          />
+        ) : (
+          <ul className={clsx("flex flex-col px-2", density === "compact" ? "gap-px" : "gap-1")}>
+            {threads.map((thread) => {
+              const isSelected = selected.has(thread.id);
+              return (
+                <li key={thread.id}>
+                  <SwipeRow
+                    right={swipeRight}
+                    left={swipeLeft}
+                    unread={thread.unreadCount > 0}
+                    selecting={selecting}
+                    inJunk={info.isJunk}
+                    onSwipe={(action) => void threadActions.run(action, [thread], info.isJunk)}
+                    onLongPress={() => toggle(thread.id)}
+                  >
+                    <div className="relative">
+                      <ThreadRow
+                        thread={thread}
+                        variant={layout}
+                        density={density}
+                        selected={isSelected}
+                        accounts={accounts}
+                        showAccount={showAccount}
+                        actions={cardActions}
+                        inTrash={info.isTrash}
+                        inJunk={info.isJunk}
+                        snoozedUntil={snoozedRows?.get(thread.id)}
+                        code={codeFor(codes, thread.id)}
+                        onSelect={() =>
+                          selecting
+                            ? toggle(thread.id)
+                            : info.isDrafts
+                              ? void openDraftThread(thread.id)
+                              : selectThread(thread.id)
+                        }
+                      />
+                      {isSelected && (
+                        // Covers the sender picture, wherever the card's density puts it.
+                        <span
+                          aria-hidden
+                          className={clsx(
+                            "pointer-events-none absolute grid animate-pop place-items-center rounded-full bg-pink-solid text-on-pink",
+                            density === "compact"
+                              ? "top-2 left-6 size-7"
+                              : clsx("top-3 left-[26px]", layout === "pro" ? "size-9" : "size-10"),
+                          )}
+                        >
+                          <Icon icon={ICONS.done} size={density === "compact" ? "sm" : "lg"} />
+                        </span>
+                      )}
+                    </div>
+                  </SwipeRow>
+                </li>
+              );
+            })}
+            <li ref={end} aria-hidden />
+            {query.isFetchingNextPage && (
+              <li className="py-4 text-center text-[12.5px] text-muted">{t("list.loading")}</li>
+            )}
+            {serverButton && !query.hasNextPage && <li className="flex justify-center px-4 py-5">{serverButton}</li>}
+          </ul>
+        )}
+      </div>
 
-      {!selecting && !reading && accounts.length > 0 && (
-        <button
-          type="button"
+      {platform === "android" && !selecting && !reading && accounts.length > 0 && (
+        <Fab
+          extended
+          icon={ICONS.compose}
+          label={t("nav.compose")}
+          className="fixed right-4 bottom-[calc(var(--uwu-safe-bottom,0px)+96px)] z-20"
           onClick={() => openCompose({ mode: "new" })}
-          aria-label={t("nav.compose")}
-          className={clsx(
-            "fixed right-4 bottom-4 z-20 flex h-14 items-center justify-center gap-2 rounded-2xl bg-pink-solid font-bold text-on-pink shadow-primary transition-[width,padding] duration-200 active:scale-95",
-            compact ? "w-14" : "px-5",
-          )}
-        >
-          <Icon icon={ICONS.compose} size="lg" className="shrink-0" />
-          {!compact && <span className="text-[15px]">{t("nav.compose")}</span>}
-        </button>
+        />
       )}
-    </section>
+    </Screen>
   );
 }

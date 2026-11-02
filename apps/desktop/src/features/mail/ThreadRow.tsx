@@ -8,6 +8,8 @@ import type { useThreadActions } from "@/lib/queries";
 import type { ListDensity } from "@/state/settings";
 import { isReadOnly } from "@/state/sharedMailboxes";
 import { ThreadLabelChips } from "../assist/LabelChips";
+import type { VerificationCode } from "../verification/types";
+import { SubjectCodeChip } from "../verification/VerificationCodeBar";
 import { formatSnoozeTime } from "./snooze";
 import { endThreadDrag, startThreadDrag } from "./threadDrag";
 
@@ -31,6 +33,8 @@ interface ThreadRowProps {
   /** When the row's snooze ends (in the Snoozed folder): shown instead of its date. */
   snoozedUntil?: string;
   onContextMenu?: (event: React.MouseEvent) => void;
+  /** A working sign-in code in the conversation: marked before the subject. */
+  code?: VerificationCode;
 }
 
 function QuickAction({
@@ -80,6 +84,7 @@ export function ThreadRow({
   inJunk = false,
   snoozedUntil,
   onContextMenu,
+  code,
 }: ThreadRowProps) {
   const { t, i18n } = useT();
   const compact = density === "compact";
@@ -190,6 +195,7 @@ export function ThreadRow({
 
         {compact ? (
           <span className="flex min-w-0 items-center gap-1.5 text-[13px]">
+            {code && <SubjectCodeChip code={code} />}
             <ThreadLabelChips accountId={thread.accountIds[0]} keywords={thread.keywords} />
             <span className="min-w-0 truncate">
               <span className={clsx(unread ? "font-semibold text-ink" : "text-ink/80")}>{subject}</span>
@@ -199,6 +205,7 @@ export function ThreadRow({
         ) : (
           <>
             <span className="flex min-w-0 items-center gap-1.5">
+              {code && <SubjectCodeChip code={code} />}
               <ThreadLabelChips accountId={thread.accountIds[0]} keywords={thread.keywords} />
               <span
                 className={clsx("min-w-0 truncate text-[13.5px]", unread ? "font-semibold text-ink" : "text-ink/80")}

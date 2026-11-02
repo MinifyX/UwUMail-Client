@@ -138,7 +138,28 @@ pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
     if !prefs.rings_now(account_id) {
         return;
     }
-    if let Ok(messages) = engine.messages(message_ids) {
+    // A mail with a sign-in code gets a notification of its own (in its own place, so the next
+    // mail doesn't replace it). Its body is what may show on a locked screen: only where the code
+    // is for, unless Settings let the code show there. The desktop systems have no "Copy code"
+    // button here (the notification plugin has no desktop actions); a click opens UwUMail, whose
+    // code bar copies it.
+    let mut plain = Vec::with_capacity(message_ids.len());
+    for id in message_ids {
+        match engine.code_notification(&prefs, id, notify::NotifyPlatform::Desktop) {
+            Some((_, note)) => {
+                #[cfg(target_os = "linux")]
+                let body = notify::markup_escape(&note.locked_body);
+                #[cfg(not(target_os = "linux"))]
+                let body = note.locked_body;
+                crate::mail_notifications::show(app, &format!("code:{id}"), note.title, body);
+            }
+            None => plain.push(id.clone()),
+        }
+    }
+    if plain.is_empty() {
+        return;
+    }
+    if let Ok(messages) = engine.messages(&plain) {
         let mails: Vec<notify::NotifiedMail<'_>> = messages
             .iter()
             .map(|message| notify::NotifiedMail {

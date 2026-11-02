@@ -149,6 +149,8 @@ struct Inner {
     ocr_permits: Arc<tokio::sync::Semaphore>,
     /// The text in the pictures of the mails read last.
     image_texts: Mutex<crate::ocr::ResultCache>,
+    /// The sign-in codes still valid per account, in memory only (see `verification_ops`).
+    verification_codes: Mutex<verification_ops::CodeCache>,
     /// The AI assistant's streams and auto-label queue.
     assist: assist_ops::AssistState,
     /// Graph and Google tokens and addresses for calendars and contacts of cloud sign-ins.
@@ -213,6 +215,7 @@ mod jmap_shared_ops;
 mod send_later_ops;
 mod shared_ops;
 mod snooze_ops;
+mod verification_ops;
 pub use snooze_ops::{SNOOZED_FOLDER, SnoozedMessage, UnsnoozeOutcome};
 
 impl Engine {
@@ -259,6 +262,7 @@ impl Engine {
                 recognizer: options.recognizer,
                 ocr_permits: Arc::new(tokio::sync::Semaphore::new(crate::ocr::PARALLEL)),
                 image_texts: Mutex::new(crate::ocr::ResultCache::default()),
+                verification_codes: Mutex::new(verification_ops::CodeCache::default()),
                 assist: assist_ops::AssistState::new(),
                 cloud: cloud_ops::CloudState::default(),
                 shared_lock: AsyncMutex::new(()),
@@ -667,6 +671,7 @@ impl Engine {
         self.inner.jmap.lock().await.remove(account_id);
         self.inner.calendar_sources.lock().await.remove(account_id);
         self.inner.calendar_lists.lock().unwrap().remove(account_id);
+        self.inner.forget_verification_codes(account_id);
         self.inner.forget_cloud(account_id).await;
         self.remove_cached_attachments(account_id)?;
         self.inner.store.delete_account(account_id)?;
@@ -2165,6 +2170,9 @@ impl Inner {
         let keep = self.recently_created(account_id);
         let folders_changed = jmap_sync::sync_mailboxes(client, &self.store, account_id, &keep).await?;
         let result = jmap_sync::sync_emails(client, &self.store, account_id, self.full_after()).await?;
+        // Before new mail is announced, so its notification can show the code.
+        let mail_changed = result.changed || !result.new_message_ids.is_empty();
+        self.refresh_verification_codes(client, account_id, mail_changed).await;
         if !result.new_message_ids.is_empty() {
             let inbox = self.store.folder_by_role(account_id, FolderRole::Inbox)?.map(|f| f.id);
             let arrived: Vec<Message> = self

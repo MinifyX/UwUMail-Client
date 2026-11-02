@@ -17,5 +17,5 @@ mod secrets;
 pub mod updates;
 
 pub use bridge::{call, call_json};
-pub use host::{cache_dir, engine, engine_for_window, runtime};
+pub use host::{cache_dir, engine, engine_for_window, runtime, set_notify_prefs};
 pub use jni;

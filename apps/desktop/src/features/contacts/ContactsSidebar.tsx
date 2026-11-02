@@ -24,7 +24,6 @@ import { queryKeys, useAccounts } from "@/lib/queries";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { SignInAgainHint } from "../accounts/SignInAgain";
-import { AppSwitch } from "../shell/AppSwitch";
 import { startNewContact, useContactsUi } from "./state";
 import { useAddressBooks, useContacts, useContactsAccounts } from "./useContactsData";
 
@@ -52,7 +51,6 @@ export function ContactsSidebar({ className, onNavigate }: { className?: string;
       <div className="flex items-center justify-between px-2">
         <Wordmark product="Mail" shell="mail" className="text-[19px]" />
       </div>
-      <AppSwitch />
       <Button
         variant="primary"
         size="lg"

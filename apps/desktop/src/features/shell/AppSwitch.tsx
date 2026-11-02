@@ -5,7 +5,7 @@ import { useUi, type AppSection } from "@/state/ui";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { useContactsAvailable } from "../contacts/useContactsData";
 
-const SECTIONS: { id: AppSection; icon: IconProps["icon"] }[] = [
+export const SECTIONS: { id: AppSection; icon: IconProps["icon"] }[] = [
   { id: "mail", icon: ICONS.mail },
   { id: "calendar", icon: ICONS.calendar },
   { id: "contacts", icon: ICONS.contacts },

@@ -135,6 +135,8 @@ export interface Settings {
   runInBackground: boolean;
   /** New-mail notifications name sender and subject; off, they only say that new mail came. */
   notifyShowContent: boolean;
+  /** Notifications of mails with a sign-in code show the code on the lock screen too. */
+  notifyCodeOnLockScreen: boolean;
   /** Mailboxes (lower-case addresses) whose new mail doesn't notify. Follows the account as `notify.muted:<addr>`. */
   notifyMuted: string[];
   quietHours: QuietHours;
@@ -241,6 +243,7 @@ export const DEFAULT_SETTINGS: Settings = {
   privacyProxy: "",
   runInBackground: true,
   notifyShowContent: true,
+  notifyCodeOnLockScreen: false,
   notifyMuted: [],
   quietHours: { enabled: false, from: "22:00", to: "07:00", days: [0, 1, 2, 3, 4, 5, 6] },
   snoozes: {},

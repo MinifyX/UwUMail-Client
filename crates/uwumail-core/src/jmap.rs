@@ -30,6 +30,9 @@ pub const REMOTE: &str = "urn:uwumail:jmap:remote";
 pub const CONTACTS: &str = "urn:ietf:params:jmap:contacts";
 /// A UwUMail server that reads the text in a mail's pictures (UwUMail-Server docs/jmap-image-text.md).
 pub const IMAGETEXT: &str = "urn:uwumail:jmap:imagetext";
+/// A UwUMail server that finds sign-in codes and links in mail (`VerificationCode/query`, the
+/// `verification` property of an Email; UwUMail-Server docs/jmap-verification.md).
+pub const VERIFICATION: &str = "urn:uwumail:jmap:verification";
 /// Our own: birthday events of other calendars moved into the contacts (`Birthdays/scan`,
 /// `Birthdays/import`), from UwUMail-Server 0.18 on. Its birthdays calendar comes with it.
 pub const BIRTHDAYS: &str = "urn:uwumail:jmap:birthdays";
@@ -140,6 +143,8 @@ pub struct Session {
     pub vapid_key: Option<String>,
     /// The server reads the text in a mail's pictures (`Email/imageText`, a UwUMail server).
     pub image_text: bool,
+    /// The server finds sign-in codes in the mail of the login's own account (`VERIFICATION`).
+    pub verification: bool,
     /// The account whose signatures per domain this login manages (`urn:uwumail:jmap:signatures`).
     pub signatures_account_id: Option<String>,
     /// The session's `state`: API answers carry it as `sessionState`, and a different one there
@@ -327,6 +332,7 @@ impl Session {
                 .filter(|key| !key.is_empty())
                 .map(String::from),
             image_text: capabilities.contains_key(IMAGETEXT),
+            verification: capabilities.contains_key(VERIFICATION),
             signatures_account_id,
             state: text("state").map(String::from),
             assist,
@@ -357,6 +363,8 @@ impl Session {
             birthdays_account_id: None,
             signatures_account_id: None,
             vapid_key: None,
+            // Sign-in codes are the login's own: never offered for someone else's mail.
+            verification: false,
             assist: None,
             masked: None,
             profile: None,
@@ -637,6 +645,9 @@ impl Client {
         }
         if self.session.image_text {
             using.push(IMAGETEXT);
+        }
+        if self.session.verification {
+            using.push(VERIFICATION);
         }
         if self.session.birthdays_account_id.is_some() {
             using.push(BIRTHDAYS);

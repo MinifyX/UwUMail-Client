@@ -65,6 +65,8 @@ export const queryKeys = {
   calendarPeople: (accountId: string) => ["calendarPeople", accountId] as const,
   /** The photo Microsoft or Google keep for a contact. */
   contactPhoto: (id: string) => ["contactPhoto", id] as const,
+  /** Sign-in codes the servers found in recent mail (features/verification). */
+  verificationCodes: ["verificationCodes"] as const,
 };
 
 export function useAccounts() {
@@ -510,6 +512,7 @@ export function useBackendEvents() {
 
   const notifyShowContent = useSettings((s) => s.notifyShowContent);
   const notifyMuted = useSettings((s) => s.notifyMuted);
+  const codeOnLockScreen = useSettings((s) => s.notifyCodeOnLockScreen);
   const quietHours = useSettings((s) => s.quietHours);
   // Muted mailboxes are named by address in the settings and by id where the shell rings.
   const mutedAccounts = useMemo(() => {
@@ -526,9 +529,13 @@ export function useBackendEvents() {
         many: t("push.notification.many", { n: "{n}" }),
         mutedAccounts: mutedKey ? mutedKey.split("\n") : [],
         quietHours: quietHours.enabled ? { from: quietHours.from, to: quietHours.to, days: quietHours.days } : null,
+        codeTitle: t("codes.notification.title"),
+        linkTitle: t("codes.notification.linkTitle"),
+        copyCode: t("codes.notification.copy"),
+        codeOnLockScreen,
       })
       .catch(() => {});
-  }, [notifyShowContent, t, mutedKey, quietHours]);
+  }, [notifyShowContent, t, mutedKey, quietHours, codeOnLockScreen]);
 
   // Remote pictures wait for this before they go anywhere. A kept address was checked when it was
   // saved; should the app still turn it down, they stay away rather than leave without it.
@@ -575,6 +582,7 @@ export function useBackendEvents() {
           // The open conversation too: a reply or a draft may have joined it. Unchanged data keeps its objects.
           void client.invalidateQueries({ queryKey: queryKeys.thread });
           void client.invalidateQueries({ queryKey: queryKeys.folders });
+          void client.invalidateQueries({ queryKey: queryKeys.verificationCodes });
           break;
         case "send:done":
           toast(t("toast.sent"), "success", "sent");
@@ -594,6 +602,8 @@ export function useBackendEvents() {
           break;
         case "mail:received":
           toast(t("toast.newMail", { count: event.messageIds.length }), "info");
+          // The engine asked for the new mail's codes before it said the mail came.
+          void client.invalidateQueries({ queryKey: queryKeys.verificationCodes });
           break;
         case "account:status":
           void client.invalidateQueries({ queryKey: queryKeys.accounts });
@@ -603,6 +613,7 @@ export function useBackendEvents() {
           void client.invalidateQueries({ queryKey: queryKeys.folders });
           void client.invalidateQueries({ queryKey: queryKeys.identities });
           void client.invalidateQueries({ queryKey: queryKeys.serverAccountFeatures });
+          void client.invalidateQueries({ queryKey: queryKeys.verificationCodes });
           break;
         case "calendar:changed":
           void client.invalidateQueries({ queryKey: queryKeys.calendars });
