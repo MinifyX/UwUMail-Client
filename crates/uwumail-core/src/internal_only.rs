@@ -15,7 +15,8 @@ use crate::error::{Error, ErrorCode, Result};
 const MAX_DOMAINS: usize = 10_000;
 
 /// The domains a mailbox may send to, from its submission capability; `None` when it may send
-/// anywhere. An internal-only mailbox whose server names no domains may send nowhere.
+/// anywhere. An internal-only mailbox whose server names no (usable) domains is treated as
+/// unrestricted too: an empty list means "unknown", not "nowhere", so nothing is blocked wrongly.
 pub fn from_capability(capability: Option<&Value>) -> Option<Vec<String>> {
     let capability = capability?;
     if capability.get("uwuInternalOnly").and_then(Value::as_bool) != Some(true) {
@@ -28,12 +29,14 @@ pub fn from_capability(capability: Option<&Value>) -> Option<Vec<String>> {
         .unwrap_or_default();
     domains.sort();
     domains.dedup();
-    Some(domains)
+    (!domains.is_empty()).then_some(domains)
 }
 
-/// A domain as it is compared: trimmed, without a final dot, in lower case.
+/// A domain as it is compared: trimmed, without a final dot, in lower case, IDNA-encoded to ASCII
+/// (the server lists punycode). If that fails the lower-cased input is kept.
 fn normal_domain(domain: &str) -> Option<String> {
     let domain = domain.trim().trim_end_matches('.').to_lowercase();
+    let domain = idna::domain_to_ascii(&domain).ok().filter(|ascii| !ascii.is_empty()).unwrap_or(domain);
     let fine = !domain.is_empty()
         && domain.len() <= 253
         && !domain.chars().any(|c| c.is_whitespace() || c.is_control() || matches!(c, '@' | '<' | '>'));
@@ -68,7 +71,8 @@ pub fn external<'a>(recipients: impl IntoIterator<Item = &'a str>, domains: &[St
 
 /// Refuses a mail to recipients the mailbox may not send to (`domains` from [`from_capability`]).
 pub fn check<'a>(domains: Option<&[String]>, recipients: impl IntoIterator<Item = &'a str>) -> Result<()> {
-    let Some(domains) = domains else { return Ok(()) };
+    // `None` and an empty list both mean "no (known) restriction".
+    let Some(domains) = domains.filter(|domains| !domains.is_empty()) else { return Ok(()) };
     let outside = external(recipients, domains);
     if outside.is_empty() {
         return Ok(());
@@ -98,7 +102,13 @@ mod tests {
             }))),
             Some(vec!["a.test".to_string(), "b.example".to_string()])
         );
-        assert_eq!(from_capability(Some(&json!({ "uwuInternalOnly": true }))), Some(Vec::new()));
+        assert_eq!(
+            from_capability(Some(&json!({ "uwuInternalOnly": true }))),
+            None,
+            "no domains: unknown, not blocked"
+        );
+        assert_eq!(from_capability(Some(&json!({ "uwuInternalOnly": true, "uwuInternalDomains": [] }))), None);
+        assert_eq!(from_capability(Some(&json!({ "uwuInternalOnly": true, "uwuInternalDomains": ["", "x@y"] }))), None);
     }
 
     #[test]
@@ -123,6 +133,25 @@ mod tests {
         let error = check(Some(&domains), ["mini@a.test", "x@example.com"]).unwrap_err();
         assert_eq!(error.code, ErrorCode::Forbidden);
         assert!(error.message.contains("x@example.com"));
-        assert!(check(Some(&[]), ["mini@a.test"]).is_err(), "no hosted domains: nowhere to send");
+        assert!(check(Some(&[]), ["mini@a.test"]).is_ok(), "empty list: unknown, nothing blocked");
+    }
+
+    #[test]
+    fn compares_idn_domains_in_ascii() {
+        let hosted = from_capability(Some(&json!({
+            "uwuInternalOnly": true, "uwuInternalDomains": ["xn--bcher-kva.example"]
+        })))
+        .unwrap();
+        assert!(check(Some(&hosted), ["kim@bücher.example"]).is_ok(), "Unicode form of a hosted domain");
+        assert!(check(Some(&hosted), ["kim@BÜCHER.example"]).is_ok());
+        assert!(check(Some(&hosted), ["kim@xn--bcher-kva.example"]).is_ok());
+        let unicode = from_capability(Some(&json!({
+            "uwuInternalOnly": true, "uwuInternalDomains": ["bücher.example"]
+        })))
+        .unwrap();
+        assert!(check(Some(&unicode), ["kim@xn--bcher-kva.example"]).is_ok());
+        assert!(check(Some(&hosted), ["kim@bucher.example"]).is_err());
+        assert!(check(Some(&hosted), ["kim@xn--bcher-kva.example/x"]).is_err(), "no stripping of a path");
+        assert!(check(Some(&hosted), ["kim@xn--bcher-kva.example:25"]).is_err(), "no stripping of a port");
     }
 }

@@ -7,5 +7,7 @@ import { useServerAccountFeatures } from "../masked/useMasked";
  */
 export function useInternalDomains(accountId: string): string[] | null {
   const { data: features } = useServerAccountFeatures();
-  return features?.find((entry) => entry.accountId === accountId)?.internalDomains ?? null;
+  const domains = features?.find((entry) => entry.accountId === accountId)?.internalDomains;
+  // An empty list means "unknown", not "nowhere": nothing is marked or blocked then.
+  return domains && domains.length > 0 ? domains : null;
 }

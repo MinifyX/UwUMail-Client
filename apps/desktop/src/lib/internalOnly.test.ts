@@ -30,6 +30,19 @@ describe("isInternal", () => {
   it("lets nothing through when the server names no domains", () => {
     expect(isInternal("kim@a.test", [])).toBe(false);
   });
+
+  it("treats the Unicode form of a punycode domain as internal", () => {
+    expect(isInternal("kim@bücher.example", ["xn--bcher-kva.example"])).toBe(true);
+    expect(isInternal("kim@BÜCHER.example", ["xn--bcher-kva.example"])).toBe(true);
+    expect(isInternal("kim@xn--bcher-kva.example", ["xn--bcher-kva.example"])).toBe(true);
+    expect(isInternal("kim@bucher.example", ["xn--bcher-kva.example"])).toBe(false);
+  });
+
+  it("never lets URL syntax turn a foreign domain into a hosted one", () => {
+    for (const bad of ["a.test/x", "a.test:25", "a.test?x", "a.test#x", "a.test\\x", "a.test%2f"]) {
+      expect(isInternal(`kim@${bad}`, ["a.test"])).toBe(false);
+    }
+  });
 });
 
 describe("undeliverableRecipients", () => {
@@ -44,6 +57,10 @@ describe("undeliverableRecipients", () => {
       { name: "Kim", email: "kim@example.com" },
       { email: "sam@example.net" },
     ]);
+  });
+
+  it("blocks nothing when the list is empty (unknown)", () => {
+    expect(undeliverableRecipients([{ email: "kim@example.com" }], [])).toEqual([]);
   });
 
   it("finds none for a mailbox that may send anywhere", () => {

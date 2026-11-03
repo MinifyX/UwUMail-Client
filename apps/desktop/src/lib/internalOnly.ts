@@ -5,10 +5,22 @@
 
 import type { Address } from "@/backend/types";
 
-/** A domain as it is compared: trimmed, without a final dot, in lower case. */
+/**
+ * A domain as it is compared: trimmed, without a final dot, in lower case, in its ASCII (punycode)
+ * form like the server lists it. Anything but letters, digits, dots and hyphens (or non-ASCII
+ * letters) is kept as typed, so `/ \\ ? # : @` can't be stripped away by URL parsing into a hosted
+ * host; such a string never matches.
+ */
 function normalDomain(domain: string): string | null {
   const normal = domain.trim().replace(/\.+$/, "").toLowerCase();
-  return normal && !/[\s@<>]/.test(normal) ? normal : null;
+  if (!normal || /[\s@<>]/.test(normal)) return null;
+  if (!/^[a-z0-9.\-\u0080-\uffff]+$/.test(normal)) return normal;
+  try {
+    const host = new URL(`http://${normal}/`).hostname;
+    return host || normal;
+  } catch {
+    return normal;
+  }
 }
 
 /** The domain of an address (`mini+news@Example.COM` → `example.com`), also of `Name <a@b>`. */
@@ -28,7 +40,7 @@ export function isInternal(email: string, domains: readonly string[]): boolean {
 
 /** The recipients a mailbox restricted to `domains` can't send to, each once; none without a restriction. */
 export function undeliverableRecipients(recipients: readonly Address[], domains: readonly string[] | null): Address[] {
-  if (!domains) return [];
+  if (!domains || domains.length === 0) return [];
   const seen = new Set<string>();
   return recipients.filter((address) => {
     const key = address.email.trim().toLowerCase();
