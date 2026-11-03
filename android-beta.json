@@ -1,9 +1,9 @@
 {
-  "version": "0.12.0-beta.2",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.2/UwUMail-android.apk",
-  "sha256": "a890499826b6d603e409134e9da1a1a340bc9ace73f79d1094e29443eaeeddc9",
+  "version": "0.12.0-beta.3",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.3/UwUMail-android.apk",
+  "sha256": "2093f299abde92394e5bd12462f7e7a2e1b6934fd5d4eceb3d5e0e5a983718be",
   "notes": {
-    "de": "- Behoben: Profilbilder im Hochformat saßen zu tief im Kreis und waren unten abgeschnitten\n- Google Play: Die App aus dem Play Store aktualisiert sich jetzt nur noch über den Store",
-    "en": "- Fixed: portrait profile pictures sat too low in the circle and were cut off at the bottom\n- Google Play: the app from the Play Store now only updates through the store"
+    "de": "- Neu: Darf ein UwUMail-Konto nur an Adressen auf seinem eigenen Server senden, sagt das Verfassen-Fenster es dauerhaft dazu, markiert Empfänger außerhalb als nicht zustellbar und sendet erst, wenn sie entfernt sind – auch bei Antworten, Weiterleitungen und geplantem Senden\n- Behoben: Ein Alias, den der Server später hinzufügt, erscheint jetzt als Absender (mit UwUMail-Server 0.27.0)",
+    "en": "- New: if a UwUMail account may only send to addresses on its own server, the compose window says so, marks recipients outside it as not deliverable and only sends once they're removed, including replies, forwards and scheduled mail\n- Fixed: an alias the server adds later now shows up as a sender (with UwUMail-Server 0.27.0)"
   }
 }
