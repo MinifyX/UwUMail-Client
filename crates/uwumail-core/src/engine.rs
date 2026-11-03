@@ -21,7 +21,7 @@ use crate::pictures::{PictureLookup, PictureServer, SenderPicture, SenderPicture
 use crate::secrets::{Secret, SecretStore};
 use crate::smtp::{self, SmtpAuth, Threading};
 use crate::store::{AccountRecord, FolderInfo, FolderRecord, MessageLocation, Store};
-use crate::{autoconfig, calendar, contacts, folders, mime, oauth};
+use crate::{autoconfig, calendar, contacts, folders, internal_only, mime, oauth};
 use crate::{jmap_settings, jmap_sieve, jmap_signatures, jmap_sync};
 
 /// A device signature's address for every domain; `@domain` is one for a whole domain.
@@ -1487,6 +1487,13 @@ impl Engine {
 
         let recipients: Vec<Address> = outgoing.to.iter().chain(&outgoing.cc).chain(&outgoing.bcc).cloned().collect();
         if account.protocol == Protocol::Jmap {
+            // A mailbox its server lets send only to its own domains: nothing goes out to the
+            // others, and the outbox keeps the mail as a draft instead of trying again.
+            let client = self.current_jmap_client(&account.id).await?;
+            internal_only::check(
+                client.session.internal_domains.as_deref(),
+                recipients.iter().map(|a| a.email.as_str()),
+            )?;
             let envelope: Vec<String> = recipients.iter().map(|a| a.email.clone()).collect();
             self.inner.jmap_send(&account.id, message.formatted(), &from.email, &envelope).await?;
         } else {

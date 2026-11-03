@@ -155,6 +155,9 @@ pub struct Session {
     /// How far ahead the submission account holds mail ("send later"), in seconds; 0 when it
     /// doesn't (`maxDelayedSend` of its submission capability, RFC 8621 §7).
     pub max_delayed_send: u64,
+    /// The domains the submission account may send to, when its UwUMail server lets it send only
+    /// to addresses it hosts (`uwuInternalOnly`, see `internal_only`); `None` when it may send anywhere.
+    pub internal_domains: Option<Vec<String>>,
     /// The own account's masked address capability (`domains`, `defaultDomain`), if the server
     /// makes masked addresses; an empty object from servers that don't say where.
     pub masked: Option<Value>,
@@ -272,12 +275,12 @@ impl Session {
             .contains_key(SUBMISSION)
             .then(|| primary.and_then(|p| p.get(SUBMISSION)).and_then(Value::as_str).map(String::from))
             .flatten();
-        let max_delayed_send = submission_account_id
+        let submission = submission_account_id
             .as_ref()
-            .and_then(|id| document.get("accounts")?.get(id)?.get("accountCapabilities")?.get(SUBMISSION))
-            .and_then(|capability| capability.get("maxDelayedSend"))
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
+            .and_then(|id| document.get("accounts")?.get(id)?.get("accountCapabilities")?.get(SUBMISSION));
+        let max_delayed_send =
+            submission.and_then(|capability| capability.get("maxDelayedSend")).and_then(Value::as_u64).unwrap_or(0);
+        let internal_domains = crate::internal_only::from_capability(submission);
         // An extension's object in the own account's `accountCapabilities`; `{}` when the session
         // only names the capability.
         let own_capability = |capability: &str| {
@@ -337,6 +340,7 @@ impl Session {
             state: text("state").map(String::from),
             assist,
             max_delayed_send,
+            internal_domains,
             masked,
             profile,
             principals: principals.is_some(),
@@ -1433,6 +1437,20 @@ mod tests {
         assert_eq!(Session::parse(&later, &base).unwrap().max_delayed_send, 2_592_000);
         later["accounts"]["c"]["accountCapabilities"][SUBMISSION]["maxDelayedSend"] = json!("30");
         assert_eq!(Session::parse(&later, &base).unwrap().max_delayed_send, 0, "only a number counts");
+        assert_eq!(Session::parse(&later, &base).unwrap().internal_domains, None, "older servers: no restriction");
+
+        let mut internal = document.clone();
+        internal["accounts"] = json!({ "c": { "accountCapabilities": { SUBMISSION: {
+            "uwuInternalOnly": true, "uwuInternalDomains": ["uwumail.test", "Team.Example"]
+        } } } });
+        let session = Session::parse(&internal, &base).unwrap();
+        let domains = vec!["team.example".to_string(), "uwumail.test".to_string()];
+        assert_eq!(session.internal_domains.as_ref(), Some(&domains));
+        // A shared mailbox sends through the login, so the same rule holds there.
+        internal["accounts"]["s"] = json!({ "name": "team@uwumail.test", "isPersonal": false,
+            "accountCapabilities": { MAIL: {} } });
+        let session = Session::parse(&internal, &base).unwrap();
+        assert_eq!(session.shared_view("s").unwrap().internal_domains, Some(domains));
     }
 
     /// A UwUMail session of a member of a shared mailbox (UwUMail-Server sharing.rs `add_to_session`).

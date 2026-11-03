@@ -179,6 +179,13 @@
     "noSignature": "No signature",
     "editSignatures": "Edit signatures …",
     "companyFooter": "The server adds your organisation's footer when sending.",
+    "internalOnly": {
+      "note": "This account may only send to addresses on this server.",
+      "domains": "Allowed: {{list}}.",
+      "blocked_one": "Not deliverable because it's outside this server: {{list}}. Remove the address to send.",
+      "blocked_other": "Not deliverable because they're outside this server: {{list}}. Remove these addresses to send.",
+      "chip": "{{email}} can't be reached: this account may only send to addresses on this server."
+    },
     "signatureForDomain": "Signature for {{domain}}",
     "signatureForAllDomains": "Signature for all domains",
     "later": {

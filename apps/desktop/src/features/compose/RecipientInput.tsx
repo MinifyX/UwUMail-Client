@@ -15,9 +15,11 @@ interface RecipientInputProps {
   value: Address[];
   onChange: (value: Address[]) => void;
   autoFocus?: boolean;
+  /** Recipients the sending mailbox can't reach (lib/internalOnly); their chips say so. */
+  isUndeliverable?: (address: Address) => boolean;
 }
 
-export function RecipientInput({ label, value, onChange, autoFocus }: RecipientInputProps) {
+export function RecipientInput({ label, value, onChange, autoFocus, isUndeliverable }: RecipientInputProps) {
   const { t } = useT();
   const id = useId();
   const [text, setText] = useState("");
@@ -75,24 +77,43 @@ export function RecipientInput({ label, value, onChange, autoFocus }: RecipientI
         {label}
       </label>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-        {value.map((address) => (
-          <span
-            key={address.email}
-            title={address.email}
-            className="inline-flex h-7 items-center gap-1.5 rounded-full bg-pink-tint pr-1 pl-1 text-[13px] font-medium text-pink-ink"
-          >
-            <Avatar address={address} size="xs" />
-            {displayName(address)}
-            <button
-              type="button"
-              aria-label={t("compose.removeRecipient", { email: address.email })}
-              onClick={() => onChange(value.filter((a) => a !== address))}
-              className="grid size-5 place-items-center rounded-full hover:bg-pink-tint-strong"
+        {value.map((address) => {
+          const undeliverable = isUndeliverable?.(address) ?? false;
+          return (
+            <span
+              key={address.email}
+              title={undeliverable ? t("compose.internalOnly.chip", { email: address.email }) : address.email}
+              data-undeliverable={undeliverable || undefined}
+              className={clsx(
+                "inline-flex h-7 items-center gap-1.5 rounded-full pr-1 pl-1 text-[13px] font-medium",
+                undeliverable
+                  ? "bg-danger-tint text-danger-ink ring-1 ring-danger ring-inset"
+                  : "bg-pink-tint text-pink-ink",
+              )}
             >
-              <Icon icon={ICONS.close} size="xs" />
-            </button>
-          </span>
-        ))}
+              {undeliverable ? (
+                <Icon icon={ICONS.error} size="xs" className="ml-1" />
+              ) : (
+                <Avatar address={address} size="xs" />
+              )}
+              <span className={clsx(undeliverable && "line-through decoration-1")}>{displayName(address)}</span>
+              {undeliverable && (
+                <span className="sr-only">{t("compose.internalOnly.chip", { email: address.email })}</span>
+              )}
+              <button
+                type="button"
+                aria-label={t("compose.removeRecipient", { email: address.email })}
+                onClick={() => onChange(value.filter((a) => a !== address))}
+                className={clsx(
+                  "grid size-5 place-items-center rounded-full",
+                  undeliverable ? "hover:bg-current/10" : "hover:bg-pink-tint-strong",
+                )}
+              >
+                <Icon icon={ICONS.close} size="xs" />
+              </button>
+            </span>
+          );
+        })}
         <input
           id={id}
           value={text}

@@ -24,6 +24,8 @@ import { useUi, type ComposeRequest } from "@/state/ui";
 import { useWorkspaceName } from "../workspaces/workspaces";
 import { initialDraft, replyFrom, type DraftState } from "./draft";
 import { RecipientInput } from "./RecipientInput";
+import { useInternalDomains } from "./internalOnly";
+import { isInternal, undeliverableRecipients } from "@/lib/internalOnly";
 import { undoSend } from "./undoSend";
 import { SendLaterDialog } from "./SendLater";
 import { announceScheduled, useSendLaterInfo } from "./scheduled";
@@ -78,6 +80,21 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const [draft, setDraft] = useState<DraftState>(initial);
   const accountId = draft.accountId || accounts[0]?.id || "";
   const { data: sendLaterInfo } = useSendLaterInfo(accountId);
+  // A mailbox its UwUMail server lets send only to its own domains: outside recipients are marked
+  // and the mail isn't sent while they're in it (the engine refuses it too).
+  const internalDomains = useInternalDomains(accountId);
+  const undeliverable = undeliverableRecipients([...draft.to, ...draft.cc, ...draft.bcc], internalDomains);
+  const undeliverableList = undeliverable.map((a) => a.email).join(", ");
+  const isUndeliverable = internalDomains
+    ? (address: { email: string }) => !isInternal(address.email, internalDomains)
+    : undefined;
+  /** Why the mail can't go out as addressed: no recipients, or some it can't reach. */
+  const recipientProblem =
+    draft.to.length + draft.cc.length + draft.bcc.length === 0
+      ? t("compose.noRecipients")
+      : undeliverable.length > 0
+        ? t("compose.internalOnly.blocked", { count: undeliverable.length, list: undeliverableList })
+        : null;
   // Show the Cc/Bcc rows when either is set, so a Bcc that arrived (e.g. from a mailto link) is
   // never present but invisible (webmail security audit W-1).
   const [showCc, setShowCc] = useState(initial.cc.length > 0 || initial.bcc.length > 0);
@@ -434,8 +451,8 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
 
   /** Sends now (after the undo window), or at `sendAt`: on the UwUMail server or from this device's outbox. */
   const send = async (sendAt?: string, remindedAlready = false) => {
-    if (draft.to.length + draft.cc.length + draft.bcc.length === 0) {
-      setError(t("compose.noRecipients"));
+    if (recipientProblem) {
+      setError(recipientProblem);
       return;
     }
     // Before the undo window too: undoing is for second thoughts, this is for a forgotten file.
@@ -661,12 +678,36 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         </p>
       )}
 
+      {internalDomains && (
+        <div
+          aria-live="polite"
+          data-testid="internal-only-note"
+          className="flex items-start gap-2 border-b border-hairline px-4 py-1.5 text-[12px] text-muted"
+        >
+          <Icon icon={ICONS.server} size="xs" className="mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p>
+              {t("compose.internalOnly.note")}
+              {internalDomains.length > 0 && internalDomains.length <= 3 && (
+                <> {t("compose.internalOnly.domains", { list: internalDomains.join(", ") })}</>
+              )}
+            </p>
+            {undeliverable.length > 0 && (
+              <p className="font-medium text-danger-ink">
+                {t("compose.internalOnly.blocked", { count: undeliverable.length, list: undeliverableList })}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="relative">
         <RecipientInput
           label={t("compose.to")}
           value={draft.to}
           onChange={(to) => update({ to })}
           autoFocus={request.mode !== "reply" && request.mode !== "replyAll"}
+          isUndeliverable={isUndeliverable}
         />
         {!showCc && (
           <button
@@ -680,8 +721,18 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
       </div>
       {showCc && (
         <>
-          <RecipientInput label={t("compose.cc")} value={draft.cc} onChange={(cc) => update({ cc })} />
-          <RecipientInput label={t("compose.bcc")} value={draft.bcc} onChange={(bcc) => update({ bcc })} />
+          <RecipientInput
+            label={t("compose.cc")}
+            value={draft.cc}
+            onChange={(cc) => update({ cc })}
+            isUndeliverable={isUndeliverable}
+          />
+          <RecipientInput
+            label={t("compose.bcc")}
+            value={draft.bcc}
+            onChange={(bcc) => update({ bcc })}
+            isUndeliverable={isUndeliverable}
+          />
         </>
       )}
       <div className="flex h-11 items-center gap-2 border-b border-hairline px-4">
@@ -839,8 +890,8 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           label={t("compose.later.open")}
           disabled={sending || !sendLaterInfo}
           onClick={() => {
-            if (draft.to.length + draft.cc.length + draft.bcc.length === 0) {
-              setError(t("compose.noRecipients"));
+            if (recipientProblem) {
+              setError(recipientProblem);
               return;
             }
             setPickingTime(true);

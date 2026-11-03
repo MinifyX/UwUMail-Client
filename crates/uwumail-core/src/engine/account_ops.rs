@@ -20,6 +20,9 @@ pub struct ServerAccountFeatures {
     pub account_id: String,
     pub masked: Option<MaskedOptions>,
     pub profile: Option<ProfileOptions>,
+    /// The domains its mail may go to, when the server lets it send only to addresses it hosts
+    /// (`internal_only`); `None` when it may send anywhere.
+    pub internal_domains: Option<Vec<String>>,
 }
 
 impl Engine {
@@ -31,8 +34,8 @@ impl Engine {
         self.inner.jmap_client(account_id).await
     }
 
-    /// Per mailbox on a UwUMail server, whether it makes masked addresses and keeps a profile
-    /// picture. Servers that can't be reached right now, or take too long, are left out.
+    /// Per mailbox on a UwUMail server, whether it makes masked addresses, keeps a profile
+    /// picture and may only send to addresses on its server. Servers that can't be reached right now, or take too long, are left out.
     pub async fn server_account_features(&self) -> Result<Vec<ServerAccountFeatures>> {
         let accounts: Vec<_> =
             self.inner.store.accounts()?.into_iter().filter(|account| account.protocol == Protocol::Jmap).collect();
@@ -44,8 +47,10 @@ impl Engine {
                         account_id: account.id.clone(),
                         masked: jmap_masked::options(&client),
                         profile: jmap_profile::options(&client),
+                        internal_domains: client.session.internal_domains.clone(),
                     };
-                    (features.masked.is_some() || features.profile.is_some()).then_some(features)
+                    (features.masked.is_some() || features.profile.is_some() || features.internal_domains.is_some())
+                        .then_some(features)
                 }
                 Ok(Err(error)) => {
                     tracing::debug!("{} couldn't tell what its server offers: {error}", account.id);

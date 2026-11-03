@@ -1,0 +1,4 @@
+{
+  "de": "- Neu: Darf ein UwUMail-Konto nur an Adressen auf seinem eigenen Server senden, sagt das Verfassen-Fenster es dauerhaft dazu, markiert Empfänger außerhalb als nicht zustellbar und sendet erst, wenn sie entfernt sind – auch bei Antworten, Weiterleitungen und geplantem Senden\n- Behoben: Ein Alias, den der Server später hinzufügt, erscheint jetzt als Absender (mit UwUMail-Server 0.27.0)",
+  "en": "- New: if a UwUMail account may only send to addresses on its own server, the compose window says so, marks recipients outside it as not deliverable and only sends once they're removed, including replies, forwards and scheduled mail\n- Fixed: an alias the server adds later now shows up as a sender (with UwUMail-Server 0.27.0)"
+}
