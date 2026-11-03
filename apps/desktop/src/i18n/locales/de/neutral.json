@@ -179,6 +179,13 @@
     "noSignature": "Keine Signatur",
     "editSignatures": "Signaturen bearbeiten …",
     "companyFooter": "Beim Senden hängt der Server die Fußzeile deiner Organisation an.",
+    "internalOnly": {
+      "note": "Dieses Konto darf nur an Adressen auf diesem Server senden.",
+      "domains": "Erlaubt: {{list}}.",
+      "blocked_one": "Nicht zustellbar, weil außerhalb dieses Servers: {{list}}. Entferne die Adresse, um zu senden.",
+      "blocked_other": "Nicht zustellbar, weil außerhalb dieses Servers: {{list}}. Entferne diese Adressen, um zu senden.",
+      "chip": "{{email}} ist nicht zustellbar: Dieses Konto darf nur an Adressen auf diesem Server senden."
+    },
     "signatureForDomain": "Signatur für {{domain}}",
     "signatureForAllDomains": "Signatur für alle Domains",
     "later": {

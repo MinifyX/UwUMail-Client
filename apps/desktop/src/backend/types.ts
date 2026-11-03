@@ -1644,6 +1644,11 @@ export interface ServerAccountFeatures {
   accountId: string;
   masked: MaskedOptions | null;
   profile: ProfilePictureOptions | null;
+  /**
+   * The domains its mail may go to, when the server lets it send only to addresses it hosts
+   * (`uwuInternalOnly`, lib/internalOnly); null or left out when it may send anywhere.
+   */
+  internalDomains?: string[] | null;
 }
 
 /** Why a mail carries a code: what the sender wants it for. */

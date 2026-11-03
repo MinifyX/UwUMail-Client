@@ -216,6 +216,13 @@ impl Engine {
 
         let receipt = if let Some(client) = self.holding_server(&account).await {
             check_time(at, now_millis(), client.session.max_delayed_send)?;
+            // The local outbox checks when the time comes (`Engine::send`); the server would only
+            // bounce them then.
+            let client = self.current_jmap_client(&account.id).await?;
+            crate::internal_only::check(
+                client.session.internal_domains.as_deref(),
+                recipients.iter().map(|a| a.email.as_str()),
+            )?;
             let envelope: Vec<String> = recipients.iter().map(|a| a.email.clone()).collect();
             let (id, taken_at) = jmap_scheduled::submit(
                 &client,

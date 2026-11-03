@@ -203,12 +203,42 @@ impl Engine {
 
     /// Reads the login's session again and matches its shared mailboxes with it now.
     pub(super) async fn refresh_jmap_shares(&self, account_id: &str) -> Result<Vec<String>> {
-        self.inner.jmap.lock().await.remove(account_id);
-        let client = self.inner.jmap_client(account_id).await?;
+        let client = self.reread_session(account_id).await?;
         let added = self.reconcile_jmap_shares(account_id, &client).await?;
         let state = client.latest_session_state().unwrap_or_default();
         self.inner.jmap_shares_seen.lock().unwrap().insert(account_id.to_string(), state);
         Ok(added)
+    }
+
+    /// Signs the login `account_id` in again, so it works with the session as it is now, also in
+    /// its shared mailboxes. Says so when that changed whom its mailboxes may send to
+    /// (`internal_only`), so the composer looks again.
+    pub(super) async fn reread_session(&self, account_id: &str) -> Result<Arc<JmapClient>> {
+        let children = self.inner.store.shared_children(account_id).unwrap_or_default();
+        let old = {
+            let mut clients = self.inner.jmap.lock().await;
+            for child in &children {
+                clients.remove(child);
+            }
+            clients.remove(account_id)
+        };
+        let fresh = self.inner.jmap_client(account_id).await?;
+        if old.is_some_and(|old| old.session.internal_domains != fresh.session.internal_domains) {
+            self.inner.emit(EngineEvent::AccountsChanged {});
+        }
+        Ok(fresh)
+    }
+
+    /// The JMAP connection of a mailbox (a login or one of its shared mailboxes), with the login's
+    /// session read again first when an answer since named a newer one: what it may send to can
+    /// have changed.
+    pub(super) async fn current_jmap_client(&self, account_id: &str) -> Result<Arc<JmapClient>> {
+        let login =
+            self.inner.jmap_share_of(account_id).map_or_else(|| account_id.to_string(), |share| share.parent_id);
+        if self.inner.jmap_client(&login).await?.session_outdated() {
+            self.reread_session(&login).await?;
+        }
+        self.inner.jmap_client(account_id).await
     }
 
     /// Adds the shared accounts of the session that aren't here yet (and weren't removed by the
