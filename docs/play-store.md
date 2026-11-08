@@ -76,7 +76,8 @@ don't run it.
 Starting an upload by hand: Actions → **Google Play** → Run workflow. Run from a tag, it uploads
 that release. Run from `main`, an unreleased commit goes to the internal testers, signed with the
 release key (Play needs the upload key; the JAR signature of a bundle isn't what devices install,
-Play signs the APKs it delivers itself).
+Play signs the APKs it delivers itself). Run from any other branch, it only builds the bundle: the
+signing job doesn't start there.
 
 ### Secrets (MinifyX/UwUMail-Client)
 

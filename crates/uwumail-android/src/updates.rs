@@ -15,6 +15,10 @@ use uwumail_core::{Error, Result};
 use crate::bridge;
 
 const FEED: &str = "https://raw.githubusercontent.com/MinifyX/UwUMail-Client/updates";
+/// Where the feed's APK must come from: this repo's release of exactly that version.
+const RELEASES: &str = "https://github.com/MinifyX/UwUMail-Client/releases/download";
+/// The APK is about 22 MB; a download that grows past this is stopped instead of filling the memory.
+const MAX_APK: usize = 200 * 1024 * 1024;
 const FIRST_CHECK_AFTER: Duration = Duration::from_secs(20);
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 /// A phone often starts without network; one quick second try instead of waiting hours.
@@ -62,6 +66,13 @@ static CHECKING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn state() -> Result<&'static State> {
     STATE.get().ok_or_else(|| Error::internal("Updates aren't set up yet."))
+}
+
+/// Only this repo's release of the feed's version, so a changed feed can't send UwUMail anywhere else.
+fn is_release_download(url: &str, version: &str) -> bool {
+    url.strip_prefix(RELEASES)
+        .and_then(|rest| rest.strip_prefix(&format!("/v{version}/")))
+        .is_some_and(|name| !name.is_empty() && !name.contains(['/', '?', '#', '\\']) && !name.contains(".."))
 }
 
 fn is_newer(version: &str) -> bool {
@@ -112,8 +123,21 @@ pub async fn check() -> Result<Option<ReadyUpdate>> {
         return Ok(None);
     }
 
-    let bytes = state.http.get(&feed.url).timeout(Duration::from_secs(600)).send().await?.error_for_status()?;
-    let bytes = bytes.bytes().await?;
+    if !is_release_download(&feed.url, &feed.version) {
+        return Err(Error::connection("The update feed points somewhere other than UwUMail's releases."));
+    }
+    let too_big = || Error::connection("The update is larger than an UwUMail APK can be.");
+    let mut response = state.http.get(&feed.url).timeout(Duration::from_secs(600)).send().await?.error_for_status()?;
+    if response.content_length().is_some_and(|length| length > MAX_APK as u64) {
+        return Err(too_big());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if bytes.len() + chunk.len() > MAX_APK {
+            return Err(too_big());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
     let digest: String = Sha256::digest(&bytes).iter().map(|byte| format!("{byte:02x}")).collect();
     if !digest.eq_ignore_ascii_case(feed.sha256.trim()) {
         return Err(Error::connection("The downloaded update is damaged. UwUMail will try again later."));
@@ -185,4 +209,28 @@ pub fn start(on_ready: impl Fn(&ReadyUpdate) + Send + Sync + 'static) {
             tokio::time::sleep(wait).await;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_this_repos_release_of_that_version() {
+        let ok = "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0/UwUMail-android.apk";
+        assert!(is_release_download(ok, "0.12.0"));
+        assert!(!is_release_download(ok, "0.12.1"));
+        for bad in [
+            "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0/",
+            "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0/../v0.1.0/a.apk",
+            "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0/a/b.apk",
+            "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0/a.apk?x=1",
+            "https://github.com/MinifyX/UwUMail-Client-fork/releases/download/v0.12.0/a.apk",
+            "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0.evil.example/a.apk",
+            "https://download.example.com/v0.12.0/UwUMail-android.apk",
+            "http://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0/a.apk",
+        ] {
+            assert!(!is_release_download(bad, "0.12.0"), "{bad}");
+        }
+    }
 }

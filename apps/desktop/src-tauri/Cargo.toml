@@ -41,7 +41,9 @@ minisign-verify = { version = "0.2", optional = true }
 # The "can run programs" question (desktop.rs `confirm`); the same rfd tauri-plugin-dialog uses.
 rfd = { version = "0.16", default-features = false, features = ["common-controls-v6", "gtk3"] }
 semver = { version = "1", optional = true }
-tauri-plugin-updater = { version = "2", optional = true }
+# Without `zip`: UwUMail only uses `download()` and runs the checked setup itself, never the
+# plugin's extraction (zip 4 has open advisories, see .cargo/audit.toml).
+tauri-plugin-updater = { version = "2", optional = true, default-features = false, features = ["rustls-tls", "system-proxy"] }
 
 # macOS has its own single-instance check in a private folder (background.rs).
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
