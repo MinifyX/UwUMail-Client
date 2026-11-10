@@ -17,21 +17,22 @@
 
 ## Why this exists
 
-I'm building UwUMail for myself. Every mail client and self-hosted mail server I
-tried annoyed me in one way or another, so I started building my own, the way I
-want it. The server half lives in
-[UwUMail Server](https://github.com/MinifyX/UwUMail-Server).
+Every mail client and self-hosted mail server I tried annoyed me in one way or
+another, so I started building my own, the way I want it. What began as my own
+project is now actively developed together with
+[UwUMail Server](https://github.com/MinifyX/UwUMail-Server), which runs my mail
+in production.
 
-- **Just for fun.** No company, no team, no schedule, no promises. I work on it
-  when I have time and feel like it, so don't expect steady development, and
-  don't be surprised by long breaks.
-- **Written with AI.** Almost all of the code is written with Claude, because
-  I'm honestly not a great programmer. Not your thing? No hard feelings, just
-  pick something else.
+- **Actively developed.** Bug fixes and new features ship regularly.
+- **Bugs get fixed.** Found one? [Open an issue](https://github.com/MinifyX/UwUMail-Client/issues/new/choose)
+  and I'll fix it. It's one person and best effort, so there are no guaranteed
+  response times, but reports are read and fixed, security reports first
+  ([SECURITY.md](SECURITY.md)).
+- **Written with AI.** Almost all of the code is written with Claude, backed by
+  automated tests and written-down security reviews. Not your thing? No hard
+  feelings, just pick something else.
 - **Use it, fork it, do what you want with it.** The license only asks one
   thing: if you pass on a changed version, its source stays open too.
-- **No support.** Issues and pull requests are okay, but I might answer late or
-  not at all, and I mostly build what I need myself.
 
 ## What it is
 

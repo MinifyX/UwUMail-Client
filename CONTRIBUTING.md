@@ -4,12 +4,15 @@ Thanks for wanting to help! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧
 
 ## Please read this first
 
-UwUMail is a hobby project I build for myself, just for fun (see
-[Why this exists](README.md#why-this-exists)). That means:
+UwUMail is actively developed (see [Why this exists](README.md#why-this-exists)).
+That means:
 
-- Issues and pull requests are welcome, but I might answer late or not at all,
-  and I may say no to things I don't need or don't want in the app. No hard
-  feelings either way.
+- **Bug reports are welcome and get fixed.** Use the bug template and say which
+  version and platform you use. It's one person and best effort, so there are
+  no guaranteed response times.
+- **Feature wishes and pull requests are welcome too.** I decide what goes into
+  the app, so I may say no to things that don't fit the
+  [vision](docs/vision.md). No hard feelings either way.
 - Want UwUMail to go somewhere else? Fork it, that's what the license is for.
 - Almost all of the code here is written with AI (Claude), so using AI for
   your contribution is fine too. Just make sure it builds and the checks pass.

@@ -1,7 +1,7 @@
 # Security
 
-UwUMail is a hobby project that I build in my spare time, almost entirely with AI (Claude). Security reports are
-very welcome and come first when I get to them, but I can't promise response times.
+UwUMail is actively developed, almost entirely with AI (Claude). It's one person, so there are no guaranteed
+response times, but security reports come before everything else and get fixed and released as soon as I can.
 
 ## Supported versions
 

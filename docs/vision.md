@@ -7,12 +7,13 @@ everyone. If it happens to fit you too, great.
 
 ## What to expect
 
-- **A hobby project.** No company, no team, no schedule, no support. I build
-  what I need and what I find fun, when I have time and feel like it. That can
-  mean a lot of changes in a week and then nothing for months.
+- **Actively developed.** It started as my own project and is now developed
+  together with UwUMail Server, which runs my mail in production. Reported bugs
+  get fixed; no company behind it, so no guaranteed response times, but best
+  effort and security first.
 - **Written with AI.** I decide what UwUMail should do and how it should look
-  and feel; almost all of the code is written with Claude, because I'm
-  honestly not a great programmer. Automated tests catch what they can. If
+  and feel; almost all of the code is written with Claude. Automated tests and
+  written-down security reviews back every release. If
   that's a dealbreaker, that's completely fine, there are plenty of other mail
   clients.
 - **Free to take.** Anyone may use it, fork it and turn it into something else
