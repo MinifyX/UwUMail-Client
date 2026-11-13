@@ -9,7 +9,7 @@ name: Release
 # works), with
 #   - the Windows setups (x64 and ARM), the universal macOS setup, and for Linux
 #     x64 and arm64 the .deb, the .rpm and the portable folder, built and
-#     smoke-tested by the desktop workflow called from here,
+#     smoke-tested by the desktop workflow for the commit's push to main,
 #   - the files only the in-app updater downloads (UwUMail-update-…),
 #   - the Android APK the Android workflow built, signed and smoke-tested for
 #     the push of this tag with the release key,
@@ -28,12 +28,12 @@ name: Release
 # signs what the updater downloads, and publishing checks every signature
 # against the key the apps carry.
 #
-# Started by hand on a branch it builds the setups but publishes nothing (the
-# APK and IPA are only picked up for a tag).
+# Started by hand on a branch it only checks the version and the release notes.
 #
-# The longest part is the desktop workflow (about as long as one push to main
-# takes there); the APK and the IPA come from the Android run of the tag and the
-# iOS run of the commit's push to main, which run at the same time. If GitHub can't run it,
+# Nothing is built here: the setups come from the desktop run and the IPA from the
+# iOS run of the commit's push to main, the APK from the Android run of the tag.
+# So push the release commit to main and let those runs finish before tagging it
+# (the release waits for them, but a newer push to main cancels them). If GitHub can't run it,
 # `pnpm release` (scripts/release.mjs) publishes the Windows x64 setup from a PC.
 
 on:
@@ -76,12 +76,54 @@ jobs:
   desktop:
     name: Release (Windows, macOS, Linux)
     needs: check
-    uses: ./.github/workflows/desktop.yml
-    secrets:
-      UWUMAIL_MICROSOFT_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_CLIENT_ID }}
-      UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID: ${{ secrets.UWUMAIL_MICROSOFT_BUSINESS_CLIENT_ID }}
-      UWUMAIL_GOOGLE_CLIENT_ID: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_ID }}
-      UWUMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.UWUMAIL_GOOGLE_CLIENT_SECRET }}
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      run_id: ${{ steps.wait.outputs.run_id }}
+      digest_macos_universal: ${{ steps.wait.outputs.digest_macos_universal }}
+      digest_linux_x64: ${{ steps.wait.outputs.digest_linux_x64 }}
+      digest_linux_arm64: ${{ steps.wait.outputs.digest_linux_arm64 }}
+      digest_windows_x64: ${{ steps.wait.outputs.digest_windows_x64 }}
+      digest_windows_arm64: ${{ steps.wait.outputs.digest_windows_arm64 }}
+    steps:
+      # Like the IPA: the desktop workflow builds and smoke-tests every push to main; the release
+      # takes those setups instead of building the same commit again. Its last job leaves the digest
+      # of each setup, which the jobs below compare before they sign or publish.
+      - name: Wait for the tested setups of this commit
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 180); do
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/desktop.yml/runs?head_sha=$GITHUB_SHA&event=push" \
+              --jq '.workflow_runs | sort_by(.created_at) | last // {} | "\(.id) \(.status) \(.conclusion)"')
+            read -r id status conclusion <<< "$run"
+            if [ "$id" = "null" ]; then
+              if [ "$attempt" -ge 20 ]; then
+                echo "::error::No desktop build for $GITHUB_SHA. Push the release commit to main before tagging it."
+                exit 1
+              fi
+            elif [ "$status" = "completed" ]; then
+              if [ "$conclusion" != "success" ]; then
+                echo "::error::The desktop build for this commit ended with '$conclusion': $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$id"
+                exit 1
+              fi
+              gh run download "$id" --repo "$GITHUB_REPOSITORY" --name desktop-digests --dir digests
+              if [ "$(grep -cxE 'digest_(macos_universal|linux_x64|linux_arm64|windows_x64|windows_arm64)=[0-9a-f]{64}' digests/desktop-digests.txt)" != 5 ] \
+                || [ "$(sort -u digests/desktop-digests.txt | wc -l)" != 5 ]; then
+                echo "::error::Unexpected desktop-digests.txt in run $id"
+                exit 1
+              fi
+              cat digests/desktop-digests.txt >> "$GITHUB_OUTPUT"
+              echo "run_id=$id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::The desktop build for this commit didn't finish within 90 minutes"
+          exit 1
 
   sign:
     name: Sign for the updater
@@ -89,6 +131,10 @@ jobs:
     # Only releases are signed, so no signed test build of an unreleased commit lies around.
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    permissions:
+      # To download the setups from the desktop run.
+      actions: read
+      contents: read
     outputs:
       digest: ${{ steps.digest.outputs.digest }}
     env:
@@ -111,24 +157,35 @@ jobs:
         with:
           name: desktop-windows-x64
           path: ${{ runner.temp }}/unpacked/desktop-windows-x64
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-windows-arm64
           path: ${{ runner.temp }}/unpacked/desktop-windows-arm64
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-macos-universal
           path: ${{ runner.temp }}/desktop/desktop-macos-universal
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-linux-x64
           path: ${{ runner.temp }}/desktop/desktop-linux-x64
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-linux-arm64
           path: ${{ runner.temp }}/desktop/desktop-linux-arm64
-      # Any job of this run can delete and re-upload another job's artifact by name, but none can
-      # change another job's outputs: each artifact must still be what the job that built it digested.
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
+      # Any job of the desktop run can delete and re-upload another job's artifact by name, but none
+      # can change another job's outputs, which that run's last job handed on: each artifact must
+      # still be what the job that built it digested.
       - name: Check that no job replaced another one's artifact
         env:
           WINDOWS_X64: ${{ needs.desktop.outputs.digest_windows_x64 }}
@@ -312,6 +369,7 @@ jobs:
       group: release-publish
       cancel-in-progress: false
     permissions:
+      actions: read
       contents: write
     env:
       VERSION: ${{ needs.check.outputs.version }}
@@ -330,10 +388,14 @@ jobs:
         with:
           name: desktop-windows-x64
           path: ${{ runner.temp }}/unpacked/desktop-windows-x64
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-windows-arm64
           path: ${{ runner.temp }}/unpacked/desktop-windows-arm64
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: release-signatures
@@ -350,14 +412,20 @@ jobs:
         with:
           name: desktop-macos-universal
           path: ${{ runner.temp }}/desktop/desktop-macos-universal
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-linux-x64
           path: ${{ runner.temp }}/desktop/desktop-linux-x64
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-linux-arm64
           path: ${{ runner.temp }}/desktop/desktop-linux-arm64
+          run-id: ${{ needs.desktop.outputs.run_id }}
+          github-token: ${{ github.token }}
       # As in the signing job, and for the APK, the IPA and the signatures too: every artifact must
       # still be what the job that made it digested.
       - name: Check that no job replaced another one's artifact
