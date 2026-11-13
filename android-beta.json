@@ -1,9 +1,9 @@
 {
-  "version": "0.12.0-beta.5",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.5/UwUMail-android.apk",
-  "sha256": "5b6275ed84465fd248a2ad8e3d8b84eb749ac16336148eac139afc8894fd8292",
+  "version": "0.12.0-beta.6",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.6/UwUMail-android.apk",
+  "sha256": "bc727e262dea896ead7db96963814e5d9eef31257950022dfbe5da033049c9dd",
   "notes": {
-    "de": "- Neu: Absender ohne Bild bekommen einen eigenen kleinen Blob statt Initialen – dieselbe Adresse sieht überall gleich aus, auch im Webmail, und bewegt sich, wenn du darüberfährst\n- Design: UwUSuite Design 1.13.0",
-    "en": "- New: senders without a picture get their own little blob instead of initials – the same address looks the same everywhere, webmail included, and moves when you hover over it\n- Design: UwUSuite Design 1.13.0"
+    "de": "- Barrierefreiheit: Screenreader sagen jetzt bei jedem Dialog den Titel an\n- Design: UwUSuite Design 1.14.0",
+    "en": "- Accessibility: screen readers now announce the title of every dialog\n- Design: UwUSuite Design 1.14.0"
   }
 }
