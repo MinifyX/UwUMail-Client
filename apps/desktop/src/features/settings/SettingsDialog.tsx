@@ -823,12 +823,7 @@ export function SettingsDialog() {
 
   return (
     <>
-      <Dialog
-        open={section !== null}
-        onClose={requestClose}
-        title={t("settings.title")}
-        width="lg"
-      >
+      <Dialog open={section !== null} onClose={requestClose} title={t("settings.title")} width="lg">
         <div className="flex min-h-[460px] flex-col gap-2 px-4 pb-5 sm:flex-row sm:gap-6 sm:px-6">
           <nav className="flex shrink-0 gap-1 overflow-x-auto sm:w-48 sm:flex-col" aria-label={t("settings.title")}>
             {sections.map(({ id, icon: Glyph }) => (
