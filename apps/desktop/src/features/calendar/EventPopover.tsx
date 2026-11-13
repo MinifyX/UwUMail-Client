@@ -243,6 +243,16 @@ export function QuickCreate() {
             variant="ghost"
             size="sm"
             onClick={() => {
+              setTitle("");
+              close();
+            }}
+          >
+            {t("common.cancel")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
               openEditor({
                 occurrence: null,
                 draft: { start: quick.start, end: quick.end, allDay: quick.allDay, title },

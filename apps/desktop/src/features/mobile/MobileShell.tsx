@@ -67,7 +67,14 @@ function AccountSheet({
   const setAddAccountOpen = useUi((s) => s.setAddAccountOpen);
   const openSettings = useUi((s) => s.openSettings);
   return (
-    <Sheet open={open} onClose={onClose} title={t("nav.accounts")} detents={["medium", "large"]} platform={platform}>
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={t("nav.accounts")}
+      leading={<NavButton label={t("common.close")} icon={ICONS.close} platform={platform} onClick={onClose} />}
+      detents={["medium", "large"]}
+      platform={platform}
+    >
       <GroupedList platform={platform}>
         <ListSection>
           {accounts
@@ -143,6 +150,7 @@ export function MobileShell() {
 
   useBackLayer(selectedThreadId !== null, () => selectThread(null));
   useBackLayer(addAccountOpen, () => useUi.getState().setAddAccountOpen(false));
+  useBackLayer(accountsOpen, () => setAccountsOpen(false));
   useBackLayer(tab === "mail" && listOpen && selectedThreadId === null && !searching, () => setListOpen(false));
 
   useEffect(() => {
