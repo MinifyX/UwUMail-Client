@@ -903,27 +903,58 @@ impl Engine {
     }
 
     pub async fn set_flags(&self, message_ids: &[String], change: FlagChange) -> Result<()> {
-        let locations = self.inner.store.locations(message_ids)?;
+        let mut locations = self.inner.store.locations(message_ids)?;
         self.inner.refuse_read_only(&locations)?;
+        let before = self.inner.store.flag_state(message_ids)?;
         self.inner.store.apply_flag_change(message_ids, change)?;
         self.inner.emit_changed(&locations);
-        for (account_id, remote_ids) in group_remote(&locations) {
-            let keywords: Vec<(&str, bool)> = [("$seen", change.seen), ("$flagged", change.flagged)]
-                .into_iter()
-                .filter_map(|(keyword, value)| value.map(|on| (keyword, on)))
-                .collect();
-            let client = self.inner.jmap_client(&account_id).await?;
-            jmap_sync::set_keywords(&client, &remote_ids, &keywords).await?;
+        let mut pushed: HashSet<String> = HashSet::new();
+        let result: Result<()> = async {
+            self.inner.resolve_placeholders(&mut locations).await?;
+            for (account_id, remote_ids) in group_remote(&locations) {
+                let keywords: Vec<(&str, bool)> = [("$seen", change.seen), ("$flagged", change.flagged)]
+                    .into_iter()
+                    .filter_map(|(keyword, value)| value.map(|on| (keyword, on)))
+                    .collect();
+                let client = self.inner.jmap_client(&account_id).await?;
+                jmap_sync::set_keywords(&client, &remote_ids, &keywords).await?;
+                pushed.extend(
+                    locations
+                        .iter()
+                        .filter(|l| l.account_id == account_id && l.remote_id.is_some())
+                        .map(|l| l.id.clone()),
+                );
+            }
+            for ((account_id, path), uids) in group_by_folder(&locations) {
+                if let Some(seen) = change.seen {
+                    let op = if seen { "+FLAGS.SILENT (\\Seen)" } else { "-FLAGS.SILENT (\\Seen)" };
+                    with_session!(self.inner, &account_id, |session| imap::store_flags(session, &path, &uids, op))?;
+                }
+                if let Some(flagged) = change.flagged {
+                    let op = if flagged { "+FLAGS.SILENT (\\Flagged)" } else { "-FLAGS.SILENT (\\Flagged)" };
+                    with_session!(self.inner, &account_id, |session| imap::store_flags(session, &path, &uids, op))?;
+                }
+                pushed.extend(
+                    locations
+                        .iter()
+                        .filter(|l| l.account_id == account_id && l.remote_id.is_none() && l.folder_path == path)
+                        .map(|l| l.id.clone()),
+                );
+            }
+            Ok(())
         }
-        for ((account_id, path), uids) in group_by_folder(&locations) {
-            if let Some(seen) = change.seen {
-                let op = if seen { "+FLAGS.SILENT (\\Seen)" } else { "-FLAGS.SILENT (\\Seen)" };
-                with_session!(self.inner, &account_id, |session| imap::store_flags(session, &path, &uids, op))?;
+        .await;
+        if let Err(error) = result {
+            // Set back what no server took, so the change neither reverts later nor diverges unnoticed.
+            let mut back: HashMap<(Option<bool>, Option<bool>), Vec<String>> = HashMap::new();
+            for (id, old) in before.into_iter().filter(|(id, _)| !pushed.contains(id)) {
+                back.entry((old.seen, old.flagged)).or_default().push(id);
             }
-            if let Some(flagged) = change.flagged {
-                let op = if flagged { "+FLAGS.SILENT (\\Flagged)" } else { "-FLAGS.SILENT (\\Flagged)" };
-                with_session!(self.inner, &account_id, |session| imap::store_flags(session, &path, &uids, op))?;
+            for ((seen, flagged), ids) in back {
+                self.inner.store.apply_flag_change(&ids, FlagChange { seen, flagged })?;
             }
+            self.inner.emit_changed(&locations);
+            return Err(error);
         }
         Ok(())
     }
@@ -1797,6 +1828,24 @@ fn group_by_folder(locations: &[MessageLocation]) -> HashMap<(String, String), V
 }
 
 impl Inner {
+    /// Gives IMAP mail moved here before this folder synced (a placeholder uid) its server uid,
+    /// found by Message-ID. Mail without one keeps its placeholder.
+    // shortcut: one SEARCH per placeholder, batch them into one OR search if undoing large selections gets slow.
+    async fn resolve_placeholders(&self, locations: &mut [MessageLocation]) -> Result<()> {
+        for location in locations.iter_mut().filter(|l| l.remote_id.is_none() && l.uid <= 0) {
+            let Some(message_id) = location.message_id.clone() else { continue };
+            let found = with_session!(self, &location.account_id, |session| imap::uids_with_message_id(
+                session,
+                &location.folder_path,
+                &message_id
+            ))?;
+            if let Some(uid) = found.last() {
+                location.uid = i64::from(*uid);
+            }
+        }
+        Ok(())
+    }
+
     /// The complete message from the server.
     async fn raw_message(&self, location: &MessageLocation) -> Result<Vec<u8>> {
         if let Some(blob) = &location.blob_id {
@@ -2009,7 +2058,7 @@ impl Inner {
                     folder
                 }
             };
-            let to_move: Vec<MessageLocation> = messages.into_iter().filter(|m| m.folder_id != folder.id).collect();
+            let mut to_move: Vec<MessageLocation> = messages.into_iter().filter(|m| m.folder_id != folder.id).collect();
             moved
                 .extend(to_move.iter().map(|m| MovedMessage { id: m.id.clone(), from_folder_id: m.folder_id.clone() }));
             if jmap {
@@ -2017,9 +2066,25 @@ impl Inner {
                 continue;
             }
 
+            // Moved before and the old target hasn't synced: the server needs its real uid.
+            self.resolve_placeholders(&mut to_move).await?;
+            if to_move.iter().any(|m| m.uid <= 0) {
+                return Err(Error::connection("The message is still being moved. Try again in a moment."));
+            }
             self.store.move_local(&local_ids(&to_move), &folder.id)?;
+            let mut done: HashSet<String> = HashSet::new();
             for ((account, path), uids) in group_by_folder(&to_move) {
-                with_session!(self, &account, |session| imap::move_messages(session, &path, &uids, &folder.path))?;
+                let result =
+                    with_session!(self, &account, |session| imap::move_messages(session, &path, &uids, &folder.path));
+                if let Err(error) = result {
+                    // Put back what the server still has where it was, so sync keeps showing it there.
+                    let back: Vec<MessageLocation> =
+                        to_move.iter().filter(|m| !done.contains(&m.folder_path)).cloned().collect();
+                    self.store.restore_locations(&back)?;
+                    self.emit_changed(&locations);
+                    return Err(error);
+                }
+                done.insert(path);
             }
             self.wake(&account_id);
         }

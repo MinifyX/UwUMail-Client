@@ -906,6 +906,15 @@ impl Store {
         )?)
     }
 
+    /// The lowest real uid stored in a folder; nothing below it is kept here.
+    pub fn min_uid(&self, folder_id: &str) -> Result<u32> {
+        Ok(self.conn().query_row(
+            "SELECT COALESCE(MIN(uid), 1) FROM messages WHERE folder_id = ?1 AND uid > 0",
+            [folder_id],
+            |row| row.get(0),
+        )?)
+    }
+
     pub fn stored_flags(&self, folder_id: &str) -> Result<Vec<StoredFlags>> {
         let conn = self.conn();
         let mut stmt =
@@ -1257,24 +1266,26 @@ impl Store {
         if uids.is_empty() {
             return Ok(0);
         }
-        let conn = self.conn();
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
         let mut deleted = 0;
         for chunk in uids.chunks(500) {
             let placeholders = vec!["?"; chunk.len()].join(",");
             let mut values: Vec<Value> = vec![Value::Text(folder_id.to_string())];
             values.extend(chunk.iter().map(|uid| Value::Integer(i64::from(*uid))));
-            conn.execute(
+            tx.execute(
                 &format!(
                     "DELETE FROM messages_fts WHERE rowid IN
                         (SELECT rowid FROM messages WHERE folder_id = ?1 AND uid IN ({placeholders}))"
                 ),
                 params_from_iter(values.iter()),
             )?;
-            deleted += conn.execute(
+            deleted += tx.execute(
                 &format!("DELETE FROM messages WHERE folder_id = ?1 AND uid IN ({placeholders})"),
                 params_from_iter(values.iter()),
             )?;
         }
+        tx.commit()?;
         Ok(deleted)
     }
 
@@ -1422,6 +1433,22 @@ impl Store {
         Ok(())
     }
 
+    /// Seen and flagged of the given messages as a change that sets them back.
+    pub fn flag_state(&self, ids: &[String]) -> Result<Vec<(String, FlagChange)>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT seen, flagged FROM messages WHERE id = ?1")?;
+        let mut out = Vec::with_capacity(ids.len());
+        for id in ids {
+            if let Some(change) = stmt
+                .query_row([id], |row| Ok(FlagChange { seen: Some(row.get(0)?), flagged: Some(row.get(1)?) }))
+                .optional()?
+            {
+                out.push((id.clone(), change));
+            }
+        }
+        Ok(out)
+    }
+
     pub fn apply_flag_change(&self, ids: &[String], change: FlagChange) -> Result<()> {
         let mut conn = self.conn();
         // One transaction: "mark all as read" can touch tens of thousands of rows.
@@ -1442,25 +1469,71 @@ impl Store {
         Ok(())
     }
 
-    /// Moves messages locally. They keep a placeholder uid until the target folder syncs.
+    /// Moves messages locally. They keep a placeholder uid until the target folder syncs: minus
+    /// the time in seconds times 1000, or lower when that is taken, so it is unique in the folder.
     pub fn move_local(&self, ids: &[String], target_folder_id: &str) -> Result<()> {
-        let conn = self.conn();
-        for (index, id) in ids.iter().enumerate() {
-            let placeholder = -(crate::mime::now() * 1000 + index as i64);
-            conn.execute(
-                "UPDATE messages SET folder_id = ?1, uid = ?2 WHERE id = ?3",
-                params![target_folder_id, placeholder, id],
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let base = -crate::mime::now() * 1000;
+        for id in ids {
+            tx.execute(
+                "UPDATE messages SET folder_id = ?1,
+                    uid = MIN(?2, (SELECT COALESCE(MIN(uid), 0) FROM messages WHERE folder_id = ?1) - 1)
+                 WHERE id = ?3",
+                params![target_folder_id, base, id],
             )?;
         }
+        tx.commit()?;
         Ok(())
     }
 
-    pub fn delete_messages(&self, ids: &[String]) -> Result<()> {
-        let conn = self.conn();
-        for id in ids {
-            conn.execute("DELETE FROM messages_fts WHERE rowid = (SELECT rowid FROM messages WHERE id = ?1)", [id])?;
-            conn.execute("DELETE FROM messages WHERE id = ?1", [id])?;
+    /// Puts messages back where they were before a local move whose server move failed. When the
+    /// source synced the mail again meanwhile, the moved row is dropped instead.
+    pub fn restore_locations(&self, locations: &[MessageLocation]) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        for location in locations {
+            let restored = tx.execute(
+                "UPDATE OR IGNORE messages SET folder_id = ?1, uid = ?2 WHERE id = ?3",
+                params![location.folder_id, location.uid, location.id],
+            )?;
+            if restored == 0 {
+                Self::delete_row(&tx, &location.id)?;
+            }
         }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Drops IMAP placeholders of a folder made before `before` (Unix seconds). Called once the
+    /// folder's new mail is stored, so their server copies are in by then or the move went wrong.
+    pub fn delete_stale_placeholders(&self, folder_id: &str, before: i64) -> Result<usize> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let stale = "folder_id = ?1 AND uid < 0 AND remote_id IS NULL AND -uid < ?2";
+        let values = params![folder_id, before.saturating_mul(1000)];
+        tx.execute(
+            &format!("DELETE FROM messages_fts WHERE rowid IN (SELECT rowid FROM messages WHERE {stale})"),
+            values,
+        )?;
+        let deleted = tx.execute(&format!("DELETE FROM messages WHERE {stale}"), values)?;
+        tx.commit()?;
+        Ok(deleted)
+    }
+
+    pub fn delete_messages(&self, ids: &[String]) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        for id in ids {
+            Self::delete_row(&tx, id)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    fn delete_row(conn: &Connection, id: &str) -> Result<()> {
+        conn.execute("DELETE FROM messages_fts WHERE rowid = (SELECT rowid FROM messages WHERE id = ?1)", [id])?;
+        conn.execute("DELETE FROM messages WHERE id = ?1", [id])?;
         Ok(())
     }
 
@@ -2861,6 +2934,62 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
 
         assert_eq!(store.delete_uids(&archive, &[3]).unwrap(), 1);
         assert!(store.messages_by_ids(&[id]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn quick_moves_into_one_folder_get_their_own_placeholders() {
+        let (store, _, inbox, _) = store_with_account();
+        let archive = folder(&store, "Archive", Some(FolderRole::Archive), ".");
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let ids: Vec<String> = (1..=3)
+            .map(|uid| insert(&store, &inbox, uid, &raw(&format!("{uid}@x"), "Hi", "leni@x.example", None, "", date)))
+            .map(Option::unwrap)
+            .collect();
+        // Pressing archive twice within a second, then a batch.
+        store.move_local(&ids[..1], &archive).unwrap();
+        store.move_local(&ids[1..2], &archive).unwrap();
+        store.move_local(&ids[..2], &inbox).unwrap();
+        store.move_local(&ids, &archive).unwrap();
+        let locations = store.locations(&ids).unwrap();
+        assert!(locations.iter().all(|l| l.folder_id == archive && l.uid < 0));
+        let uids: HashSet<i64> = locations.iter().map(|l| l.uid).collect();
+        assert_eq!(uids.len(), 3);
+    }
+
+    #[test]
+    fn a_failed_server_move_puts_the_mail_back() {
+        let (store, _, inbox, _) = store_with_account();
+        let archive = folder(&store, "Archive", Some(FolderRole::Archive), ".");
+        let date = "Mon, 14 Sep 2026 09:00:00 +0000";
+        let a = insert(&store, &inbox, 7, &raw("a@x", "Hi", "leni@x.example", None, "", date)).unwrap();
+        let b = insert(&store, &inbox, 8, &raw("b@x", "Hi", "leni@x.example", None, "", date)).unwrap();
+        let before = store.locations(&[a.clone(), b.clone()]).unwrap();
+        store.move_local(&[a.clone(), b.clone()], &archive).unwrap();
+        // Meanwhile the inbox synced b again, as the server still has it there.
+        let again = insert(&store, &inbox, 8, &raw("b@x", "Hi", "leni@x.example", None, "", date)).unwrap();
+
+        store.restore_locations(&before).unwrap();
+        let a_now = store.locations(std::slice::from_ref(&a)).unwrap().pop().unwrap();
+        assert_eq!((a_now.folder_id.as_str(), a_now.uid), (inbox.as_str(), 7));
+        assert!(store.locations(std::slice::from_ref(&b)).unwrap().is_empty(), "no ghost left in the archive");
+        assert_eq!(store.id_by_uid(&inbox, 8).unwrap(), Some(again));
+    }
+
+    #[test]
+    fn placeholders_without_a_message_id_go_once_the_target_synced() {
+        let (store, _, inbox, _) = store_with_account();
+        let archive = folder(&store, "Archive", Some(FolderRole::Archive), ".");
+        let bytes = b"From: leni@x.example\r\nSubject: No id\r\n\r\nHallo\r\n";
+        let id = insert(&store, &inbox, 7, bytes).unwrap();
+        store.move_local(std::slice::from_ref(&id), &archive).unwrap();
+        // Without a Message-ID the server copy can't take over the placeholder.
+        let copy = insert(&store, &archive, 3, bytes).unwrap();
+
+        let now = crate::mime::now();
+        assert_eq!(store.delete_stale_placeholders(&archive, now - 300).unwrap(), 0, "a fresh move stays");
+        assert_eq!(store.delete_stale_placeholders(&archive, now + 1).unwrap(), 1);
+        assert!(store.locations(std::slice::from_ref(&id)).unwrap().is_empty());
+        assert_eq!(store.id_by_uid(&archive, 3).unwrap(), Some(copy));
     }
 
     #[test]

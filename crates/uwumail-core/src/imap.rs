@@ -27,6 +27,10 @@ pub const INITIAL_WINDOW: u32 = 400;
 /// Messages larger than this are synced headers-only; the body loads on open.
 const FULL_FETCH_LIMIT: u32 = 2 * 1024 * 1024;
 const FETCH_BATCH: usize = 50;
+/// Raw bytes fetched with bodies in one batch, so a batch of large mails stays small on phones.
+const FETCH_BATCH_BYTES: u64 = 8 * 1024 * 1024;
+/// Moves whose placeholder is older than this when the target syncs have finished on the server.
+const PLACEHOLDER_GRACE_SECS: i64 = 5 * 60;
 const HEADER_QUERY: &str = "(UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER])";
 /// The start of the text, enough for a preview.
 const PREVIEW_QUERY: &str = "(UID BODY.PEEK[TEXT]<0.4096>)";
@@ -437,6 +441,26 @@ pub async fn store_keyword(
     Ok(())
 }
 
+/// Uids with their sizes split into fetch batches of at most `FETCH_BATCH` mails and
+/// `FETCH_BATCH_BYTES` (a single larger mail gets its own batch).
+fn fetch_batches(mails: &[(u32, u32)]) -> Vec<Vec<u32>> {
+    let mut batches: Vec<Vec<u32>> = Vec::new();
+    let mut bytes = 0;
+    for &(uid, size) in mails {
+        match batches.last_mut() {
+            Some(batch) if batch.len() < FETCH_BATCH && bytes + u64::from(size) <= FETCH_BATCH_BYTES => {
+                batch.push(uid);
+                bytes += u64::from(size);
+            }
+            _ => {
+                batches.push(vec![uid]);
+                bytes = u64::from(size);
+            }
+        }
+    }
+    batches
+}
+
 fn uid_set(uids: &[u32]) -> String {
     uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",")
 }
@@ -516,6 +540,7 @@ pub async fn sync_folder(
     folder: &FolderRecord,
     full_after: Option<i64>,
 ) -> Result<FolderSync> {
+    let started = mime::now();
     let mailbox = session.select(&folder.path).await?;
     let validity = mailbox.uid_validity.unwrap_or(0);
     let mut result = FolderSync::default();
@@ -541,15 +566,16 @@ pub async fn sync_folder(
         for fetch in listing.iter().filter(|f| f.uid.is_some_and(|uid| uid > max_uid)) {
             let uid = fetch.uid.unwrap_or_default();
             let old = full_after.zip(fetch.internal_date()).is_some_and(|(cutoff, date)| date.timestamp() < cutoff);
-            if fetch.size.unwrap_or(0) <= FULL_FETCH_LIMIT && !old { small.push(uid) } else { large.push(uid) }
+            let size = fetch.size.unwrap_or(0);
+            if size <= FULL_FETCH_LIMIT && !old { small.push((uid, size)) } else { large.push(uid) }
         }
 
         // Step 2: download, newest first so the inbox fills from the top.
         small.sort_unstable_by(|a, b| b.cmp(a));
         large.sort_unstable_by(|a, b| b.cmp(a));
-        for chunk in small.chunks(FETCH_BATCH) {
+        for chunk in fetch_batches(&small) {
             let query = "(UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[])";
-            let fetches: Vec<Fetch> = session.uid_fetch(uid_set(chunk), query).await?.try_collect().await?;
+            let fetches: Vec<Fetch> = session.uid_fetch(uid_set(&chunk), query).await?.try_collect().await?;
             for fetch in fetches {
                 let (Some(uid), Some(raw)) = (fetch.uid, fetch.body()) else { continue };
                 let inserted = store.insert_message(
@@ -577,12 +603,18 @@ pub async fn sync_folder(
         }
     }
 
-    // Step 3: flag changes and deletions of what we already had.
+    // Moved here long enough ago and still not matched to a server copy (no Message-ID): drop it.
+    if store.delete_stale_placeholders(&folder.id, started - PLACEHOLDER_GRACE_SECS)? > 0 {
+        result.changed = true;
+    }
+
+    // Step 3: flag changes and deletions of what we already had; nothing below `min_uid` is stored.
     if max_uid > 0 {
         let fetched: Vec<Fetch> = if mailbox.exists == 0 {
             Vec::new()
         } else {
-            session.uid_fetch(format!("1:{max_uid}"), "(UID FLAGS)").await?.try_collect::<Vec<Fetch>>().await?
+            let min_uid = store.min_uid(&folder.id)?;
+            session.uid_fetch(format!("{min_uid}:{max_uid}"), "(UID FLAGS)").await?.try_collect::<Vec<Fetch>>().await?
         };
         let current: HashMap<u32, MessageFlags> =
             fetched.iter().filter_map(|fetch| fetch.uid.map(|uid| (uid, flags_of(fetch)))).collect();
@@ -694,11 +726,30 @@ pub async fn move_messages(session: &mut ImapSession, from: &str, uids: &[u32], 
     } else {
         session.uid_copy(&set, to).await?;
         let _: Vec<Fetch> = session.uid_store(&set, "+FLAGS.SILENT (\\Deleted)").await?.try_collect().await?;
-        if capabilities.has_str("UIDPLUS") {
-            let _: Vec<u32> = session.uid_expunge(&set).await?.try_collect().await?;
-        } else {
-            let _: Vec<u32> = session.expunge().await?.try_collect().await?;
-        }
+        expunge_uids(session, capabilities.has_str("UIDPLUS"), uids).await?;
+    }
+    Ok(())
+}
+
+/// Expunges just these uids, which are marked \Deleted. A plain EXPUNGE (no UIDPLUS) would also
+/// remove mail other clients only marked deleted, so their mark is lifted around it.
+async fn expunge_uids(session: &mut ImapSession, uidplus: bool, uids: &[u32]) -> Result<()> {
+    if uidplus {
+        let _: Vec<u32> = session.uid_expunge(uid_set(uids)).await?.try_collect().await?;
+        return Ok(());
+    }
+    let ours: HashSet<u32> = uids.iter().copied().collect();
+    let mut others: Vec<u32> =
+        session.uid_search("DELETED").await?.into_iter().filter(|uid| !ours.contains(uid)).collect();
+    others.sort_unstable();
+    if !others.is_empty() {
+        let _: Vec<Fetch> =
+            session.uid_store(uid_set(&others), "-FLAGS.SILENT (\\Deleted)").await?.try_collect().await?;
+    }
+    let _: Vec<u32> = session.expunge().await?.try_collect().await?;
+    if !others.is_empty() {
+        let _: Vec<Fetch> =
+            session.uid_store(uid_set(&others), "+FLAGS.SILENT (\\Deleted)").await?.try_collect().await?;
     }
     Ok(())
 }
@@ -711,12 +762,7 @@ pub async fn delete_permanently(session: &mut ImapSession, folder_path: &str, ui
     session.select(folder_path).await?;
     let set = uid_set(uids);
     let _: Vec<Fetch> = session.uid_store(&set, "+FLAGS.SILENT (\\Deleted)").await?.try_collect().await?;
-    if capabilities.has_str("UIDPLUS") {
-        let _: Vec<u32> = session.uid_expunge(&set).await?.try_collect().await?;
-    } else {
-        let _: Vec<u32> = session.expunge().await?.try_collect().await?;
-    }
-    Ok(())
+    expunge_uids(session, capabilities.has_str("UIDPLUS"), uids).await
 }
 
 /// A refusal from the server about a folder, in words that fit the folder dialogs.
@@ -874,6 +920,16 @@ mod tests {
         assert!(explain_rejection("LOGIN failed.", false).message.contains("password"));
     }
     use super::*;
+
+    #[test]
+    fn body_fetches_are_batched_by_size() {
+        let mb = 1024 * 1024;
+        let big: Vec<(u32, u32)> = (1..=10).map(|uid| (uid, 2 * mb)).collect();
+        assert_eq!(fetch_batches(&big), vec![vec![1, 2, 3, 4], vec![5, 6, 7, 8], vec![9, 10]]);
+        let tiny: Vec<(u32, u32)> = (1..=120).map(|uid| (uid, 100)).collect();
+        assert_eq!(fetch_batches(&tiny).iter().map(Vec::len).collect::<Vec<_>>(), [50, 50, 20]);
+        assert_eq!(fetch_batches(&[(1, 20 * mb), (2, 1)]), vec![vec![1], vec![2]]);
+    }
 
     #[test]
     fn search_text_stays_one_command() {
