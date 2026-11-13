@@ -535,6 +535,17 @@ fn for_page(picture: SenderPicture) -> Option<SenderPicture> {
     Some(picture)
 }
 
+/// Deletes the files in `dir` last written longer than `age` ago.
+fn remove_older_than(dir: &Path, age: Duration) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let old = entry.metadata().and_then(|m| m.modified()).is_ok_and(|at| at.elapsed().unwrap_or_default() > age);
+        if old {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
 pub struct SenderPictures {
     dir: PathBuf,
     /// Through the privacy proxy when one is set, for addresses no UwUMail server looks up for us.
@@ -545,6 +556,8 @@ pub struct SenderPictures {
     /// A server's answers per (address, local, logo only).
     addresses: Mutex<HashMap<(String, bool, bool), Remembered>>,
     permits: Semaphore,
+    /// Whether old domains were removed from the disk cache in this run yet.
+    pruned: std::sync::atomic::AtomicBool,
 }
 
 impl SenderPictures {
@@ -570,6 +583,7 @@ impl SenderPictures {
             unreachable: Mutex::new(HashMap::new()),
             addresses: Mutex::new(HashMap::new()),
             permits: Semaphore::new(PARALLEL_FETCHES),
+            pruned: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -724,6 +738,10 @@ impl SenderPictures {
     fn store(&self, domain: &str, found: Option<Found>) -> Result<Option<SenderPicture>> {
         let fail = |e: std::io::Error| Error::internal(format!("Couldn't save the sender picture: {e}"));
         std::fs::create_dir_all(&self.dir).map_err(fail)?;
+        if !self.pruned.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            // Spam brings a new domain per mail; what nobody looked at again would be fetched anew anyway.
+            remove_older_than(&self.dir, 2 * FRESH_FOR);
+        }
         let _ = std::fs::remove_file(self.marker(domain));
         for kind in [PictureKind::Logo, PictureKind::Icon] {
             for format in EXTENSIONS {
@@ -860,6 +878,20 @@ impl SenderPictures {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_disk_cache_drops_domains_not_refreshed_for_long() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join("old.example.none");
+        let fresh = dir.path().join("fresh.example.none");
+        std::fs::write(&old, b"").unwrap();
+        std::fs::write(&fresh, b"").unwrap();
+        let long_ago = SystemTime::now() - 3 * FRESH_FOR;
+        std::fs::File::options().write(true).open(&old).unwrap().set_modified(long_ago).unwrap();
+        remove_older_than(dir.path(), 2 * FRESH_FOR);
+        assert!(!old.exists());
+        assert!(fresh.exists());
+    }
 
     #[test]
     fn uses_the_main_domain_of_company_addresses() {
