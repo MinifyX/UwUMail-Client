@@ -826,7 +826,6 @@ export function SettingsDialog() {
       <Dialog
         open={section !== null}
         onClose={requestClose}
-        closeOnOutsideClick={!formDirty}
         title={t("settings.title")}
         width="lg"
       >

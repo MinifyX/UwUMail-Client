@@ -14,7 +14,13 @@ export function CommandPalette({ commands }: { commands: Command[] }) {
   const hasThread = useUi((s) => s.selectedThreadId !== null);
 
   return (
-    <Dialog open={open} onClose={() => setOpen(false)} width="md" className="mt-[12vh] self-start">
+    <Dialog
+      open={open}
+      onClose={() => setOpen(false)}
+      closeOnOutsideClick
+      width="md"
+      className="mt-[12vh] self-start"
+    >
       {open && (
         <PaletteBody
           commands={commands.filter((c) => hasThread || !c.needsThread)}

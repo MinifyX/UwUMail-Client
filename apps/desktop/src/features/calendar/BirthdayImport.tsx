@@ -155,7 +155,6 @@ export function BirthdayImportDialog({ accountId, onClose }: { accountId: string
       onClose={onClose}
       title={t("calendar.birthdays.title")}
       width="lg"
-      closeOnOutsideClick={false}
     >
       {accountId !== null && <ImportBody accountId={accountId} onClose={onClose} />}
     </Dialog>
