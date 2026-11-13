@@ -52,6 +52,11 @@ describe("replies", () => {
     );
   });
 
+  it("to my own mail come from the alias I sent it from", () => {
+    const sent = { ...message(["leni@wanders.example"]), from: { email: "Hallo@uwumail.example" } };
+    expect(replyFrom(sent, identities)).toBe("hallo@uwumail.example");
+  });
+
   it("use the mailbox's own address otherwise", () => {
     expect(replyFrom(message(["mini@uwumail.example"]), identities)).toBe("");
     // An alias of another mailbox doesn't count.
