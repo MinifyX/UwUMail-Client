@@ -1472,7 +1472,7 @@ impl Engine {
             .pop()
             .ok_or_else(|| Error::not_found("This message no longer exists."))?;
         let raw = self.inner.raw_message(&location).await?;
-        Ok(mime::draft_parts(&raw).attachments)
+        Ok(mime::forward_attachments(&raw))
     }
 
     /// Sends after `delay_seconds`, unless [`Engine::cancel_send`] comes first. The message
