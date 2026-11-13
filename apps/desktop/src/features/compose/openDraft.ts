@@ -1,48 +1,9 @@
 import { BackendError, backend } from "@/backend/backend";
-import type { DraftContent, Message, OutgoingAttachment } from "@/backend/types";
+import type { DraftContent } from "@/backend/types";
 import { translate } from "@/i18n";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { clearLocalDraft } from "./localDraft";
-
-export function readAsBase64(file: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
- * Forwards a mail with its files. They load before the composer opens, so none can be missing when
- * it is sent. Pictures the text shows through `cid:` stay out: an outgoing file has no Content-ID.
- */
-export async function openForward(source: Message) {
-  let attachments: OutgoingAttachment[] = [];
-  try {
-    attachments = await Promise.all(
-      source.attachments
-        .filter((attachment) => !attachment.inline)
-        .map(async (attachment) => {
-          const file = await backend().getAttachment(attachment.id);
-          const response = await fetch(file.url);
-          if (!response.ok) throw new Error(response.statusText);
-          const blob = await response.blob();
-          return {
-            filename: file.filename,
-            mimeType: file.mimeType,
-            size: blob.size,
-            source: { kind: "base64" as const, data: await readAsBase64(blob) },
-          };
-        }),
-    );
-  } catch (reason) {
-    const message = reason instanceof Error ? reason.message : String(reason);
-    toast(translate("toast.forwardFilesFailed", { reason: message }), "error");
-  }
-  useUi.getState().openCompose({ mode: "forward", source, attachments });
-}
 
 /** Opens a draft from the Drafts folder in the composer, to keep writing it. */
 export async function openDraftMessage(messageId: string) {

@@ -15,7 +15,6 @@ import { requestMove } from "../mail/selection";
 import { requestSnooze } from "../mail/snooze";
 import { SEARCH_INPUT_ID } from "../mail/MailSearch";
 import { switchWorkspace, WORKSPACE_ICONS, WORKSPACE_KEYS, workspaceName } from "../workspaces/workspaces";
-import { openForward } from "../compose/openDraft";
 
 export interface Command {
   id: string;
@@ -95,7 +94,7 @@ export function buildCommands(
       icon: ICONS.forward,
       keys: ["f"],
       needsThread: true,
-      run: withThread((thread) => void openForward(latest(thread))),
+      run: withThread((thread) => ui.openCompose({ mode: "forward", source: latest(thread) })),
     },
     {
       id: "archive",

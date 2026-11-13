@@ -9,7 +9,6 @@ import { useBackLayer } from "@/lib/backStack";
 import { useIsPhone } from "@/lib/device";
 import { insertDroppedHtml } from "./droppedHtml";
 import { clearLocalDraft, markLocalDraftSaved, saveLocalDraft } from "./localDraft";
-import { readAsBase64 } from "./openDraft";
 import { AccountDot } from "@/components/ui/Avatar";
 import { useT } from "@/i18n";
 import { formatSize } from "@/lib/format";
@@ -45,6 +44,15 @@ const DRAFT_SAVE_DELAY = 2500;
 const DRAFT_SAVE_MAX_WAIT = 15_000;
 
 type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; at: string } | { kind: "local" };
+
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 
 export function Composer() {
   const request = useUi((s) => s.compose);

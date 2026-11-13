@@ -1,16 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BackendError } from "@/backend/backend";
-import type { AttachmentContent, DraftContent, Message } from "@/backend/types";
+import type { DraftContent } from "@/backend/types";
 import { useUi } from "@/state/ui";
 import { loadLocalDraft, markLocalDraftSaved, saveLocalDraft } from "./localDraft";
-import { openForward, reopenSavedDraft } from "./openDraft";
+import { reopenSavedDraft } from "./openDraft";
 
 const KEY = "uwumail.phoneDraft";
 
-const fake = {
-  openDraft: vi.fn<(messageId: string) => Promise<DraftContent>>(),
-  getAttachment: vi.fn<(attachmentId: string) => Promise<AttachmentContent>>(),
-};
+const fake = { openDraft: vi.fn<(messageId: string) => Promise<DraftContent>>() };
 
 vi.mock("@/backend/backend", async (original) => ({
   ...(await original<typeof import("@/backend/backend")>()),
@@ -102,33 +99,5 @@ describe("a draft kept as its id", () => {
     fake.openDraft.mockRejectedValue(new BackendError("connection_failed", "Offline"));
     await reopenSavedDraft("m7");
     expect(loadLocalDraft()).toMatchObject({ messageId: "m7" });
-  });
-});
-
-describe("forwarding", () => {
-  it("takes the original's files along, but not its inline pictures", async () => {
-    fake.getAttachment.mockResolvedValue({
-      url: "blob:rechnung",
-      filename: "rechnung.pdf",
-      mimeType: "application/pdf",
-      size: 3,
-      dangerous: false,
-    });
-    vi.stubGlobal("fetch", async () => new Response("PDF"));
-    const source = {
-      id: "m1",
-      attachments: [
-        { id: "a1", filename: "rechnung.pdf", mimeType: "application/pdf", size: 3, inline: false },
-        { id: "a2", filename: "logo.png", mimeType: "image/png", size: 9, inline: true, contentId: "logo" },
-      ],
-    } as Message;
-    await openForward(source);
-    vi.unstubAllGlobals();
-    expect(fake.getAttachment).toHaveBeenCalledExactlyOnceWith("a1");
-    const request = useUi.getState().compose;
-    expect(request?.mode).toBe("forward");
-    expect(request?.attachments).toEqual([
-      { filename: "rechnung.pdf", mimeType: "application/pdf", size: 3, source: { kind: "base64", data: btoa("PDF") } },
-    ]);
   });
 });
