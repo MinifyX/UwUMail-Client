@@ -740,7 +740,8 @@ impl SenderPictures {
         std::fs::create_dir_all(&self.dir).map_err(fail)?;
         if !self.pruned.swap(true, std::sync::atomic::Ordering::Relaxed) {
             // Spam brings a new domain per mail; what nobody looked at again would be fetched anew anyway.
-            remove_older_than(&self.dir, 2 * FRESH_FOR);
+            let dir = self.dir.clone();
+            tokio::task::spawn_blocking(move || remove_older_than(&dir, 2 * FRESH_FOR));
         }
         let _ = std::fs::remove_file(self.marker(domain));
         for kind in [PictureKind::Logo, PictureKind::Icon] {
