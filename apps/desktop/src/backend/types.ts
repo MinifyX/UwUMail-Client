@@ -251,7 +251,7 @@ export interface OutgoingAttachment {
   filename: string;
   mimeType: string;
   size: number;
-  /** Base64 content, or a local path when running in the desktop shell. */
+  /** Base64 content only; there is deliberately no path variant (see AttachmentSource in uwumail-core). */
   source: { kind: "base64"; data: string };
 }
 

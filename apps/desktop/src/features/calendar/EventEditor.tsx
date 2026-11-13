@@ -201,7 +201,6 @@ function EditorDialog({ request, onClose }: { request: EditorRequest | null; onC
       <Dialog
         open
         onClose={requestClose}
-        closeOnOutsideClick={!dirty}
         title={occurrence ? t("calendar.editEvent") : t("calendar.newEvent")}
         width="md"
       >

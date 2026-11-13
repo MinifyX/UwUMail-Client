@@ -11,6 +11,8 @@ import { startAccountSync, useAccountSync } from "@/state/accountSync";
 import { useSettings } from "@/state/settings";
 import { sharedOf, useSharedMailboxes } from "@/state/sharedMailboxes";
 import { toast } from "@/state/toasts";
+import { useUi } from "@/state/ui";
+import { clearLocalDraft, loadLocalDraft } from "../compose/localDraft";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -144,6 +146,20 @@ function RemoveQuestion({ account, onDone }: { account: Account; onDone: () => v
       const gone = [account, ...(keepShared ? shared.filter((mailbox) => mailbox.serverShared) : shared)];
       for (const removed of gone) settings.setAccountWorkspace(removed.id, "private");
       await client.invalidateQueries();
+      const goneIds = new Set(gone.map((removed) => removed.id));
+      const ui = useUi.getState();
+      // Not setView: that would also leave the settings for the mail section.
+      const view = ui.view;
+      const viewGone =
+        (view.kind === "folder" && goneIds.has(view.accountId)) ||
+        (view.kind === "label" && view.accountIds.every((id) => goneIds.has(id)));
+      if (viewGone) {
+        useUi.setState({ view: { kind: "unified", role: "inbox" }, selectedThreadId: null, checkedThreadIds: [] });
+      } else ui.selectThread(null);
+      const composing = ui.compose?.source?.accountId ?? ui.compose?.restore?.accountId;
+      if (composing && goneIds.has(composing)) ui.closeCompose();
+      const draft = loadLocalDraft();
+      if (draft && goneIds.has(draft.accountId)) clearLocalDraft();
       // Another account may carry the settings now.
       if (gone.some((removed) => useAccountSync.getState().accountId === removed.id)) void startAccountSync();
       onDone();

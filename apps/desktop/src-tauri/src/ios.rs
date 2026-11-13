@@ -212,9 +212,16 @@ pub async fn save_file(app: &AppHandle, file: &AttachmentFile) -> Result<bool, E
         app.path().document_dir().map_err(|e| Error::internal(format!("Couldn't find the Files folder: {e}")))?;
     std::fs::create_dir_all(&folder).map_err(|e| Error::internal(format!("Couldn't open the Files folder: {e}")))?;
     let destination = free_name(&folder, &uwumail_core::attachments::safe_filename(&file.filename));
-    // The file is already in the cache; the page never decides which file gets copied.
-    std::fs::copy(&file.path, &destination)
-        .map_err(|e| Error::invalid(format!("Couldn't save {}: {e}", destination.display())))?;
+    let source = file.path.clone();
+    // A big file would hold an async worker for the whole copy.
+    tauri::async_runtime::spawn_blocking(move || {
+        // The file is already in the cache; the page never decides which file gets copied.
+        std::fs::copy(&source, &destination)
+            .map_err(|e| Error::invalid(format!("Couldn't save {}: {e}", destination.display())))?;
+        Ok::<_, Error>(())
+    })
+    .await
+    .map_err(|e| Error::internal(format!("Saving failed: {e}")))??;
     Ok(true)
 }
 

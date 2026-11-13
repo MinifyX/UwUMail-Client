@@ -16,14 +16,10 @@ export interface DraftState {
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
-function prefixed(prefix: string, subject: string) {
-  const pattern = new RegExp(`^(${prefix}|re|aw|fwd|wg):\\s*`, "i");
+function prefixed(prefix: "Re" | "Fwd", subject: string) {
+  // Only the mode's own family counts: a forward of "Re: …" still becomes "Fwd: Re: …".
+  const pattern = prefix === "Re" ? /^(re|aw):\s*/i : /^(fwd|fw|wg):\s*/i;
   return pattern.test(subject) ? subject : `${prefix}: ${subject}`;
-}
-
-function withoutMe(addresses: Address[], accounts: Account[], identities: Identity[]) {
-  const mine = new Set([...accounts, ...identities].map((a) => a.email.toLowerCase()));
-  return addresses.filter((a) => !mine.has(a.email.toLowerCase()));
 }
 
 function quoted(message: Message) {
@@ -31,11 +27,12 @@ function quoted(message: Message) {
 }
 
 /**
- * The address a reply comes from: the one of the mailbox's addresses the mail was sent to.
- * Empty means the mailbox's own address.
+ * The address a reply comes from: the one of the mailbox's addresses the mail was sent from or
+ * to. Empty means the mailbox's own address.
  */
 export function replyFrom(source: Message, identities: Identity[]): string {
-  const addressed = new Set([...source.to, ...source.cc].map((a) => a.email.toLowerCase()));
+  // My own mail: the address I sent it from.
+  const addressed = new Set([source.from, ...source.to, ...source.cc].map((a) => a.email.toLowerCase()));
   const match = identities.find(
     (i) => i.accountId === source.accountId && !i.primary && addressed.has(i.email.toLowerCase()),
   );
@@ -96,9 +93,15 @@ export function initialDraft(
     };
   }
 
-  const replyTo = source.replyTo.length > 0 ? source.replyTo : [source.from];
-  const to = request.mode === "replyAll" ? withoutMe([...replyTo, ...source.to], accounts, identities) : replyTo;
-  const cc = request.mode === "replyAll" ? withoutMe(source.cc, accounts, identities) : [];
+  const mine = new Set([...accounts, ...identities].map((a) => a.email.toLowerCase()));
+  // A reply to my own mail goes to the people it went to, not back to me.
+  const fromMe = mine.has(source.from.email.toLowerCase()) && source.to.length > 0;
+  const replyTo = source.replyTo.length > 0 ? source.replyTo : fromMe ? source.to : [source.from];
+  // Each address once, in To before Cc, and none of mine in reply all.
+  const seen = request.mode === "replyAll" ? new Set(mine) : new Set<string>();
+  const fresh = (a: Address) => !seen.has(a.email.toLowerCase()) && !!seen.add(a.email.toLowerCase());
+  const to = (request.mode === "replyAll" ? [...replyTo, ...source.to] : replyTo).filter(fresh);
+  const cc = request.mode === "replyAll" ? source.cc.filter(fresh) : [];
   const header = escapeHtml(t("compose.quoteHeader", { date, name: "%%NAME%%" })).replace("%%NAME%%", name);
   return {
     ...empty,

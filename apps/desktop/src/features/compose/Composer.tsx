@@ -31,6 +31,7 @@ import { SendLaterDialog } from "./SendLater";
 import { announceScheduled, useSendLaterInfo } from "./scheduled";
 import { ComposeAssistButton, ComposeAssistPanel } from "../assist/ComposeAssist";
 import { needsAttachmentReminder } from "./attachmentReminder";
+import { useForwardedFiles } from "./forwardFiles";
 import { AttachmentReminderDialog } from "./AttachmentReminderDialog";
 import { SaveTemplateDialog, TemplatesMenu } from "./TemplatesMenu";
 import { fillText, templateHtml, templateValues } from "@/lib/templates";
@@ -100,6 +101,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
   const [showCc, setShowCc] = useState(initial.cc.length > 0 || initial.bcc.length > 0);
   const [large, setLarge] = useState(false);
   const [attachments, setAttachments] = useState<OutgoingAttachment[]>(request.attachments ?? []);
+  const loadingFiles = useForwardedFiles(request, (files) => setAttachments((current) => [...files, ...current]));
   const [sending, setSending] = useState(false);
   const [pickingTime, setPickingTime] = useState(false);
   /** Sending waits for an answer: the text speaks of an attachment, and there is none. */
@@ -451,6 +453,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
 
   /** Sends now (after the undo window), or at `sendAt`: on the UwUMail server or from this device's outbox. */
   const send = async (sendAt?: string, remindedAlready = false) => {
+    if (loadingFiles) return;
     if (recipientProblem) {
       setError(recipientProblem);
       return;
@@ -878,7 +881,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
         <Button
           variant="primary"
           icon={ICONS.send}
-          busy={sending}
+          busy={sending || loadingFiles}
           onClick={() => void send()}
           title={shortcutHint(t("compose.send"), "CmdOrCtrl+Enter", i18n.language)}
         >
@@ -888,7 +891,7 @@ function ComposerWindow({ request }: { request: ComposeRequest }) {
           icon={ICONS.sendLater}
           size="sm"
           label={t("compose.later.open")}
-          disabled={sending || !sendLaterInfo}
+          disabled={sending || loadingFiles || !sendLaterInfo}
           onClick={() => {
             if (recipientProblem) {
               setError(recipientProblem);

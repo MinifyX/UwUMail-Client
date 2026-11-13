@@ -263,6 +263,25 @@ pub fn draft_parts(raw: &[u8]) -> DraftParts {
     DraftParts { bcc: addresses(message.bcc()), attachments }
 }
 
+/// The files a forward takes along: what the reader lists, without the pictures the HTML shows.
+pub fn forward_attachments(raw: &[u8]) -> Vec<crate::model::OutgoingAttachment> {
+    use base64::Engine as _;
+    let Some(message) = MessageParser::default().parse(raw) else { return Vec::new() };
+    let decoded = crate::tnef::decode(&message);
+    crate::tnef::attachment_parts(&message, &decoded)
+        .into_iter()
+        .filter(|part| !part.inline)
+        .map(|part| crate::model::OutgoingAttachment {
+            size: part.data.len() as u64,
+            source: crate::model::AttachmentSource::Base64 {
+                data: base64::engine::general_purpose::STANDARD.encode(&part.data),
+            },
+            filename: part.filename,
+            mime_type: part.mime_type,
+        })
+        .collect()
+}
+
 const REMOTE_MARKERS: [&str; 6] =
     ["src=\"http", "src='http", "url(http", "url(\"http", "url('http", "background=\"http"];
 
@@ -551,6 +570,9 @@ Content-Type: text/html; charset=utf-8\r\n\
         assert_eq!(names, ["Quartalsbericht 2026.pdf", "image001.png", "Weitergeleitet.eml"]);
         assert_eq!(parsed.attachments[0].size, 13);
         assert!(parsed.attachments[1].inline);
+        let forwarded = forward_attachments(&mime_with_winmail(HEADERS, Some(""), &note()));
+        let names: Vec<&str> = forwarded.iter().map(|a| a.filename.as_str()).collect();
+        assert_eq!(names, ["Quartalsbericht 2026.pdf", "Weitergeleitet.eml"], "no winmail.dat, no inline picture");
 
         // The mail's own text wins; the meeting is an invitation.
         let parsed =

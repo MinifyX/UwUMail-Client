@@ -415,7 +415,16 @@ pub fn apply_pending_on_start(app: &AppHandle) -> bool {
 }
 
 pub fn set_channel(app: &AppHandle, channel: Channel) {
-    *app.state::<Updates>().channel.lock().unwrap() = channel;
+    let state = app.state::<Updates>();
+    *state.channel.lock().unwrap() = channel;
+    // A beta that is already waiting must not install after the switch to stable.
+    let mut ready = state.ready.lock().unwrap();
+    if channel == Channel::Stable && ready.as_ref().is_some_and(|update| update.version.contains('-')) {
+        *ready = None;
+        if let Some(dir) = updates_dir(app) {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
 }
 
 pub fn set_automatic(app: &AppHandle, enabled: bool) {
@@ -466,6 +475,11 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
     if !verify(app, &bytes, &found.signature, &found.version, install) {
         return Err(Error::internal(format!("The update to {} isn't signed for that version.", found.version)));
     }
+    // Held while saving, so a channel switch during the download can't leave this one waiting.
+    let mut ready = state.ready.lock().unwrap();
+    if *state.channel.lock().unwrap() != channel {
+        return Ok(None);
+    }
     let dir = updates_dir(app).ok_or_else(|| Error::internal("No folder for updates"))?;
     create_private_dir(&dir).map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
     let file = setup_file(&dir, &found.version, install);
@@ -479,7 +493,8 @@ pub async fn check(app: &AppHandle) -> Result<Option<ReadyUpdate>, Error> {
     std::fs::write(dir.join(PENDING), serde_json::to_vec(&update)?)
         .map_err(|e| Error::internal(format!("Couldn't save the update: {e}")))?;
 
-    *state.ready.lock().unwrap() = Some(update.clone());
+    *ready = Some(update.clone());
+    drop(ready);
     let _ = app.emit("update:ready", &update);
     Ok(Some(update))
 }

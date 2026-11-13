@@ -1,6 +1,6 @@
 {
   "name": "@uwumail/desktop",
-  "version": "0.12.0-beta.3",
+  "version": "0.12.0-beta.4",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-only",
@@ -24,7 +24,7 @@
     "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-haptics": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.5",
-    "@uwusuite/design": "https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.9.0/uwusuite-design-1.9.0.tgz",
+    "@uwusuite/design": "https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.12.0/uwusuite-design-1.12.0.tgz",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.17",
     "i18next": "^26.4.2",
