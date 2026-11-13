@@ -1,4 +1,4 @@
-import { ACCOUNT_COLORS, type AccountColor, type Address } from "@/backend/types";
+import type { Address } from "@/backend/types";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -53,12 +53,6 @@ export function initials(address: Address): string {
   const parts = name.split(/[\s._-]+/).filter(Boolean);
   const letters = parts.length > 1 ? `${parts[0]![0]}${parts[parts.length - 1]![0]}` : name.slice(0, 2);
   return letters.toUpperCase();
-}
-
-export function colorFor(key: string): AccountColor {
-  let hash = 0;
-  for (const char of key.toLowerCase()) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return ACCOUNT_COLORS[hash % ACCOUNT_COLORS.length]!;
 }
 
 /**

@@ -530,7 +530,7 @@ export function AccountSetup({ onDone, footer, onDirtyChange }: AccountSetupProp
               onClick={() => setColor(option)}
               className={clsx(
                 "size-8 rounded-full ring-offset-2 ring-offset-surface transition-transform hover:scale-110",
-                COLOR_CLASSES[option].dot,
+                COLOR_CLASSES[option],
                 color === option && "ring-2 ring-ink",
               )}
             />
