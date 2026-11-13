@@ -171,6 +171,17 @@ describe("shared mailboxes", () => {
     expect(loadLocalDraft()).toBeNull();
   });
 
+  it("leaves no label view or composer on a removed account", async () => {
+    useUi.getState().setView({ kind: "label", scope: "home", labelId: "l1", keyword: "$label1", accountIds: ["home"] });
+    const restore = { mode: "new" as const, accountId: "home", to: [], cc: [], bcc: [], subject: "", html: "" };
+    useUi.getState().openCompose({ mode: "new", restore });
+    setup();
+    useSharedMailboxes.getState().open({ kind: "remove", account: home });
+    answer(await screen.findByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(useUi.getState().view).toEqual({ kind: "unified", role: "inbox" }));
+    expect(useUi.getState().compose).toBeNull();
+  });
+
   it("removes one shared mailbox from its menu", async () => {
     setup();
     fireEvent.click(await screen.findByRole("button", { name: "More for team@contoso.example" }));

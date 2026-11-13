@@ -149,9 +149,15 @@ function RemoveQuestion({ account, onDone }: { account: Account; onDone: () => v
       const goneIds = new Set(gone.map((removed) => removed.id));
       const ui = useUi.getState();
       // Not setView: that would also leave the settings for the mail section.
-      if (ui.view.kind === "folder" && goneIds.has(ui.view.accountId)) {
+      const view = ui.view;
+      const viewGone =
+        (view.kind === "folder" && goneIds.has(view.accountId)) ||
+        (view.kind === "label" && view.accountIds.every((id) => goneIds.has(id)));
+      if (viewGone) {
         useUi.setState({ view: { kind: "unified", role: "inbox" }, selectedThreadId: null, checkedThreadIds: [] });
       } else ui.selectThread(null);
+      const composing = ui.compose?.source?.accountId ?? ui.compose?.restore?.accountId;
+      if (composing && goneIds.has(composing)) ui.closeCompose();
       const draft = loadLocalDraft();
       if (draft && goneIds.has(draft.accountId)) clearLocalDraft();
       // Another account may carry the settings now.
