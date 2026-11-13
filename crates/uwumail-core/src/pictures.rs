@@ -682,6 +682,11 @@ impl SenderPictures {
             let _permit = self.permits.acquire().await.map_err(|_| Error::internal("Picture fetching stopped."))?;
             self.lookup(&domain).await
         };
+        if !self.pruned.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            // Spam brings a new domain per mail; what nobody looked at again would be fetched anew anyway.
+            let dir = self.dir.clone();
+            let _ = tokio::task::spawn_blocking(move || remove_older_than(&dir, 2 * FRESH_FOR)).await;
+        }
         match lookup {
             Lookup::Unreachable => {
                 self.unreachable.lock().unwrap().insert(domain, Instant::now());
@@ -738,11 +743,6 @@ impl SenderPictures {
     fn store(&self, domain: &str, found: Option<Found>) -> Result<Option<SenderPicture>> {
         let fail = |e: std::io::Error| Error::internal(format!("Couldn't save the sender picture: {e}"));
         std::fs::create_dir_all(&self.dir).map_err(fail)?;
-        if !self.pruned.swap(true, std::sync::atomic::Ordering::Relaxed) {
-            // Spam brings a new domain per mail; what nobody looked at again would be fetched anew anyway.
-            let dir = self.dir.clone();
-            tokio::task::spawn_blocking(move || remove_older_than(&dir, 2 * FRESH_FOR));
-        }
         let _ = std::fs::remove_file(self.marker(domain));
         for kind in [PictureKind::Logo, PictureKind::Icon] {
             for format in EXTENSIONS {
