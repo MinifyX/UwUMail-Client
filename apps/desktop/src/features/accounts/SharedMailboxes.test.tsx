@@ -8,6 +8,8 @@ import { isReadOnly, nestAccounts, takesSharedMailboxes, useSharedMailboxes } fr
 import { MailboxNav } from "../mail/MailboxNav";
 import { SharedMailboxDialogs } from "./SharedMailboxDialogs";
 import { useSettings } from "@/state/settings";
+import { useUi } from "@/state/ui";
+import { loadLocalDraft, saveLocalDraft } from "../compose/localDraft";
 
 const work: Account = {
   id: "work",
@@ -155,6 +157,18 @@ describe("shared mailboxes", () => {
     fireEvent.click(keep);
     answer(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(removeAccount).toHaveBeenCalledWith("work", { keepShared: true }));
+  });
+
+  it("leaves nothing open on a removed account", async () => {
+    useUi.getState().setView({ kind: "folder", accountId: "home", folderId: "home:inbox" });
+    useUi.getState().selectThread("t1");
+    saveLocalDraft({ mode: "new", accountId: "home", to: [], cc: [], bcc: [], subject: "", html: "" });
+    setup();
+    useSharedMailboxes.getState().open({ kind: "remove", account: home });
+    answer(await screen.findByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(useUi.getState().view).toEqual({ kind: "unified", role: "inbox" }));
+    expect(useUi.getState().selectedThreadId).toBeNull();
+    expect(loadLocalDraft()).toBeNull();
   });
 
   it("removes one shared mailbox from its menu", async () => {
