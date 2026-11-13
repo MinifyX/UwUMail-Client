@@ -15,11 +15,11 @@ without it. The text appears under "What's new" in UwUMail's update hint and on 
 1. Set the version in `Cargo.toml` (workspace), `apps/desktop/src-tauri/tauri.conf.json`,
    `apps/setup/src-tauri/tauri.conf.json` and the `package.json` files.
 2. Add `release-notes/<version>.json`.
-3. Push the release commit to `main` and wait for the Android and iOS workflows of that commit (the release
-   takes their APK and IPA).
-4. Tag `v<version>` and push the tag. The release workflow does the rest: it builds the setups for Windows
-   (x64 and ARM) and macOS (universal) and the Linux packages (x64 and arm64), tests each of them on a runner
-   of its kind, signs what the updater downloads, and publishes them with the APK, the unsigned IPA and
+3. Push the release commit to `main` and wait for the desktop, Android and iOS workflows of that commit (the
+   release takes their setups, APK and IPA; a newer push to `main` would cancel them).
+4. Tag `v<version>` and push the tag. The release workflow does the rest: it takes the setups for Windows
+   (x64 and ARM) and macOS (universal) and the Linux packages (x64 and arm64) that the desktop workflow built
+   and tested for that commit, signs what the updater downloads, and publishes them with the APK, the unsigned IPA and
    `SHA256SUMS.txt`. Then it updates the feeds and the AUR package `uwumail-bin` (once the
    `AUR_SSH_PRIVATE_KEY` secret exists; until then the job only leaves a notice). The files, all without the
    version in their name:
