@@ -1510,7 +1510,8 @@ impl Store {
     pub fn delete_stale_placeholders(&self, folder_id: &str, before: i64) -> Result<usize> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
-        let stale = "folder_id = ?1 AND uid < 0 AND remote_id IS NULL AND -uid < ?2";
+        // Placeholders with a Message-ID wait for their server copy, `insert` adopts them.
+        let stale = "folder_id = ?1 AND uid < 0 AND remote_id IS NULL AND message_id IS NULL AND -uid < ?2";
         let values = params![folder_id, before.saturating_mul(1000)];
         tx.execute(
             &format!("DELETE FROM messages_fts WHERE rowid IN (SELECT rowid FROM messages WHERE {stale})"),
@@ -2981,7 +2982,8 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         let archive = folder(&store, "Archive", Some(FolderRole::Archive), ".");
         let bytes = b"From: leni@x.example\r\nSubject: No id\r\n\r\nHallo\r\n";
         let id = insert(&store, &inbox, 7, bytes).unwrap();
-        store.move_local(std::slice::from_ref(&id), &archive).unwrap();
+        let with_id = insert(&store, &inbox, 8, &raw("w@x", "Hi", "leni@x.example", None, "", "")).unwrap();
+        store.move_local(&[id.clone(), with_id.clone()], &archive).unwrap();
         // Without a Message-ID the server copy can't take over the placeholder.
         let copy = insert(&store, &archive, 3, bytes).unwrap();
 
@@ -2990,6 +2992,7 @@ Content-Type: text/plain; charset=utf-8\r\n\r\nPsst\r\n";
         assert_eq!(store.delete_stale_placeholders(&archive, now + 1).unwrap(), 1);
         assert!(store.locations(std::slice::from_ref(&id)).unwrap().is_empty());
         assert_eq!(store.id_by_uid(&archive, 3).unwrap(), Some(copy));
+        assert_eq!(store.locations(&[with_id]).unwrap().len(), 1, "a placeholder with a Message-ID waits");
     }
 
     #[test]
