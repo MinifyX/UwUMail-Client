@@ -1463,6 +1463,18 @@ impl Engine {
         })
     }
 
+    /// The files of a message as attachments for a new one, e.g. when forwarding it.
+    pub async fn message_attachments(&self, message_id: &str) -> Result<Vec<OutgoingAttachment>> {
+        let location = self
+            .inner
+            .store
+            .locations(&[message_id.to_string()])?
+            .pop()
+            .ok_or_else(|| Error::not_found("This message no longer exists."))?;
+        let raw = self.inner.raw_message(&location).await?;
+        Ok(mime::draft_parts(&raw).attachments)
+    }
+
     /// Sends after `delay_seconds`, unless [`Engine::cancel_send`] comes first. The message
     /// waits in the database, so closing the window or even UwUMail doesn't lose it.
     pub fn queue_send(&self, outgoing: OutgoingMessage, delay_seconds: u64) -> Result<QueuedSend> {
