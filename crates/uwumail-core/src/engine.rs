@@ -1844,6 +1844,8 @@ impl Inner {
     /// found by Message-ID. Mail without one keeps its placeholder.
     // shortcut: one SEARCH per placeholder, batch them into one OR search if undoing large selections gets slow.
     async fn resolve_placeholders(&self, locations: &mut [MessageLocation]) -> Result<()> {
+        // Copies with the same Message-ID moved together each take their own uid.
+        let mut taken = HashSet::new();
         for location in locations.iter_mut().filter(|l| l.remote_id.is_none() && l.uid <= 0) {
             let Some(message_id) = location.message_id.clone() else { continue };
             let found = with_session!(self, &location.account_id, |session| imap::uids_with_message_id(
@@ -1851,8 +1853,13 @@ impl Inner {
                 &location.folder_path,
                 &message_id
             ))?;
-            if let Some(uid) = found.last() {
-                location.uid = i64::from(*uid);
+            let free = found
+                .iter()
+                .rev()
+                .find(|uid| !taken.contains(&(location.account_id.clone(), location.folder_path.clone(), **uid)));
+            if let Some(&uid) = free {
+                taken.insert((location.account_id.clone(), location.folder_path.clone(), uid));
+                location.uid = i64::from(uid);
             }
         }
         Ok(())
@@ -2153,14 +2160,17 @@ impl Inner {
                         Some(uid) => uids.push(uid),
                         // Just moved here: the trash hasn't synced yet, so the server's uid is unknown.
                         None => {
-                            let message_id = message.message_id.as_deref().ok_or_else(|| {
-                                Error::connection("The message is still being moved. Try again in a moment.")
-                            })?;
-                            uids.extend(with_session!(self, &account_id, |session| imap::uids_with_message_id(
+                            let moving =
+                                || Error::connection("The message is still being moved. Try again in a moment.");
+                            let message_id = message.message_id.as_deref().ok_or_else(moving)?;
+                            let found = with_session!(self, &account_id, |session| imap::uids_with_message_id(
                                 session,
                                 &trash.path,
                                 message_id
-                            ))?);
+                            ))?;
+                            // More than one copy: which is this one isn't known, so delete none.
+                            let [uid] = found[..] else { return Err(moving()) };
+                            uids.push(uid);
                         }
                     }
                 }
