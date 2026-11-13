@@ -15,6 +15,7 @@ import { requestSnooze, someSnoozed, useSnooze } from "./snooze";
 import { useVerificationCodes } from "../verification/useVerificationCodes";
 import { ReaderCodeHint } from "../verification/VerificationCodeBar";
 import { useNyuOnOpen } from "./nyuOnOpen";
+import { openForward } from "../compose/openDraft";
 
 interface ThreadReaderProps {
   variant: "simple" | "pro";
@@ -147,7 +148,7 @@ export function ThreadReader({ variant, className }: ThreadReaderProps) {
           size="sm"
           variant="ghost"
           icon={ICONS.forward}
-          onClick={() => openCompose({ mode: "forward", source: latest })}
+          onClick={() => void openForward(latest)}
         >
           {t("reader.forward")}
         </Button>

@@ -13,6 +13,7 @@ import { MessageView } from "../mail/MessageView";
 import { requestMove } from "../mail/selection";
 import { requestSnooze, someSnoozed, useSnooze } from "../mail/snooze";
 import { useNyuOnOpen } from "../mail/nyuOnOpen";
+import { openForward } from "../compose/openDraft";
 
 /** Messages that start expanded: the newest one plus every unread one. */
 function initiallyExpanded(messages: Message[]) {
@@ -273,7 +274,7 @@ export function MobileReader({ threadId }: { threadId: string }) {
         <BarButton
           icon={ICONS.forward}
           label={t("reader.forward")}
-          onClick={() => openCompose({ mode: "forward", source: latest })}
+          onClick={() => void openForward(latest)}
         />
         {!readOnly && (
           <>
