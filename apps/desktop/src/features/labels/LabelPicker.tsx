@@ -30,7 +30,7 @@ export function LabelPicker() {
   const request = useUi((s) => s.labeling);
   const close = useUi((s) => s.closeLabeling);
   return (
-    <Dialog open={request !== null} onClose={close} title={t("labels.quick.title")} width="sm">
+    <Dialog open={request !== null} onClose={close} closeOnOutsideClick title={t("labels.quick.title")} width="sm">
       {request && <PickerBody key={request.threadIds.join("|")} request={request} />}
     </Dialog>
   );
