@@ -636,6 +636,11 @@ async fn open_draft(engine: State<'_, Engine>, message_id: String) -> CommandRes
     engine.open_draft(&message_id).await
 }
 
+#[tauri::command]
+async fn message_attachments(engine: State<'_, Engine>, message_id: String) -> CommandResult<Vec<OutgoingAttachment>> {
+    engine.message_attachments(&message_id).await
+}
+
 // ------------------------------------------------------------------------------ AI assistant
 // Answers are in UwUMail Server's JMAP shapes (docs/jmap-assist.md) with the app's own ids; the
 // page normalizes them (src/backend/assistConvert.ts).
@@ -1484,6 +1489,7 @@ pub fn run() {
             save_draft,
             delete_draft,
             open_draft,
+            message_attachments,
             search_contacts,
             assist_scopes,
             assist_features,

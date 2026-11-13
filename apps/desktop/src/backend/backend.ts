@@ -55,6 +55,7 @@ import type {
   ContactsAccount,
   DiscoveredSettings,
   DraftContent,
+  OutgoingAttachment,
   DraftSaveResult,
   EventDeleteScope,
   EventInput,
@@ -440,6 +441,8 @@ export interface Backend {
   saveDraft(draft: OutgoingMessage): Promise<DraftSaveResult>;
   deleteDraft(accountId: string, draftKey: string): Promise<void>;
   openDraft(messageId: string): Promise<DraftContent>;
+  /** A message's files as attachments for a new mail, e.g. a forward. */
+  messageAttachments(messageId: string): Promise<OutgoingAttachment[]>;
 
   /** Recipient suggestions: people from the address books first, then addresses learned from mail. */
   searchContacts(query: string): Promise<Contact[]>;

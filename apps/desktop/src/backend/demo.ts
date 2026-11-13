@@ -58,6 +58,7 @@ import type {
   ContactsAccount,
   DiscoveredSettings,
   DraftContent,
+  OutgoingAttachment,
   DraftSaveResult,
   EventDeleteScope,
   EventInput,
@@ -1484,6 +1485,27 @@ export class DemoBackend implements Backend {
       inReplyTo: draft?.inReplyTo ?? null,
       attachments: draft?.attachments ?? [],
     };
+  }
+
+  async messageAttachments(messageId: string): Promise<OutgoingAttachment[]> {
+    await wait(200);
+    const message = this.messages.find((m) => m.id === messageId);
+    if (!message) throw new BackendError("not_found", "This message no longer exists.");
+    return Promise.all(
+      message.attachments
+        .filter((a) => !a.inline)
+        .map(async (a) => {
+          const bytes = new Uint8Array(await demoAttachmentBlob(a.filename, a.mimeType).arrayBuffer());
+          let binary = "";
+          for (const byte of bytes) binary += String.fromCharCode(byte);
+          return {
+            filename: a.filename,
+            mimeType: a.mimeType,
+            size: bytes.length,
+            source: { kind: "base64" as const, data: btoa(binary) },
+          };
+        }),
+    );
   }
 
   private senderOf(account: Account, fromEmail?: string): Address {

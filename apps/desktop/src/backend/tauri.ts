@@ -84,6 +84,7 @@ import type {
   ContactsAccount,
   DiscoveredSettings,
   DraftContent,
+  OutgoingAttachment,
   DraftSaveResult,
   EventDeleteScope,
   EventInput,
@@ -774,6 +775,10 @@ export class TauriBackend implements Backend {
 
   openDraft(messageId: string) {
     return call<DraftContent>("open_draft", { messageId });
+  }
+
+  messageAttachments(messageId: string) {
+    return call<OutgoingAttachment[]>("message_attachments", { messageId });
   }
 
   async getAttachment(attachmentId: string): Promise<AttachmentContent> {
