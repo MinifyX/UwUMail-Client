@@ -66,6 +66,39 @@ describe("replies", () => {
   });
 });
 
+describe("recipients", () => {
+  it("of a reply to my own mail are the people it went to", () => {
+    const source = { ...message(["fee@friends.example"]), from: { email: "Hallo@uwumail.example" } };
+    const draft = initialDraft({ key: 1, mode: "reply", source }, [account], identities, t, "de");
+    expect(draft.to.map((a) => a.email)).toEqual(["fee@friends.example"]);
+  });
+
+  it("of reply all list each address once", () => {
+    const source = {
+      ...message(["team@friends.example", "fee@friends.example"], ["TEAM@friends.example", "leni@wanders.example"]),
+      replyTo: [{ email: "team@friends.example" }],
+    };
+    const draft = initialDraft({ key: 1, mode: "replyAll", source }, [account], identities, t, "de");
+    expect(draft.to.map((a) => a.email)).toEqual(["team@friends.example", "fee@friends.example"]);
+    expect(draft.cc.map((a) => a.email)).toEqual(["leni@wanders.example"]);
+  });
+});
+
+describe("subjects", () => {
+  const subject = (mode: "reply" | "forward", text: string) =>
+    initialDraft({ key: 1, mode, source: { ...message([]), subject: text } }, [account], identities, t, "de").subject;
+
+  it("keep a prefix of their own kind", () => {
+    expect(subject("reply", "AW: Angebot")).toBe("AW: Angebot");
+    expect(subject("forward", "WG: Angebot")).toBe("WG: Angebot");
+  });
+
+  it("get their own prefix in front of the other kind", () => {
+    expect(subject("forward", "Re: Angebot")).toBe("Fwd: Re: Angebot");
+    expect(subject("reply", "Fwd: Angebot")).toBe("Re: Fwd: Angebot");
+  });
+});
+
 describe("quotes", () => {
   it("keep no signature marker of the quoted mail, so switching signatures leaves the quote alone (W-42)", () => {
     const source = {
