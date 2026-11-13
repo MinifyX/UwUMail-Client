@@ -1,18 +1,18 @@
+import { AvatarBlob } from "@uwusuite/design";
 import clsx from "clsx";
 import { useState } from "react";
 import type { AccountColor, Address } from "@/backend/types";
-import { colorFor, initials } from "@/lib/format";
 import { cachedLook, lookOfImage } from "@/lib/pictureLook";
 import { useSenderPicture } from "@/lib/queries";
 
-/** The initials chip and the account dot per colour, from the package's account tokens. */
-export const COLOR_CLASSES: Record<AccountColor, { bg: string; text: string; dot: string }> = {
-  pink: { bg: "bg-avatar-pink", text: "text-avatar-pink-ink", dot: "bg-account-pink" },
-  violet: { bg: "bg-avatar-violet", text: "text-avatar-violet-ink", dot: "bg-account-violet" },
-  sky: { bg: "bg-avatar-sky", text: "text-avatar-sky-ink", dot: "bg-account-sky" },
-  mint: { bg: "bg-avatar-mint", text: "text-avatar-mint-ink", dot: "bg-account-mint" },
-  amber: { bg: "bg-avatar-amber", text: "text-avatar-amber-ink", dot: "bg-account-amber" },
-  coral: { bg: "bg-avatar-coral", text: "text-avatar-coral-ink", dot: "bg-account-coral" },
+/** The account dot per colour, from the package's account tokens. */
+export const COLOR_CLASSES: Record<AccountColor, string> = {
+  pink: "bg-account-pink",
+  violet: "bg-account-violet",
+  sky: "bg-account-sky",
+  mint: "bg-account-mint",
+  amber: "bg-account-amber",
+  coral: "bg-account-coral",
 };
 
 interface AvatarProps {
@@ -22,7 +22,6 @@ interface AvatarProps {
 }
 
 export function Avatar({ address, size = "md", className }: AvatarProps) {
-  const color = COLOR_CLASSES[colorFor(address.email)];
   const picture = useSenderPicture(address.email);
   const [loaded, setLoaded] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -41,18 +40,17 @@ export function Avatar({ address, size = "md", className }: AvatarProps) {
     <span
       aria-hidden
       className={clsx(
-        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold",
-        // Initials wait underneath until the picture is there, and come back if it can't load.
-        !ready && [color.bg, color.text],
-        size === "xs" && "size-5 text-[8.5px]",
-        size === "list" && "size-9 text-[12px]",
-        size === "sm" && "size-7 text-[11px]",
-        size === "md" && "size-10 text-[13px]",
-        size === "lg" && "size-12 text-[15px]",
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full",
+        size === "xs" && "size-5",
+        size === "list" && "size-9",
+        size === "sm" && "size-7",
+        size === "md" && "size-10",
+        size === "lg" && "size-12",
         className,
       )}
     >
-      {!ready && initials(address)}
+      {/* The blob waits underneath until the picture is there, and comes back if it can't load. */}
+      {!ready && <AvatarBlob seed={address.email} />}
       {shown && (
         <span
           className={clsx(
@@ -87,9 +85,6 @@ export function Avatar({ address, size = "md", className }: AvatarProps) {
 
 export function AccountDot({ color, className }: { color: AccountColor; className?: string }) {
   return (
-    <span
-      aria-hidden
-      className={clsx("inline-block size-2 shrink-0 rounded-full", COLOR_CLASSES[color].dot, className)}
-    />
+    <span aria-hidden className={clsx("inline-block size-2 shrink-0 rounded-full", COLOR_CLASSES[color], className)} />
   );
 }

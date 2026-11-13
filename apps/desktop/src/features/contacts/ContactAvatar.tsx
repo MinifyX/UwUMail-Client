@@ -43,7 +43,7 @@ export function ContactAvatar({ contact, size = "list" }: { contact: ContactReco
     <Avatar
       address={{ name: contact.displayName, email: contact.emails[0]?.address ?? contact.displayName }}
       size={size === "lg" ? "lg" : "list"}
-      className={size === "lg" ? "!size-16 !text-[20px]" : undefined}
+      className={size === "lg" ? "!size-16" : undefined}
     />
   );
 }

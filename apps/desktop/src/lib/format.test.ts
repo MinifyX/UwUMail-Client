@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { colorFor, formatListDate, formatSize, initials, isEmail, parseAddress, textToHtml } from "./format";
+import { formatListDate, formatSize, initials, isEmail, parseAddress, textToHtml } from "./format";
 
 describe("formatListDate", () => {
   const now = new Date(2026, 8, 14, 15, 0);
@@ -44,10 +44,6 @@ describe("helpers", () => {
   it("formats sizes", () => {
     expect(formatSize(2048, "en-US")).toBe("2 KB");
     expect(formatSize(1_204_331, "en-US")).toBe("1.1 MB");
-  });
-
-  it("picks a stable color", () => {
-    expect(colorFor("Leni@Wanders.example")).toBe(colorFor("leni@wanders.example"));
   });
 
   it("escapes text before turning it into HTML", () => {

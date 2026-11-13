@@ -52,5 +52,8 @@ describe("a contact's picture", () => {
     const { container } = renderAvatar("data:image/jpeg;base64,broken");
     fireEvent.error(container.querySelector("img")!);
     expect(container.querySelector("img[src^='data:image/jpeg']")).toBeNull();
+    // A blob, not initials.
+    expect(container.querySelector("svg")).not.toBeNull();
+    expect(container.textContent).toBe("");
   });
 });

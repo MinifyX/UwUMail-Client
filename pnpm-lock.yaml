@@ -45,8 +45,8 @@ importers:
         specifier: ^2.5.5
         version: 2.5.5
       '@uwusuite/design':
-        specifier: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.12.0/uwusuite-design-1.12.0.tgz
-        version: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.12.0/uwusuite-design-1.12.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
+        specifier: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.13.0/uwusuite-design-1.13.0.tgz
+        version: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.13.0/uwusuite-design-1.13.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -130,8 +130,8 @@ importers:
         specifier: ^2.11.1
         version: 2.11.1
       '@uwusuite/design':
-        specifier: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.9.0/uwusuite-design-1.9.0.tgz
-        version: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.9.0/uwusuite-design-1.9.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
+        specifier: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.13.0/uwusuite-design-1.13.0.tgz
+        version: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.13.0/uwusuite-design-1.13.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -268,6 +268,12 @@ packages:
   '@babel/types@7.29.8':
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
+
+  '@blobatar/react@2.7.0':
+    resolution: {integrity: sha512-rysDM1+2qoeIwIezVw/em+ZxOMyqqjqJOGNEvtOOU1nFp0jmzyEjlXtJTDM6xPKamq59pq6wcG9+mHIUZV572A==}
+    peerDependencies:
+      blobatar: 2.x
+      react: '>=18'
 
   '@bramus/specificity@2.4.2':
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
@@ -825,26 +831,9 @@ packages:
     resolution: {integrity: sha512-BoC8PiO4Hkdo0TVJh9Ntxr5MxPDI7/oFsrygN5ADelFSeXG/qgNuucIGA+L5Z6JpPTE/uRfcTWtscjbUaufepQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.12.0/uwusuite-design-1.12.0.tgz':
-    resolution: {integrity: sha512-8nLjRr77GYgLy4ap0uS61k0jRaFvy+1C3DxDUixTAAsnt39ijGuQT2Zek/420ZgQSZ8fTQnGb5q1rFfhM4lbvQ==, tarball: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.12.0/uwusuite-design-1.12.0.tgz}
-    version: 1.12.0
-    engines: {node: '>=22'}
-    hasBin: true
-    peerDependencies:
-      '@tauri-apps/api': ^2.0.0
-      lucide-react: '>=1.0.0'
-      react: ^18.3.0 || ^19.0.0
-      react-dom: ^18.3.0 || ^19.0.0
-      tailwindcss: ^4.1.0
-    peerDependenciesMeta:
-      '@tauri-apps/api':
-        optional: true
-      tailwindcss:
-        optional: true
-
-  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.9.0/uwusuite-design-1.9.0.tgz':
-    resolution: {integrity: sha512-FQozJhNZJtIhq1GtOdRpirC7wk+3rgY3znO5+HyYrz1CP/3CybqLL4Mr9IAWMTYS1xaxAVNodN6nTuQEtigTcw==, tarball: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.9.0/uwusuite-design-1.9.0.tgz}
-    version: 1.9.0
+  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.13.0/uwusuite-design-1.13.0.tgz':
+    resolution: {tarball: https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.13.0/uwusuite-design-1.13.0.tgz}
+    version: 1.13.0
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -928,6 +917,17 @@ packages:
 
   bidi-js@1.1.0:
     resolution: {integrity: sha512-fX1Onk0tdVPC7obPWB5EbJ1z7NVhLq4m2xZLq2YXBkxzMXIGRpNMU88n0EPgWseKl12J7zXs7qrDxPK4sRs2fg==}
+
+  blobatar@2.7.0:
+    resolution: {integrity: sha512-tL1p2J3dXE/Z9U/ITwHqU7HBHmTH+Am+hif1J1hWAhvFT1VYC2HG+eXtN7081yuY+L2lrp9bs/VaF7dVH3S2jw==}
+    peerDependencies:
+      react: '>=18'
+      vue: '>=3'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      vue:
+        optional: true
 
   brace-expansion@5.0.9:
     resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
@@ -1965,6 +1965,11 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
+  '@blobatar/react@2.7.0(blobatar@2.7.0(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      blobatar: 2.7.0(react@19.3.0)
+      react: 19.3.0
+
   '@bramus/specificity@2.4.2':
     dependencies:
       css-tree: 3.2.1
@@ -2423,12 +2428,14 @@ snapshots:
       '@typescript-eslint/types': 8.70.0
       eslint-visitor-keys: 5.0.1
 
-  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.12.0/uwusuite-design-1.12.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)':
+  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.13.0/uwusuite-design-1.13.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)':
     dependencies:
+      '@blobatar/react': 2.7.0(blobatar@2.7.0(react@19.3.0))(react@19.3.0)
       '@fontsource-variable/dm-sans': 5.3.0
       '@fontsource-variable/jetbrains-mono': 5.3.0
       '@fontsource-variable/manrope': 5.3.0
       '@fontsource-variable/rubik': 5.3.0
+      blobatar: 2.7.0(react@19.3.0)
       clsx: 2.1.1
       lucide-react: 1.45.0(react@19.3.0)
       react: 19.3.0
@@ -2436,20 +2443,8 @@ snapshots:
     optionalDependencies:
       '@tauri-apps/api': 2.11.1
       tailwindcss: 4.3.3
-
-  '@uwusuite/design@https://github.com/MinifyX/UwUSuite-Design/releases/download/v1.9.0/uwusuite-design-1.9.0.tgz(@tauri-apps/api@2.11.1)(lucide-react@1.45.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)':
-    dependencies:
-      '@fontsource-variable/dm-sans': 5.3.0
-      '@fontsource-variable/jetbrains-mono': 5.3.0
-      '@fontsource-variable/manrope': 5.3.0
-      '@fontsource-variable/rubik': 5.3.0
-      clsx: 2.1.1
-      lucide-react: 1.45.0(react@19.3.0)
-      react: 19.3.0
-      react-dom: 19.3.0(react@19.3.0)
-    optionalDependencies:
-      '@tauri-apps/api': 2.11.1
-      tailwindcss: 4.3.3
+    transitivePeerDependencies:
+      - vue
 
   '@vitejs/plugin-react@6.1.1(vite@8.3.0(@types/node@24.13.4)(jiti@2.7.0))':
     dependencies:
@@ -2497,6 +2492,10 @@ snapshots:
   bidi-js@1.1.0:
     dependencies:
       require-from-string: 2.0.2
+
+  blobatar@2.7.0(react@19.3.0):
+    optionalDependencies:
+      react: 19.3.0
 
   brace-expansion@5.0.9:
     dependencies:
