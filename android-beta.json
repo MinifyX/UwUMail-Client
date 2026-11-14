@@ -1,9 +1,9 @@
 {
-  "version": "0.12.0-beta.7",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.7/UwUMail-android.apk",
-  "sha256": "6cc26f21470dc4fc5eeb2fc7d1f981d96818cb091da1923c9aebccabfc74b5af",
+  "version": "0.12.0-beta.8",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.8/UwUMail-android.apk",
+  "sha256": "6118b2ac0807e44249cb71682120769cc1288e42a64b92f793a13dc1ed06aeb8",
   "notes": {
-    "de": "- Bewegung: UwUMail öffnet sich mit einem Kreis aus dem Mail-Symbol, die Markierung in der linken Leiste gleitet zum gewählten Bereich, und Mail, Kalender und Kontakte blenden beim Wechsel sanft ein (unter „Animationen: Aus“ bleibt alles still)\n- Eingabe: Enter löst beim Tippen mit Wortvorschlägen (Japanisch, Chinesisch, Koreanisch) nichts mehr vorzeitig aus\n- Design: UwUSuite Design 1.15.0",
-    "en": "- Motion: UwUMail opens with a circle from the mail icon, the highlight in the left rail slides to the chosen section, and mail, calendar and contacts fade in when you switch (with \"Animations: Off\" everything stays still)\n- Typing: Enter no longer fires early while you pick a word suggestion (Japanese, Chinese, Korean)\n- Design: UwUSuite Design 1.15.0"
+    "de": "- Backups: Gelöschte Mails lassen sich im Papierkorb unter „Aus Backups zurückholen“ in den Backups des Servers suchen (Betreff, Absender, Empfänger, Zeitraum), ansehen und einzeln oder mehrere auf einmal zurückholen – nur aus dem eigenen Postfach (braucht UwUMail Server 0.34.0)\n- Kalender: Der Termin-Button liegt auf dem iPhone nicht mehr unter der Tab-Leiste\n- Windows: Mails werden in einem strenger abgeschotteten Rahmen angezeigt",
+    "en": "- Backups: in the trash, \"Restore from backups\" searches the server's backups for deleted mail (subject, sender, recipient, date range), shows it and brings back one or several at once – only from your own mailbox (needs UwUMail Server 0.34.0)\n- Calendar: on the iPhone the new-event button no longer sits under the tab bar\n- Windows: mails are shown in a more tightly sealed frame"
   }
 }
