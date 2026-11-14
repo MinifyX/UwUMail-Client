@@ -15,6 +15,7 @@ import {
   useVisibleAccounts,
 } from "@/lib/queries";
 import { canEmpty, useFolderEdit } from "@/state/folderEdit";
+import { useBackupSearch, useBackupsFor } from "../backups/BackupSearch";
 import { groupByDay } from "@/lib/dayGroups";
 import { groupByLabel, labelGroups, labelRef, splitLabelSearch, type LabelEntry } from "@/lib/labelFilter";
 import { useSettings } from "@/state/settings";
@@ -67,6 +68,7 @@ export function ThreadList({ variant, className, style, searchInTitleBar = false
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
   const emptiable = view.kind === "folder" ? folders.find((f) => f.id === view.folderId && canEmpty(f)) : undefined;
+  const backupsFor = useBackupsFor(emptiable);
   const { accounts: shown, loaded: accountsLoaded } = useVisibleAccounts();
   const workspaceName = useWorkspaceName();
   const activeWorkspace = useSettings((s) => s.activeWorkspace);
@@ -248,6 +250,16 @@ export function ThreadList({ variant, className, style, searchInTitleBar = false
               onClick={() => useFolderEdit.getState().open({ kind: "empty", folder: emptiable })}
             >
               {emptiable.role === "junk" ? t("folders.emptyJunk") : t("folders.emptyTrash")}
+            </Button>
+          )}
+          {backupsFor && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={ICONS.restore}
+              onClick={() => useBackupSearch.getState().open(backupsFor)}
+            >
+              {t("backups.open")}
             </Button>
           )}
           {labelEntries.length > 0 && (

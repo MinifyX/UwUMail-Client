@@ -28,6 +28,8 @@ import type {
   ProfilePicture,
   ProfilePicturePatch,
   ServerAccountFeatures,
+  BackupEmail,
+  BackupFilter,
   ShareLevel,
   LabelCount,
   LabelRef,
@@ -900,8 +902,81 @@ export class DemoBackend implements Backend {
         accountId: this.serverAccount,
         masked: this.masked.options(),
         profile: { maxSize: 10 * 1024 * 1024, mayBePublic: true },
+        backups: true,
       },
     ];
+  }
+
+  /** Two mails the demo's backups still have; the second one is back in the mailbox. */
+  private backupMail(): BackupEmail[] {
+    const snapshots = ["2026-11-03T01:30:00Z", "2026-11-04T01:30:00Z"];
+    return [
+      {
+        id: "k17",
+        subject: lang() === "de" ? "Deine eSIM ist bereit" : "Your eSIM is ready",
+        from: [{ name: "Mobilfunk", email: "esim@example.com" }],
+        to: [{ email: "mini@example.org" }],
+        receivedAt: "2026-11-02T09:14:00Z",
+        size: 48211,
+        folder: "Inbox",
+        snapshots,
+        inMailbox: false,
+      },
+      {
+        id: "k18",
+        subject: lang() === "de" ? "Deine Rechnung" : "Your invoice",
+        from: [{ name: "Shop", email: "billing@example.net" }],
+        to: [{ email: "mini@example.org" }],
+        receivedAt: "2026-10-28T16:02:00Z",
+        size: 21000,
+        folder: "Archive",
+        snapshots: snapshots.slice(1),
+        inMailbox: true,
+      },
+    ];
+  }
+
+  async searchBackups(accountId: string, filter: BackupFilter) {
+    await wait(300);
+    this.serverOnly(accountId);
+    const text = filter.text?.trim().toLowerCase() ?? "";
+    const list = this.backupMail().filter(
+      (mail) =>
+        (!text ||
+          [mail.subject, ...[...mail.from, ...mail.to].flatMap((a) => [a.name ?? "", a.email])].some((field) =>
+            field.toLowerCase().includes(text),
+          )) &&
+        (!filter.after || (mail.receivedAt ?? "") >= filter.after) &&
+        (!filter.before || (mail.receivedAt ?? "") < filter.before),
+    );
+    return { list, indexing: { done: 2, total: 3 } };
+  }
+
+  async previewBackupMail(accountId: string, ids: string[]) {
+    await wait(300);
+    this.serverOnly(accountId);
+    return this.backupMail()
+      .filter((mail) => ids.includes(mail.id))
+      .map((mail) => ({
+        ...mail,
+        textBody:
+          lang() === "de"
+            ? "Hallo,\n\nhier ist der QR-Code für deine eSIM."
+            : "Hi,\n\nhere is the QR code for your eSIM.",
+        attachments: [{ name: "esim.pdf", mediaType: "application/pdf", size: 31000 }],
+      }));
+  }
+
+  async restoreBackupMail(accountId: string, ids: string[]) {
+    await wait(400);
+    this.serverOnly(accountId);
+    const known = this.backupMail();
+    const there = (id: string) => known.find((mail) => mail.id === id)?.inMailbox;
+    return {
+      restored: ids.filter((id) => there(id) === false),
+      alreadyThere: ids.filter((id) => there(id) === true),
+      notRestored: ids.filter((id) => there(id) === undefined).map((id) => ({ id, reason: "notFound" })),
+    };
   }
 
   async maskedAddresses(accountId: string) {

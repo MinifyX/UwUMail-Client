@@ -87,6 +87,10 @@ import type {
   SenderPicture,
   SenderPictureLookup,
   ServerAccountFeatures,
+  BackupFilter,
+  BackupPreview,
+  BackupRestoreOutcome,
+  BackupSearch,
   ShareLevel,
   Signature,
   ThreadDetail,
@@ -368,6 +372,12 @@ export interface Backend {
   /** Stores a new picture (already cropped) or removes it with null; returns it after the change. */
   setProfilePicture(accountId: string, picture: Blob | null): Promise<ProfilePicture>;
   updateProfilePicture(accountId: string, patch: ProfilePicturePatch): Promise<void>;
+  /** The mailbox's own deleted mail in its server's backups, newest first (up to 200). */
+  searchBackups(accountId: string, filter: BackupFilter): Promise<BackupSearch>;
+  /** Up to 10 mails from the backups with their text. */
+  previewBackupMail(accountId: string, ids: string[]): Promise<BackupPreview[]>;
+  /** Takes up to 50 mails back into "Restored <date>"; the mailbox syncs afterwards. */
+  restoreBackupMail(accountId: string, ids: string[]): Promise<BackupRestoreOutcome>;
 
   listFolders(accountId?: string): Promise<Folder[]>;
   /** A new folder below `parentId`, or at the top of the mailbox (the only one when `accountId` is left out). Returns its id. */

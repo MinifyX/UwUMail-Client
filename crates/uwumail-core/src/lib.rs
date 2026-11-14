@@ -18,6 +18,7 @@ pub mod image_size;
 pub mod imap;
 pub mod internal_only;
 pub mod jmap;
+pub mod jmap_backups;
 pub mod jmap_masked;
 pub mod jmap_profile;
 pub mod jmap_push;

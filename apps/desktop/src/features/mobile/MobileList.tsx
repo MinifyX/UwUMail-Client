@@ -42,6 +42,7 @@ import { useWorkspaceName } from "../workspaces/workspaces";
 import { VerificationCodeBar } from "../verification/VerificationCodeBar";
 import { useVerificationCodes } from "../verification/useVerificationCodes";
 import { codeFor } from "../verification/format";
+import { useBackupSearch, useBackupsFor } from "../backups/BackupSearch";
 import { SwipeRow } from "./SwipeRow";
 import { useThreadActions } from "./threadActions";
 
@@ -90,6 +91,7 @@ export function MobileList({
   const { data: accounts = [] } = useAccounts();
   const { data: folders = [] } = useFolders();
   const emptiable = view.kind === "folder" ? folders.find((f) => f.id === view.folderId && canEmpty(f)) : undefined;
+  const backupsFor = useBackupsFor(emptiable);
   const { accounts: shown, loaded: accountsLoaded } = useVisibleAccounts();
   const { accountIds, includeFolderIds } = useListScope(view);
   const { refresh } = useMessageActions();
@@ -213,6 +215,14 @@ export function MobileList({
           disabled={emptiable.total === 0}
           platform={platform}
           onClick={() => useFolderEdit.getState().open({ kind: "empty", folder: emptiable })}
+        />
+      )}
+      {backupsFor && (
+        <NavButton
+          icon={ICONS.restore}
+          label={t("backups.open")}
+          platform={platform}
+          onClick={() => useBackupSearch.getState().open(backupsFor)}
         />
       )}
       {/* iPhone: writing starts top right; Android has the FAB. */}

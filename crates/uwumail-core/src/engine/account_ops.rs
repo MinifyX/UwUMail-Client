@@ -7,6 +7,7 @@ use serde::Serialize;
 
 use super::*;
 use crate::calendar::{Source as CalendarSource, jmap_cal};
+use crate::jmap_backups::{self, BackupFilter, BackupPreview, BackupSearch, RestoreOutcome};
 use crate::jmap_masked::{self, MaskedAddress, MaskedInput, MaskedOptions, MaskedPatch};
 use crate::jmap_profile::{self, ProfileOptions, ProfilePatch, ProfilePicture};
 
@@ -20,6 +21,8 @@ pub struct ServerAccountFeatures {
     pub account_id: String,
     pub masked: Option<MaskedOptions>,
     pub profile: Option<ProfileOptions>,
+    /// The person may search their own deleted mail in the server's backups.
+    pub backups: bool,
     /// The domains its mail may go to, when the server lets it send only to addresses it hosts
     /// (`internal_only`); `None` when it may send anywhere.
     pub internal_domains: Option<Vec<String>>,
@@ -47,10 +50,14 @@ impl Engine {
                         account_id: account.id.clone(),
                         masked: jmap_masked::options(&client),
                         profile: jmap_profile::options(&client),
+                        backups: jmap_backups::available(&client),
                         internal_domains: client.session.internal_domains.clone(),
                     };
-                    (features.masked.is_some() || features.profile.is_some() || features.internal_domains.is_some())
-                        .then_some(features)
+                    (features.masked.is_some()
+                        || features.profile.is_some()
+                        || features.backups
+                        || features.internal_domains.is_some())
+                    .then_some(features)
                 }
                 Ok(Err(error)) => {
                     tracing::debug!("{} couldn't tell what its server offers: {error}", account.id);
@@ -85,6 +92,24 @@ impl Engine {
 
     pub async fn update_profile_picture(&self, account_id: &str, patch: &ProfilePatch) -> Result<()> {
         jmap_profile::update(&*self.server_client(account_id).await?, patch).await
+    }
+
+    /// The mailbox's own mail in its server's backups, by headers and date.
+    pub async fn search_backups(&self, account_id: &str, filter: &BackupFilter) -> Result<BackupSearch> {
+        jmap_backups::search(&*self.server_client(account_id).await?, filter).await
+    }
+
+    pub async fn preview_backup_mail(&self, account_id: &str, ids: &[String]) -> Result<Vec<BackupPreview>> {
+        jmap_backups::preview(&*self.server_client(account_id).await?, ids).await
+    }
+
+    /// Takes mail back from the backups into "Restored <date>", then syncs so the folder shows.
+    pub async fn restore_backup_mail(&self, account_id: &str, ids: &[String]) -> Result<RestoreOutcome> {
+        let outcome = jmap_backups::restore(&*self.server_client(account_id).await?, ids).await?;
+        if !outcome.restored.is_empty() {
+            self.sync_now(Some(account_id));
+        }
+        Ok(outcome)
     }
 
     /// The people of a mailbox's server to share its calendars with.
