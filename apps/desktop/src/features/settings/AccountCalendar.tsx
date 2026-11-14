@@ -134,7 +134,6 @@ function CalDavUrl({ account, source }: { account: Account; source: CalendarAcco
             spellCheck={false}
             placeholder="https://dav.example.com/"
             value={text}
-            aria-invalid={tried && problem !== null}
             onChange={(event) => setText(event.target.value)}
           />
         )}

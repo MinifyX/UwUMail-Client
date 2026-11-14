@@ -129,7 +129,6 @@ function NameForm({ request, onDone }: { request: FolderRequest & { kind: "creat
             value={name}
             autoFocus
             maxLength={255}
-            aria-invalid={shownProblem !== null}
             placeholder={t("folders.namePlaceholder")}
             onChange={(event) => {
               setName(event.target.value);

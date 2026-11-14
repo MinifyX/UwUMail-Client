@@ -58,7 +58,6 @@ export function PrivacyProxy() {
             spellCheck={false}
             placeholder="socks5://127.0.0.1:1080"
             value={text}
-            aria-invalid={invalid}
             onChange={(event) => setText(event.target.value)}
           />
         )}

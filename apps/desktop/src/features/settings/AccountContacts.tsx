@@ -121,7 +121,6 @@ function CardDavUrl({ account, source }: { account: Account; source: ContactsAcc
             spellCheck={false}
             placeholder="https://dav.example.com/"
             value={text}
-            aria-invalid={tried && problem !== null}
             onChange={(event) => setText(event.target.value)}
           />
         )}

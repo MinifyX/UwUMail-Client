@@ -58,6 +58,8 @@ function createStoreView(): ToastStore {
     show: (message, options = {}) =>
       useToasts.getState().show(String(message), options.tone, undefined, { action: options.action }),
     dismiss: (id) => useToasts.getState().dismiss(id),
+    pause: (id) => useToasts.getState().pause(id),
+    resume: (id) => useToasts.getState().resume(id),
     subscribe(listener) {
       const unsubscribe = useToasts.subscribe(listener);
       return () => {
