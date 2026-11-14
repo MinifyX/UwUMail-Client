@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { revealFrom } from "@uwusuite/design";
 import { backend } from "@/backend/backend";
 import { ConfirmDiscardDialog } from "@/components/ui/ConfirmDiscardDialog";
 import { Dialog } from "@/components/ui/Dialog";
@@ -10,6 +11,7 @@ import { isAndroid, PRO_QUERY, useIsPhone, useMediaQuery } from "@/lib/device";
 import { useHotkeys, type HotkeyMap } from "@/lib/hotkeys";
 import { fitPanes, usePaneWidths } from "@/lib/paneWidths";
 import { useAccounts, useBackendEvents, useDomainSignatures, useIdentities, useSignatures } from "@/lib/queries";
+import { useLocked } from "@/state/lock";
 import { useLayout, useSettings } from "@/state/settings";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
@@ -130,6 +132,12 @@ export function MailShell() {
   const drawerOpen = useUi((s) => s.folderDrawerOpen);
   const setDrawerOpen = useUi((s) => s.setFolderDrawerOpen);
   const phone = useIsPhone();
+  // The shell opens with a circle from the rail's mail icon: at start and after the app lock, never per page.
+  const shell = useRef<HTMLDivElement>(null);
+  const locked = useLocked();
+  useEffect(() => {
+    if (!locked && shell.current) revealFrom(shell.current);
+  }, [locked]);
   const roomForPro = useMediaQuery(PRO_QUERY);
   // Android tablets in portrait lack the room for three columns.
   const pro = layout === "pro" && (roomForPro || !isAndroid);
@@ -235,7 +243,7 @@ export function MailShell() {
   useHotkeys(hotkeys, { enabled: section === "mail", repeat: ["j", "k", "ArrowDown", "ArrowUp", ...SCROLL_KEYS] });
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={shell} className="flex h-full flex-col">
       {backend().kind === "demo" && (
         <p className="shrink-0 bg-pink-tint py-1 text-center text-[12px] font-semibold text-pink-ink">
           {t("status.demo")}
@@ -247,45 +255,47 @@ export function MailShell() {
       ) : (
         <div className="flex min-h-0 flex-1">
           <SectionRail />
-          {section === "calendar" ? (
-            <LazyCalendar />
-          ) : section === "contacts" ? (
-            <LazyContacts />
-          ) : pro ? (
-            <ProColumns />
-          ) : (
-            <div className="relative flex min-h-0 min-w-0 flex-1 gap-3 py-2 pr-3 pb-3">
-              <ThreadList
-                variant="simple"
-                searchInTitleBar={searchInTitleBar}
-                className={clsx(
-                  "rounded-[22px] border border-hairline",
-                  selectedThreadId
-                    ? "hidden w-[380px] shrink-0 lg:flex"
-                    : "w-full max-w-[560px] shrink-0 max-lg:max-w-none",
-                )}
-              />
-              <ThreadReader
-                variant="simple"
-                className={clsx(
-                  "min-w-0 flex-1 overflow-hidden rounded-[22px] border border-hairline",
-                  !selectedThreadId && "max-lg:hidden",
-                )}
-              />
+          <div key={section} className="uwu-page flex min-h-0 min-w-0 flex-1">
+            {section === "calendar" ? (
+              <LazyCalendar />
+            ) : section === "contacts" ? (
+              <LazyContacts />
+            ) : pro ? (
+              <ProColumns />
+            ) : (
+              <div className="relative flex min-h-0 min-w-0 flex-1 gap-3 py-2 pr-3 pb-3">
+                <ThreadList
+                  variant="simple"
+                  searchInTitleBar={searchInTitleBar}
+                  className={clsx(
+                    "rounded-[22px] border border-hairline",
+                    selectedThreadId
+                      ? "hidden w-[380px] shrink-0 lg:flex"
+                      : "w-full max-w-[560px] shrink-0 max-lg:max-w-none",
+                  )}
+                />
+                <ThreadReader
+                  variant="simple"
+                  className={clsx(
+                    "min-w-0 flex-1 overflow-hidden rounded-[22px] border border-hairline",
+                    !selectedThreadId && "max-lg:hidden",
+                  )}
+                />
 
-              {drawerOpen && (
-                <div className="absolute inset-0 z-30 flex" role="presentation">
-                  <button
-                    type="button"
-                    aria-label={t("common.close")}
-                    onClick={() => setDrawerOpen(false)}
-                    className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
-                  />
-                  <MailboxNav className="relative w-[280px] animate-slide-up rounded-r-[22px] bg-surface shadow-float" />
-                </div>
-              )}
-            </div>
-          )}
+                {drawerOpen && (
+                  <div className="absolute inset-0 z-30 flex" role="presentation">
+                    <button
+                      type="button"
+                      aria-label={t("common.close")}
+                      onClick={() => setDrawerOpen(false)}
+                      className="absolute inset-0 animate-fade bg-[var(--uwu-backdrop)]"
+                    />
+                    <MailboxNav className="relative w-[280px] animate-slide-up rounded-r-[22px] bg-surface shadow-float" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
