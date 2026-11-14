@@ -231,7 +231,7 @@ function PhoneCalendar() {
         type="button"
         onClick={startNewEvent}
         aria-label={t("calendar.newEvent")}
-        className="fixed right-4 bottom-4 z-20 grid size-14 place-items-center rounded-2xl bg-pink-solid text-on-pink shadow-primary active:scale-95"
+        className="fixed right-4 bottom-[calc(var(--uwu-safe-bottom,0px)+96px)] z-20 grid size-14 place-items-center rounded-2xl bg-pink-solid text-on-pink shadow-primary active:scale-95"
       >
         <Icon icon={ICONS.add} size="xl" />
       </button>
