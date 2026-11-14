@@ -1,9 +1,9 @@
 {
-  "version": "0.12.0-beta.8",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.8/UwUMail-android.apk",
-  "sha256": "6118b2ac0807e44249cb71682120769cc1288e42a64b92f793a13dc1ed06aeb8",
+  "version": "0.12.0-beta.9",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.9/UwUMail-android.apk",
+  "sha256": "aee3c3c3785ef2542d1e9845ce04153410c454245d0e5b7884167c83969ea100",
   "notes": {
-    "de": "- Backups: Gelöschte Mails lassen sich im Papierkorb unter „Aus Backups zurückholen“ in den Backups des Servers suchen (Betreff, Absender, Empfänger, Zeitraum), ansehen und einzeln oder mehrere auf einmal zurückholen – nur aus dem eigenen Postfach (braucht UwUMail Server 0.34.0)\n- Kalender: Der Termin-Button liegt auf dem iPhone nicht mehr unter der Tab-Leiste\n- Windows: Mails werden in einem strenger abgeschotteten Rahmen angezeigt",
-    "en": "- Backups: in the trash, \"Restore from backups\" searches the server's backups for deleted mail (subject, sender, recipient, date range), shows it and brings back one or several at once – only from your own mailbox (needs UwUMail Server 0.34.0)\n- Calendar: on the iPhone the new-event button no longer sits under the tab bar\n- Windows: mails are shown in a more tightly sealed frame"
+    "de": "- Eingabefelder mit Fehler bekommen einen roten Rahmen, und Screenreader lesen Hinweis und Fehler zum Feld vor\n- Mitteilungen unten verschwinden nicht, solange die Maus oder der Tastaturfokus darauf liegt (der Countdown zum Zurückholen einer Mail läuft weiter)\n- Dialoge setzen den Fokus beim Öffnen nicht mehr auf das X, Menüs schließen mit Tab, und auf dem Handy bleibt der Hintergrund hinter offenen Bögen für Screenreader stumm",
+    "en": "- Fields with an error get a red border, and screen readers read out the field's hint and error\n- Notes at the bottom stay while the pointer or keyboard focus is on them (the countdown for taking back a mail keeps running)\n- Dialogs no longer put the focus on the X when they open, menus close on Tab, and on phones the background behind an open sheet stays silent for screen readers"
   }
 }
