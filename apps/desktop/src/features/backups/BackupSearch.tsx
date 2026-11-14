@@ -146,11 +146,10 @@ function BackupSearchForm({ accountId }: { accountId: string }) {
       <p className="text-[13.5px] text-muted">{t("backups.intro")}</p>
       <form role="search" className="flex flex-col gap-3" onSubmit={(event) => void search(event)}>
         <Field label={t("backups.text")} hint={t("backups.textHint")}>
-          {(id, describedBy) => (
+          {(id) => (
             <TextInput
               id={id}
               type="search"
-              aria-describedby={describedBy}
               maxLength={256}
               value={text}
               onChange={(event) => setText(event.target.value)}

@@ -1,0 +1,4 @@
+{
+  "de": "- Eingabefelder mit Fehler bekommen einen roten Rahmen, und Screenreader lesen Hinweis und Fehler zum Feld vor\n- Mitteilungen unten verschwinden nicht, solange die Maus oder der Tastaturfokus darauf liegt (der Countdown zum Zurückholen einer Mail läuft weiter)\n- Dialoge setzen den Fokus beim Öffnen nicht mehr auf das X, Menüs schließen mit Tab, und auf dem Handy bleibt der Hintergrund hinter offenen Bögen für Screenreader stumm",
+  "en": "- Fields with an error get a red border, and screen readers read out the field's hint and error\n- Notes at the bottom stay while the pointer or keyboard focus is on them (the countdown for taking back a mail keeps running)\n- Dialogs no longer put the focus on the X when they open, menus close on Tab, and on phones the background behind an open sheet stays silent for screen readers"
+}
