@@ -539,8 +539,8 @@ function printMessage(
     date: translate("reader.date"),
   };
   const frame = document.createElement("iframe");
-  // allow-modals lets the print dialog open. allow-scripts only so WebKit calls the app's
-  // afterprint listener (see MAIL_FRAME_SANDBOX); the mail runs nothing under the document's policy.
+  // allow-modals lets the print dialog open. In WebKit the sandbox also has allow-scripts, only so
+  // it calls the app's afterprint listener (see MAIL_FRAME_SANDBOX); the mail runs nothing there.
   frame.setAttribute("sandbox", `${MAIL_FRAME_SANDBOX} allow-modals`);
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none";
