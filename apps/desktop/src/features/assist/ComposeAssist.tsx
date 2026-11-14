@@ -346,7 +346,11 @@ export function ComposeAssistPanel({
                   value={instruction}
                   onChange={(event) => setInstruction(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
+                    if (
+                      event.key === "Enter" &&
+                      !(event.nativeEvent.isComposing || event.keyCode === 229) &&
+                      !event.shiftKey
+                    ) {
                       event.preventDefault();
                       event.currentTarget.form?.requestSubmit();
                     }

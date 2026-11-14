@@ -60,7 +60,11 @@ function MoveChoices({ request, onDone }: { request: MoveRequest; onDone: () => 
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && shown.length > 0) {
+            if (
+              event.key === "Enter" &&
+              !(event.nativeEvent.isComposing || event.keyCode === 229) &&
+              shown.length > 0
+            ) {
               event.preventDefault();
               pick(shown[0]!.folder);
             }

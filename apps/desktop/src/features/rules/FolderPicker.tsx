@@ -60,7 +60,11 @@ function FolderChoices({ accountId, onPick }: { accountId: string; onPick: (fold
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && shown.length > 0) {
+            if (
+              event.key === "Enter" &&
+              !(event.nativeEvent.isComposing || event.keyCode === 229) &&
+              shown.length > 0
+            ) {
               event.preventDefault();
               onPick(shown[0]!.folder);
             }
