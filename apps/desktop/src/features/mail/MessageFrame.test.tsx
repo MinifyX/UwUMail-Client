@@ -2,7 +2,14 @@ import "@/test/dom";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Message } from "@/backend/types";
-import { buildDocument, buildPrintDocument, frameStrayed, MAIL_FRAME_SANDBOX, MessageBody } from "./MessageBody";
+import {
+  buildDocument,
+  buildPrintDocument,
+  frameStrayed,
+  MAIL_FRAME_SANDBOX,
+  mailFrameSandbox,
+  MessageBody,
+} from "./MessageBody";
 
 // WebKit (macOS, iOS, Linux) never calls the app's listeners in a frame without allow-scripts, so
 // links in mails opened inside the frame past the link question. These pin what keeps the mail
@@ -62,8 +69,9 @@ function headOf(html: string) {
 describe("the mail frame", () => {
   afterEach(cleanup);
 
-  it("allows scripts for the app's listeners, and nothing else beyond its own origin", () => {
-    expect(MAIL_FRAME_SANDBOX.split(" ").sort()).toEqual(["allow-same-origin", "allow-scripts"]);
+  it("allows scripts only where WebKit needs them for the app's listeners", () => {
+    expect(mailFrameSandbox(true).split(" ").sort()).toEqual(["allow-same-origin", "allow-scripts"]);
+    expect(mailFrameSandbox(false)).toBe("allow-same-origin");
     const { container } = render(
       <MessageBody
         message={message({ bodyHtml: "<p>Hi</p>" })}

@@ -1,3 +1,4 @@
+import { detectPlatform } from "@uwusuite/design";
 import DOMPurify from "dompurify";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSizeProbe, Message } from "@/backend/types";
@@ -126,14 +127,20 @@ export const ROOT_ID = "uwu-mail-root";
 
 /**
  * The sandbox of every frame that shows a mail. `allow-same-origin` lets the app measure the
- * height, recolor for dark mode and read the document. `allow-scripts` is there for WebKit (macOS,
- * iOS, Linux): in a frame without it, WebKit never calls the listeners the app puts on the mail's
- * document, so a click on a link went past the link question and opened the page inside the
- * frame, and dates and shortcuts did nothing either. The mail itself still runs nothing: the
- * sanitizer drops scripts and event attributes, the document's own policy (`default-src 'none'`,
- * the first thing in its head) blocks whatever would be left, and the app's policy applies on top.
+ * height, recolor for dark mode and read the document. Together with `allow-scripts` the sandbox
+ * would isolate nothing on the app's origin, so that is added only for WebKit (macOS, iOS, Linux;
+ * WebView2 on Windows doesn't need it): in a frame without it, WebKit never calls the listeners
+ * the app puts on the mail's document, so a click on a link went past the link question and
+ * opened the page inside the frame, and dates and shortcuts did nothing either. The mail itself
+ * still runs nothing: the sanitizer drops scripts and event attributes, the document's own policy
+ * (`default-src 'none'`, the first thing in its head) blocks whatever would be left, and the app's
+ * policy applies on top.
  */
-export const MAIL_FRAME_SANDBOX = "allow-same-origin allow-scripts";
+export function mailFrameSandbox(webKit: boolean) {
+  return webKit ? "allow-same-origin allow-scripts" : "allow-same-origin";
+}
+
+export const MAIL_FRAME_SANDBOX = mailFrameSandbox(detectPlatform() !== "windows");
 
 /** Whether a mail frame shows something else than its mail, e.g. a page a link opened in it. */
 export function frameStrayed(frame: HTMLIFrameElement): boolean {
