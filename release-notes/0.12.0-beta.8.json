@@ -1,0 +1,4 @@
+{
+  "de": "- Backups: Gelöschte Mails lassen sich im Papierkorb unter „Aus Backups zurückholen“ in den Backups des Servers suchen (Betreff, Absender, Empfänger, Zeitraum), ansehen und einzeln oder mehrere auf einmal zurückholen – nur aus dem eigenen Postfach (braucht UwUMail Server 0.34.0)\n- Kalender: Der Termin-Button liegt auf dem iPhone nicht mehr unter der Tab-Leiste\n- Windows: Mails werden in einem strenger abgeschotteten Rahmen angezeigt",
+  "en": "- Backups: in the trash, \"Restore from backups\" searches the server's backups for deleted mail (subject, sender, recipient, date range), shows it and brings back one or several at once – only from your own mailbox (needs UwUMail Server 0.34.0)\n- Calendar: on the iPhone the new-event button no longer sits under the tab bar\n- Windows: mails are shown in a more tightly sealed frame"
+}

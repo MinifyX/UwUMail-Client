@@ -119,7 +119,13 @@ fn require(client: &Client) -> Result<()> {
 
 /// Text without control characters (newlines and tabs kept where `lines`), at most `max` chars.
 fn clean(text: &str, max: usize, lines: bool) -> String {
-    text.chars().filter(|c| !c.is_control() || (lines && matches!(c, '\n' | '\t'))).take(max).collect()
+    // Bidi controls too: a sender or file name must not reorder what stands around it (BK-1).
+    text.chars()
+        .filter(|&c| {
+            (!c.is_control() || (lines && matches!(c, '\n' | '\t'))) && !crate::assist::signals::is_bidi_control(c)
+        })
+        .take(max)
+        .collect()
 }
 
 fn text_of(raw: &Value, key: &str, max: usize) -> String {
@@ -129,7 +135,12 @@ fn text_of(raw: &Value, key: &str, max: usize) -> String {
 fn id_of(value: &Value) -> Option<String> {
     value
         .as_str()
-        .filter(|id| !id.is_empty() && id.len() <= MAX_ID && !id.chars().any(char::is_control))
+        // JMAP Ids (RFC 8620 1.2): they also end up in DOM ids and label links (BK-2).
+        .filter(|id| {
+            !id.is_empty()
+                && id.len() <= MAX_ID
+                && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        })
         .map(String::from)
 }
 
@@ -169,7 +180,15 @@ pub fn parse_search(answer: &Value) -> BackupSearch {
     let indexing = answer.get("indexing");
     let count = |key: &str| indexing.and_then(|i| i.get(key)).and_then(Value::as_u64).unwrap_or(0);
     BackupSearch {
-        list: list.into_iter().flatten().take(MAX_HITS).filter_map(email_of).collect(),
+        list: {
+            let mut seen = std::collections::HashSet::new();
+            list.into_iter()
+                .flatten()
+                .take(MAX_HITS)
+                .filter_map(email_of)
+                .filter(|hit| seen.insert(hit.id.clone()))
+                .collect()
+        },
         indexing: Indexing { done: count("done"), total: count("total") },
     }
 }
@@ -242,7 +261,11 @@ fn checked_ids(ids: &[String], max: usize) -> Result<Vec<String>> {
     if ids.is_empty() || ids.len() > max {
         return Err(Error::invalid(format!("Choose between 1 and {max} mails.")));
     }
-    ids.iter().map(|id| id_of(&json!(id)).ok_or_else(|| Error::invalid("That isn't a mail in the backups."))).collect()
+    let mut seen = std::collections::HashSet::new();
+    ids.iter()
+        .filter(|id| seen.insert(id.as_str()))
+        .map(|id| id_of(&json!(id)).ok_or_else(|| Error::invalid("That isn't a mail in the backups.")))
+        .collect()
 }
 
 fn answer<'a>(responses: &'a Responses, method: &str) -> Result<&'a Value> {
@@ -288,6 +311,14 @@ pub async fn restore(client: &Client, ids: &[String]) -> Result<RestoreOutcome> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drops_bidi_controls_odd_ids_and_duplicates() {
+        assert_eq!(clean("a\u{202E}b\u{2066}c", 10, false), "abc");
+        assert_eq!(id_of(&json!("k1 2")), None);
+        assert_eq!(id_of(&json!("k12")), Some("k12".into()));
+        assert_eq!(checked_ids(&["k1".into(), "k1".into()], 5).unwrap(), vec!["k1".to_string()]);
+    }
 
     #[test]
     fn reads_a_search() {
