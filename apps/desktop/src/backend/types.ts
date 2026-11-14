@@ -1649,6 +1649,51 @@ export interface ServerAccountFeatures {
    * (`uwuInternalOnly`, lib/internalOnly); null or left out when it may send anywhere.
    */
   internalDomains?: string[] | null;
+  /** The person may search their own deleted mail in the server's backups. */
+  backups?: boolean;
+}
+
+/** What to look for in the backups: the headers (subject, senders, recipients) and when it came. */
+export interface BackupFilter {
+  text?: string;
+  /** ISO times. */
+  after?: string;
+  before?: string;
+}
+
+/** A mail found in the server's backups (`BackupEmail/query`). */
+export interface BackupEmail {
+  id: string;
+  subject: string;
+  from: Address[];
+  to: Address[];
+  receivedAt: string | null;
+  size: number;
+  /** The folder it was in. */
+  folder: string;
+  /** When the backups it is in were made, oldest first. */
+  snapshots: string[];
+  /** The mailbox has it already. */
+  inMailbox: boolean;
+}
+
+export interface BackupSearch {
+  list: BackupEmail[];
+  /** While done is below total, older backups are still being read. */
+  indexing: { done: number; total: number };
+}
+
+/** A mail from the backups with its text (never HTML) and what it carries. */
+export interface BackupPreview extends BackupEmail {
+  textBody: string;
+  attachments: { name: string | null; mediaType: string | null; size: number }[];
+}
+
+export interface BackupRestoreOutcome {
+  restored: string[];
+  alreadyThere: string[];
+  /** `reason`: notFound, overQuota, invalidEmail or what else the server said. */
+  notRestored: { id: string; reason: string }[];
 }
 
 /** Why a mail carries a code: what the sender wants it for. */

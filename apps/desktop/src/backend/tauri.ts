@@ -103,6 +103,10 @@ import type {
   ProfilePicture,
   ProfilePicturePatch,
   ServerAccountFeatures,
+  BackupFilter,
+  BackupPreview,
+  BackupRestoreOutcome,
+  BackupSearch,
   ShareLevel,
   MovedMessage,
   SnoozedMessage,
@@ -635,6 +639,18 @@ export class TauriBackend implements Backend {
 
   updateProfilePicture(accountId: string, patch: ProfilePicturePatch) {
     return call<void>("update_profile_picture", { accountId, patch });
+  }
+
+  searchBackups(accountId: string, filter: BackupFilter) {
+    return call<BackupSearch>("search_backups", { accountId, filter });
+  }
+
+  previewBackupMail(accountId: string, ids: string[]) {
+    return call<BackupPreview[]>("preview_backup_mail", { accountId, ids });
+  }
+
+  restoreBackupMail(accountId: string, ids: string[]) {
+    return call<BackupRestoreOutcome>("restore_backup_mail", { accountId, ids });
   }
 
   createFolder(input: { accountId?: string; name: string; parentId: string | null }) {

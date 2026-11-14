@@ -48,6 +48,8 @@ pub const SIGNATURES: &str = "urn:uwumail:jmap:signatures";
 pub const MASKED: &str = "https://www.fastmail.com/dev/maskedemail";
 /// The own profile picture on a UwUMail server (`ProfilePicture`, its docs/profile-pictures.md).
 pub const PROFILE: &str = "urn:uwumail:jmap:profile";
+/// The login's own mail in the server's backups (`BackupEmail`, UwUMail-Server docs/jmap-backups.md).
+pub const BACKUPS: &str = "urn:uwumail:jmap:backups";
 /// The people of the server, to share calendars with (draft-ietf-jmap-sharing).
 pub const PRINCIPALS: &str = "urn:ietf:params:jmap:principals";
 
@@ -163,6 +165,8 @@ pub struct Session {
     pub masked: Option<Value>,
     /// The own account's profile picture capability (`maxSize`, `mayBePublic`), if it has one.
     pub profile: Option<Value>,
+    /// The server lets the login search its own mail in the backups (only in its own account).
+    pub backups: bool,
     /// The server lists its people for sharing; `own_principal_id` is the login's own.
     pub principals: bool,
     pub own_principal_id: Option<String>,
@@ -298,6 +302,14 @@ impl Session {
         };
         let masked = own_capability(MASKED);
         let profile = own_capability(PROFILE);
+        // Only where the own account itself names it: a shared account never has it.
+        let backups = capabilities.contains_key(BACKUPS)
+            && document
+                .get("accounts")
+                .and_then(|accounts| accounts.get(&account_id))
+                .and_then(|account| account.get("accountCapabilities"))
+                .and_then(Value::as_object)
+                .is_some_and(|own| own.contains_key(BACKUPS));
         let principals = own_capability(PRINCIPALS);
         let own_principal_id = principals
             .as_ref()
@@ -343,6 +355,7 @@ impl Session {
             internal_domains,
             masked,
             profile,
+            backups,
             principals: principals.is_some(),
             own_principal_id,
         })
@@ -372,6 +385,7 @@ impl Session {
             assist: None,
             masked: None,
             profile: None,
+            backups: false,
             principals: false,
             own_principal_id: None,
             shared_accounts: Vec::new(),
@@ -667,6 +681,9 @@ impl Client {
         }
         if self.session.profile.is_some() {
             using.push(PROFILE);
+        }
+        if self.session.backups {
+            using.push(BACKUPS);
         }
         if self.session.principals {
             using.push(PRINCIPALS);
@@ -1665,6 +1682,21 @@ mod tests {
         assert!(Session::parse(&document, &base).unwrap().user_settings);
         document["capabilities"].as_object_mut().unwrap().remove(SETTINGS);
         assert!(!Session::parse(&document, &base).unwrap().user_settings);
+    }
+
+    #[test]
+    fn offers_the_backups_only_for_the_own_account() {
+        let base = Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let mut document = json!({
+            "capabilities": { CORE: {}, MAIL: {}, BACKUPS: {} },
+            "primaryAccounts": { MAIL: "a1", BACKUPS: "a1" },
+            "accounts": { "a1": { "accountCapabilities": { MAIL: {}, BACKUPS: {} } } },
+            "apiUrl": "/jmap/api", "downloadUrl": "/jmap/download", "uploadUrl": "/jmap/upload",
+        });
+        let session = Session::parse(&document, &base).unwrap();
+        assert!(session.backups);
+        document["accounts"]["a1"]["accountCapabilities"].as_object_mut().unwrap().remove(BACKUPS);
+        assert!(!Session::parse(&document, &base).unwrap().backups, "only where the own account names it");
     }
 
     #[test]

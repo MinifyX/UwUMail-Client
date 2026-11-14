@@ -4,6 +4,7 @@
 
 use tauri::State;
 use uwumail_core::engine::ServerAccountFeatures;
+use uwumail_core::jmap_backups::{BackupFilter, BackupPreview, BackupSearch, RestoreOutcome};
 use uwumail_core::jmap_masked::{MaskedAddress, MaskedInput, MaskedPatch};
 use uwumail_core::jmap_profile::{ProfilePatch, ProfilePicture};
 use uwumail_core::model::Person;
@@ -63,6 +64,35 @@ pub async fn update_profile_picture(
     patch: ProfilePatch,
 ) -> CommandResult<()> {
     engine.update_profile_picture(&account_id, &patch).await
+}
+
+/// The mailbox's own deleted mail in its server's backups.
+#[tauri::command]
+pub async fn search_backups(
+    engine: State<'_, Engine>,
+    account_id: String,
+    filter: BackupFilter,
+) -> CommandResult<BackupSearch> {
+    engine.search_backups(&account_id, &filter).await
+}
+
+#[tauri::command]
+pub async fn preview_backup_mail(
+    engine: State<'_, Engine>,
+    account_id: String,
+    ids: Vec<String>,
+) -> CommandResult<Vec<BackupPreview>> {
+    engine.preview_backup_mail(&account_id, &ids).await
+}
+
+/// Takes mail back into "Restored <date>" and syncs the mailbox.
+#[tauri::command]
+pub async fn restore_backup_mail(
+    engine: State<'_, Engine>,
+    account_id: String,
+    ids: Vec<String>,
+) -> CommandResult<RestoreOutcome> {
+    engine.restore_backup_mail(&account_id, &ids).await
 }
 
 #[tauri::command]

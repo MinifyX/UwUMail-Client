@@ -10,6 +10,7 @@ import { Onboarding } from "@/features/onboarding/Onboarding";
 import { DeleteForeverQuestion } from "@/features/mail/DeleteForeverQuestion";
 import { DangerousFileQuestion } from "@/features/attachments/DangerousFileQuestion";
 import { AiConsentQuestion } from "@/features/assist/AiConsentQuestion";
+import { BackupSearchDialog } from "@/features/backups/BackupSearch";
 import { FolderDialogs } from "@/features/mail/FolderDialogs";
 import { SharedMailboxDialogs } from "@/features/accounts/SharedMailboxDialogs";
 import { LinkSheet, LinkStatus } from "@/features/mail/LinkPreview";
@@ -53,6 +54,7 @@ export function App() {
             <LinkStatus />
             <DeleteForeverQuestion />
             <FolderDialogs />
+            <BackupSearchDialog />
             <DangerousFileQuestion />
             <AiConsentQuestion />
             <SharedMailboxDialogs />
