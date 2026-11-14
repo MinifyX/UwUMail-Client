@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Icon, IconButton, ICONS, Tooltip } from "@uwusuite/design";
+import { Icon, IconButton, ICONS, NavIndicator, Tooltip } from "@uwusuite/design";
 import { Avatar } from "@/components/ui/Avatar";
 import { useT } from "@/i18n";
 import { accountLabel } from "@/lib/accountLabel";
@@ -39,6 +39,7 @@ export function SectionRail({ className }: { className?: string }) {
       aria-label={t("nav.apps")}
       className={clsx("flex w-16 shrink-0 flex-col items-center gap-1.5 py-3", className)}
     >
+      <NavIndicator />
       {SECTIONS.filter(({ id }) => available.includes(id)).map(({ id, icon }) => {
         const label = t(`nav.section.${id}`);
         const active = section === id;
@@ -48,6 +49,7 @@ export function SectionRail({ className }: { className?: string }) {
               type="button"
               aria-label={label}
               aria-current={active ? "page" : undefined}
+              data-uwu-reveal-origin={id === "mail" ? "" : undefined}
               onClick={() => setSection(id)}
               className={clsx(
                 "grid size-11 place-items-center rounded-[14px] transition-colors",
