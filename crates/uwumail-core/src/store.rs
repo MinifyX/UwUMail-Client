@@ -16,6 +16,7 @@ mod assist;
 mod invites;
 mod send_later;
 mod shared;
+mod shipments;
 pub use assist::{
     CalibrationRecord, LabelExample, LabelHeaders, LabelLogRecord, LabelShot, ProviderRecord, UsageRecord,
 };
@@ -227,6 +228,7 @@ DROP TABLE IF EXISTS addon_storage;
 UPDATE accounts SET name = email
 WHERE lower(name) = lower(substr(email, instr(email, '@') + 1));
 "#,
+    shipments::MIGRATION,
 ];
 
 /// What this device remembers about one calendar.
@@ -2181,7 +2183,7 @@ mod tests {
     fn mailboxes_named_after_their_domain_are_called_by_their_address() {
         let conn = Connection::open_in_memory().unwrap();
         // The database as it was before the mailbox names.
-        let before = MIGRATIONS.len() - 1;
+        let before = MIGRATIONS.iter().position(|m| m.contains("UPDATE accounts SET name = email")).unwrap();
         for migration in &MIGRATIONS[..before] {
             conn.execute_batch(migration).unwrap();
         }

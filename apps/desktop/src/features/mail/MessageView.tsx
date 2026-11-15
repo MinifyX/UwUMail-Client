@@ -40,6 +40,7 @@ import {
   type Appearance,
 } from "./MessageBody";
 import { useMailDates } from "../dates/useMailDates";
+import { ShipmentChip } from "../shipments/ShipmentChip";
 
 interface AppearanceToggleProps {
   message: Message;
@@ -325,6 +326,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
         {showDetails && <AddressDetails id={detailsId} message={message} />}
 
         {!message.flags.draft && <MessageLabels message={message} canEdit />}
+        {!message.flags.draft && <ShipmentChip emailId={message.id} />}
         <MessageAssistCards message={message} inJunk={inJunk} />
 
         {message.hasRemoteContent && !allowRemote && (

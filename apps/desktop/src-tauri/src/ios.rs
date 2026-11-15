@@ -112,10 +112,19 @@ fn disable_pinch_zoom(app: &App) {
 /// up in the background to look (ios_refresh.rs). Nothing rings while it is in front, so a banner
 /// never lands on top of the mail itself.
 pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
-    let EngineEvent::MailReceived { account_id, message_ids } = event else { return };
     if crate::ios_refresh::in_foreground() {
         return;
     }
+    if let EngineEvent::ShipmentsChanged { notices } = event {
+        let prefs = crate::notify_prefs::get();
+        for notice in notices {
+            if let Some((title, body)) = notify::shipment_notification(&prefs, notice) {
+                let _ = app.notification().builder().title(title).body(body).show();
+            }
+        }
+        return;
+    }
+    let EngineEvent::MailReceived { account_id, message_ids } = event else { return };
     // Muted accounts and quiet hours (Settings → Notifications) keep the mail silent. All of
     // UwUMail's notifications on iOS are local ones from here, so this covers them all.
     let prefs = crate::notify_prefs::get();

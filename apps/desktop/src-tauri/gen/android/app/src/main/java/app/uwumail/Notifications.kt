@@ -152,6 +152,27 @@ object Notifications {
         }
     }
 
+    /** A parcel today, delivered or ready for pickup; title and body come from Rust (notify::shipment_notification). */
+    fun showShipment(context: Context, args: JSONObject) {
+        if (MainActivity.visible || !allowed(context)) return
+        val accountId = args.getString("accountId")
+        if (Prefs.muted(context, accountId) || Prefs.quietNow(context)) return
+        val tag = "shipment:$accountId:${args.getString("shipmentId")}"
+        val notification = NotificationCompat.Builder(context, CHANNEL_MAIL)
+            .setSmallIcon(R.drawable.ic_stat_nyu)
+            .setColor(PINK)
+            .setContentTitle(args.getString("title"))
+            .setContentText(args.getString("body"))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(lockScreenVersion(context, Prefs.localized(context)))
+            .setAutoCancel(true)
+            .setContentIntent(openIntent(context, tag.hashCode()))
+            .build()
+        // One notification per parcel: a newer status replaces the older one.
+        NotificationManagerCompat.from(context).notify(tag, 0, notification)
+    }
+
     /**
      * One mail's notification. `reveal` says whether a sign-in code may be in it: null decides by
      * whether the phone is locked right now; a repost (`reveal` set) doesn't alert again.

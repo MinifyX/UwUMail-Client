@@ -1205,6 +1205,7 @@ fn set_mobile_prefs(language: String, tone: String, app_lock: bool) -> CommandRe
 /// silent; quiet hours in another shape count as none. `code_title`, `link_title` and `copy_code`
 /// are the texts for mail with a sign-in code; `code_on_lock_screen` lets a notification show the
 /// code itself where the system may show it locked (off unless the person switched it on).
+/// `shipments` (on unless switched off) lets parcels notify, with the three titles for that.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn set_notification_prefs(
@@ -1218,6 +1219,10 @@ fn set_notification_prefs(
     link_title: Option<String>,
     copy_code: Option<String>,
     code_on_lock_screen: Option<bool>,
+    shipments: Option<bool>,
+    out_for_delivery: Option<String>,
+    delivered: Option<String>,
+    ready_for_pickup: Option<String>,
 ) -> CommandResult<()> {
     let quiet = quiet_hours.as_ref().and_then(uwumail_core::notify::QuietHours::from_value);
     let prefs = uwumail_core::notify::NotifyPrefs::new(show_content, &new_mail, &hidden, &many)
@@ -1227,6 +1232,12 @@ fn set_notification_prefs(
             link_title.as_deref().unwrap_or_default(),
             copy_code.as_deref().unwrap_or_default(),
             code_on_lock_screen.unwrap_or(false),
+        )
+        .with_shipments(
+            shipments.unwrap_or(true),
+            out_for_delivery.as_deref().unwrap_or_default(),
+            delivered.as_deref().unwrap_or_default(),
+            ready_for_pickup.as_deref().unwrap_or_default(),
         );
     platform::set_notification_prefs(prefs)
 }
@@ -1429,6 +1440,10 @@ pub fn run() {
             account::server_account_features,
             account::masked_addresses,
             account::create_masked_address,
+            account::shipments,
+            account::create_shipment,
+            account::update_shipment,
+            account::delete_shipment,
             account::update_masked_address,
             account::profile_picture,
             account::set_profile_picture,

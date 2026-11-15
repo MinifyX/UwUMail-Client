@@ -163,6 +163,11 @@ struct Inner {
     background_sync: std::sync::atomic::AtomicBool,
     /// The outbox task (undo send and send later, see `send_later_ops`).
     send_later: send_later_ops::OutboxState,
+    /// Accounts whose server shipments were looked at for notifications since start or since a
+    /// push said they changed.
+    shipments_checked: Mutex<HashSet<String>>,
+    /// One change to the shipments kept on this device at a time.
+    shipments_lock: Mutex<()>,
 }
 
 enum Credential {
@@ -214,6 +219,7 @@ pub use refresh_ops::RefreshOutcome;
 mod jmap_shared_ops;
 mod send_later_ops;
 mod shared_ops;
+mod shipment_ops;
 mod snooze_ops;
 mod verification_ops;
 pub use snooze_ops::{SNOOZED_FOLDER, SnoozedMessage, UnsnoozeOutcome};
@@ -269,6 +275,8 @@ impl Engine {
                 autodiscover_url: Mutex::new(crate::shared::AUTODISCOVER_URL.to_string()),
                 background_sync: std::sync::atomic::AtomicBool::new(true),
                 send_later: Default::default(),
+                shipments_checked: Mutex::default(),
+                shipments_lock: Mutex::default(),
             }),
         })
     }
@@ -2289,6 +2297,9 @@ impl Inner {
         if folders_changed || result.changed {
             self.emit(EngineEvent::MailChanged { account_id: account_id.to_string() });
         }
+        if client.session.shipments && self.shipments_checked.lock().unwrap().insert(account_id.to_string()) {
+            self.check_server_shipments(client, account_id).await;
+        }
         self.set_status(account_id, AccountStatus::Idle);
         self.emit(EngineEvent::SyncFinished { account_id: account_id.to_string() });
         self.check_push(client, account_id).await;
@@ -2312,6 +2323,11 @@ impl Inner {
         if change.state_of("AddressBook").is_some() || change.state_of("ContactCard").is_some() {
             self.forget_contacts(account_id);
             self.emit(EngineEvent::ContactsChanged {});
+        }
+        if client.session.shipments && change.state_of("Shipment").is_some() {
+            // The next sync (this one, as "Shipment" isn't in NOT_MAIL) looks for notifications.
+            self.shipments_checked.lock().unwrap().remove(account_id);
+            self.emit(EngineEvent::ShipmentsChanged { notices: Vec::new() });
         }
         // Settings, calendars and rules alone are nothing for the mail.
         !change.only(&NOT_MAIL)

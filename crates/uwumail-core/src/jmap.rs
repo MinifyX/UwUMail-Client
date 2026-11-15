@@ -33,6 +33,9 @@ pub const IMAGETEXT: &str = "urn:uwumail:jmap:imagetext";
 /// A UwUMail server that finds sign-in codes and links in mail (`VerificationCode/query`, the
 /// `verification` property of an Email; UwUMail-Server docs/jmap-verification.md).
 pub const VERIFICATION: &str = "urn:uwumail:jmap:verification";
+/// A UwUMail server that finds shipments in the mail of the login's own account (`Shipment/*`,
+/// UwUMail-Server docs/jmap-shipments.md).
+pub const SHIPMENTS: &str = "urn:uwumail:jmap:shipments";
 /// Our own: birthday events of other calendars moved into the contacts (`Birthdays/scan`,
 /// `Birthdays/import`), from UwUMail-Server 0.18 on. Its birthdays calendar comes with it.
 pub const BIRTHDAYS: &str = "urn:uwumail:jmap:birthdays";
@@ -147,6 +150,8 @@ pub struct Session {
     pub image_text: bool,
     /// The server finds sign-in codes in the mail of the login's own account (`VERIFICATION`).
     pub verification: bool,
+    /// The server keeps the shipments of the login's own account (`SHIPMENTS`).
+    pub shipments: bool,
     /// The account whose signatures per domain this login manages (`urn:uwumail:jmap:signatures`).
     pub signatures_account_id: Option<String>,
     /// The session's `state`: API answers carry it as `sessionState`, and a different one there
@@ -348,6 +353,7 @@ impl Session {
                 .map(String::from),
             image_text: capabilities.contains_key(IMAGETEXT),
             verification: capabilities.contains_key(VERIFICATION),
+            shipments: capabilities.contains_key(SHIPMENTS),
             signatures_account_id,
             state: text("state").map(String::from),
             assist,
@@ -382,6 +388,7 @@ impl Session {
             vapid_key: None,
             // Sign-in codes are the login's own: never offered for someone else's mail.
             verification: false,
+            shipments: false,
             assist: None,
             masked: None,
             profile: None,
@@ -666,6 +673,9 @@ impl Client {
         }
         if self.session.verification {
             using.push(VERIFICATION);
+        }
+        if self.session.shipments {
+            using.push(SHIPMENTS);
         }
         if self.session.birthdays_account_id.is_some() {
             using.push(BIRTHDAYS);

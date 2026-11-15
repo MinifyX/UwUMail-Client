@@ -1,0 +1,4 @@
+{
+  "de": "- Neue Ansicht Pakete: Versandmails von DHL, Deutsche Post, Hermes, DPD, GLS, UPS, FedEx, Amazon und anderen werden zu Paketen mit Status, Zustellfenster und Abholort (ab UwUMail-Server 0.36.0)\n- Paket-Chip an Versandmails, Sendungsnummern selbst hinzufügen, Pakete ausblenden oder löschen\n- Mitteilung, wenn ein Paket in Zustellung, zugestellt oder abholbereit ist (abschaltbar in den Mitteilungs-Einstellungen)",
+  "en": "- New Parcels view: shipping mail from DHL, Deutsche Post, Hermes, DPD, GLS, UPS, FedEx, Amazon and others becomes a parcel with status, delivery window and pickup place (with UwUMail Server 0.36.0)\n- A parcel chip on shipping mail; add tracking numbers yourself, hide or delete parcels\n- A notification when a parcel is out for delivery, delivered or ready for pickup (can be switched off in the notification settings)"
+}

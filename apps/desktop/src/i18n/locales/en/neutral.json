@@ -16,7 +16,8 @@
     "section": {
       "mail": "Mail",
       "calendar": "Calendar",
-      "contacts": "Contacts"
+      "contacts": "Contacts",
+      "shipments": "Parcels"
     },
     "scheduled": "Scheduled",
     "favorites": "Favorites"
@@ -651,7 +652,8 @@
     "contactsPrevious": "Previous contact",
     "label": "Label",
     "markAllRead": "Mark all as read",
-    "snooze": "Snooze"
+    "snooze": "Snooze",
+    "goShipments": "Go to parcels"
   },
   "palette": {
     "placeholder": "Type a command",
@@ -2534,7 +2536,9 @@
     "from": "From",
     "to": "to",
     "days": "Days",
-    "noDays": "Pick at least one day, otherwise the quiet hours never start."
+    "noDays": "Pick at least one day, otherwise the quiet hours never start.",
+    "shipments": "Parcel notifications",
+    "shipmentsDesc": "Let you know when a parcel is out for delivery, delivered or ready for pickup."
   },
   "codes": {
     "bar": "Sign-in codes",
@@ -2566,5 +2570,106 @@
   },
   "titlebar": {
     "search": "Search"
+  },
+  "shipments": {
+    "add": "Add shipment",
+    "addButton": "Add",
+    "empty": {
+      "title": "No parcels right now",
+      "body": "UwUMail spots shipping mails by itself. You can also add a tracking number yourself."
+    },
+    "group": {
+      "today": "Today",
+      "onTheWay": "On the way",
+      "delivered": "Delivered (last 7 days)",
+      "hidden": "Hidden"
+    },
+    "day": {
+      "today": "Today",
+      "tomorrow": "Tomorrow"
+    },
+    "window": "{{day}}, {{from}}–{{to}}",
+    "from": "{{day}}, from {{from}}",
+    "expected": "Expected",
+    "progress": "Shipment progress",
+    "status": {
+      "ordered": "Ordered",
+      "shipped": "Shipped",
+      "inTransit": "On the way",
+      "outForDelivery": "Out for delivery",
+      "delivered": "Delivered",
+      "readyForPickup": "Ready for pickup",
+      "deliveryFailed": "Delivery failed",
+      "returned": "Returned to sender",
+      "cancelled": "Cancelled"
+    },
+    "carrier": {
+      "dhl": "DHL",
+      "deutschePost": "Deutsche Post",
+      "dpd": "DPD",
+      "hermes": "Hermes",
+      "gls": "GLS",
+      "ups": "UPS",
+      "amazonLogistics": "Amazon Logistics",
+      "fedex": "FedEx",
+      "other": "Other carrier"
+    },
+    "source": {
+      "mail": "Mail",
+      "ai": "AI",
+      "client": "App"
+    },
+    "via": "via {{source}}",
+    "finished": {
+      "delivered": "Delivered: {{date}}",
+      "returned": "Returned: {{date}}",
+      "cancelled": "Cancelled: {{date}}"
+    },
+    "pickup": {
+      "packstation": "Parcel locker",
+      "postOffice": "Post office",
+      "parcelShop": "Parcel shop",
+      "accessPoint": "Pickup point",
+      "until": "Pick up by {{date}}"
+    },
+    "failedHint": "The courier couldn't reach you.",
+    "number": "Tracking number",
+    "numberMissing": "Please enter the tracking number.",
+    "history": "History ({{n}})",
+    "track": "Track shipment",
+    "toMail": "Go to mail",
+    "rename": "Rename",
+    "hide": "Hide",
+    "delete": "Delete",
+    "deleteTitle": "Delete parcel?",
+    "deleteBody": "“{{name}}” leaves the list and is no longer tracked.",
+    "actions": "Actions for {{name}}",
+    "name": "Name",
+    "nameHint": "Leave it empty to show the shop again.",
+    "nameOptional": "Name (optional)",
+    "carrierLabel": "Carrier",
+    "order": "Order {{ref}}",
+    "chip": "Parcel: {{status}}",
+    "undo": "Undo",
+    "toast": {
+      "hidden": "Parcel hidden",
+      "deleted": "Parcel deleted"
+    },
+    "error": {
+      "invalid": "That doesn't fit. Check the tracking number, it may already be there.",
+      "notFound": "That parcel no longer exists.",
+      "connection": "No connection to the server. Try again in a moment.",
+      "generic": "That didn't work. Please try again."
+    },
+    "hiddenShow": "Show hidden ({{n}})",
+    "hiddenHide": "Hide hidden parcels",
+    "unhide": "Show again",
+    "inBrowser": "(opens in your browser)",
+    "account": "Mailbox",
+    "notification": {
+      "outForDelivery": "Your parcel is out for delivery",
+      "delivered": "Your parcel has arrived",
+      "readyForPickup": "Your parcel is ready for pickup"
+    }
   }
 }

@@ -16,7 +16,8 @@
     "section": {
       "mail": "Mail",
       "calendar": "Kalender",
-      "contacts": "Kontakte"
+      "contacts": "Kontakte",
+      "shipments": "Pakete"
     },
     "scheduled": "Geplant",
     "favorites": "Favoriten"
@@ -651,7 +652,8 @@
     "contactsPrevious": "Vorheriger Kontakt",
     "label": "Label vergeben",
     "markAllRead": "Alle als gelesen markieren",
-    "snooze": "Zurückstellen"
+    "snooze": "Zurückstellen",
+    "goShipments": "Zu den Paketen"
   },
   "palette": {
     "placeholder": "Befehl eingeben",
@@ -2534,7 +2536,9 @@
     "from": "Von",
     "to": "bis",
     "days": "Tage",
-    "noDays": "Wähle mindestens einen Tag, sonst beginnen die Ruhezeiten nie."
+    "noDays": "Wähle mindestens einen Tag, sonst beginnen die Ruhezeiten nie.",
+    "shipments": "Paketmitteilungen",
+    "shipmentsDesc": "Bescheid geben, wenn ein Paket in Zustellung, zugestellt oder abholbereit ist."
   },
   "codes": {
     "bar": "Anmeldecodes",
@@ -2566,5 +2570,106 @@
   },
   "titlebar": {
     "search": "Suchen"
+  },
+  "shipments": {
+    "add": "Sendung hinzufügen",
+    "addButton": "Hinzufügen",
+    "empty": {
+      "title": "Gerade keine Pakete",
+      "body": "Versandmails erkennt UwUMail von selbst. Eine Sendungsnummer kannst du auch selbst hinzufügen."
+    },
+    "group": {
+      "today": "Heute",
+      "onTheWay": "Unterwegs",
+      "delivered": "Zugestellt (letzte 7 Tage)",
+      "hidden": "Ausgeblendet"
+    },
+    "day": {
+      "today": "Heute",
+      "tomorrow": "Morgen"
+    },
+    "window": "{{day}}, {{from}}–{{to}}",
+    "from": "{{day}}, ab {{from}}",
+    "expected": "Voraussichtlich",
+    "progress": "Sendungsverlauf",
+    "status": {
+      "ordered": "Bestellt",
+      "shipped": "Versendet",
+      "inTransit": "Unterwegs",
+      "outForDelivery": "In Zustellung",
+      "delivered": "Zugestellt",
+      "readyForPickup": "Abholbereit",
+      "deliveryFailed": "Zustellung fehlgeschlagen",
+      "returned": "Zurück an Absender",
+      "cancelled": "Storniert"
+    },
+    "carrier": {
+      "dhl": "DHL",
+      "deutschePost": "Deutsche Post",
+      "dpd": "DPD",
+      "hermes": "Hermes",
+      "gls": "GLS",
+      "ups": "UPS",
+      "amazonLogistics": "Amazon Logistics",
+      "fedex": "FedEx",
+      "other": "Anderer Versand"
+    },
+    "source": {
+      "mail": "Mail",
+      "ai": "KI",
+      "client": "App"
+    },
+    "via": "über {{source}}",
+    "finished": {
+      "delivered": "Zugestellt: {{date}}",
+      "returned": "Zurückgeschickt: {{date}}",
+      "cancelled": "Storniert: {{date}}"
+    },
+    "pickup": {
+      "packstation": "Packstation",
+      "postOffice": "Postfiliale",
+      "parcelShop": "Paketshop",
+      "accessPoint": "Abholstelle",
+      "until": "Abholen bis {{date}}"
+    },
+    "failedHint": "Der Zusteller hat dich nicht angetroffen.",
+    "number": "Sendungsnummer",
+    "numberMissing": "Bitte gib die Sendungsnummer ein.",
+    "history": "Verlauf ({{n}})",
+    "track": "Sendung verfolgen",
+    "toMail": "Zur Mail",
+    "rename": "Umbenennen",
+    "hide": "Ausblenden",
+    "delete": "Löschen",
+    "deleteTitle": "Paket löschen?",
+    "deleteBody": "„{{name}}“ verschwindet aus der Liste und wird nicht mehr verfolgt.",
+    "actions": "Aktionen für {{name}}",
+    "name": "Name",
+    "nameHint": "Leer lassen, dann steht hier wieder der Shop.",
+    "nameOptional": "Name (optional)",
+    "carrierLabel": "Versanddienst",
+    "order": "Bestellung {{ref}}",
+    "chip": "Paket: {{status}}",
+    "undo": "Rückgängig",
+    "toast": {
+      "hidden": "Paket ausgeblendet",
+      "deleted": "Paket gelöscht"
+    },
+    "error": {
+      "invalid": "Das passt nicht. Prüfe die Sendungsnummer, vielleicht gibt es sie schon.",
+      "notFound": "Das Paket gibt es nicht mehr.",
+      "connection": "Keine Verbindung zum Server. Versuch es gleich noch mal.",
+      "generic": "Das hat nicht geklappt. Versuch es noch mal."
+    },
+    "hiddenShow": "Ausgeblendete anzeigen ({{n}})",
+    "hiddenHide": "Ausgeblendete verbergen",
+    "unhide": "Wieder einblenden",
+    "inBrowser": "(öffnet im Browser)",
+    "account": "Postfach",
+    "notification": {
+      "outForDelivery": "Dein Paket ist in Zustellung",
+      "delivered": "Dein Paket ist da",
+      "readyForPickup": "Dein Paket liegt zur Abholung bereit"
+    }
   }
 }

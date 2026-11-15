@@ -59,6 +59,8 @@ export const queryKeys = {
   assistLocalModels: ["assistLocalModels"] as const,
   /** Per mailbox on a UwUMail server: masked addresses and profile picture. */
   serverAccountFeatures: ["serverAccountFeatures"] as const,
+  shipments: ["shipments"] as const,
+  hiddenShipments: ["shipments", "hidden"] as const,
   maskedAddresses: (accountId: string) => ["maskedAddresses", accountId] as const,
   profilePicture: (accountId: string) => ["profilePicture", accountId] as const,
   /** The people of a mailbox's server, to share calendars with. */
@@ -513,6 +515,7 @@ export function useBackendEvents() {
   const notifyShowContent = useSettings((s) => s.notifyShowContent);
   const notifyMuted = useSettings((s) => s.notifyMuted);
   const codeOnLockScreen = useSettings((s) => s.notifyCodeOnLockScreen);
+  const notifyShipments = useSettings((s) => s.notifyShipments);
   const quietHours = useSettings((s) => s.quietHours);
   // Muted mailboxes are named by address in the settings and by id where the shell rings.
   const mutedAccounts = useMemo(() => {
@@ -533,9 +536,13 @@ export function useBackendEvents() {
         linkTitle: t("codes.notification.linkTitle"),
         copyCode: t("codes.notification.copy"),
         codeOnLockScreen,
+        shipments: notifyShipments,
+        outForDelivery: t("shipments.notification.outForDelivery"),
+        delivered: t("shipments.notification.delivered"),
+        readyForPickup: t("shipments.notification.readyForPickup"),
       })
       .catch(() => {});
-  }, [notifyShowContent, t, mutedKey, quietHours, codeOnLockScreen]);
+  }, [notifyShowContent, t, mutedKey, quietHours, codeOnLockScreen, notifyShipments]);
 
   // Remote pictures wait for this before they go anywhere. A kept address was checked when it was
   // saved; should the app still turn it down, they stay away rather than leave without it.
@@ -633,6 +640,9 @@ export function useBackendEvents() {
           // Birthdays calendars are made from the contacts.
           void client.invalidateQueries({ queryKey: queryKeys.calendars });
           void client.invalidateQueries({ queryKey: queryKeys.calendarEvents });
+          break;
+        case "shipments:changed":
+          void client.invalidateQueries({ queryKey: queryKeys.shipments });
           break;
         case "assist:changed":
           for (const key of [

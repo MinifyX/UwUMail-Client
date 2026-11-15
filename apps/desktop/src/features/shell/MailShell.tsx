@@ -36,6 +36,7 @@ import { buildCommands } from "./commands";
 import { CommandPalette } from "./CommandPalette";
 import { LazyCalendar, LazyCalendarDialogs } from "./LazyCalendar";
 import { LazyContactDialogs, LazyContacts } from "./LazyContacts";
+import { LazyShipments } from "./LazyShipments";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { useMacMenu } from "./useMacShell";
 import { searchInTitleBar } from "./WindowTitleBar";
@@ -260,6 +261,8 @@ export function MailShell() {
               <LazyCalendar />
             ) : section === "contacts" ? (
               <LazyContacts />
+            ) : section === "shipments" ? (
+              <LazyShipments />
             ) : pro ? (
               <ProColumns />
             ) : (

@@ -128,11 +128,24 @@ pub fn after_start(app: &mut App) -> tauri::Result<()> {
 
 /// Rings for new mail while UwUMail is in the background.
 pub fn on_engine_event(app: &AppHandle, engine: &Engine, event: &EngineEvent) {
-    let EngineEvent::MailReceived { account_id, message_ids } = event else { return };
     let focused = app.get_webview_window("main").and_then(|window| window.is_focused().ok()).unwrap_or(false);
     if focused {
         return;
     }
+    // A parcel's notification has a place of its own per shipment and status.
+    if let EngineEvent::ShipmentsChanged { notices } = event {
+        let prefs = crate::notify_prefs::get();
+        for notice in notices {
+            if let Some((title, body)) = notify::shipment_notification(&prefs, notice) {
+                #[cfg(target_os = "linux")]
+                let body = notify::markup_escape(&body);
+                let place = format!("shipment:{}:{}:{}", notice.account_id, notice.shipment_id, notice.status);
+                crate::mail_notifications::show(app, &place, title, body);
+            }
+        }
+        return;
+    }
+    let EngineEvent::MailReceived { account_id, message_ids } = event else { return };
     // Muted accounts and quiet hours (Settings → Notifications) keep the mail silent.
     let prefs = crate::notify_prefs::get();
     if !prefs.rings_now(account_id) {

@@ -87,6 +87,9 @@ import type {
   SenderPicture,
   SenderPictureLookup,
   ServerAccountFeatures,
+  Shipment,
+  ShipmentInput,
+  ShipmentPatch,
   BackupFilter,
   BackupPreview,
   BackupRestoreOutcome,
@@ -363,6 +366,15 @@ export interface Backend {
    * picture; other mailboxes and servers that can't be reached right now are left out.
    */
   serverAccountFeatures(): Promise<ServerAccountFeatures[]>;
+  /**
+   * The parcels of every mailbox, hidden ones or the others, last changed first. UwUMail servers
+   * keep their own; for other mailboxes UwUMail finds them in new mail and keeps them here.
+   */
+  shipments(hidden?: boolean): Promise<Shipment[]>;
+  /** Adds one by hand; returns its id. */
+  createShipment(input: ShipmentInput): Promise<string>;
+  updateShipment(accountId: string, id: string, patch: ShipmentPatch): Promise<void>;
+  deleteShipment(accountId: string, id: string): Promise<void>;
   /** Every masked address of the mailbox, deleted ones included, newest first. */
   maskedAddresses(accountId: string): Promise<MaskedAddress[]>;
   /** Makes one by hand; it is `enabled` at once. */
@@ -640,6 +652,11 @@ export interface Backend {
     copyCode?: string;
     /** The lock screen shows the code itself, not only where it is from. */
     codeOnLockScreen?: boolean;
+    /** Parcels today, delivered and ready for pickup ring (default on), with these titles. */
+    shipments?: boolean;
+    outForDelivery?: string;
+    delivered?: string;
+    readyForPickup?: string;
   }): Promise<void>;
   /** The mailto: link UwUMail was opened with, handed out once. */
   takeMailto(): Promise<MailtoDraft | null>;

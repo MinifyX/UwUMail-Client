@@ -305,6 +305,12 @@ export function buildCommands(
           },
         ]
       : []),
+    {
+      id: "goShipments",
+      title: t("shortcuts.goShipments"),
+      icon: ICONS.parcel,
+      run: () => ui.setSection("shipments"),
+    },
     // A phone has no Simple or Pro.
     ...(layoutChoice
       ? [

@@ -9,14 +9,15 @@ export const SECTIONS: { id: AppSection; icon: IconProps["icon"] }[] = [
   { id: "mail", icon: ICONS.mail },
   { id: "calendar", icon: ICONS.calendar },
   { id: "contacts", icon: ICONS.contacts },
+  { id: "shipments", icon: ICONS.parcel },
 ];
 
-/** The sections some account offers besides mail. */
+/** The sections some account offers besides mail; parcels with any mailbox (found in new mail if the server keeps none). */
 export function useAvailableSections(): AppSection[] {
   const { data: calendar = false } = useCalendarsAvailable();
   const { data: contacts = false } = useContactsAvailable();
   return SECTIONS.map((s) => s.id).filter(
-    (id) => id === "mail" || (id === "calendar" && calendar) || (id === "contacts" && contacts),
+    (id) => id === "mail" || id === "shipments" || (id === "calendar" && calendar) || (id === "contacts" && contacts),
   );
 }
 
@@ -30,14 +31,16 @@ export function AppSwitch({ onCanvas = false }: { onCanvas?: boolean }) {
   const section = useUi((s) => s.section);
   const setSection = useUi((s) => s.setSection);
   if (available.length < 2) return null;
-  const three = available.length === 3;
+  const three = available.length >= 3;
   return (
     <div
       role="tablist"
       aria-label={t("nav.apps")}
       className={clsx(
         "grid gap-1 p-1",
-        three ? "grid-cols-3 rounded-[18px]" : "grid-cols-2 rounded-full",
+        three ? "rounded-[18px]" : "grid-cols-2 rounded-full",
+        available.length === 3 && "grid-cols-3",
+        available.length === 4 && "grid-cols-4",
         onCanvas ? "bg-hairline" : "bg-canvas",
       )}
     >

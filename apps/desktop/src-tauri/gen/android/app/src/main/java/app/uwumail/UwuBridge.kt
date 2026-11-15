@@ -39,6 +39,10 @@ object UwuBridge {
                 Notifications.showMail(app, args)
                 null
             }
+            "notifyShipment" -> {
+                Notifications.showShipment(app, args)
+                null
+            }
             "clearMailNotifications" -> {
                 Notifications.clearMail(app)
                 null

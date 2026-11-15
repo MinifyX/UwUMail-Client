@@ -1114,6 +1114,13 @@ pub enum EngineEvent {
     /// Mail sent later was scheduled, changed, stopped or sent (see `send_later`).
     #[serde(rename = "scheduled:changed")]
     ScheduledChanged {},
+    /// Shipments were found, followed, changed or dropped; `notices` are statuses that reached
+    /// one of them just now and notify (see `shipments::NOTIFIED`).
+    #[serde(rename = "shipments:changed")]
+    ShipmentsChanged {
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        notices: Vec<crate::shipments::ShipmentNotice>,
+    },
     /// A round of looking for mail of an account went through to the end (`Engine::refresh_all`).
     #[serde(rename = "sync:finished", rename_all = "camelCase")]
     SyncFinished { account_id: String },
@@ -1134,6 +1141,7 @@ impl EngineEvent {
             Self::AccountsChanged {} => "accounts:changed",
             Self::AssistChanged { .. } => "assist:changed",
             Self::ScheduledChanged {} => "scheduled:changed",
+            Self::ShipmentsChanged { .. } => "shipments:changed",
             Self::SyncFinished { .. } => "sync:finished",
         }
     }
