@@ -1,9 +1,9 @@
 {
-  "version": "0.12.0-beta.10",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.10/UwUMail-android.apk",
-  "sha256": "a414617ad95d52400eb569788d883fcbb00b76cd645ffb1bbee6d0d6fd69f130",
+  "version": "0.12.0-beta.11",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-android.apk",
+  "sha256": "78129c43427565b1a1c20b224465142c0054de2864bf68a620dbbc2d13f2a098",
   "notes": {
-    "de": "- Neue Ansicht Pakete: Versandmails von DHL, Deutsche Post, Hermes, DPD, GLS, UPS, FedEx, Amazon und anderen werden zu Paketen mit Status, Zustellfenster und Abholort (ab UwUMail-Server 0.36.0)\n- Paket-Chip an Versandmails, Sendungsnummern selbst hinzufügen, Pakete ausblenden oder löschen\n- Mitteilung, wenn ein Paket in Zustellung, zugestellt oder abholbereit ist (abschaltbar in den Mitteilungs-Einstellungen)",
-    "en": "- New Parcels view: shipping mail from DHL, Deutsche Post, Hermes, DPD, GLS, UPS, FedEx, Amazon and others becomes a parcel with status, delivery window and pickup place (with UwUMail Server 0.36.0)\n- A parcel chip on shipping mail; add tracking numbers yourself, hide or delete parcels\n- A notification when a parcel is out for delivery, delivered or ready for pickup (can be switched off in the notification settings)"
+    "de": "- Paketerkennung lässt sich pro Postfach abschalten: Einstellungen → Postfächer → Paketerkennung (ab UwUMail-Server 0.37.0). Beim Abschalten werden die gefundenen Pakete gelöscht\n- Ist die Paketerkennung aus (oder vom Server-Admin abgeschaltet), verschwinden Pakete-Ansicht, Paket-Chips und Paket-Mitteilungen ganz\n- Pakete gibt es bei UwUMail-Servern erst ab Version 0.37.0",
+    "en": "- Parcel detection can be switched off per mailbox: Settings → Mailboxes → Parcel detection (with UwUMail Server 0.37.0). Switching it off deletes the parcels found\n- With parcel detection off (or switched off by the server's admin), the Parcels view, parcel chips and parcel notifications are gone entirely\n- Parcels on UwUMail servers need server version 0.37.0 or newer"
   }
 }
