@@ -14,7 +14,6 @@ import { markAllRead, viewScope } from "../mail/markAllRead";
 import { requestMove } from "../mail/selection";
 import { requestSnooze } from "../mail/snooze";
 import { SEARCH_INPUT_ID } from "../mail/MailSearch";
-import { PARCEL_ICON } from "../shipments/icon";
 import { switchWorkspace, WORKSPACE_ICONS, WORKSPACE_KEYS, workspaceName } from "../workspaces/workspaces";
 
 export interface Command {
@@ -309,7 +308,7 @@ export function buildCommands(
     {
       id: "goShipments",
       title: t("shortcuts.goShipments"),
-      icon: PARCEL_ICON,
+      icon: ICONS.parcel,
       run: () => ui.setSection("shipments"),
     },
     // A phone has no Simple or Pro.

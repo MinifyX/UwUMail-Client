@@ -1,5 +1,4 @@
-import { Icon } from "@uwusuite/design";
-import { PARCEL_ICON } from "./icon";
+import { Icon, ICONS } from "@uwusuite/design";
 import { useT } from "@/i18n";
 import { shipmentOfMail } from "@/lib/shipments";
 import { showShipment, useShipments } from "./useShipments";
@@ -16,7 +15,7 @@ export function ShipmentChip({ emailId }: { emailId: string }) {
       onClick={() => showShipment(shipment)}
       className="inline-flex items-center gap-1.5 self-start rounded-full border border-hairline bg-canvas px-3 py-1 text-[12.5px] font-semibold text-ink hover:bg-pink-tint/50 focus-visible:shadow-focus focus-visible:outline-hidden"
     >
-      <Icon icon={PARCEL_ICON} size="sm" className="text-muted" />
+      <Icon icon={ICONS.parcel} size="sm" className="text-muted" />
       {t("shipments.chip", { status: t(`shipments.status.${shipment.status}`) })}
     </button>
   );

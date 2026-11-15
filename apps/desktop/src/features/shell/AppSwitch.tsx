@@ -1,6 +1,5 @@
 import clsx from "clsx";
 import { Icon, type IconProps, ICONS } from "@uwusuite/design";
-import { PARCEL_ICON } from "../shipments/icon";
 import { useT } from "@/i18n";
 import { useUi, type AppSection } from "@/state/ui";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
@@ -10,7 +9,7 @@ export const SECTIONS: { id: AppSection; icon: IconProps["icon"] }[] = [
   { id: "mail", icon: ICONS.mail },
   { id: "calendar", icon: ICONS.calendar },
   { id: "contacts", icon: ICONS.contacts },
-  { id: "shipments", icon: PARCEL_ICON },
+  { id: "shipments", icon: ICONS.parcel },
 ];
 
 /** The sections some account offers besides mail; parcels with any mailbox (found in new mail if the server keeps none). */

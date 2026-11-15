@@ -12,7 +12,6 @@ import {
   TextInput,
 } from "@uwusuite/design";
 import clsx from "clsx";
-import { PARCEL_ICON } from "./icon";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { CARRIERS, type Shipment, type ShipmentCarrier, type ShipmentEvent } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
@@ -241,7 +240,7 @@ function ShipmentCard({ shipment }: { shipment: Shipment }) {
     >
       <div className="flex items-start gap-3">
         <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-control bg-canvas text-muted">
-          <Icon icon={PARCEL_ICON} size="lg" />
+          <Icon icon={ICONS.parcel} size="lg" />
         </span>
         <div className="min-w-0 flex-1">
           <h3 id={headingId} className="truncate text-body font-semibold">
