@@ -1437,6 +1437,12 @@
     "notFound": "No address books found: {{reason}}",
     "failed": "That didn't work: {{reason}}"
   },
+  "accountShipments": {
+    "title": "Parcel detection",
+    "description": "Find parcels in shipping mail and show them under Parcels.",
+    "offConfirm": "Turn off parcel detection for {{email}}? All parcels already found for this mailbox are deleted on the server.",
+    "failed": "Couldn't change parcel detection: {{reason}}"
+  },
   "cloudSignIn": {
     "hint": "Sign in again to see calendar and contacts. Mail keeps working either way.",
     "hintFor": "Sign in to {{name}} again to see its calendar and contacts.",

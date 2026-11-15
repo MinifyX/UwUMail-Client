@@ -1437,6 +1437,12 @@
     "notFound": "Keine Adressbücher gefunden: {{reason}}",
     "failed": "Das hat nicht geklappt: {{reason}}"
   },
+  "accountShipments": {
+    "title": "Paketerkennung",
+    "description": "Sendungen aus Versandmails erkennen und unter Pakete zeigen.",
+    "offConfirm": "Paketerkennung für {{email}} ausschalten? Alle schon gefundenen Pakete dieses Postfachs werden auf dem Server gelöscht.",
+    "failed": "Paketerkennung ließ sich nicht umstellen: {{reason}}"
+  },
   "cloudSignIn": {
     "hint": "Melde dich erneut an, um Kalender und Kontakte zu sehen. E-Mails funktionieren so oder so weiter.",
     "hintFor": "Melde dich bei {{name}} erneut an, um Kalender und Kontakte zu sehen.",

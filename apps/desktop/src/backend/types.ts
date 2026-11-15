@@ -1819,6 +1819,13 @@ export interface ShipmentPatch {
   hidden?: boolean;
 }
 
+/** Whether a mailbox has parcels, and whether its server lets the user switch them. */
+export interface ShipmentAccount {
+  accountId: string;
+  on: boolean;
+  switchable: boolean;
+}
+
 export interface ShipmentNotice {
   accountId: string;
   shipmentId: string;

@@ -150,8 +150,12 @@ pub struct Session {
     pub image_text: bool,
     /// The server finds sign-in codes in the mail of the login's own account (`VERIFICATION`).
     pub verification: bool,
-    /// The server keeps the shipments of the login's own account (`SHIPMENTS`).
+    /// The server keeps the shipments of the login's own account (`SHIPMENTS` in its
+    /// `accountCapabilities`); not while the person or the server switched them off.
     pub shipments: bool,
+    /// The server knows shipments (`SHIPMENTS` in the session's `capabilities`), so the person
+    /// may switch them on and off (the `shipments` key of `UserSettings`).
+    pub shipments_offered: bool,
     /// The account whose signatures per domain this login manages (`urn:uwumail:jmap:signatures`).
     pub signatures_account_id: Option<String>,
     /// The session's `state`: API answers carry it as `sessionState`, and a different one there
@@ -181,6 +185,17 @@ pub struct Session {
     /// Other people's mail accounts this login reaches (`isPersonal: false`): shared mailboxes
     /// and mailboxes someone shared folders of (UwUMail-Server docs/groups.md, docs/sharing.md).
     pub shared_accounts: Vec<SharedAccount>,
+}
+
+/// Who finds the parcels of a JMAP login ([`Session::shipments_by`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShipmentsBy {
+    /// Its UwUMail server (`Shipment/*`).
+    Server,
+    /// Nobody: switched off on its UwUMail server.
+    Off,
+    /// The app, in new inbox mail (servers that don't know shipments).
+    App,
 }
 
 /// A mail account of someone else in the login's session.
@@ -315,6 +330,14 @@ impl Session {
                 .and_then(|account| account.get("accountCapabilities"))
                 .and_then(Value::as_object)
                 .is_some_and(|own| own.contains_key(BACKUPS));
+        let shipments_offered = capabilities.contains_key(SHIPMENTS);
+        let shipments = shipments_offered
+            && document
+                .get("accounts")
+                .and_then(|accounts| accounts.get(&account_id))
+                .and_then(|account| account.get("accountCapabilities"))
+                .and_then(Value::as_object)
+                .is_some_and(|own| own.contains_key(SHIPMENTS));
         let principals = own_capability(PRINCIPALS);
         let own_principal_id = principals
             .as_ref()
@@ -353,7 +376,8 @@ impl Session {
                 .map(String::from),
             image_text: capabilities.contains_key(IMAGETEXT),
             verification: capabilities.contains_key(VERIFICATION),
-            shipments: capabilities.contains_key(SHIPMENTS),
+            shipments,
+            shipments_offered,
             signatures_account_id,
             state: text("state").map(String::from),
             assist,
@@ -365,6 +389,19 @@ impl Session {
             principals: principals.is_some(),
             own_principal_id,
         })
+    }
+
+    /// Who finds the login's parcels. A UwUMail server without them in the own account has them
+    /// switched off (by its admin or the person), and then the app looks for none either; older
+    /// UwUMail servers without shipments count as that too.
+    pub fn shipments_by(&self) -> ShipmentsBy {
+        if self.shipments {
+            ShipmentsBy::Server
+        } else if self.shipments_offered || self.user_settings {
+            ShipmentsBy::Off
+        } else {
+            ShipmentsBy::App
+        }
     }
 
     /// The session as seen from the shared account `id`: mail calls go to that account, while
@@ -389,6 +426,7 @@ impl Session {
             // Sign-in codes are the login's own: never offered for someone else's mail.
             verification: false,
             shipments: false,
+            shipments_offered: false,
             assist: None,
             masked: None,
             profile: None,
@@ -542,6 +580,17 @@ pub struct Client {
 }
 
 impl Client {
+    /// A client for a session read elsewhere; every request goes nowhere.
+    #[cfg(test)]
+    pub(crate) fn with_session(session: Session) -> Self {
+        Self {
+            http: reqwest::Client::new(),
+            auth: Auth::Basic { username: String::new(), password: String::new() },
+            session,
+            latest_session_state: std::sync::Mutex::new(None),
+        }
+    }
+
     /// Signs in with a password, or with the password as an API token when the
     /// server doesn't accept it as a password.
     pub async fn connect(http: &reqwest::Client, session_url: &str, username: &str, password: &str) -> Result<Self> {
@@ -1757,6 +1806,40 @@ mod tests {
         assert_eq!(session.state.as_deref(), Some("75128aab4b1b"));
         document["capabilities"].as_object_mut().unwrap().remove(WEBPUSH_VAPID);
         assert_eq!(Session::parse(&document, &base).unwrap().vapid_key, None, "push without a key is plain Web Push");
+    }
+
+    #[test]
+    fn shipments_follow_the_session_and_the_own_account() {
+        let base = Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let mut document = json!({
+            "capabilities": { CORE: {}, MAIL: {}, SETTINGS: {}, SHIPMENTS: {} },
+            "accounts": { "a1": { "accountCapabilities": { MAIL: {}, SHIPMENTS: {} } } },
+            "primaryAccounts": { MAIL: "a1", SHIPMENTS: "a1" },
+            "apiUrl": "/jmap/api", "downloadUrl": "/jmap/download", "uploadUrl": "/jmap/upload",
+        });
+        let both_on = Session::parse(&document, &base).unwrap();
+        assert!(both_on.shipments && both_on.shipments_offered);
+        assert_eq!(both_on.shipments_by(), ShipmentsBy::Server);
+
+        // The person switched them off: still offered, gone from the account.
+        document["accounts"]["a1"]["accountCapabilities"].as_object_mut().unwrap().remove(SHIPMENTS);
+        document["primaryAccounts"].as_object_mut().unwrap().remove(SHIPMENTS);
+        let account_off = Session::parse(&document, &base).unwrap();
+        assert!(!account_off.shipments && account_off.shipments_offered);
+        assert_eq!(account_off.shipments_by(), ShipmentsBy::Off);
+
+        // The admin switched them off: nowhere in the session, and the app looks for none either.
+        document["capabilities"].as_object_mut().unwrap().remove(SHIPMENTS);
+        let server_off = Session::parse(&document, &base).unwrap();
+        assert!(!server_off.shipments && !server_off.shipments_offered);
+        assert_eq!(server_off.shipments_by(), ShipmentsBy::Off);
+        // A capability only in the account, not the session, doesn't count.
+        document["accounts"]["a1"]["accountCapabilities"][SHIPMENTS] = json!({});
+        assert_eq!(Session::parse(&document, &base).unwrap().shipments_by(), ShipmentsBy::Off);
+
+        // Another JMAP server: the app finds them itself.
+        document["capabilities"].as_object_mut().unwrap().remove(SETTINGS);
+        assert_eq!(Session::parse(&document, &base).unwrap().shipments_by(), ShipmentsBy::App);
     }
 
     #[test]

@@ -17,6 +17,7 @@ import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 import { AccountSetup } from "../accounts/AccountSetup";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
+import { useShipmentsAvailable } from "../shipments/useShipments";
 import { useContactsAvailable } from "../contacts/useContactsData";
 import { Composer } from "../compose/Composer";
 import { loadLocalDraft } from "../compose/localDraft";
@@ -178,9 +179,19 @@ export function MailShell() {
     useUi.getState().setSection("mail");
     toast(t("contacts.noneFound"), "info");
   }, [contactsKnown, contactsAvailable, section, t]);
+  const shipmentsAvailable = useShipmentsAvailable();
+  // Every mailbox switched its parcels off: no parcel view any more.
+  useEffect(() => {
+    if (shipmentsAvailable === false && section === "shipments") useUi.getState().setSection("mail");
+  }, [shipmentsAvailable, section]);
   // Titles depend on tone, theme, layout and the workspaces, so rebuild when they change.
   const commands = useMemo(
-    () => buildCommands(client, t, { calendar: calendarAvailable, contacts: contactsAvailable }),
+    () =>
+      buildCommands(client, t, {
+        calendar: calendarAvailable,
+        contacts: contactsAvailable,
+        shipments: shipmentsAvailable,
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       client,
@@ -193,6 +204,7 @@ export function MailShell() {
       workspaceNames,
       calendarAvailable,
       contactsAvailable,
+      shipmentsAvailable,
     ],
   );
 

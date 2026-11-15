@@ -1,0 +1,4 @@
+{
+  "de": "- Paketerkennung lässt sich pro Postfach abschalten: Einstellungen → Postfächer → Paketerkennung (ab UwUMail-Server 0.37.0). Beim Abschalten werden die gefundenen Pakete gelöscht\n- Ist die Paketerkennung aus (oder vom Server-Admin abgeschaltet), verschwinden Pakete-Ansicht, Paket-Chips und Paket-Mitteilungen ganz",
+  "en": "- Parcel detection can be switched off per mailbox: Settings → Mailboxes → Parcel detection (with UwUMail Server 0.37.0). Switching it off deletes the parcels found\n- With parcel detection off (or switched off by the server's admin), the Parcels view, parcel chips and parcel notifications are gone entirely"
+}

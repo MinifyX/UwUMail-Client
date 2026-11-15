@@ -5,6 +5,7 @@ import { accountLabel } from "@/lib/accountLabel";
 import { accountAddress } from "@/lib/arrangement";
 import { useAccounts } from "@/lib/queries";
 import { useSettings } from "@/state/settings";
+import { useShipmentsAvailable } from "../shipments/useShipments";
 import { Row } from "./Row";
 
 /** Monday first; the values are the synced ones (0 = Sunday). */
@@ -33,6 +34,7 @@ export function NotificationSettings() {
 
   const codeOnLockScreen = useSettings((s) => s.notifyCodeOnLockScreen);
   const shipments = useSettings((s) => s.notifyShipments);
+  const shipmentsAvailable = useShipmentsAvailable();
 
   return (
     <>
@@ -44,14 +46,16 @@ export function NotificationSettings() {
           description={t("codes.lockScreenDesc")}
         />
       </div>
-      <div className="border-b border-hairline py-4">
-        <Toggle
-          checked={shipments}
-          onChange={(notifyShipments) => update({ notifyShipments })}
-          label={t("notify.shipments")}
-          description={t("notify.shipmentsDesc")}
-        />
-      </div>
+      {shipmentsAvailable && (
+        <div className="border-b border-hairline py-4">
+          <Toggle
+            checked={shipments}
+            onChange={(notifyShipments) => update({ notifyShipments })}
+            label={t("notify.shipments")}
+            description={t("notify.shipmentsDesc")}
+          />
+        </div>
+      )}
       {accounts.length > 0 && (
         <Row label={t("notify.accounts")} description={t("notify.accountsDesc")}>
           <div className="flex flex-col gap-1">

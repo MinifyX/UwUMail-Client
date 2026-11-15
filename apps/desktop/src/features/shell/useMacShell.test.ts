@@ -7,7 +7,7 @@ import { mailMenu, type MailMenuState } from "./useMacShell";
 const t = (key: string) => key;
 
 function menu(overrides: Partial<MailMenuState> = {}) {
-  const commands = buildCommands(new QueryClient(), t, { calendar: true, contacts: true });
+  const commands = buildCommands(new QueryClient(), t, { calendar: true, contacts: true, shipments: true });
   return mailMenu({ t, commands, section: "mail", hasThread: true, run: (action) => void action(), ...overrides });
 }
 
@@ -59,7 +59,7 @@ describe("the macOS menu bar", () => {
     expect(run).toHaveBeenCalledWith(expect.any(Function), true);
   });
 
-  it("leaves out the calendar and contacts when there are none", () => {
+  it("leaves out the calendar, contacts and parcels when there are none", () => {
     const commands = buildCommands(new QueryClient(), t);
     const ids = items(mailMenu({ t, commands, section: "mail", hasThread: false, run: vi.fn() })).map(
       (item) => item.id,
@@ -67,6 +67,7 @@ describe("the macOS menu bar", () => {
     expect(ids).toContain("section.mail");
     expect(ids).not.toContain("section.calendar");
     expect(ids).not.toContain("command.newEvent");
+    expect(ids).not.toContain("section.shipments");
   });
 
   it("has only the help before the first account", () => {

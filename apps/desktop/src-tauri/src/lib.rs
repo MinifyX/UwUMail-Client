@@ -1440,6 +1440,7 @@ pub fn run() {
             account::server_account_features,
             account::masked_addresses,
             account::create_masked_address,
+            account::shipment_accounts,
             account::shipments,
             account::create_shipment,
             account::update_shipment,

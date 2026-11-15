@@ -88,6 +88,7 @@ import type {
   SenderPictureLookup,
   ServerAccountFeatures,
   Shipment,
+  ShipmentAccount,
   ShipmentInput,
   ShipmentPatch,
   BackupFilter,
@@ -370,6 +371,8 @@ export interface Backend {
    * The parcels of every mailbox, hidden ones or the others, last changed first. UwUMail servers
    * keep their own; for other mailboxes UwUMail finds them in new mail and keeps them here.
    */
+  /** Per mailbox whether it has parcels; unreachable servers and shares are left out. */
+  shipmentAccounts(): Promise<ShipmentAccount[]>;
   shipments(hidden?: boolean): Promise<Shipment[]>;
   /** Adds one by hand; returns its id. */
   createShipment(input: ShipmentInput): Promise<string>;

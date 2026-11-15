@@ -1,4 +1,4 @@
-import type { Shipment, ShipmentStatus } from "@/backend/types";
+import type { Shipment, ShipmentAccount, ShipmentStatus } from "@/backend/types";
 import { todayKey } from "./calendarDates";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -64,3 +64,6 @@ export function groupShipments(shipments: Shipment[], now: Date = new Date()): S
 export function shipmentOfMail(shipments: Shipment[], emailId: string): Shipment | null {
   return shipments.find((s) => !s.hidden && s.emailIds.includes(emailId)) ?? null;
 }
+
+/** Parcels are there when at least one mailbox has them on. */
+export const shipmentsAvailable = (accounts: ShipmentAccount[]) => accounts.some((account) => account.on);

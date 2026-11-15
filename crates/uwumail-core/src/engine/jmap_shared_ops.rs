@@ -212,7 +212,7 @@ impl Engine {
 
     /// Signs the login `account_id` in again, so it works with the session as it is now, also in
     /// its shared mailboxes. Says so when that changed whom its mailboxes may send to
-    /// (`internal_only`), so the composer looks again.
+    /// (`internal_only`), so the composer looks again, or whether it has parcels.
     pub(super) async fn reread_session(&self, account_id: &str) -> Result<Arc<JmapClient>> {
         let children = self.inner.store.shared_children(account_id).unwrap_or_default();
         let old = {
@@ -223,8 +223,13 @@ impl Engine {
             clients.remove(account_id)
         };
         let fresh = self.inner.jmap_client(account_id).await?;
-        if old.is_some_and(|old| old.session.internal_domains != fresh.session.internal_domains) {
-            self.inner.emit(EngineEvent::AccountsChanged {});
+        if let Some(old) = old {
+            if old.session.internal_domains != fresh.session.internal_domains {
+                self.inner.emit(EngineEvent::AccountsChanged {});
+            }
+            if old.session.shipments_by() != fresh.session.shipments_by() {
+                self.inner.shipments_switched(account_id, fresh.session.shipments);
+            }
         }
         Ok(fresh)
     }
