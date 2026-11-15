@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 import { backend, BackendError } from "@/backend/backend";
-import type { Shipment, ShipmentInput, ShipmentPatch } from "@/backend/types";
+import type { Shipment, ShipmentInput, ShipmentPatch, ShipmentStatus } from "@/backend/types";
 import { translate } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
-import { shipmentKey, shipmentsAvailable } from "@/lib/shipments";
+import { markNow, shipmentKey, shipmentsAvailable } from "@/lib/shipments";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 
@@ -72,6 +72,16 @@ export function useShipmentActions() {
       });
     },
     unhide: (shipment: Shipment) => update(shipment, { hidden: false }),
+    mark: async (shipment: Shipment, status: ShipmentStatus) => {
+      const at = markNow();
+      const set = (undo: boolean) =>
+        run(() => backend().markShipment(shipment.accountId, shipment.id, at, status, undo));
+      if (!(await set(false))) return;
+      const name = translate(`shipments.status.${status}`);
+      toast(translate("shipments.toast.marked", { status: name }), "success", undefined, {
+        action: { label: translate("shipments.undo"), run: () => void set(true) },
+      });
+    },
     remove: async (shipment: Shipment) => {
       if (await run(() => backend().deleteShipment(shipment.accountId, shipment.id))) {
         toast(translate("shipments.toast.deleted"), "success");

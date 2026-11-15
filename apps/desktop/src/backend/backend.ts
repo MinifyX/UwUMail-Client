@@ -91,6 +91,7 @@ import type {
   ShipmentAccount,
   ShipmentInput,
   ShipmentPatch,
+  ShipmentStatus,
   BackupFilter,
   BackupPreview,
   BackupRestoreOutcome,
@@ -377,6 +378,8 @@ export interface Backend {
   /** Adds one by hand; returns its id. */
   createShipment(input: ShipmentInput): Promise<string>;
   updateShipment(accountId: string, id: string, patch: ShipmentPatch): Promise<void>;
+  /** Marks `status` at `at` by hand, or takes that mark back (`undo`). */
+  markShipment(accountId: string, id: string, at: string, status: ShipmentStatus, undo: boolean): Promise<void>;
   deleteShipment(accountId: string, id: string): Promise<void>;
   /** Every masked address of the mailbox, deleted ones included, newest first. */
   maskedAddresses(accountId: string): Promise<MaskedAddress[]>;

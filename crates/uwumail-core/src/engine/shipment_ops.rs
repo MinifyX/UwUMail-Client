@@ -151,6 +151,30 @@ impl Engine {
         Ok(())
     }
 
+    /// Marks one `status` at `at` (RFC 3339) by hand, or takes that mark back (`undo`).
+    pub async fn mark_shipment(&self, account_id: &str, id: &str, at: &str, status: &str, undo: bool) -> Result<()> {
+        let status = uwumail_labels::ShipmentStatus::from_id(status)
+            .ok_or_else(|| Error::invalid("That is no shipment status."))?;
+        let at = DateTime::parse_from_rfc3339(at)
+            .map(|at| shipments::format_time(at.with_timezone(&Utc)))
+            .map_err(|_| Error::invalid("That is no time."))?;
+        let account = self.inner.store.account(account_id)?;
+        match self.inner.shipments_source(account_id, account.protocol).await {
+            Source::Server(client) => jmap_shipments::mark(&client, id, &at, status, undo).await?,
+            Source::Off => return Err(off()),
+            Source::Local => self.inner.change_local(account_id, |list| {
+                let shipment = list
+                    .iter_mut()
+                    .find(|shipment| shipment.id == id)
+                    .ok_or_else(|| Error::not_found("That shipment is gone."))?;
+                shipment.mark(&at, status, undo, Utc::now());
+                Ok(())
+            })?,
+        }
+        self.inner.emit(EngineEvent::ShipmentsChanged { notices: Vec::new() });
+        Ok(())
+    }
+
     pub async fn delete_shipment(&self, account_id: &str, id: &str) -> Result<()> {
         let account = self.inner.store.account(account_id)?;
         match self.inner.shipments_source(account_id, account.protocol).await {

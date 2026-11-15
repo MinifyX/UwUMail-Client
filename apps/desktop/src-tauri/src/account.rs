@@ -256,6 +256,19 @@ pub async fn update_shipment(
     engine.update_shipment(&account_id, &id, title.as_deref().map(Some), hidden).await
 }
 
+/// Marks a status by hand, or takes that mark back (`undo`).
+#[tauri::command]
+pub async fn mark_shipment(
+    engine: State<'_, Engine>,
+    account_id: String,
+    id: String,
+    at: String,
+    status: String,
+    undo: bool,
+) -> CommandResult<()> {
+    engine.mark_shipment(&account_id, &id, &at, &status, undo).await
+}
+
 #[tauri::command]
 pub async fn delete_shipment(engine: State<'_, Engine>, account_id: String, id: String) -> CommandResult<()> {
     engine.delete_shipment(&account_id, &id).await

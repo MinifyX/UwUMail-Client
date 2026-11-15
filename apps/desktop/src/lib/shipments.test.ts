@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Shipment } from "@/backend/types";
-import { dayOf, groupShipments, shipmentOfMail, shipmentsAvailable, stepOf } from "./shipments";
+import { dayOf, groupShipments, markable, markNow, shipmentOfMail, shipmentsAvailable, stepOf } from "./shipments";
 
 const now = new Date(2026, 10, 14, 9, 0);
 const at = (days: number) => new Date(now.getTime() + days * 86_400_000).toISOString();
@@ -68,4 +68,23 @@ describe("shipmentsAvailable", () => {
     expect(shipmentsAvailable([account(false), account(true)])).toBe(true));
   it("is off when every mailbox switched them off", () => expect(shipmentsAvailable([account(false)])).toBe(false));
   it("is off without mailboxes", () => expect(shipmentsAvailable([])).toBe(false));
+});
+
+describe("marking by hand", () => {
+  it("offers what the server takes", () => {
+    expect(markable("ordered")).toEqual([
+      "shipped",
+      "inTransit",
+      "outForDelivery",
+      "delivered",
+      "readyForPickup",
+      "deliveryFailed",
+      "returned",
+      "cancelled",
+    ]);
+    expect(markable("readyForPickup")).toEqual(["delivered", "deliveryFailed", "returned", "cancelled"]);
+    expect(markable("deliveryFailed")).toContain("delivered");
+    expect(markable("delivered")).toEqual(["readyForPickup", "deliveryFailed", "returned", "cancelled"]);
+    expect(markNow()).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+  });
 });

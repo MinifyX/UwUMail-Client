@@ -1,0 +1,4 @@
+{
+  "de": "- Pakete lassen sich von Hand als versendet, unterwegs, zugestellt, abholbereit usw. markieren: Menü am Paket → Status setzen. Der Hinweis danach kann es rückgängig machen (bei UwUMail-Servern ab 0.37.2)\n- Eine fehlgeschlagene Zustellung kann danach als zugestellt gelten",
+  "en": "- Parcels can be marked shipped, in transit, delivered, ready for pickup and so on by hand: the parcel's menu → Set status. The notice afterwards can undo it (on UwUMail servers from 0.37.2)\n- A failed delivery can still end delivered"
+}

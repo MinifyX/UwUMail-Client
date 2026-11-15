@@ -4,6 +4,7 @@ import { DEVICE_ASSIST_SCOPE } from "./types";
 import { isDangerous } from "@/lib/attachments";
 import { confirmDangerousFile } from "@/state/dangerousFile";
 import { hasLabel, matchesLabels } from "@/lib/labelFilter";
+import { movesTo } from "@/lib/shipments";
 import { unsubscribeFallback, unsubscribeMail } from "@/lib/unsubscribe";
 import type { SaveOutcome } from "@/lib/settingsSyncQueue";
 import { demoAttachmentBlob } from "./demo-attachments";
@@ -33,6 +34,8 @@ import type {
   ShipmentAccount,
   ShipmentInput,
   ShipmentPatch,
+  ShipmentEvent,
+  ShipmentStatus,
   BackupEmail,
   BackupFilter,
   ShareLevel,
@@ -1049,6 +1052,29 @@ export class DemoBackend implements Backend {
     const shipment = this.demoShipment(accountId, id);
     if (patch.title !== undefined) shipment.title = patch.title?.trim() || null;
     if (patch.hidden !== undefined) shipment.hidden = patch.hidden;
+    shipment.updated = new Date().toISOString();
+    this.emit({ type: "shipments:changed" });
+  }
+
+  async markShipment(accountId: string, id: string, at: string, status: ShipmentStatus, undo: boolean) {
+    await wait(60);
+    const shipment = this.demoShipment(accountId, id);
+    const same = (e: ShipmentEvent) => e.source === "client" && e.at === at && e.status === status;
+    if (undo) shipment.events = shipment.events.filter((e) => !same(e));
+    else if (!shipment.events.some(same))
+      shipment.events.push({ at, status, text: "", location: null, source: "client", emailId: null, clientName: null });
+    // The status from the events, by the server's rules.
+    const [first, ...rest] = shipment.events;
+    if (first) {
+      const status = first.status || shipment.status;
+      Object.assign(shipment, { status, statusAt: first.at, deliveredAt: status === "delivered" ? first.at : null });
+      for (const e of rest) {
+        if (e.status && Date.parse(e.at) >= Date.parse(shipment.statusAt ?? "") && movesTo(shipment.status, e.status)) {
+          Object.assign(shipment, { status: e.status, statusAt: e.at });
+          if (e.status === "delivered") shipment.deliveredAt = e.at;
+        }
+      }
+    }
     shipment.updated = new Date().toISOString();
     this.emit({ type: "shipments:changed" });
   }

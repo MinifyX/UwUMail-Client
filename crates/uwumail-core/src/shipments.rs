@@ -236,6 +236,43 @@ impl Shipment {
         true
     }
 
+    /// The person marks it `status` at `at` by hand (source `client`), or takes such a mark back
+    /// (`undo`): then the status is worked out again from the events left, as on the server.
+    pub fn mark(&mut self, at: &str, status: ShipmentStatus, undo: bool, now: DateTime<Utc>) -> bool {
+        if !undo {
+            let event = ShipmentEvent {
+                at: at.to_owned(),
+                status: status.id().to_owned(),
+                source: "client".into(),
+                ..Default::default()
+            };
+            return self.add_event(event, now);
+        }
+        let before = self.events.len();
+        self.events.retain(|event| !(event.source == "client" && event.at == at && event.status == status.id()));
+        if self.events.len() == before {
+            return false;
+        }
+        let mut events = self.events.iter();
+        if let Some(first) = events.next() {
+            self.status = status_of(&first.status).id().to_owned();
+            self.status_at = first.at.clone();
+            self.delivered_at = (self.status == ShipmentStatus::Delivered.id()).then(|| first.at.clone());
+            for event in events {
+                let next = status_of(&event.status);
+                if seconds(&event.at) >= seconds(&self.status_at) && status_of(&self.status).moves_to(next) {
+                    self.status = next.id().to_owned();
+                    self.status_at = event.at.clone();
+                    if next == ShipmentStatus::Delivered {
+                        self.delivered_at = Some(event.at.clone());
+                    }
+                }
+            }
+        }
+        self.updated = format_time(now);
+        true
+    }
+
     /// What a notification calls it: its title, the shop, else the carrier and number.
     pub fn display_name(&self) -> String {
         if let Some(name) = self.title.as_deref().or(self.merchant.as_deref()).filter(|name| !name.trim().is_empty()) {
@@ -580,5 +617,24 @@ mod tests {
         assert!(prune(&mut list, now));
         assert_eq!(list.len(), 1);
         assert!(!prune(&mut list, now));
+    }
+
+    #[test]
+    fn marked_by_hand_and_taken_back() {
+        let now = at("2026-11-15T12:00:00Z");
+        let mut shipment = create(&[], "dhl", "00340434161094042557", None, "1".into(), now).unwrap();
+        assert!(shipment.mark("2026-11-15T13:00:00Z", ShipmentStatus::Delivered, false, now));
+        assert_eq!(
+            (shipment.status.as_str(), shipment.delivered_at.as_deref()),
+            ("delivered", Some("2026-11-15T13:00:00Z"))
+        );
+        assert!(!shipment.mark("2026-11-15T13:00:00Z", ShipmentStatus::Delivered, false, now), "the same mark twice");
+        assert!(shipment.mark("2026-11-15T13:00:00Z", ShipmentStatus::Delivered, true, now));
+        assert_eq!((shipment.status.as_str(), shipment.delivered_at.as_deref()), ("shipped", None));
+        assert_eq!(shipment.events.len(), 1);
+        assert!(
+            !shipment.mark("2026-11-15T13:00:00Z", ShipmentStatus::Delivered, true, now),
+            "nothing left to take back"
+        );
     }
 }

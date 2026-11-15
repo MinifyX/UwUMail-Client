@@ -107,6 +107,7 @@ import type {
   ShipmentAccount,
   ShipmentInput,
   ShipmentPatch,
+  ShipmentStatus,
   BackupFilter,
   BackupPreview,
   BackupRestoreOutcome,
@@ -637,6 +638,10 @@ export class TauriBackend implements Backend {
     // An empty title goes back to the shop's name; no title leaves it as it is.
     const title = patch.title === undefined ? null : (patch.title ?? "");
     return call<void>("update_shipment", { accountId, id, title, hidden: patch.hidden ?? null });
+  }
+
+  markShipment(accountId: string, id: string, at: string, status: ShipmentStatus, undo: boolean) {
+    return call<void>("mark_shipment", { accountId, id, at, status, undo });
   }
 
   deleteShipment(accountId: string, id: string) {
