@@ -1,9 +1,9 @@
 {
-  "version": "0.12.0-beta.11",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-android.apk",
-  "sha256": "78129c43427565b1a1c20b224465142c0054de2864bf68a620dbbc2d13f2a098",
+  "version": "0.12.0-beta.12",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-android.apk",
+  "sha256": "a33dfbc59da754c2cdd27a24d87b065da2150049845e1775f6b1e00292333c75",
   "notes": {
-    "de": "- Paketerkennung lässt sich pro Postfach abschalten: Einstellungen → Postfächer → Paketerkennung (ab UwUMail-Server 0.37.0). Beim Abschalten werden die gefundenen Pakete gelöscht\n- Ist die Paketerkennung aus (oder vom Server-Admin abgeschaltet), verschwinden Pakete-Ansicht, Paket-Chips und Paket-Mitteilungen ganz\n- Pakete gibt es bei UwUMail-Servern erst ab Version 0.37.0",
-    "en": "- Parcel detection can be switched off per mailbox: Settings → Mailboxes → Parcel detection (with UwUMail Server 0.37.0). Switching it off deletes the parcels found\n- With parcel detection off (or switched off by the server's admin), the Parcels view, parcel chips and parcel notifications are gone entirely\n- Parcels on UwUMail servers need server version 0.37.0 or newer"
+    "de": "- Pakete lassen sich von Hand als versendet, unterwegs, zugestellt, abholbereit usw. markieren: Menü am Paket → Status setzen. Der Hinweis danach kann es rückgängig machen (bei UwUMail-Servern ab 0.37.2)\n- Eine fehlgeschlagene Zustellung kann danach als zugestellt gelten",
+    "en": "- Parcels can be marked shipped, in transit, delivered, ready for pickup and so on by hand: the parcel's menu → Set status. The notice afterwards can undo it (on UwUMail servers from 0.37.2)\n- A failed delivery can still end delivered"
   }
 }

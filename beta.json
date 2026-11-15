@@ -1,43 +1,43 @@
 {
-  "version": "0.12.0-beta.11",
-  "notes": "{\"de\":\"- Paketerkennung lässt sich pro Postfach abschalten: Einstellungen → Postfächer → Paketerkennung (ab UwUMail-Server 0.37.0). Beim Abschalten werden die gefundenen Pakete gelöscht\\n- Ist die Paketerkennung aus (oder vom Server-Admin abgeschaltet), verschwinden Pakete-Ansicht, Paket-Chips und Paket-Mitteilungen ganz\\n- Pakete gibt es bei UwUMail-Servern erst ab Version 0.37.0\",\"en\":\"- Parcel detection can be switched off per mailbox: Settings → Mailboxes → Parcel detection (with UwUMail Server 0.37.0). Switching it off deletes the parcels found\\n- With parcel detection off (or switched off by the server's admin), the Parcels view, parcel chips and parcel notifications are gone entirely\\n- Parcels on UwUMail servers need server version 0.37.0 or newer\"}",
-  "pub_date": "2026-11-15T11:21:27Z",
+  "version": "0.12.0-beta.12",
+  "notes": "{\"de\":\"- Pakete lassen sich von Hand als versendet, unterwegs, zugestellt, abholbereit usw. markieren: Menü am Paket → Status setzen. Der Hinweis danach kann es rückgängig machen (bei UwUMail-Servern ab 0.37.2)\\n- Eine fehlgeschlagene Zustellung kann danach als zugestellt gelten\",\"en\":\"- Parcels can be marked shipped, in transit, delivered, ready for pickup and so on by hand: the parcel's menu → Set status. The notice afterwards can undo it (on UwUMail servers from 0.37.2)\\n- A failed delivery can still end delivered\"}",
+  "pub_date": "2026-11-15T17:52:45Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS25oaS90UC9CVGozOXlsdEZYYnpRb09KZk5IRTRQdHJ1MkRKd2tYbUtFYitqYzErVmNVR1BLMXZ1dmZsMzVlRGxZTTdZbzFzWUwvNTlRUXlJRDd2dHdNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzQxMzU1CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjEyLjAtYmV0YS4xMS5leGUKVUNaL29wS0RYSHlCVy94NUtEUDZDclRqY0xQckllY24yekxEZWExWmxpYStLb3RMbHUwWnc5N0hMQ0hmWGtLc0Q0U1k0aU81Q2dPdjIwOXprUmM4RFE9PQo=",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-windows-x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2dEY2pmcVpnVkVORVJLNXJtQ3liTXd1eWhmOUxROHEwcFJxa3NRM3V5ZXdjZVQ5OUwxRWJYNnRWYVNpclVDamE3QTBsY1NLa21IeGVnWEpEcFluV0FZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY1MTI3CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjEyLjAtYmV0YS4xMi5leGUKR2xtMCtmZExTREY2ZC9nUmlSUWVpT21MbHpBYnAwQ3MvN3pGZEFsbEdPMXRkbHVsSXlpVU1KdTdjcTFhVEFuUEM5Z2R5cElZQUVzUStLMDRtanlUQkE9PQo=",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-windows-x64-setup.exe"
     },
     "windows-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3VjYXhCbWJJYzdCZXlRV2xjQ2xUdU5lMTJobjhKMVlUTmV5WE9UTVdtL0hWYTFHamRLRTN3d2xSQk1YR1lEaGhqQTVMdTVublRka29DMnZXNGprQ1FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzQxMzU2CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjEyLjAtYmV0YS4xMS1hcm02NC5leGUKakdOYnkweW1UYjJUQmUzTGpPeC9CVVFxNVJ5bDNyRjdTRS8xWU04Slk0MUtReWRKY2R4emRGQmtJb01YZEtwcGQzS1plTURWMGdqREpKVDVjbWs0QkE9PQo=",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-windows-arm64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS25PMXRlYWdTc0xZNU52cjZKR3NTOVd2Q1BIOUoybER2NjhHOVY0cUladTA3MUEzWEs2eXB5dGRlSFRMeVppWUh2OXY0QUduMGt5UWdWUzJmSWtMZnc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY1MTI4CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjEyLjAtYmV0YS4xMi1hcm02NC5leGUKWXlEOWV2T0J3eDJZZS9TUE56Q2F0czZjUVJtRDBCZzliSFlKZWFybWIrY1UzL3lBSTVJMWl6Tk9kYlhpS2hrUVRoVmFOVTVUT3dHYU1ZZmJZUktEQkE9PQo=",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-windows-arm64-setup.exe"
     },
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2xsOEZoT0RzdmpJbVB3RHdmaEp2WUgwczhVSnVVNGR3SE1QeVJKUU5lUGh2aTRIVXVGUVh3cTg0RERSR2FwTWg5M2tOUkU2amRQYzU0R0x4VnVTcmcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzQxMzU2CWZpbGU6VXdVTWFpbC1VcGRhdGUtMC4xMi4wLWJldGEuMTEtbWFjb3MtYXBwbGUtc2lsaWNvbgo4Z3BiWWtuWTBMOXlUSUhicmlYZXhOMXpWTGRIeWsraDk5ZDBLQ1BNemo2eHF0TUJyWHZGYjhuMzdsTjVlR0Vnd0dBUmI1U3BTK1M4V056SkxHanJDZz09Cg==",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-update-macos-universal"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2hKRFVjWk42a2Z2RXZ3SmVQZm1WWm1HWU93OEpQZGUvaFEvN29lVTM3WVFNQW5qa3ZpR0xHbEFzSWJKM0VHSUxpQ1l4TmVwOS9Eb3l5UnJjNkxaY2c0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY1MTI5CWZpbGU6VXdVTWFpbC1VcGRhdGUtMC4xMi4wLWJldGEuMTItbWFjb3MtYXBwbGUtc2lsaWNvbgppcE4xTnJ3UVJUZk84b0pqK1JmcW9tYjRaWUJ1SkVNMCtqQVExWDY5WlpadWY3Q0trNmk2RHdFOHIzc0cvTFM4NS9pVWJwc2dzOTNhdjUwbXg4bXNDdz09Cg==",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-update-macos-universal"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3NPWHV2SXNLdVlRS1I5S2tiM1hJTW1TMnZKQk42T1FpQXRkR3RzVm81M2ZBSVhIOEQzS0NHVi9WM2xQMGQ2UjNoK3c3NkEwdE0yMitnVG9xU2IwOWc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzQxMzU3CWZpbGU6VXdVTWFpbC1VcGRhdGUtMC4xMi4wLWJldGEuMTEtbWFjb3MtaW50ZWwKWlBkRUtkUlJEWFdRalpoRHNlMDlVd2FnUEhxRERXYUdJM2VOdm81d1NmNmZXWGdzZWN6VjdCQW5LYytoeVFxMGxFeWRudDBzQWlBZGtRNys1aXFUQ0E9PQo=",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-update-macos-universal"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2tCMUpoTi96K2xheFErMW9vbWtNRUpVdGVsV1RkdjdMQXd6ZGlCaW5kSVhNYTNxbXV1b3ppTnMwRWgvMEt0eDJGZU9IYlZRRFdyWlA0QUNFQXdqWkFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY1MTI5CWZpbGU6VXdVTWFpbC1VcGRhdGUtMC4xMi4wLWJldGEuMTItbWFjb3MtaW50ZWwKZ3ZvcnJsUWZKc213NklUMUg2NFVQSm1UdEJWTC9sYWF5SytSY2xBeVp3dXN3ZzYyQzNOa0xldy9ySUpHYmREbnRDRDNtNEtiUVVud3pmM3dIeHNGQ2c9PQo=",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-update-macos-universal"
     },
     "linux-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2xJOHo0ck53WWdGMjdQN0hYYTdsQkppTitnQzJjUExkQmRFTlVWWlVkamg3QzZDamFuUENFTUVERmpHcTl5Wjd5cHdTWUdCUllFL3UxcTlHcG9KWUFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzQxMzU4CWZpbGU6VXdVTWFpbC1TZXR1cC0wLjEyLjAtYmV0YS4xMS14ODZfNjQuQXBwSW1hZ2UKZW1QeWIrT3FING5zUmlDZlpBelpZOEVWeW9pbUlQVVQ5M3VRT0NXVDBRUTB1eXc3ZmtsZE4zRFZOckR2T0x1SzhnVURLc2lhdlZSTFRSOGhUVmNHQVE9PQo=",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-update-linux-x64.AppImage"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2pFL2tBeVp5OTJpTE5DVWVsekd2U1k0WUxiaUUzaGhoaFNJRmJSNk14bVNyakQ2SzgzcHdqSjJyVWRuSS9tY29BMEx5QjVTRzFlR0tNMmVRSGMzQ0EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY1MTMwCWZpbGU6VXdVTWFpbC1TZXR1cC0wLjEyLjAtYmV0YS4xMi14ODZfNjQuQXBwSW1hZ2UKbVgxUVJyZ3oyVExxaGxxaUZZQVJibWRaSW00K3RHcUZFQ3FiZ1BJa0czc2hpOE40Ujd3M0JRRitET3YxdnFQS3JWdFNFeGJuWU1qY2FPYlFjeWxjQnc9PQo=",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-update-linux-x64.AppImage"
     },
     "linux-x86_64-deb": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3VvMUl5aGpKaFZYTm1uQ0k4cmJoZTlVeWcrL1lucUJpWWpZSmxNQlVHMjVQV0FPc29ZdUtPYnp5UlpnK2pubS9RQkFLSnFFRE91R1MyL1Y2N0FMT1FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzQxMzU5CWZpbGU6VXdVTWFpbC0wLjEyLjAtYmV0YS4xMS1saW51eC14ODZfNjQuZGViCjBlcTZ1dmpTS1ZkQ2VScDBGcWF0eVNmdUlOa3dkL1JrZ3JKTjJnR0JXTC9zWUVZTmQvL0RSZFkzZHJqVzN6L2JOYU1Vb2dHR3Y4VHpMbjlGZmtDT0J3PT0K",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-linux-x64.deb"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2h6V25FRndZU3Q4Um1HeHVqbUxaQ010MmlZRFFkVUFrelZqanJucFJDUkR1S3YrRVdldGVXUXovb1BicmFLUERTN2Jvb0crTGhVVDNaenRzaUZUZmd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY1MTMxCWZpbGU6VXdVTWFpbC0wLjEyLjAtYmV0YS4xMi1saW51eC14ODZfNjQuZGViCnJURXVWN04ydFdnbFoxWVJXeFJHV0JoN3ZaUWVYZGZSdTlweUZGbnNEdHdwNzdVSzhPeXo4Znphcm52cFhOcU1raC9QVDJUK2tQQzBGQ0hSTmMyUkRnPT0K",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-linux-x64.deb"
     },
     "linux-aarch64-deb": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS21iNnYycHNHYm1uVGx2U3pqTFJwNTh2QW9ZajdPUEU0dkdSMkRqVVBOd2htdTZUUWQ4MzluUlZ0eFJvZFRqcnFwVlpZY3JVem53ZVhJaG9sU1llWGdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzQxMzU5CWZpbGU6VXdVTWFpbC0wLjEyLjAtYmV0YS4xMS1saW51eC1hYXJjaDY0LmRlYgplR1NQWDRrQjZUVkczMkhURmwwb0NWS2t4dlFMM2VFVnozZlQ2c2FpdkVWamFReG9xWUo2TGhIUlc2QUduWVJSdFJCWXBHTkczbjRGOUc1QjVreE9EQT09Cg==",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-linux-arm64.deb"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2o3TVVDOHRmNVVhdnBRd3pkeEcvOThsKzBpR0RtZHYxZGxseWFiaEh1WE9aTmFJY2tlWHVaTUlzSURwQ3c1TURJczIrYVlmdms2eWpNOU5nRnQwNGdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY1MTMxCWZpbGU6VXdVTWFpbC0wLjEyLjAtYmV0YS4xMi1saW51eC1hYXJjaDY0LmRlYgpSYU14N21sdGNSZFMycXFrODcyZUtjTmlyQW80b0ovMFFpWmViR2hxcVBvMHU4cmhJRFZHQ3M5RGdvQlp6bHFtZzV4K1VNaTB4V1EzQ1EvS2hyYmRBdz09Cg==",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-linux-arm64.deb"
     },
     "linux-x86_64-rpm": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3NIS25VVENDMWUralRzTlRYanJMbkFCVFhCSjZVRDlaSGJjRXV1eGVVVmdFRXJtd3lVamNwYmFIbXcwajNDT0NJK3BiM2dyQUFkVjBwUWk1MXRFUHdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzQxMzYwCWZpbGU6VXdVTWFpbC0wLjEyLjAtYmV0YS4xMS1saW51eC14ODZfNjQucnBtCmtGQzhiei9OamZKSUlTMTR6OWl2RWx1ZUZGVGszMzd0NkFpcE4raWx0OUxRU1ZVeHVwTWdSSGFyR1B6R1hhVkR2SGgwOFEzZUJLNER2c2N4cFJ0OEFnPT0K",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-linux-x64.rpm"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS2tORHBubWQ1dzZicFovaEg3M2cxbE1rYzR5Tm0rTVFnNENRRklJeHNDNGNFYTdGdlNNWFhscmNQSGxKRUs0TlpXSmNWVkF5ZzRpVkxySmwzLzV0RGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY1MTMyCWZpbGU6VXdVTWFpbC0wLjEyLjAtYmV0YS4xMi1saW51eC14ODZfNjQucnBtCnB0Y2RRTEE0VDMyaGxCK2hjWGNpZkhpajdZa2Q3THFiWCtsTkU2bE83WHZXT0M1N1ZqSWlhUytoY1VDWU1LTldxMUJBbHEyTzVXL2tXTTJvcDhQdERRPT0K",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-linux-x64.rpm"
     },
     "linux-aarch64-rpm": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS29CWjlxcjB1bUlCNjh2ai9LeFh1TlhWcEtHV2JObThydmJ6Y256TDBVd3FPNHlUbDRWZ055WU0zK0dFU0xhc0tub0c1MGlxdk9QWkRFSXlJU01sTFFrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzQxMzYxCWZpbGU6VXdVTWFpbC0wLjEyLjAtYmV0YS4xMS1saW51eC1hYXJjaDY0LnJwbQo3d0JhdmtNeDdDOVIxYVNrVTI3RVp1Y2JucmRYUHNGNUhRQm9KcU5nbTZ4ZnB1Vy9hN0R5YWtYZFVQWDZ6UVNNb1hpTE16VFBVVDVzbEM3UEFzYk5EUT09Cg==",
-      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.11/UwUMail-linux-arm64.rpm"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSMGF4WnJ2Qk9hS3N0VGs3ZW1JdCtGcVg3ZEhBREt6eGllUDJ1ZHpzL1ZBWjNqakcyRFFvNVczMDFLKzdXOG5ONGxGSW50ZUo0RDBzWXlKRzVqbk5wREl2WnkxTkZ0WWd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY1MTMyCWZpbGU6VXdVTWFpbC0wLjEyLjAtYmV0YS4xMi1saW51eC1hYXJjaDY0LnJwbQo0c2lKZUVtZUE5WmJEVG5DQkJIUkNYd21hZ2RlL2ZkWjN5d2VGaEFUVXRXLzlSSzFkRXo0OWIxc1hWRHE4VUE1L0FIaER4eDRtQzVBTEJXQzkycFVDUT09Cg==",
+      "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-linux-arm64.rpm"
     }
   }
 }
