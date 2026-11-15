@@ -8,7 +8,7 @@ use uwumail_core::jmap_backups::{BackupFilter, BackupPreview, BackupSearch, Rest
 use uwumail_core::jmap_masked::{MaskedAddress, MaskedInput, MaskedPatch};
 use uwumail_core::jmap_profile::{ProfilePatch, ProfilePicture};
 use uwumail_core::model::Person;
-use uwumail_core::shipments::Shipment;
+use uwumail_core::shipments::{Shipment, ShipmentAccount};
 use uwumail_core::{Engine, Error};
 
 type CommandResult<T> = Result<T, Error>;
@@ -219,6 +219,12 @@ mod tests {
         assert_eq!(readable_host_name("nyop-desktop"), "nyop desktop");
         assert_eq!(readable_host_name("box.example.com"), "box");
     }
+}
+
+/// Per mailbox whether it has parcels and may switch them on its server.
+#[tauri::command]
+pub async fn shipment_accounts(engine: State<'_, Engine>) -> CommandResult<Vec<ShipmentAccount>> {
+    engine.shipment_accounts().await
 }
 
 /// The hidden shipments of every mailbox, or the others, last changed first.

@@ -4,6 +4,7 @@ import { useT } from "@/i18n";
 import { useUi, type AppSection } from "@/state/ui";
 import { useCalendarsAvailable } from "../calendar/useCalendarData";
 import { useContactsAvailable } from "../contacts/useContactsData";
+import { useShipmentsAvailable } from "../shipments/useShipments";
 
 export const SECTIONS: { id: AppSection; icon: IconProps["icon"] }[] = [
   { id: "mail", icon: ICONS.mail },
@@ -12,12 +13,17 @@ export const SECTIONS: { id: AppSection; icon: IconProps["icon"] }[] = [
   { id: "shipments", icon: ICONS.parcel },
 ];
 
-/** The sections some account offers besides mail; parcels with any mailbox (found in new mail if the server keeps none). */
+/** The sections some account offers besides mail; parcels unless every mailbox has them switched off. */
 export function useAvailableSections(): AppSection[] {
   const { data: calendar = false } = useCalendarsAvailable();
   const { data: contacts = false } = useContactsAvailable();
+  const shipments = useShipmentsAvailable() ?? false;
   return SECTIONS.map((s) => s.id).filter(
-    (id) => id === "mail" || id === "shipments" || (id === "calendar" && calendar) || (id === "contacts" && contacts),
+    (id) =>
+      id === "mail" ||
+      (id === "shipments" && shipments) ||
+      (id === "calendar" && calendar) ||
+      (id === "contacts" && contacts),
   );
 }
 

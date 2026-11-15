@@ -1256,7 +1256,16 @@ impl Engine {
         if_in_state: Option<&str>,
     ) -> Result<UserSettingsSaved> {
         let client = self.inner.jmap_client(account_id).await?;
-        jmap_settings::save(&client, changes, if_in_state).await
+        let saved = jmap_settings::save(&client, changes, if_in_state).await?;
+        // Parcels switched here show (or go) right away, not only after the next sync.
+        if saved.ok
+            && changes.contains_key("shipments")
+            && client.session.shipments_offered
+            && let Err(error) = self.reread_session(account_id).await
+        {
+            tracing::debug!("Couldn't read the session of {account_id} again: {error}");
+        }
+        Ok(saved)
     }
 
     /// Signatures per domain of every account whose UwUMail server has them. Accounts that can't

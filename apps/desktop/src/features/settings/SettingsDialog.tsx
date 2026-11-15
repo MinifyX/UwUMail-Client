@@ -43,6 +43,7 @@ import { signInAgain, UwumailSignInAgainHint } from "../accounts/SignInAgain";
 import { AccountName } from "./AccountName";
 import { AccountCalendar } from "./AccountCalendar";
 import { AccountContacts } from "./AccountContacts";
+import { AccountShipments } from "./AccountShipments";
 import { BlockedSenders } from "./BlockedSenders";
 import { LinkSettings } from "./LinkSettings";
 import { SettingsSyncRow } from "./SettingsSync";
@@ -577,6 +578,7 @@ function Accounts() {
               )}
               <AccountCalendar account={account} />
               <AccountContacts account={account} />
+              <AccountShipments account={account} />
               {(takesSharedMailboxes(account) || shared.length > 0) && (
                 <SharedMailboxesOf account={account} shared={shared} />
               )}

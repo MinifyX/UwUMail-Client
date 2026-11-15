@@ -61,6 +61,8 @@ export const queryKeys = {
   serverAccountFeatures: ["serverAccountFeatures"] as const,
   shipments: ["shipments"] as const,
   hiddenShipments: ["shipments", "hidden"] as const,
+  /** Per mailbox whether it has parcels; under "shipments", so a change of those refreshes it too. */
+  shipmentAccounts: ["shipments", "accounts"] as const,
   maskedAddresses: (accountId: string) => ["maskedAddresses", accountId] as const,
   profilePicture: (accountId: string) => ["profilePicture", accountId] as const,
   /** The people of a mailbox's server, to share calendars with. */
@@ -621,6 +623,7 @@ export function useBackendEvents() {
           void client.invalidateQueries({ queryKey: queryKeys.identities });
           void client.invalidateQueries({ queryKey: queryKeys.serverAccountFeatures });
           void client.invalidateQueries({ queryKey: queryKeys.verificationCodes });
+          void client.invalidateQueries({ queryKey: queryKeys.shipmentAccounts });
           break;
         case "calendar:changed":
           void client.invalidateQueries({ queryKey: queryKeys.calendars });

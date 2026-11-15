@@ -10,8 +10,9 @@
 use chrono::{DateTime, Utc};
 
 use super::*;
+use crate::jmap::ShipmentsBy;
 use crate::jmap_shipments;
-use crate::shipments::{self, NOTIFIED, Shipment, ShipmentNotice};
+use crate::shipments::{self, NOTIFIED, Shipment, ShipmentAccount, ShipmentNotice};
 
 /// How long one server may take to list its shipments.
 const LIST_WAIT: Duration = Duration::from_secs(8);
@@ -19,6 +20,18 @@ const LIST_WAIT: Duration = Duration::from_secs(8);
 const NOTICE_WITHIN: i64 = 24 * 60 * 60;
 /// `sync_state` kind: notifications for this account's shipments began.
 const NOTICES_BEGAN: &str = "shipmentNotify";
+
+/// Where an account's shipments are kept (`Inner::shipments_source`).
+enum Source {
+    Server(Arc<JmapClient>),
+    Local,
+    /// Switched off on its server, or a shared mailbox.
+    Off,
+}
+
+fn off() -> Error {
+    Error::not_supported("Parcels are switched off for this mailbox.")
+}
 
 fn new_local_id() -> String {
     format!("l{}", uuid::Uuid::new_v4().simple())
@@ -29,17 +42,19 @@ impl Engine {
     pub async fn shipments(&self, hidden: bool) -> Result<Vec<Shipment>> {
         let accounts = self.inner.store.accounts()?;
         let asks = accounts.into_iter().map(|account| async move {
-            match self.inner.server_shipments_client(&account.id, account.protocol).await {
-                Some(client) => match tokio::time::timeout(LIST_WAIT, jmap_shipments::list(&client, hidden)).await {
-                    Ok(Ok(list)) => self.inner.with_local_email_ids(&account.id, list),
-                    Ok(Err(error)) => {
-                        tracing::debug!("{} couldn't list its shipments: {error}", account.id);
-                        Vec::new()
+            match self.inner.shipments_source(&account.id, account.protocol).await {
+                Source::Server(client) => {
+                    match tokio::time::timeout(LIST_WAIT, jmap_shipments::list(&client, hidden)).await {
+                        Ok(Ok(list)) => self.inner.with_local_email_ids(&account.id, list),
+                        Ok(Err(error)) => {
+                            tracing::debug!("{} couldn't list its shipments: {error}", account.id);
+                            Vec::new()
+                        }
+                        Err(_) => Vec::new(),
                     }
-                    Err(_) => Vec::new(),
-                },
-                None if self.inner.jmap_share_of(&account.id).is_some() => Vec::new(),
-                None => self
+                }
+                Source::Off => Vec::new(),
+                Source::Local => self
                     .inner
                     .store
                     .local_shipments(&account.id)
@@ -59,6 +74,26 @@ impl Engine {
         Ok(all)
     }
 
+    /// Per account whether it has parcels and may switch them; shared mailboxes and servers that
+    /// can't be reached right now are left out.
+    pub async fn shipment_accounts(&self) -> Result<Vec<ShipmentAccount>> {
+        let accounts = self.inner.store.accounts()?;
+        let asks = accounts.into_iter().map(|account| async move {
+            if self.inner.jmap_share_of(&account.id).is_some() {
+                return None;
+            }
+            let (on, switchable) = if account.protocol == Protocol::Jmap {
+                let client = tokio::time::timeout(LIST_WAIT, self.inner.jmap_client(&account.id)).await.ok()?.ok()?;
+                let session = &client.session;
+                (session.shipments_by() != ShipmentsBy::Off, session.shipments_offered && session.user_settings)
+            } else {
+                (true, false)
+            };
+            Some(ShipmentAccount { account_id: account.id, on, switchable })
+        });
+        Ok(futures::future::join_all(asks).await.into_iter().flatten().collect())
+    }
+
     /// Follows a parcel by hand. Returns its id.
     pub async fn create_shipment(
         &self,
@@ -68,9 +103,10 @@ impl Engine {
         title: Option<&str>,
     ) -> Result<String> {
         let account = self.inner.store.account(account_id)?;
-        let id = match self.inner.server_shipments_client(account_id, account.protocol).await {
-            Some(client) => jmap_shipments::create(&client, carrier, number, title).await?,
-            None => self.inner.change_local(account_id, |list| {
+        let id = match self.inner.shipments_source(account_id, account.protocol).await {
+            Source::Server(client) => jmap_shipments::create(&client, carrier, number, title).await?,
+            Source::Off => return Err(off()),
+            Source::Local => self.inner.change_local(account_id, |list| {
                 let shipment = shipments::create(list, carrier, number, title, new_local_id(), Utc::now())?;
                 let id = shipment.id.clone();
                 list.push(shipment);
@@ -90,9 +126,10 @@ impl Engine {
         hidden: Option<bool>,
     ) -> Result<()> {
         let account = self.inner.store.account(account_id)?;
-        match self.inner.server_shipments_client(account_id, account.protocol).await {
-            Some(client) => jmap_shipments::update(&client, id, title, hidden).await?,
-            None => {
+        match self.inner.shipments_source(account_id, account.protocol).await {
+            Source::Server(client) => jmap_shipments::update(&client, id, title, hidden).await?,
+            Source::Off => return Err(off()),
+            Source::Local => {
                 let title = title.map(shipments::normalize_title).transpose()?;
                 self.inner.change_local(account_id, |list| {
                     let shipment = list
@@ -116,9 +153,10 @@ impl Engine {
 
     pub async fn delete_shipment(&self, account_id: &str, id: &str) -> Result<()> {
         let account = self.inner.store.account(account_id)?;
-        match self.inner.server_shipments_client(account_id, account.protocol).await {
-            Some(client) => jmap_shipments::destroy(&client, id).await?,
-            None => self.inner.change_local(account_id, |list| {
+        match self.inner.shipments_source(account_id, account.protocol).await {
+            Source::Server(client) => jmap_shipments::destroy(&client, id).await?,
+            Source::Off => return Err(off()),
+            Source::Local => self.inner.change_local(account_id, |list| {
                 let before = list.len();
                 list.retain(|shipment| shipment.id != id);
                 if list.len() == before { Err(Error::not_found("That shipment is gone.")) } else { Ok(()) }
@@ -135,9 +173,9 @@ impl Engine {
             return;
         }
         if account.protocol == Protocol::Jmap {
-            // A UwUMail server finds them itself; an unreachable one is left for now.
+            // A UwUMail server finds them itself or has them switched off; an unreachable one is left for now.
             match self.inner.jmap_client(account_id).await {
-                Ok(client) if !client.session.shipments => {}
+                Ok(client) if client.session.shipments_by() == ShipmentsBy::App => {}
                 _ => return,
             }
         }
@@ -181,13 +219,23 @@ impl Engine {
 }
 
 impl Inner {
-    /// The account's connection when its server keeps shipments; `None` for every other mailbox.
-    async fn server_shipments_client(&self, account_id: &str, protocol: Protocol) -> Option<Arc<JmapClient>> {
-        if protocol != Protocol::Jmap || self.jmap_share_of(account_id).is_some() {
-            return None;
+    /// Where the account's shipments are kept. A shared mailbox has none of its own; an
+    /// unreachable server leaves those kept here.
+    async fn shipments_source(&self, account_id: &str, protocol: Protocol) -> Source {
+        if self.jmap_share_of(account_id).is_some() {
+            return Source::Off;
         }
-        let client = tokio::time::timeout(LIST_WAIT, self.jmap_client(account_id)).await.ok()?.ok()?;
-        client.session.shipments.then_some(client)
+        if protocol != Protocol::Jmap {
+            return Source::Local;
+        }
+        match tokio::time::timeout(LIST_WAIT, self.jmap_client(account_id)).await {
+            Ok(Ok(client)) => match client.session.shipments_by() {
+                ShipmentsBy::Server => Source::Server(client),
+                ShipmentsBy::Off => Source::Off,
+                ShipmentsBy::App => Source::Local,
+            },
+            _ => Source::Local,
+        }
     }
 
     /// The server's email ids as this device's message ids; mail not stored here is left out.
@@ -235,6 +283,16 @@ impl Inner {
             self.store.set_sync_state(account_id, NOTICES_BEGAN, Some("1"))?;
         }
         Ok(notices)
+    }
+
+    /// The account's server switched its parcels on or off: the app looks again, and once off,
+    /// switching them on again starts like the first time (nothing old rings).
+    pub(super) fn shipments_switched(&self, account_id: &str, on: bool) {
+        self.shipments_checked.lock().unwrap().remove(account_id);
+        if !on && let Err(error) = self.store.set_sync_state(account_id, NOTICES_BEGAN, None) {
+            tracing::debug!("Couldn't forget the shipment notifications of {account_id}: {error}");
+        }
+        self.emit(EngineEvent::ShipmentsChanged { notices: Vec::new() });
     }
 
     /// Looks at a UwUMail server's shipments for statuses that notify.
@@ -347,6 +405,52 @@ Message-ID: <{uid}@dhl.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r
         assert_eq!(notices[0].name, "DHL 00340434161234567890");
         // A second sync rings no more.
         assert!(engine.inner.notices("acc", &list, now).unwrap().is_empty());
+    }
+
+    /// The mailbox as one on a UwUMail server whose session (see jmap's tests) has parcels off.
+    async fn on_server_with_parcels_off(engine: &Engine) {
+        // The client below is kept, so the app never signs in or calls the server.
+        engine.inner.store.set_account_protocol("acc", Protocol::Jmap).unwrap();
+        let base = url::Url::parse("https://mail.uwumail.test/jmap/session").unwrap();
+        let session = crate::jmap::Session::parse(
+            &serde_json::json!({
+                "capabilities": { crate::jmap::CORE: {}, crate::jmap::MAIL: {}, crate::jmap::SETTINGS: {}, crate::jmap::SHIPMENTS: {} },
+                "accounts": { "a1": { "accountCapabilities": { crate::jmap::MAIL: {} } } },
+                "primaryAccounts": { crate::jmap::MAIL: "a1" },
+                "apiUrl": "/jmap/api", "downloadUrl": "/jmap/download", "uploadUrl": "/jmap/upload",
+            }),
+            &base,
+        )
+        .unwrap();
+        let client = Arc::new(crate::jmap::Client::with_session(session));
+        engine.inner.jmap.lock().await.insert("acc".into(), client);
+    }
+
+    #[tokio::test]
+    async fn parcels_switched_off_find_nothing_and_ring_no_more() {
+        let (_dir, engine, inbox) = engine();
+        on_server_with_parcels_off(&engine).await;
+        let mut events = engine.subscribe();
+        let id = mail(
+            &engine,
+            &inbox,
+            1,
+            "Ihr DHL Paket wird heute zugestellt",
+            "Ihr Paket JJD000390000000000001 wird heute zugestellt.",
+        );
+        engine.detect_shipments("acc", std::slice::from_ref(&id)).await;
+        assert!(engine.shipments(false).await.unwrap().is_empty());
+        assert!(events.try_recv().is_err(), "no parcel event, so no notification");
+        let accounts = engine.shipment_accounts().await.unwrap();
+        assert_eq!(accounts, [ShipmentAccount { account_id: "acc".into(), on: false, switchable: true }]);
+
+        // Switching off forgets where the notices began, so switching on again doesn't ring for old parcels.
+        engine.inner.store.set_sync_state("acc", NOTICES_BEGAN, Some("x")).unwrap();
+        engine.inner.shipments_switched("acc", false);
+        assert!(engine.inner.store.sync_state("acc", NOTICES_BEGAN).unwrap().is_none());
+        assert!(
+            matches!(events.recv().await.unwrap(), EngineEvent::ShipmentsChanged { notices } if notices.is_empty())
+        );
     }
 
     #[tokio::test]

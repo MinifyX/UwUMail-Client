@@ -45,7 +45,11 @@ async function afterChange(client: QueryClient) {
 export function buildCommands(
   client: QueryClient,
   t: (key: string, options?: Record<string, unknown>) => string,
-  { calendar = false, contacts = false }: { calendar?: boolean; contacts?: boolean } = {},
+  {
+    calendar = false,
+    contacts = false,
+    shipments = false,
+  }: { calendar?: boolean; contacts?: boolean; shipments?: boolean } = {},
 ): Command[] {
   const ui = useUi.getState();
   const settings = useSettings.getState();
@@ -305,12 +309,16 @@ export function buildCommands(
           },
         ]
       : []),
-    {
-      id: "goShipments",
-      title: t("shortcuts.goShipments"),
-      icon: ICONS.parcel,
-      run: () => ui.setSection("shipments"),
-    },
+    ...(shipments
+      ? [
+          {
+            id: "goShipments",
+            title: t("shortcuts.goShipments"),
+            icon: ICONS.parcel,
+            run: () => ui.setSection("shipments"),
+          },
+        ]
+      : []),
     // A phone has no Simple or Pro.
     ...(layoutChoice
       ? [

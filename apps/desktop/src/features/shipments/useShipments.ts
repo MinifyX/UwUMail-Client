@@ -4,12 +4,22 @@ import { backend, BackendError } from "@/backend/backend";
 import type { Shipment, ShipmentInput, ShipmentPatch } from "@/backend/types";
 import { translate } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
-import { shipmentKey } from "@/lib/shipments";
+import { shipmentKey, shipmentsAvailable } from "@/lib/shipments";
 import { toast } from "@/state/toasts";
 import { useUi } from "@/state/ui";
 
 export function useShipments() {
   return useQuery({ queryKey: queryKeys.shipments, queryFn: () => backend().shipments() });
+}
+
+export function useShipmentAccounts() {
+  return useQuery({ queryKey: queryKeys.shipmentAccounts, queryFn: () => backend().shipmentAccounts() });
+}
+
+/** Whether any mailbox has parcels; undefined until known. */
+export function useShipmentsAvailable(): boolean | undefined {
+  const { data } = useShipmentAccounts();
+  return data && shipmentsAvailable(data);
 }
 
 export function useHiddenShipments() {

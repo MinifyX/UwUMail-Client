@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Shipment } from "@/backend/types";
-import { dayOf, groupShipments, shipmentOfMail, stepOf } from "./shipments";
+import { dayOf, groupShipments, shipmentOfMail, shipmentsAvailable, stepOf } from "./shipments";
 
 const now = new Date(2026, 10, 14, 9, 0);
 const at = (days: number) => new Date(now.getTime() + days * 86_400_000).toISOString();
@@ -60,4 +60,12 @@ describe("shipments", () => {
     expect(shipmentOfMail(list, "m1")?.id).toBe("a");
     expect(shipmentOfMail(list, "m2")).toBeNull();
   });
+});
+
+describe("shipmentsAvailable", () => {
+  const account = (on: boolean) => ({ accountId: `a-${on}`, on, switchable: true });
+  it("is on when any mailbox has parcels", () =>
+    expect(shipmentsAvailable([account(false), account(true)])).toBe(true));
+  it("is off when every mailbox switched them off", () => expect(shipmentsAvailable([account(false)])).toBe(false));
+  it("is off without mailboxes", () => expect(shipmentsAvailable([])).toBe(false));
 });

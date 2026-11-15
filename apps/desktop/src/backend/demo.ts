@@ -30,6 +30,7 @@ import type {
   ProfilePicturePatch,
   ServerAccountFeatures,
   Shipment,
+  ShipmentAccount,
   ShipmentInput,
   ShipmentPatch,
   BackupEmail,
@@ -354,6 +355,11 @@ export class DemoBackend implements Backend {
     const state = current.state + 1;
     this.userSettings.set(accountId, { state, values });
     this.emit({ type: "settings:changed", accountId, state: String(state) });
+    if ("shipments" in patch) {
+      // Like the server: switching parcels off deletes the mailbox's parcels.
+      if (patch.shipments === "off") this.shipmentList = this.shipmentList.filter((s) => s.accountId !== accountId);
+      this.emit({ type: "shipments:changed" });
+    }
     return { ok: true, state: String(state) };
   }
 
@@ -984,6 +990,18 @@ export class DemoBackend implements Backend {
   }
 
   private shipmentList: Shipment[] = demoShipments(this.serverAccount);
+
+  private shipmentsOn = (accountId: string) => this.userSettings.get(accountId)?.values.shipments !== "off";
+
+  async shipmentAccounts(): Promise<ShipmentAccount[]> {
+    await wait(40);
+    return this.accounts.map((account) => ({
+      accountId: account.id,
+      on: this.shipmentsOn(account.id),
+      // Only the demo's UwUMail server lets the user switch them.
+      switchable: account.id === this.serverAccount,
+    }));
+  }
 
   async shipments(hidden = false) {
     await wait(60);

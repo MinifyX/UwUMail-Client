@@ -86,6 +86,16 @@ pub struct Shipment {
     pub updated: String,
 }
 
+/// Whether an account has parcels (`on`), and whether the person may switch them on and off on
+/// its UwUMail server (`switchable`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShipmentAccount {
+    pub account_id: String,
+    pub on: bool,
+    pub switchable: bool,
+}
+
 /// A status worth a notification that a shipment reached (see [`NOTIFIED`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

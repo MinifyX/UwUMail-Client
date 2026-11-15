@@ -104,6 +104,7 @@ import type {
   ProfilePicturePatch,
   ServerAccountFeatures,
   Shipment,
+  ShipmentAccount,
   ShipmentInput,
   ShipmentPatch,
   BackupFilter,
@@ -618,6 +619,10 @@ export class TauriBackend implements Backend {
 
   serverAccountFeatures() {
     return call<ServerAccountFeatures[]>("server_account_features");
+  }
+
+  shipmentAccounts() {
+    return call<ShipmentAccount[]>("shipment_accounts");
   }
 
   shipments(hidden = false) {
