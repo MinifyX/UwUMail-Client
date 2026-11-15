@@ -65,10 +65,12 @@ fn read(file: &Path) -> Option<NotifyPrefs> {
         .unwrap_or_default();
     let quiet = value.get("quietHours").and_then(QuietHours::from_value);
     let on_lock_screen = value.get("codeOnLockScreen").and_then(Value::as_bool).unwrap_or(false);
+    let shipments = value.get("shipments").and_then(Value::as_bool).unwrap_or(true);
     Some(
         NotifyPrefs::new(show_content, &text("newMail"), &text("hidden"), &text("many"))
             .with_filter(muted, quiet)
-            .with_codes(&text("codeTitle"), &text("linkTitle"), &text("copyCode"), on_lock_screen),
+            .with_codes(&text("codeTitle"), &text("linkTitle"), &text("copyCode"), on_lock_screen)
+            .with_shipments(shipments, &text("outForDelivery"), &text("delivered"), &text("readyForPickup")),
     )
 }
 
@@ -85,6 +87,10 @@ fn write(file: &Path, prefs: &NotifyPrefs) -> std::io::Result<()> {
         "linkTitle": prefs.link_title,
         "copyCode": prefs.copy_code,
         "codeOnLockScreen": prefs.code_on_lock_screen,
+        "shipments": prefs.shipments,
+        "outForDelivery": prefs.out_for_delivery,
+        "delivered": prefs.delivered,
+        "readyForPickup": prefs.ready_for_pickup,
     });
     let temporary = file.with_extension("json.tmp");
     std::fs::write(&temporary, serde_json::to_vec(&body)?)?;
@@ -132,6 +138,11 @@ mod tests {
         assert_eq!(read(&file), Some(codes));
         std::fs::write(&file, r#"{"showContent":true}"#).unwrap();
         assert!(!read(&file).unwrap().code_on_lock_screen);
+        // Parcels notify unless switched off.
+        assert!(read(&file).unwrap().shipments);
+        let parcels = NotifyPrefs::default().with_shipments(false, "Kommt heute", "Zugestellt", "Abholbereit");
+        write(&file, &parcels).unwrap();
+        assert_eq!(read(&file), Some(parcels));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

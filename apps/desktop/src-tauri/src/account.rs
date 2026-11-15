@@ -8,6 +8,7 @@ use uwumail_core::jmap_backups::{BackupFilter, BackupPreview, BackupSearch, Rest
 use uwumail_core::jmap_masked::{MaskedAddress, MaskedInput, MaskedPatch};
 use uwumail_core::jmap_profile::{ProfilePatch, ProfilePicture};
 use uwumail_core::model::Person;
+use uwumail_core::shipments::Shipment;
 use uwumail_core::{Engine, Error};
 
 type CommandResult<T> = Result<T, Error>;
@@ -218,4 +219,38 @@ mod tests {
         assert_eq!(readable_host_name("nyop-desktop"), "nyop desktop");
         assert_eq!(readable_host_name("box.example.com"), "box");
     }
+}
+
+/// The hidden shipments of every mailbox, or the others, last changed first.
+#[tauri::command]
+pub async fn shipments(engine: State<'_, Engine>, hidden: bool) -> CommandResult<Vec<Shipment>> {
+    engine.shipments(hidden).await
+}
+
+#[tauri::command]
+pub async fn create_shipment(
+    engine: State<'_, Engine>,
+    account_id: String,
+    carrier: String,
+    number: String,
+    title: Option<String>,
+) -> CommandResult<String> {
+    engine.create_shipment(&account_id, &carrier, &number, title.as_deref()).await
+}
+
+/// An empty `title` goes back to the shop's name.
+#[tauri::command]
+pub async fn update_shipment(
+    engine: State<'_, Engine>,
+    account_id: String,
+    id: String,
+    title: Option<String>,
+    hidden: Option<bool>,
+) -> CommandResult<()> {
+    engine.update_shipment(&account_id, &id, title.as_deref().map(Some), hidden).await
+}
+
+#[tauri::command]
+pub async fn delete_shipment(engine: State<'_, Engine>, account_id: String, id: String) -> CommandResult<()> {
+    engine.delete_shipment(&account_id, &id).await
 }

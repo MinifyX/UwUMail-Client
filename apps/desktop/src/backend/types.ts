@@ -852,6 +852,8 @@ export type BackendEvent =
   | { type: "contacts:changed" }
   /** The AI assistant's providers, settings or labels changed, here, on the server or on another device. */
   | { type: "assist:changed"; accountId?: string | null }
+  /** Parcels changed, here, on the server or found in new mail; `notices` already rang where the shell rings. */
+  | { type: "shipments:changed"; notices?: ShipmentNotice[] }
   | ({ type: "update:ready" } & UpdateInfo);
 
 /** What the server found out about one remote picture of a mail, see `Backend.imageSizes`. */
@@ -1726,4 +1728,100 @@ export interface VerificationCode {
   autofill: boolean;
   /** When it stops working (ISO 8601). */
   expiresAt: string;
+}
+
+export type ShipmentCarrier =
+  "dhl" | "deutschePost" | "dpd" | "hermes" | "gls" | "ups" | "amazonLogistics" | "fedex" | "other";
+
+/** The carriers a parcel can be added by hand for. */
+export const CARRIERS: readonly ShipmentCarrier[] = [
+  "dhl",
+  "deutschePost",
+  "dpd",
+  "hermes",
+  "gls",
+  "ups",
+  "amazonLogistics",
+  "fedex",
+  "other",
+];
+
+export type ShipmentStatus =
+  | "ordered"
+  | "shipped"
+  | "inTransit"
+  | "outForDelivery"
+  | "delivered"
+  | "readyForPickup"
+  | "deliveryFailed"
+  | "returned"
+  | "cancelled";
+
+export interface ShipmentEvent {
+  at: string;
+  status: ShipmentStatus | "";
+  text: string | null;
+  location: string | null;
+  /** Where it came from: `mail`, `ai` or `client` (then `clientName` says which). */
+  source: string;
+  clientName?: string | null;
+  /** The mail it was found in. */
+  emailId?: string | null;
+}
+
+export interface ShipmentPickup {
+  kind: "packstation" | "postOffice" | "parcelShop" | "accessPoint" | string;
+  name: string | null;
+  address: string | null;
+  /** The last day to collect it, "YYYY-MM-DD". */
+  until: string | null;
+}
+
+/**
+ * A parcel, from a UwUMail server or found on this device in new mail. `id` is unique within its
+ * mailbox only.
+ */
+export interface Shipment {
+  accountId: string;
+  id: string;
+  carrier: ShipmentCarrier;
+  number: string | null;
+  /** Only http(s); opened in the browser, never fetched by UwUMail. */
+  trackingUrl: string | null;
+  /** The name the person gave it; null shows the shop. */
+  title: string | null;
+  merchant: string | null;
+  orderRef: string | null;
+  status: ShipmentStatus;
+  statusAt: string;
+  expected: { from: string | null; to: string | null; allDay: boolean } | null;
+  deliveredAt: string | null;
+  pickup: ShipmentPickup | null;
+  hidden: boolean;
+  /** The mails it was found in (this device's message ids), oldest first. */
+  emailIds: string[];
+  /** Oldest first. */
+  events: ShipmentEvent[];
+  created: string;
+  updated: string;
+}
+
+export interface ShipmentInput {
+  accountId: string;
+  carrier: ShipmentCarrier;
+  number: string;
+  title?: string | null;
+}
+
+export interface ShipmentPatch {
+  /** Empty or null goes back to the shop's name. */
+  title?: string | null;
+  hidden?: boolean;
+}
+
+export interface ShipmentNotice {
+  accountId: string;
+  shipmentId: string;
+  status: ShipmentStatus;
+  name: string;
 }

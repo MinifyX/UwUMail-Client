@@ -131,6 +131,23 @@ pub(crate) fn start_engine(data_dir: PathBuf, cache_dir: PathBuf) -> Result<()> 
                         tracing::warn!("Couldn't show the notification: {error}");
                     }
                 }
+                // Parcel news from the server or found in new mail; Kotlin shows it unless UwUMail is on screen.
+                Ok(EngineEvent::ShipmentsChanged { notices }) => {
+                    let prefs = notify_prefs();
+                    for notice in &notices {
+                        let Some((title, body)) = notify::shipment_notification(&prefs, notice) else { continue };
+                        let args = json!({
+                            "accountId": notice.account_id,
+                            "shipmentId": notice.shipment_id,
+                            "status": notice.status,
+                            "title": title,
+                            "body": body,
+                        });
+                        if let Err(error) = bridge::call("notifyShipment", &args) {
+                            tracing::warn!("Couldn't show the parcel notification: {error}");
+                        }
+                    }
+                }
                 // Kotlin registers with the push service again, or decides whether the mail
                 // service still has to stay connected. It only queues that and returns.
                 Ok(EngineEvent::PushChanged { reregister }) => {

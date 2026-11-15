@@ -83,7 +83,7 @@ export type SettingsSection =
   | "about";
 
 /** The two halves of the app. */
-export type AppSection = "mail" | "calendar" | "contacts";
+export type AppSection = "mail" | "calendar" | "contacts" | "shipments";
 
 interface UiState {
   section: AppSection;

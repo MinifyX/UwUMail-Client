@@ -17,6 +17,7 @@ import type { DomainSignatureChange } from "@/lib/domainSignatures";
 import { buildFolders, buildMessages, DEMO_ACCOUNTS, DEMO_IMAGE_TEXT, welcomeMessage } from "./demo-data";
 import { DEMO_PROFILE_PICTURES, DEMO_REMOTE_PICTURES, demoSenderPicture } from "./demo-pictures";
 import { demoRulesScript, demoValidateSieve } from "./demo-rules";
+import { demoShipments } from "./demo-shipments";
 import type {
   VerificationCode,
   AiConsent,
@@ -28,6 +29,9 @@ import type {
   ProfilePicture,
   ProfilePicturePatch,
   ServerAccountFeatures,
+  Shipment,
+  ShipmentInput,
+  ShipmentPatch,
   BackupEmail,
   BackupFilter,
   ShareLevel,
@@ -977,6 +981,65 @@ export class DemoBackend implements Backend {
       alreadyThere: ids.filter((id) => there(id) === true),
       notRestored: ids.filter((id) => there(id) === undefined).map((id) => ({ id, reason: "notFound" })),
     };
+  }
+
+  private shipmentList: Shipment[] = demoShipments(this.serverAccount);
+
+  async shipments(hidden = false) {
+    await wait(60);
+    return this.shipmentList
+      .filter((shipment) => shipment.hidden === hidden)
+      .sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated));
+  }
+
+  async createShipment({ accountId, carrier, number, title }: ShipmentInput) {
+    await wait(60);
+    const now = new Date().toISOString();
+    const id = `demo-${Date.now()}`;
+    this.shipmentList.push({
+      accountId,
+      id,
+      carrier,
+      number: number.trim(),
+      trackingUrl: null,
+      title: title?.trim() || null,
+      merchant: null,
+      orderRef: null,
+      status: "inTransit",
+      statusAt: now,
+      expected: null,
+      deliveredAt: null,
+      pickup: null,
+      hidden: false,
+      emailIds: [],
+      events: [],
+      created: now,
+      updated: now,
+    });
+    this.emit({ type: "shipments:changed" });
+    return id;
+  }
+
+  private demoShipment(accountId: string, id: string) {
+    const shipment = this.shipmentList.find((s) => s.accountId === accountId && s.id === id);
+    if (!shipment) throw new BackendError("not_found", "There is no such parcel.");
+    return shipment;
+  }
+
+  async updateShipment(accountId: string, id: string, patch: ShipmentPatch) {
+    await wait(60);
+    const shipment = this.demoShipment(accountId, id);
+    if (patch.title !== undefined) shipment.title = patch.title?.trim() || null;
+    if (patch.hidden !== undefined) shipment.hidden = patch.hidden;
+    shipment.updated = new Date().toISOString();
+    this.emit({ type: "shipments:changed" });
+  }
+
+  async deleteShipment(accountId: string, id: string) {
+    await wait(60);
+    this.demoShipment(accountId, id);
+    this.shipmentList = this.shipmentList.filter((s) => !(s.accountId === accountId && s.id === id));
+    this.emit({ type: "shipments:changed" });
   }
 
   async maskedAddresses(accountId: string) {

@@ -90,6 +90,12 @@ pub struct NotifyPrefs {
     pub copy_code: String,
     /// Whether the lock screen shows the code itself (off: only where it is from).
     pub code_on_lock_screen: bool,
+    /// Whether parcels notify when they come today, were delivered or wait to be picked up.
+    pub shipments: bool,
+    /// Their titles: "Your parcel comes today", "Parcel delivered", "Parcel ready for pickup".
+    pub out_for_delivery: String,
+    pub delivered: String,
+    pub ready_for_pickup: String,
 }
 
 /// The longest list of muted accounts the prefs keep.
@@ -179,6 +185,10 @@ impl Default for NotifyPrefs {
             link_title: "Sign-in link from {sender}".into(),
             copy_code: "Copy code".into(),
             code_on_lock_screen: false,
+            shipments: true,
+            out_for_delivery: "Your parcel comes today".into(),
+            delivered: "Parcel delivered".into(),
+            ready_for_pickup: "Parcel ready for pickup".into(),
         }
     }
 }
@@ -227,6 +237,21 @@ impl NotifyPrefs {
         let copy = notification_text(copy_code, MAX_NAME);
         self.copy_code = if copy.is_empty() { fallback.copy_code } else { copy };
         self.code_on_lock_screen = on_lock_screen;
+        self
+    }
+
+    /// The same prefs with whether parcels notify and the titles for that (an empty one keeps the
+    /// default).
+    pub fn with_shipments(mut self, on: bool, out_for_delivery: &str, delivered: &str, ready_for_pickup: &str) -> Self {
+        let fallback = Self::default();
+        let line = |text: &str, fallback: String| {
+            let plain = notification_text(text, MAX_LINE);
+            if plain.is_empty() { fallback } else { plain }
+        };
+        self.shipments = on;
+        self.out_for_delivery = line(out_for_delivery, fallback.out_for_delivery);
+        self.delivered = line(delivered, fallback.delivered);
+        self.ready_for_pickup = line(ready_for_pickup, fallback.ready_for_pickup);
         self
     }
 
@@ -326,6 +351,25 @@ pub fn mail_notification(prefs: &NotifyPrefs, count: usize, newest: &[MailLine])
             Some((title, body.join("\n")))
         }
     }
+}
+
+/// Title and text of the notification for a parcel's new status; `None` when parcels or the
+/// account keep quiet. The name comes from mail, so it is made plain and short.
+pub fn shipment_notification(
+    prefs: &NotifyPrefs,
+    notice: &crate::shipments::ShipmentNotice,
+) -> Option<(String, String)> {
+    if !prefs.shipments || !prefs.rings_now(&notice.account_id) {
+        return None;
+    }
+    let title = match notice.status.as_str() {
+        "outForDelivery" => &prefs.out_for_delivery,
+        "delivered" => &prefs.delivered,
+        "readyForPickup" => &prefs.ready_for_pickup,
+        _ => return None,
+    };
+    let body = if prefs.show_content { notification_text(&notice.name, MAX_LINE) } else { prefs.hidden.clone() };
+    Some((title.clone(), body))
 }
 
 /// What a mail is for when it carries a sign-in code: a one-time code to type, or a link to open.
@@ -708,5 +752,23 @@ mod tests {
             NotifyPrefs::default().code_title,
             "a title without {{sender}} keeps the default"
         );
+    }
+
+    #[test]
+    fn parcels_notify_with_their_status_unless_switched_off() {
+        let notice = crate::shipments::ShipmentNotice {
+            account_id: "a1".into(),
+            shipment_id: "s1".into(),
+            status: "delivered".into(),
+            name: "Schuhe\u{202e}\nneu".into(),
+        };
+        let prefs = NotifyPrefs::default().with_shipments(true, "", "Paket zugestellt", "");
+        assert_eq!(shipment_notification(&prefs, &notice), Some(("Paket zugestellt".into(), "Schuhe neu".into())));
+        let hidden = NotifyPrefs::new(false, "", "Öffne UwUMail.", "").with_shipments(true, "", "", "");
+        assert_eq!(shipment_notification(&hidden, &notice).unwrap().1, "Öffne UwUMail.");
+        let off = prefs.clone().with_shipments(false, "", "", "");
+        assert_eq!(shipment_notification(&off, &notice), None);
+        let muted = prefs.with_filter(vec!["a1".into()], None);
+        assert_eq!(shipment_notification(&muted, &notice), None);
     }
 }

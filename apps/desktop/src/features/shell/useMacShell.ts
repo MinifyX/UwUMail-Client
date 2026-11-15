@@ -100,6 +100,7 @@ export function mailMenu({
     ["mail", "mail", "CmdOrCtrl+1"],
     ["calendar", "goCalendar", "CmdOrCtrl+2"],
     ["contacts", "goContacts", "CmdOrCtrl+3"],
+    ["shipments", "goShipments", "CmdOrCtrl+4"],
   ];
   const sectionEntries = sections.flatMap(([name, commandId, accelerator]): MacMenuEntry[] =>
     name === "mail" || byId.has(commandId)

@@ -1657,7 +1657,7 @@ impl Engine {
     /// A stored mail as labels without a model see it. Mail stored before its list headers were
     /// kept shows what its unsubscribe link says of them. The sender is known when the person wrote
     /// to them; [`LabelRun`] adds the address books.
-    fn label_mail(&self, message: &Message) -> Result<uwumail_labels::Mail> {
+    pub(super) fn label_mail(&self, message: &Message) -> Result<uwumail_labels::Mail> {
         let LabelHeaders { mut headers, calendar, from_trusted } = self.inner.store.label_headers(&message.id)?;
         if headers.is_empty()
             && let Some(unsubscribe) = &message.unsubscribe
@@ -2478,6 +2478,7 @@ pub(super) fn start_auto_labels(engine: Engine) {
     let runtime = engine.inner.runtime.clone();
     runtime.spawn(async move {
         while let Some((account_id, message_ids)) = queue.recv().await {
+            engine.detect_shipments(&account_id, &message_ids).await;
             engine.auto_label(&account_id, message_ids).await;
         }
     });

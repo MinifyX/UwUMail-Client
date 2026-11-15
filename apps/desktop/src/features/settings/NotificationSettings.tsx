@@ -32,6 +32,7 @@ export function NotificationSettings() {
   };
 
   const codeOnLockScreen = useSettings((s) => s.notifyCodeOnLockScreen);
+  const shipments = useSettings((s) => s.notifyShipments);
 
   return (
     <>
@@ -41,6 +42,14 @@ export function NotificationSettings() {
           onChange={(notifyCodeOnLockScreen) => update({ notifyCodeOnLockScreen })}
           label={t("codes.lockScreen")}
           description={t("codes.lockScreenDesc")}
+        />
+      </div>
+      <div className="border-b border-hairline py-4">
+        <Toggle
+          checked={shipments}
+          onChange={(notifyShipments) => update({ notifyShipments })}
+          label={t("notify.shipments")}
+          description={t("notify.shipmentsDesc")}
         />
       </div>
       {accounts.length > 0 && (

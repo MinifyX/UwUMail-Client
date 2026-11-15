@@ -103,6 +103,9 @@ import type {
   ProfilePicture,
   ProfilePicturePatch,
   ServerAccountFeatures,
+  Shipment,
+  ShipmentInput,
+  ShipmentPatch,
   BackupFilter,
   BackupPreview,
   BackupRestoreOutcome,
@@ -274,6 +277,7 @@ const EVENT_NAMES = [
   "contacts:changed",
   "update:ready",
   "assist:changed",
+  "shipments:changed",
 ] as const;
 
 export class TauriBackend implements Backend {
@@ -614,6 +618,24 @@ export class TauriBackend implements Backend {
 
   serverAccountFeatures() {
     return call<ServerAccountFeatures[]>("server_account_features");
+  }
+
+  shipments(hidden = false) {
+    return call<Shipment[]>("shipments", { hidden });
+  }
+
+  createShipment({ accountId, carrier, number, title }: ShipmentInput) {
+    return call<string>("create_shipment", { accountId, carrier, number, title: title || null });
+  }
+
+  updateShipment(accountId: string, id: string, patch: ShipmentPatch) {
+    // An empty title goes back to the shop's name; no title leaves it as it is.
+    const title = patch.title === undefined ? null : (patch.title ?? "");
+    return call<void>("update_shipment", { accountId, id, title, hidden: patch.hidden ?? null });
+  }
+
+  deleteShipment(accountId: string, id: string) {
+    return call<void>("delete_shipment", { accountId, id });
   }
 
   maskedAddresses(accountId: string) {
@@ -1092,6 +1114,10 @@ export class TauriBackend implements Backend {
     copyCode?: string;
     /** The lock screen shows the code itself, not only where it is from. */
     codeOnLockScreen?: boolean;
+    shipments?: boolean;
+    outForDelivery?: string;
+    delivered?: string;
+    readyForPickup?: string;
   }) {
     return call<void>("set_notification_prefs", prefs);
   }

@@ -26,6 +26,7 @@ import { loadLocalDraft } from "../compose/localDraft";
 import { reopenSavedDraft } from "../compose/openDraft";
 import { LazyCalendar } from "../shell/LazyCalendar";
 import { LazyContacts } from "../shell/LazyContacts";
+import { LazyShipments } from "../shell/LazyShipments";
 import { SECTIONS, useAvailableSections } from "../shell/AppSwitch";
 import { MobileList } from "./MobileList";
 import { MobileMailboxes } from "./MobileMailboxes";
@@ -221,6 +222,8 @@ export function MobileShell() {
         <LazyCalendar />
       ) : tab === "contacts" ? (
         <LazyContacts />
+      ) : tab === "shipments" ? (
+        <LazyShipments />
       ) : (
         <>
           {listOpen ? (
