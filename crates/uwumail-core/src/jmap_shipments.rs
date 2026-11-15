@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use crate::error::{Error, ErrorCode, Result};
 use crate::jmap::Client;
 use crate::shipments::{self, MAX_EVENTS, MAX_PER_ACCOUNT, Shipment};
+use uwumail_labels::ShipmentStatus;
 
 const CARRIERS: [&str; 9] = ["dhl", "deutschePost", "dpd", "hermes", "gls", "ups", "amazonLogistics", "fedex", "other"];
 /// Ids and short fields are never longer.
@@ -157,6 +158,15 @@ pub async fn update(client: &Client, id: &str, title: Option<Option<&str>>, hidd
     if let Some(hidden) = hidden {
         object["hidden"] = json!(hidden);
     }
+    set(client, json!({ "update": { id: object } }), "notUpdated", id).await.map(|_| ())
+}
+
+/// Marks one `status` at `at` by hand (`addEvents`), or takes that mark back (`removeEvents`,
+/// UwUMail-Server 0.37.2 and later).
+pub async fn mark(client: &Client, id: &str, at: &str, status: ShipmentStatus, undo: bool) -> Result<()> {
+    valid_id(id)?;
+    let key = if undo { "removeEvents" } else { "addEvents" };
+    let object = json!({ key: [{ "at": at, "status": status.id() }] });
     set(client, json!({ "update": { id: object } }), "notUpdated", id).await.map(|_| ())
 }
 

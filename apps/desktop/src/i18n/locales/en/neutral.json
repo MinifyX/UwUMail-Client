@@ -2646,6 +2646,7 @@
     "history": "History ({{n}})",
     "track": "Track shipment",
     "toMail": "Go to mail",
+    "mark": "Set status",
     "rename": "Rename",
     "hide": "Hide",
     "delete": "Delete",
@@ -2661,7 +2662,8 @@
     "undo": "Undo",
     "toast": {
       "hidden": "Parcel hidden",
-      "deleted": "Parcel deleted"
+      "deleted": "Parcel deleted",
+      "marked": "Marked as “{{status}}”"
     },
     "error": {
       "invalid": "That doesn't fit. Check the tracking number, it may already be there.",

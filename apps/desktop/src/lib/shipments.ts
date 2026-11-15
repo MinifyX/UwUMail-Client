@@ -11,6 +11,41 @@ const DONE: ReadonlySet<ShipmentStatus> = new Set(["delivered", "returned", "can
 /** Whether the parcel is still coming (or waiting to be picked up). */
 export const isActive = (shipment: Shipment) => !DONE.has(shipment.status);
 
+const ORDER: readonly ShipmentStatus[] = [
+  "ordered",
+  "shipped",
+  "inTransit",
+  "outForDelivery",
+  "delivered",
+  "readyForPickup",
+  "deliveryFailed",
+  "returned",
+  "cancelled",
+];
+
+/**
+ * Whether a parcel at `from` takes `to`, as the server rules (ShipmentStatus::moves_to): forward
+ * only, except that a failed try, a return and a cancellation always count, a failed try is tried
+ * again (and then delivered), and a parcel waiting for pickup can be delivered.
+ */
+export function movesTo(from: ShipmentStatus, to: ShipmentStatus): boolean {
+  if (to === from) return false;
+  return (
+    ORDER.indexOf(to) > ORDER.indexOf(from) ||
+    to === "deliveryFailed" ||
+    to === "returned" ||
+    to === "cancelled" ||
+    (from === "deliveryFailed" && to !== "ordered") ||
+    (from === "readyForPickup" && to === "delivered")
+  );
+}
+
+/** The statuses a person may set by hand from here, in order. */
+export const markable = (status: ShipmentStatus) => ORDER.filter((to) => movesTo(status, to));
+
+/** Now as the server keeps it: whole seconds, so the same `at` takes the event back. */
+export const markNow = () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+
 /** The step of the progress line the parcel is at; a pickup or a failed try sits at the last mile. */
 export function stepOf(status: ShipmentStatus): number {
   if (status === "readyForPickup" || status === "deliveryFailed") return 3;

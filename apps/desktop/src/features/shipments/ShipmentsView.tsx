@@ -22,7 +22,7 @@ import { addDays, todayKey } from "@/lib/calendarDates";
 import { useIsPhone } from "@/lib/device";
 import { openExternal } from "@/lib/platform";
 import { useVisibleAccounts } from "@/lib/queries";
-import { dayOf, finishedAt, groupShipments, isActive, shipmentKey, STEPS, stepOf } from "@/lib/shipments";
+import { dayOf, finishedAt, groupShipments, isActive, markable, shipmentKey, STEPS, stepOf } from "@/lib/shipments";
 import { useUi } from "@/state/ui";
 import { useHiddenShipments, useShipmentActions, useShipmentFocus, useShipments } from "./useShipments";
 
@@ -216,6 +216,7 @@ function ShipmentCard({ shipment }: { shipment: Shipment }) {
   const [deleting, setDeleting] = useState(false);
   const active = isActive(shipment);
   const latest = shipment.events.at(-1);
+  const marks = markable(shipment.status);
 
   useEffect(() => {
     if (focusKey !== key || !ref.current) return;
@@ -354,6 +355,16 @@ function ShipmentCard({ shipment }: { shipment: Shipment }) {
         <Menu
           align="end"
           items={[
+            ...(marks.length > 0
+              ? [
+                  { heading: t("shipments.mark") },
+                  ...marks.map((status) => ({
+                    label: t(`shipments.status.${status}`),
+                    onSelect: () => void actions.mark(shipment, status),
+                  })),
+                  "separator" as const,
+                ]
+              : []),
             { label: t("shipments.rename"), icon: ICONS.edit, onSelect: () => setRenaming(true) },
             ...(shipment.hidden
               ? []
