@@ -52,10 +52,7 @@ describe("a mailbox's parcel detection", () => {
       { accountId: "imap", on: true, switchable: false },
     ];
   });
-  afterEach(() => {
-    cleanup();
-    vi.restoreAllMocks();
-  });
+  afterEach(cleanup);
 
   it("is left out where the server can't switch parcels", async () => {
     renderBlock("imap");
@@ -63,18 +60,21 @@ describe("a mailbox's parcel detection", () => {
     expect(screen.queryByRole("switch")).toBeNull();
   });
 
-  it("asks before switching off and keeps them on when declined", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("asks before switching off, starts on Cancel and keeps them on when cancelled", async () => {
     renderBlock("uwu");
     fireEvent.click(await screen.findByRole("switch", { name: /Parcel detection/ }));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("uwu@example.org"));
+    expect(await screen.findByText(/uwu@example\.org/)).toBeTruthy();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(document.activeElement).toBe(cancel));
+    fireEvent.click(cancel);
     expect(fake.saveUserSettings).not.toHaveBeenCalled();
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("true");
   });
 
   it("switches off on the server after the confirmation", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     renderBlock("uwu");
     fireEvent.click(await screen.findByRole("switch", { name: /Parcel detection/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Turn off and delete" }));
     await waitFor(() => expect(fake.saveUserSettings).toHaveBeenCalledWith("uwu", { shipments: "off" }));
     await waitFor(() => expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("false"));
   });

@@ -1,8 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Toggle } from "@uwusuite/design";
+import { Button, Toggle } from "@uwusuite/design";
 import { backend } from "@/backend/backend";
 import type { Account } from "@/backend/types";
+import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/i18n";
 import { queryKeys } from "@/lib/queries";
 import { toast } from "@/state/toasts";
@@ -14,12 +15,12 @@ export function AccountShipments({ account }: { account: Account }) {
   const client = useQueryClient();
   const { data } = useShipmentAccounts();
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
   const entry = data?.find((each) => each.accountId === account.id);
   if (!entry?.switchable) return null;
 
   const change = async (on: boolean) => {
-    // The server deletes the parcels it found when they go off.
-    if (!on && !window.confirm(t("accountShipments.offConfirm", { email: account.email }))) return;
+    setAsking(false);
     setBusy(true);
     try {
       const saved = await backend().saveUserSettings(account.id, { shipments: on ? "on" : "off" });
@@ -37,10 +38,30 @@ export function AccountShipments({ account }: { account: Account }) {
       <Toggle
         checked={entry.on}
         disabled={busy}
-        onChange={(on) => void change(on)}
+        // The server deletes the parcels it found when they go off, so that asks first.
+        onChange={(on) => (on ? void change(true) : setAsking(true))}
         label={t("accountShipments.title")}
         description={t("accountShipments.description")}
       />
+      <Dialog
+        open={asking}
+        onClose={() => setAsking(false)}
+        title={t("accountShipments.offTitle")}
+        tone="warning"
+        width="sm"
+        footer={
+          <>
+            <Button variant="ghost" autoFocus onClick={() => setAsking(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="danger" onClick={() => void change(false)}>
+              {t("accountShipments.offAction")}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[13px] text-muted">{t("accountShipments.offConfirm", { email: account.email })}</p>
+      </Dialog>
     </div>
   );
 }

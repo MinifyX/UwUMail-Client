@@ -1440,8 +1440,10 @@
   "accountShipments": {
     "title": "Paketerkennung",
     "description": "Sendungen aus Versandmails erkennen und unter Pakete zeigen.",
-    "offConfirm": "Paketerkennung für {{email}} ausschalten? Alle schon gefundenen Pakete dieses Postfachs werden auf dem Server gelöscht.",
-    "failed": "Paketerkennung ließ sich nicht umstellen: {{reason}}"
+    "offConfirm": "Alle schon gefundenen Pakete von {{email}} werden auf dem Server gelöscht. Neue Versandmails werden nicht mehr erkannt.",
+    "failed": "Paketerkennung ließ sich nicht umstellen: {{reason}}",
+    "offTitle": "Paketerkennung ausschalten?",
+    "offAction": "Ausschalten und löschen"
   },
   "cloudSignIn": {
     "hint": "Melde dich erneut an, um Kalender und Kontakte zu sehen. E-Mails funktionieren so oder so weiter.",

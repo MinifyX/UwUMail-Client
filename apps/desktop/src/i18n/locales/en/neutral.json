@@ -1440,8 +1440,10 @@
   "accountShipments": {
     "title": "Parcel detection",
     "description": "Find parcels in shipping mail and show them under Parcels.",
-    "offConfirm": "Turn off parcel detection for {{email}}? All parcels already found for this mailbox are deleted on the server.",
-    "failed": "Couldn't change parcel detection: {{reason}}"
+    "offConfirm": "All parcels already found for {{email}} are deleted on the server. New shipping mail is no longer recognized.",
+    "failed": "Couldn't change parcel detection: {{reason}}",
+    "offTitle": "Turn off parcel detection?",
+    "offAction": "Turn off and delete"
   },
   "cloudSignIn": {
     "hint": "Sign in again to see calendar and contacts. Mail keeps working either way.",
