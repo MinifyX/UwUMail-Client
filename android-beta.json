@@ -1,9 +1,9 @@
 {
-  "version": "0.12.0-beta.9",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.9/UwUMail-android.apk",
-  "sha256": "aee3c3c3785ef2542d1e9845ce04153410c454245d0e5b7884167c83969ea100",
+  "version": "0.12.0-beta.10",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.10/UwUMail-android.apk",
+  "sha256": "a414617ad95d52400eb569788d883fcbb00b76cd645ffb1bbee6d0d6fd69f130",
   "notes": {
-    "de": "- Eingabefelder mit Fehler bekommen einen roten Rahmen, und Screenreader lesen Hinweis und Fehler zum Feld vor\n- Mitteilungen unten verschwinden nicht, solange die Maus oder der Tastaturfokus darauf liegt (der Countdown zum Zurückholen einer Mail läuft weiter)\n- Dialoge setzen den Fokus beim Öffnen nicht mehr auf das X, Menüs schließen mit Tab, und auf dem Handy bleibt der Hintergrund hinter offenen Bögen für Screenreader stumm",
-    "en": "- Fields with an error get a red border, and screen readers read out the field's hint and error\n- Notes at the bottom stay while the pointer or keyboard focus is on them (the countdown for taking back a mail keeps running)\n- Dialogs no longer put the focus on the X when they open, menus close on Tab, and on phones the background behind an open sheet stays silent for screen readers"
+    "de": "- Neue Ansicht Pakete: Versandmails von DHL, Deutsche Post, Hermes, DPD, GLS, UPS, FedEx, Amazon und anderen werden zu Paketen mit Status, Zustellfenster und Abholort (ab UwUMail-Server 0.36.0)\n- Paket-Chip an Versandmails, Sendungsnummern selbst hinzufügen, Pakete ausblenden oder löschen\n- Mitteilung, wenn ein Paket in Zustellung, zugestellt oder abholbereit ist (abschaltbar in den Mitteilungs-Einstellungen)",
+    "en": "- New Parcels view: shipping mail from DHL, Deutsche Post, Hermes, DPD, GLS, UPS, FedEx, Amazon and others becomes a parcel with status, delivery window and pickup place (with UwUMail Server 0.36.0)\n- A parcel chip on shipping mail; add tracking numbers yourself, hide or delete parcels\n- A notification when a parcel is out for delivery, delivered or ready for pickup (can be switched off in the notification settings)"
   }
 }
