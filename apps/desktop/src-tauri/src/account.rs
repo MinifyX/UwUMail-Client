@@ -269,6 +269,16 @@ pub async fn mark_shipment(
     engine.mark_shipment(&account_id, &id, &at, &status, undo).await
 }
 
+/// Asks the server to ask the carrier now; `None` when it did, else why not.
+#[tauri::command]
+pub async fn refresh_shipment(
+    engine: State<'_, Engine>,
+    account_id: String,
+    id: String,
+) -> CommandResult<Option<String>> {
+    engine.refresh_shipment(&account_id, &id).await
+}
+
 #[tauri::command]
 pub async fn delete_shipment(engine: State<'_, Engine>, account_id: String, id: String) -> CommandResult<()> {
     engine.delete_shipment(&account_id, &id).await

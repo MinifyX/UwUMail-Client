@@ -34,6 +34,7 @@ import type {
   ShipmentAccount,
   ShipmentInput,
   ShipmentPatch,
+  ShipmentRefusal,
   ShipmentEvent,
   ShipmentStatus,
   BackupEmail,
@@ -1077,6 +1078,17 @@ export class DemoBackend implements Backend {
     }
     shipment.updated = new Date().toISOString();
     this.emit({ type: "shipments:changed" });
+  }
+
+  async refreshShipment(accountId: string, id: string): Promise<ShipmentRefusal | null> {
+    await wait(300);
+    const shipment = this.demoShipment(accountId, id);
+    if (!shipment.refreshable) return "notSupported";
+    if (shipment.lookedUpAt && Date.now() - Date.parse(shipment.lookedUpAt) < 5 * 60_000) return "tooSoon";
+    shipment.lookedUpAt = new Date().toISOString();
+    shipment.lookupError = null;
+    this.emit({ type: "shipments:changed" });
+    return null;
   }
 
   async deleteShipment(accountId: string, id: string) {

@@ -16,10 +16,12 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { CARRIERS, type Shipment, type ShipmentCarrier, type ShipmentEvent } from "@/backend/types";
 import { NyuScene } from "@/components/nyu/scenes";
 import { Dialog } from "@/components/ui/Dialog";
+import { useNow } from "@/features/verification/useVerificationCodes";
 import { useT } from "@/i18n";
 import { accountLabel } from "@/lib/accountLabel";
 import { addDays, todayKey } from "@/lib/calendarDates";
 import { useIsPhone } from "@/lib/device";
+import { sinceText } from "@/lib/format";
 import { openExternal } from "@/lib/platform";
 import { useVisibleAccounts } from "@/lib/queries";
 import { dayOf, finishedAt, groupShipments, isActive, markable, shipmentKey, STEPS, stepOf } from "@/lib/shipments";
@@ -60,6 +62,7 @@ function whenText(expected: NonNullable<Shipment["expected"]> & { from: string }
 function sourceText(event: ShipmentEvent, t: T): string {
   if (event.source === "mail") return t("shipments.source.mail");
   if (event.source === "ai") return t("shipments.source.ai");
+  if (event.source === "carrier") return t("shipments.source.carrier");
   return event.clientName ?? t("shipments.source.client");
 }
 
@@ -214,6 +217,7 @@ function ShipmentCard({ shipment }: { shipment: Shipment }) {
   const headingId = useId();
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
   const active = isActive(shipment);
   const latest = shipment.events.at(-1);
   const marks = markable(shipment.status);
@@ -296,6 +300,14 @@ function ShipmentCard({ shipment }: { shipment: Shipment }) {
         </p>
       )}
 
+      {(shipment.lookedUpAt || shipment.lookupError) && (
+        <p className="text-caption text-muted">
+          {shipment.lookedUpAt && <LookedUp at={shipment.lookedUpAt} />}
+          {shipment.lookedUpAt && shipment.lookupError && " · "}
+          {shipment.lookupError && t(`shipments.lookupError.${shipment.lookupError}`)}
+        </p>
+      )}
+
       {shipment.events.length > 0 && (
         <details className="group text-meta">
           <summary className="cursor-pointer rounded-control font-semibold text-muted hover:text-ink">
@@ -330,6 +342,31 @@ function ShipmentCard({ shipment }: { shipment: Shipment }) {
           >
             {t("shipments.track")}
             <span className="sr-only">{t("shipments.inBrowser")}</span>
+          </Button>
+        )}
+        {shipment.shopTrackingUrl && (
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={ICONS.openExternal}
+            onClick={() => void openExternal(shipment.shopTrackingUrl!)}
+          >
+            {t("shipments.trackAtShop")}
+            <span className="sr-only">{t("shipments.inBrowser")}</span>
+          </Button>
+        )}
+        {shipment.refreshable && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={ICONS.refresh}
+            busy={lookingUp}
+            onClick={() => {
+              setLookingUp(true);
+              void actions.lookUp(shipment).finally(() => setLookingUp(false));
+            }}
+          >
+            {t("shipments.lookUp")}
           </Button>
         )}
         {mail && (
@@ -414,6 +451,13 @@ function ShipmentCard({ shipment }: { shipment: Shipment }) {
       </Dialog>
     </article>
   );
+}
+
+/** "Last checked 5 min ago", kept up to date. */
+function LookedUp({ at }: { at: string }) {
+  const { t, i18n } = useT();
+  const now = useNow(true, 30_000);
+  return <time dateTime={at}>{t("shipments.lookedUp", { when: sinceText(Date.parse(at), now, i18n.language) })}</time>;
 }
 
 function RenameShipment({ shipment, onClose }: { shipment: Shipment; onClose: () => void }) {

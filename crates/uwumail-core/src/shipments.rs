@@ -50,7 +50,7 @@ pub struct ShipmentEvent {
     pub status: String,
     pub text: Option<String>,
     pub location: Option<String>,
-    /// `mail`, `ai` or `client`.
+    /// `mail`, `ai`, `carrier` (its server asked the carrier) or `client`.
     pub source: String,
     /// The mail it was found in (this device's message id).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -69,6 +69,8 @@ pub struct Shipment {
     pub carrier: String,
     pub number: Option<String>,
     pub tracking_url: Option<String>,
+    /// The shop's own tracking page (UwUMail servers only), opened like `tracking_url`.
+    pub shop_tracking_url: Option<String>,
     pub title: Option<String>,
     pub merchant: Option<String>,
     pub order_ref: Option<String>,
@@ -84,6 +86,13 @@ pub struct Shipment {
     pub events: Vec<ShipmentEvent>,
     pub created: String,
     pub updated: String,
+    /// When its server last asked the carrier (UwUMail servers with the parcel lookup).
+    pub looked_up_at: Option<String>,
+    /// How that went wrong: `notFound`, `unavailable` or `rateLimited`.
+    pub lookup_error: Option<String>,
+    /// Its server can ask the carrier now (`Shipment/refresh`): the carrier is among the
+    /// account's `lookupCarriers`, it has a number and isn't finished.
+    pub refreshable: bool,
 }
 
 /// Whether an account has parcels (`on`), and whether the person may switch them on and off on
@@ -191,10 +200,6 @@ impl Shipment {
             id,
             carrier: carrier.to_owned(),
             number: number.map(str::to_owned),
-            tracking_url: None,
-            title: None,
-            merchant: None,
-            order_ref: None,
             status: status.id().to_owned(),
             status_at: at.clone(),
             expected: None,
@@ -205,6 +210,7 @@ impl Shipment {
             events: Vec::new(),
             created: at.clone(),
             updated: at,
+            ..Self::default()
         }
     }
 

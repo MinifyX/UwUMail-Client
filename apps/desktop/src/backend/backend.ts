@@ -91,6 +91,7 @@ import type {
   ShipmentAccount,
   ShipmentInput,
   ShipmentPatch,
+  ShipmentRefusal,
   ShipmentStatus,
   BackupFilter,
   BackupPreview,
@@ -380,6 +381,8 @@ export interface Backend {
   updateShipment(accountId: string, id: string, patch: ShipmentPatch): Promise<void>;
   /** Marks `status` at `at` by hand, or takes that mark back (`undo`). */
   markShipment(accountId: string, id: string, at: string, status: ShipmentStatus, undo: boolean): Promise<void>;
+  /** Asks the server to ask the carrier now; null when it did, else why not. */
+  refreshShipment(accountId: string, id: string): Promise<ShipmentRefusal | null>;
   deleteShipment(accountId: string, id: string): Promise<void>;
   /** Every masked address of the mailbox, deleted ones included, newest first. */
   maskedAddresses(accountId: string): Promise<MaskedAddress[]>;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { Signature } from "@/backend/types";
-import { sinceText } from "@/features/settings/SettingsSync";
+import { sinceText } from "@/lib/format";
 import { MAX_VALUE_BYTES } from "@/lib/settingsSync";
 import { cleanSyncedSignature, holdBackWeakening, loadMeta, signatureTravels } from "./accountSync";
 import { DEFAULT_SETTINGS } from "./settings";

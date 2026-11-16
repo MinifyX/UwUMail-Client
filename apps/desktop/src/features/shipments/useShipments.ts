@@ -82,6 +82,17 @@ export function useShipmentActions() {
         action: { label: translate("shipments.undo"), run: () => void set(true) },
       });
     },
+    /** Asks the carrier now; says briefly why not when the server didn't. */
+    lookUp: async (shipment: Shipment) => {
+      try {
+        const refused = await backend().refreshShipment(shipment.accountId, shipment.id);
+        await refresh();
+        if (refused) toast(translate(`shipments.refused.${refused}`), "info");
+        else toast(translate("shipments.toast.lookedUp"), "success");
+      } catch (error) {
+        toast(shipmentErrorText(error), "error");
+      }
+    },
     remove: async (shipment: Shipment) => {
       if (await run(() => backend().deleteShipment(shipment.accountId, shipment.id))) {
         toast(translate("shipments.toast.deleted"), "success");

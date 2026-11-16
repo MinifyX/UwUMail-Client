@@ -2625,7 +2625,8 @@
     "source": {
       "mail": "Mail",
       "ai": "KI",
-      "client": "App"
+      "client": "App",
+      "carrier": "Versanddienst"
     },
     "via": "über {{source}}",
     "finished": {
@@ -2663,7 +2664,8 @@
     "toast": {
       "hidden": "Paket ausgeblendet",
       "deleted": "Paket gelöscht",
-      "marked": "Als „{{status}}“ markiert"
+      "marked": "Als „{{status}}“ markiert",
+      "lookedUp": "Beim Versanddienst nachgefragt"
     },
     "error": {
       "invalid": "Das passt nicht. Prüfe die Sendungsnummer, vielleicht gibt es sie schon.",
@@ -2680,6 +2682,20 @@
       "outForDelivery": "Dein Paket ist in Zustellung",
       "delivered": "Dein Paket ist da",
       "readyForPickup": "Dein Paket liegt zur Abholung bereit"
+    },
+    "trackAtShop": "Beim Shop ansehen",
+    "lookUp": "Jetzt aktualisieren",
+    "lookedUp": "Zuletzt abgefragt {{when}}",
+    "lookupError": {
+      "notFound": "Der Versanddienst kennt die Nummer nicht.",
+      "unavailable": "Der Versanddienst hat zuletzt nicht geantwortet.",
+      "rateLimited": "Der Versanddienst war zuletzt ausgelastet."
+    },
+    "refused": {
+      "tooSoon": "Gerade erst abgefragt. Versuch es in ein paar Minuten noch mal.",
+      "notSupported": "Für dieses Paket fragt der Server nicht beim Versanddienst nach.",
+      "unavailable": "Der Versanddienst antwortet gerade nicht.",
+      "notFound": "Der Versanddienst kennt diese Nummer nicht."
     }
   }
 }

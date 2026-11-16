@@ -2,6 +2,18 @@ import type { Address } from "@/backend/types";
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/** "vor 2 Min." and the like, from the language the app speaks. */
+export function sinceText(then: number, now: number, language: string): string {
+  const seconds = Math.round((then - now) / 1000);
+  const format = new Intl.RelativeTimeFormat(language, { numeric: "auto", style: "short" });
+  if (Math.abs(seconds) < 60) return format.format(0, "second");
+  const minutes = Math.round(seconds / 60);
+  if (Math.abs(minutes) < 60) return format.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return format.format(hours, "hour");
+  return format.format(Math.round(hours / 24), "day");
+}
+
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }

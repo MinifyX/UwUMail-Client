@@ -175,6 +175,20 @@ impl Engine {
         Ok(())
     }
 
+    /// Asks its server to ask the carrier now. `None` when it did, else why not (`tooSoon`,
+    /// `notSupported`, `unavailable` or `notFound`); only UwUMail servers with the lookup can.
+    pub async fn refresh_shipment(&self, account_id: &str, id: &str) -> Result<Option<String>> {
+        let account = self.inner.store.account(account_id)?;
+        let Source::Server(client) = self.inner.shipments_source(account_id, account.protocol).await else {
+            return Ok(Some("notSupported".into()));
+        };
+        let refused = jmap_shipments::refresh(&client, id).await?;
+        if refused.is_none() {
+            self.inner.emit(EngineEvent::ShipmentsChanged { notices: Vec::new() });
+        }
+        Ok(refused)
+    }
+
     pub async fn delete_shipment(&self, account_id: &str, id: &str) -> Result<()> {
         let account = self.inner.store.account(account_id)?;
         match self.inner.shipments_source(account_id, account.protocol).await {

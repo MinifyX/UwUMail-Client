@@ -2625,7 +2625,8 @@
     "source": {
       "mail": "Mail",
       "ai": "AI",
-      "client": "App"
+      "client": "App",
+      "carrier": "Carrier"
     },
     "via": "via {{source}}",
     "finished": {
@@ -2663,7 +2664,8 @@
     "toast": {
       "hidden": "Parcel hidden",
       "deleted": "Parcel deleted",
-      "marked": "Marked as “{{status}}”"
+      "marked": "Marked as “{{status}}”",
+      "lookedUp": "Checked with the carrier"
     },
     "error": {
       "invalid": "That doesn't fit. Check the tracking number, it may already be there.",
@@ -2680,6 +2682,20 @@
       "outForDelivery": "Your parcel is out for delivery",
       "delivered": "Your parcel has arrived",
       "readyForPickup": "Your parcel is ready for pickup"
+    },
+    "trackAtShop": "View at shop",
+    "lookUp": "Update now",
+    "lookedUp": "Last checked {{when}}",
+    "lookupError": {
+      "notFound": "The carrier doesn't know this number.",
+      "unavailable": "The carrier didn't answer last time.",
+      "rateLimited": "The carrier was busy last time."
+    },
+    "refused": {
+      "tooSoon": "Just checked. Try again in a few minutes.",
+      "notSupported": "The server doesn't check with the carrier for this parcel.",
+      "unavailable": "The carrier isn't answering right now.",
+      "notFound": "The carrier doesn't know this number."
     }
   }
 }

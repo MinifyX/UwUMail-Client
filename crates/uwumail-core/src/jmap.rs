@@ -156,6 +156,9 @@ pub struct Session {
     /// The server knows shipments (`SHIPMENTS` in the session's `capabilities`), so the person
     /// may switch them on and off (the `shipments` key of `UserSettings`).
     pub shipments_offered: bool,
+    /// The carriers the server asks itself for the own account's parcels (`lookupCarriers` of
+    /// `SHIPMENTS`); empty while the lookup is off or on older servers.
+    pub lookup_carriers: Vec<String>,
     /// The account whose signatures per domain this login manages (`urn:uwumail:jmap:signatures`).
     pub signatures_account_id: Option<String>,
     /// The session's `state`: API answers carry it as `sessionState`, and a different one there
@@ -338,6 +341,14 @@ impl Session {
                 .and_then(|account| account.get("accountCapabilities"))
                 .and_then(Value::as_object)
                 .is_some_and(|own| own.contains_key(SHIPMENTS));
+        let lookup_carriers = own_capability(SHIPMENTS)
+            .filter(|_| shipments)
+            .and_then(|capability| capability.get("lookupCarriers").and_then(Value::as_array).cloned())
+            .into_iter()
+            .flatten()
+            .filter_map(|carrier| carrier.as_str().filter(|c| c.len() <= 40).map(String::from))
+            .take(20)
+            .collect();
         let principals = own_capability(PRINCIPALS);
         let own_principal_id = principals
             .as_ref()
@@ -378,6 +389,7 @@ impl Session {
             verification: capabilities.contains_key(VERIFICATION),
             shipments,
             shipments_offered,
+            lookup_carriers,
             signatures_account_id,
             state: text("state").map(String::from),
             assist,
@@ -427,6 +439,7 @@ impl Session {
             verification: false,
             shipments: false,
             shipments_offered: false,
+            lookup_carriers: Vec::new(),
             assist: None,
             masked: None,
             profile: None,
@@ -1819,6 +1832,9 @@ mod tests {
         });
         let both_on = Session::parse(&document, &base).unwrap();
         assert!(both_on.shipments && both_on.shipments_offered);
+        assert!(both_on.lookup_carriers.is_empty(), "older servers name no lookup");
+        document["accounts"]["a1"]["accountCapabilities"][SHIPMENTS] = json!({ "lookupCarriers": ["dhl", 5] });
+        assert_eq!(Session::parse(&document, &base).unwrap().lookup_carriers, ["dhl"]);
         assert_eq!(both_on.shipments_by(), ShipmentsBy::Server);
 
         // The person switched them off: still offered, gone from the account.

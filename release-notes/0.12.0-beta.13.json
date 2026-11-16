@@ -1,0 +1,4 @@
+{
+  "de": "- Pakete: „Beim Shop ansehen“ öffnet die Bestellung direkt beim Shop, wenn die Mail sie verlinkt\n- „Jetzt aktualisieren“ fragt den Paketdienst (DHL, UPS, FedEx) nach dem aktuellen Stand, wenn der Server das erlaubt; die letzte Nachfrage steht am Paket (bei UwUMail-Servern ab 0.38.0)",
+  "en": "- Parcels: “View at shop” opens the order at the shop when the mail links it\n- “Refresh now” asks the carrier (DHL, UPS, FedEx) for the latest status when the server allows it; the last lookup shows on the parcel (on UwUMail servers from 0.38.0)"
+}

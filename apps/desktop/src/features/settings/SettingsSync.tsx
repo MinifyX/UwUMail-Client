@@ -1,23 +1,12 @@
 import { Icon, ICONS, Select } from "@uwusuite/design";
 import { useEffect, useState } from "react";
 import { i18n, useT } from "@/i18n";
+import { sinceText } from "@/lib/format";
 import { useAccounts } from "@/lib/queries";
 import type { SyncStatus } from "@/lib/settingsSyncQueue";
 import { useAccountSync } from "@/state/accountSync";
 import { useSettings } from "@/state/settings";
 import { Row } from "./Row";
-
-/** "vor 2 Min." and the like, from the language the app speaks. */
-export function sinceText(then: number, now: number, language: string): string {
-  const seconds = Math.round((then - now) / 1000);
-  const format = new Intl.RelativeTimeFormat(language, { numeric: "auto", style: "short" });
-  if (Math.abs(seconds) < 60) return format.format(0, "second");
-  const minutes = Math.round(seconds / 60);
-  if (Math.abs(minutes) < 60) return format.format(minutes, "minute");
-  const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return format.format(hours, "hour");
-  return format.format(Math.round(hours / 24), "day");
-}
 
 /** Re-renders now and then, so "2 min ago" keeps up. */
 function useNow(everyMs: number): number {
