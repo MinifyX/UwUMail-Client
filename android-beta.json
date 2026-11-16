@@ -1,9 +1,9 @@
 {
-  "version": "0.12.0-beta.12",
-  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.12/UwUMail-android.apk",
-  "sha256": "a33dfbc59da754c2cdd27a24d87b065da2150049845e1775f6b1e00292333c75",
+  "version": "0.12.0-beta.13",
+  "url": "https://github.com/MinifyX/UwUMail-Client/releases/download/v0.12.0-beta.13/UwUMail-android.apk",
+  "sha256": "66329c18a695b42f78a95210ec8a5625976a597d152cdb40868b48d00d4555ba",
   "notes": {
-    "de": "- Pakete lassen sich von Hand als versendet, unterwegs, zugestellt, abholbereit usw. markieren: Menü am Paket → Status setzen. Der Hinweis danach kann es rückgängig machen (bei UwUMail-Servern ab 0.37.2)\n- Eine fehlgeschlagene Zustellung kann danach als zugestellt gelten",
-    "en": "- Parcels can be marked shipped, in transit, delivered, ready for pickup and so on by hand: the parcel's menu → Set status. The notice afterwards can undo it (on UwUMail servers from 0.37.2)\n- A failed delivery can still end delivered"
+    "de": "- Pakete: „Beim Shop ansehen“ öffnet die Bestellung direkt beim Shop, wenn die Mail sie verlinkt\n- „Jetzt aktualisieren“ fragt den Paketdienst (DHL, UPS, FedEx) nach dem aktuellen Stand, wenn der Server das erlaubt; die letzte Nachfrage steht am Paket (bei UwUMail-Servern ab 0.38.0)",
+    "en": "- Parcels: “View at shop” opens the order at the shop when the mail links it\n- “Refresh now” asks the carrier (DHL, UPS, FedEx) for the latest status when the server allows it; the last lookup shows on the parcel (on UwUMail servers from 0.38.0)"
   }
 }
