@@ -107,6 +107,7 @@ import type {
   ShipmentAccount,
   ShipmentInput,
   ShipmentPatch,
+  ShipmentRefusal,
   ShipmentStatus,
   BackupFilter,
   BackupPreview,
@@ -642,6 +643,10 @@ export class TauriBackend implements Backend {
 
   markShipment(accountId: string, id: string, at: string, status: ShipmentStatus, undo: boolean) {
     return call<void>("mark_shipment", { accountId, id, at, status, undo });
+  }
+
+  refreshShipment(accountId: string, id: string) {
+    return call<ShipmentRefusal | null>("refresh_shipment", { accountId, id });
   }
 
   deleteShipment(accountId: string, id: string) {

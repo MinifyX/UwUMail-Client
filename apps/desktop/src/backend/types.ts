@@ -1762,7 +1762,7 @@ export interface ShipmentEvent {
   status: ShipmentStatus | "";
   text: string | null;
   location: string | null;
-  /** Where it came from: `mail`, `ai` or `client` (then `clientName` says which). */
+  /** Where it came from: `mail`, `ai`, `carrier` (the server asked it) or `client` (then `clientName` says which). */
   source: string;
   clientName?: string | null;
   /** The mail it was found in. */
@@ -1788,6 +1788,8 @@ export interface Shipment {
   number: string | null;
   /** Only http(s); opened in the browser, never fetched by UwUMail. */
   trackingUrl: string | null;
+  /** The shop's own tracking page, like `trackingUrl` (UwUMail servers only). */
+  shopTrackingUrl?: string | null;
   /** The name the person gave it; null shows the shop. */
   title: string | null;
   merchant: string | null;
@@ -1804,7 +1806,16 @@ export interface Shipment {
   events: ShipmentEvent[];
   created: string;
   updated: string;
+  /** When its server last asked the carrier (UwUMail servers with the parcel lookup). */
+  lookedUpAt?: string | null;
+  /** How that last question went wrong. */
+  lookupError?: "notFound" | "unavailable" | "rateLimited" | null;
+  /** Its server can ask the carrier now (`refreshShipment`). */
+  refreshable?: boolean;
 }
+
+/** Why the server asked no carrier just now. */
+export type ShipmentRefusal = "tooSoon" | "notSupported" | "unavailable" | "notFound";
 
 export interface ShipmentInput {
   accountId: string;

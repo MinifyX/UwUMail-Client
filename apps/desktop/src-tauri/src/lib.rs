@@ -1445,6 +1445,7 @@ pub fn run() {
             account::create_shipment,
             account::update_shipment,
             account::mark_shipment,
+            account::refresh_shipment,
             account::delete_shipment,
             account::update_masked_address,
             account::profile_picture,

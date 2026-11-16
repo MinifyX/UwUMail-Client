@@ -10,6 +10,9 @@ use crate::shipments::{self, MAX_EVENTS, MAX_PER_ACCOUNT, Shipment};
 use uwumail_labels::ShipmentStatus;
 
 const CARRIERS: [&str; 9] = ["dhl", "deutschePost", "dpd", "hermes", "gls", "ups", "amazonLogistics", "fedex", "other"];
+const LOOKUP_ERRORS: [&str; 3] = ["notFound", "unavailable", "rateLimited"];
+/// Why `Shipment/refresh` asked no carrier.
+const NOT_REFRESHED: [&str; 4] = ["tooSoon", "notSupported", "unavailable", "notFound"];
 /// Ids and short fields are never longer.
 const MAX_ID: usize = 255;
 
@@ -57,6 +60,14 @@ pub fn parse(value: &Value) -> Option<Shipment> {
         shipment.status = "inTransit".into();
     }
     shipment.tracking_url = shipment.tracking_url.and_then(|url| crate::links::external_url(&url).ok());
+    shipment.shop_tracking_url = shipment.shop_tracking_url.and_then(|url| crate::links::external_url(&url).ok());
+    shipment.looked_up_at = shipment.looked_up_at.filter(|at| shipments::seconds(at) > 0);
+    // An error this app doesn't know yet still means the carrier gave no answer.
+    shipment.lookup_error = shipment
+        .lookup_error
+        .map(|error| if LOOKUP_ERRORS.contains(&error.as_str()) { error } else { "unavailable".into() });
+    // Only `list` knows the account's lookup carriers.
+    shipment.refreshable = false;
     for field in [&mut shipment.number, &mut shipment.order_ref] {
         clip(field, 40);
     }
@@ -110,7 +121,38 @@ pub async fn list(client: &Client, hidden: bool) -> Result<Vec<Shipment>> {
         .flatten()
         .take(MAX_PER_ACCOUNT)
         .filter_map(parse)
+        .map(|mut shipment| {
+            shipment.refreshable = refreshable(&client.session.lookup_carriers, &shipment);
+            shipment
+        })
         .collect())
+}
+
+/// Whether the server would ask the carrier about it now (docs/jmap-shipments.md, `notSupported`).
+fn refreshable(lookup_carriers: &[String], shipment: &Shipment) -> bool {
+    lookup_carriers.contains(&shipment.carrier)
+        && shipment.number.is_some()
+        && !matches!(shipment.status.as_str(), "delivered" | "returned" | "cancelled")
+}
+
+/// Asks the server to ask the carrier now (`Shipment/refresh`). `None` when it did, else why not:
+/// `tooSoon`, `notSupported`, `unavailable` or `notFound`.
+pub async fn refresh(client: &Client, id: &str) -> Result<Option<String>> {
+    require(client)?;
+    valid_id(id)?;
+    let arguments = json!({ "accountId": client.session.account_id, "ids": [id] });
+    let answer = call(client, vec![("Shipment/refresh", arguments)]).await?.remove(0);
+    Ok(not_refreshed(&answer, id))
+}
+
+fn not_refreshed(answer: &Value, id: &str) -> Option<String> {
+    let refreshed = answer.get("refreshed").and_then(Value::as_array).is_some_and(|ids| ids.iter().any(|v| v == id));
+    if refreshed {
+        return None;
+    }
+    let kind = answer.pointer(&format!("/notRefreshed/{}", id.replace('~', "~0").replace('/', "~1")));
+    let kind = kind.and_then(|problem| problem.get("type")).and_then(Value::as_str).unwrap_or("unavailable");
+    Some(if NOT_REFRESHED.contains(&kind) { kind } else { "unavailable" }.to_owned())
 }
 
 async fn set(client: &Client, arguments: Value, key: &str, id: &str) -> Result<Value> {
@@ -203,6 +245,51 @@ mod tests {
         assert_eq!(parse(&json!({ "id": 5 })), None);
         let tracked = parse(&json!({ "id": "s1", "trackingUrl": "https://tracking.example/?n=1" })).unwrap();
         assert_eq!(tracked.tracking_url.as_deref(), Some("https://tracking.example/?n=1"));
+    }
+
+    #[test]
+    fn reads_the_lookup_fields_and_does_without_them() {
+        let shipment = parse(&json!({
+            "id": "s7", "carrier": "dhl", "number": "00340434", "status": "inTransit",
+            "shopTrackingUrl": "https://www.shop.example/sendungsverfolgung/?orderNo=12345",
+            "lookedUpAt": "2026-11-15T08:12:00Z", "lookupError": "rateLimited",
+            "events": [{ "at": "2026-11-15T08:12:00Z", "status": "inTransit", "source": "carrier" }]
+        }))
+        .unwrap();
+        assert_eq!(
+            shipment.shop_tracking_url.as_deref(),
+            Some("https://www.shop.example/sendungsverfolgung/?orderNo=12345")
+        );
+        assert_eq!(shipment.looked_up_at.as_deref(), Some("2026-11-15T08:12:00Z"));
+        assert_eq!(shipment.lookup_error.as_deref(), Some("rateLimited"));
+        assert_eq!(shipment.events[0].source, "carrier");
+        assert!(refreshable(&["dhl".into()], &shipment));
+        assert!(!refreshable(&["ups".into()], &shipment));
+        assert!(!refreshable(&["dhl".into()], &Shipment { status: "delivered".into(), ..shipment.clone() }));
+        assert!(!refreshable(&["dhl".into()], &Shipment { number: None, ..shipment }));
+
+        let odd = parse(&json!({
+            "id": "s8", "shopTrackingUrl": "javascript:alert(1)", "lookedUpAt": "gestern",
+            "lookupError": "exploded", "refreshable": true
+        }))
+        .unwrap();
+        assert_eq!((odd.shop_tracking_url, odd.looked_up_at), (None, None));
+        assert_eq!(odd.lookup_error.as_deref(), Some("unavailable"));
+        assert!(!odd.refreshable);
+
+        // An older server sends none of them.
+        let old = parse(&json!({ "id": "s1", "carrier": "dhl", "status": "shipped" })).unwrap();
+        assert_eq!((old.shop_tracking_url, old.looked_up_at, old.lookup_error), (None, None, None));
+    }
+
+    #[test]
+    fn refresh_answers_say_why_not() {
+        assert_eq!(not_refreshed(&json!({ "refreshed": ["s7"], "notRefreshed": {} }), "s7"), None);
+        let answer =
+            json!({ "refreshed": [], "notRefreshed": { "s7": { "type": "tooSoon" }, "a/b": { "type": "weird" } } });
+        assert_eq!(not_refreshed(&answer, "s7").as_deref(), Some("tooSoon"));
+        assert_eq!(not_refreshed(&answer, "a/b").as_deref(), Some("unavailable"));
+        assert_eq!(not_refreshed(&json!({}), "s9").as_deref(), Some("unavailable"));
     }
 
     #[test]
