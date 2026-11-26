@@ -236,8 +236,9 @@ export function useMacMenu(commands: Command[] | null, enabled = true) {
       return;
     }
     const options = mailMenu({ t, commands, section, hasThread, run: guard, updates });
-    const lang = resolveLanguage(language);
-    const key = `${lang}${fingerprint(options)}`;
+    const fullLang = resolveLanguage(language);
+    const lang = fullLang === "de" ? "de" : "en";
+    const key = `${fullLang}${fingerprint(options)}`;
     if (shown.current?.key === key) return;
     // Moving through the list changes the open conversation many times a second.
     const timer = setTimeout(() => {
