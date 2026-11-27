@@ -143,7 +143,11 @@
     "addressCopied": "地址已复制",
     "teamsMeeting": "Teams 会议",
     "teamsJoin": "加入",
-    "replyAllShort": "全部"
+    "replyAllShort": "全部",
+    "viewHeaders": "查看郵件標頭",
+    "headersLoading": "正在載入郵件標頭…",
+    "copyHeaders": "複製郵件標頭",
+    "headersCopied": "郵件標頭已複製"
   },
   "compose": {
     "new": "新邮件",

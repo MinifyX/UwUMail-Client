@@ -1,8 +1,9 @@
 import clsx from "clsx";
 import { Button, Icon, IconButton, ICONS, Menu, Tooltip } from "@uwusuite/design";
-import { Fragment, useId, useMemo, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
+import { Dialog } from "@/components/ui/Dialog";
 import { translate, useT } from "@/i18n";
 import { addressRows, fullAddress, type AddressRole } from "@/lib/addresses";
 import { visibleText } from "@/lib/links";
@@ -203,6 +204,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const [loadRemote, setLoadRemote] = useState(false);
   const inlineImages = useInlineImages(message);
   const [autoDecision, setAutoDecision] = useState<{ key: string; dark: boolean } | null>(null);
+  const [showHeaders, setShowHeaders] = useState(false);
 
   const myAddresses = new Set(accounts.map((a) => a.email.toLowerCase()));
   const showDetails = useSettings((s) => s.showAddressDetails);
@@ -314,6 +316,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
                   message={message}
                   accounts={accounts}
                   onPrint={() => printMessage(message, allowRemote, inlineImages.urls, imageProxy)}
+                  onViewHeaders={() => setShowHeaders(true)}
                 />
               )}
               <time dateTime={message.date} className="text-[12.5px] text-muted">
@@ -361,6 +364,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           attachments={message.attachments.filter((attachment) => !inlineImages.shown.has(attachment.id))}
           sender={message.from}
         />
+        <HeadersDialog messageId={message.id} open={showHeaders} onClose={() => setShowHeaders(false)} />
       </article>
     </AssistForAccount>
   );
@@ -442,8 +446,43 @@ function AddressDetails({ id, message }: { id: string; message: Message }) {
   );
 }
 
+/** Shows the raw RFC 822 header block of one message. */
+function HeadersDialog({ messageId, open, onClose }: { messageId: string; open: boolean; onClose: () => void }) {
+  const { t } = useT();
+  const [headers, setHeaders] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setHeaders(null); setError(null);
+    backend().messageHeaders(messageId)
+      .then((h) => { if (alive) setHeaders(h); })
+      .catch((e: unknown) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { alive = false; };
+  }, [open, messageId]);
+  const copy = () => {
+    if (headers) void navigator.clipboard.writeText(headers).then(() => toast(t("reader.headersCopied"), "success"));
+  };
+  return (
+    <Dialog open={open} onClose={onClose} title={t("reader.viewHeaders")} width="lg">
+      <div className="flex flex-col gap-3 px-6 py-4">
+        {error && <p className="text-danger-ink">{error}</p>}
+        {!error && !headers && <p className="text-muted">{t("reader.headersLoading")}</p>}
+        {headers && (
+          <>
+            <pre className="selectable max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded bg-surface p-3 font-mono text-[12px] leading-relaxed">{headers}</pre>
+            <div className="flex justify-end">
+              <Button variant="ghost" icon={ICONS.copy} onClick={copy}>{t("reader.copyHeaders")}</Button>
+            </div>
+          </>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
 /** Less common actions for one message. */
-function MessageMenu({ message, accounts, onPrint }: { message: Message; accounts: Account[]; onPrint: () => void }) {
+function MessageMenu({ message, accounts, onPrint, onViewHeaders }: { message: Message; accounts: Account[]; onPrint: () => void; onViewHeaders: () => void }) {
   const { t } = useT();
   const client = useQueryClient();
   const email = message.from.email;
@@ -463,6 +502,7 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
   const items = [
     // No phone web view prints; the system share sheet will do that later.
     ...(nativeMobile ? [] : [{ icon: ICONS.print, label: t("reader.print"), onSelect: onPrint }]),
+    { icon: ICONS.copy, label: t("reader.viewHeaders"), onSelect: onViewHeaders },
     {
       icon: ICONS.download,
       label: t("reader.saveMessage"),

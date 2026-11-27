@@ -143,7 +143,11 @@
     "addressCopied": "Adresse kopiert",
     "teamsMeeting": "Teams-Besprechung",
     "teamsJoin": "Teilnehmen",
-    "replyAllShort": "Allen"
+    "replyAllShort": "Allen",
+    "viewHeaders": "Nachrichtenkopf anzeigen",
+    "headersLoading": "Kopfzeilen werden geladen…",
+    "copyHeaders": "Kopfzeilen kopieren",
+    "headersCopied": "Kopfzeilen kopiert"
   },
   "compose": {
     "new": "Neue Mail",

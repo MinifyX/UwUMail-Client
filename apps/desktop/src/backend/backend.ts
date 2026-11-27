@@ -489,6 +489,8 @@ export interface Backend {
   saveAttachment(attachmentId: string): Promise<boolean>;
   /** The whole mail as an .eml file, where the user picks. False when cancelled. */
   saveMessage(messageId: string): Promise<boolean>;
+  /** The raw header block of a message, up to the first empty line. */
+  messageHeaders(messageId: string): Promise<string>;
 
   /**
    * The picture for an address, looked up per address: with a UwUMail server a person's photo

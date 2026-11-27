@@ -1012,6 +1012,22 @@ async fn save_message(app: AppHandle, engine: State<'_, Engine>, message_id: Str
     platform::save_file(&app, &file).await
 }
 
+/// Returns the raw header block of a message (up to the first empty line) as text.
+#[tauri::command]
+async fn message_headers(engine: State<'_, Engine>, message_id: String) -> CommandResult<String> {
+    let file = engine.message_file(&message_id).await?;
+    let path = file.path;
+    let bytes = tokio::task::spawn_blocking(move || std::fs::read(&path))
+        .await
+        .map_err(|e| uwumail_core::Error::internal(format!("Reading headers task failed: {e}")))?
+        .map_err(|e| uwumail_core::Error::internal(format!("Reading headers failed: {e}")))?;
+    let text = String::from_utf8_lossy(&bytes);
+    // Headers end at the first empty line (CRLF CRLF or LF LF).
+    let header = text.split("\r\n\r\n").next().unwrap_or(&text)
+        .split("\n\n").next().unwrap_or(&text);
+    Ok(header.to_string())
+}
+
 #[tauri::command]
 async fn get_sender_picture(
     engine: State<'_, Engine>,
@@ -1552,6 +1568,7 @@ pub fn run() {
             open_attachment,
             save_attachment,
             save_message,
+            message_headers,
             get_sender_picture,
             fetch_mail_image,
             image_sizes,

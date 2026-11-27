@@ -857,6 +857,10 @@ export class TauriBackend implements Backend {
     return call<boolean>("save_message", { messageId });
   }
 
+  messageHeaders(messageId: string) {
+    return call<string>("message_headers", { messageId });
+  }
+
   saveAttachment(attachmentId: string) {
     return call<boolean>("save_attachment", { attachmentId });
   }

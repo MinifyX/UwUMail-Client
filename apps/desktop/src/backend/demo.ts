@@ -1802,6 +1802,19 @@ export class DemoBackend implements Backend {
     return true;
   }
 
+  async messageHeaders(messageId: string) {
+    const message = this.messages.find((m) => m.id === messageId);
+    if (!message) throw new BackendError("not_found", "This message no longer exists.");
+    return [
+      `From: ${message.from.name ?? ""} <${message.from.email}>`,
+      `To: ${message.to.map((a) => a.email).join(", ")}`,
+      `Subject: ${message.subject}`,
+      `Date: ${new Date(message.date).toUTCString()}`,
+      `Message-ID: <${message.id}@uwumail.demo>`,
+      "Content-Type: text/html; charset=utf-8",
+    ].join("\r\n");
+  }
+
   async saveAttachment(attachmentId: string) {
     const file = await this.getAttachment(attachmentId);
     // Stands in for the engine's native warning dialog, as when opening.

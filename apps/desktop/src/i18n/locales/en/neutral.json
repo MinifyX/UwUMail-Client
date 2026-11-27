@@ -143,7 +143,11 @@
     "addressCopied": "Address copied",
     "teamsMeeting": "Teams meeting",
     "teamsJoin": "Join",
-    "replyAllShort": "All"
+    "replyAllShort": "All",
+    "viewHeaders": "View message headers",
+    "headersLoading": "Loading headers…",
+    "copyHeaders": "Copy headers",
+    "headersCopied": "Headers copied"
   },
   "compose": {
     "new": "New message",
