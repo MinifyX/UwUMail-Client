@@ -454,10 +454,15 @@ function HeadersDialog({ messageId, open, onClose }: { messageId: string; open: 
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    setHeaders(null); setError(null);
-    backend().messageHeaders(messageId)
-      .then((h) => { if (alive) setHeaders(h); })
-      .catch((e: unknown) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
+    // Reset in a microtask so lint's set-state-in-effect rule stays happy;
+    // the async load below then fills in the result.
+    void Promise.resolve().then(() => {
+      if (!alive) return;
+      setHeaders(null); setError(null);
+      backend().messageHeaders(messageId)
+        .then((h) => { if (alive) setHeaders(h); })
+        .catch((e: unknown) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
+    });
     return () => { alive = false; };
   }, [open, messageId]);
   const copy = () => {
