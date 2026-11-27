@@ -20,7 +20,7 @@ export type Tone = "playful" | "neutral";
 /** Nyu's little scenes (sending, archiving, occasions, the AI thinking): see components/nyu/level. */
 export const NYU_ANIMATIONS = ["on", "reduced", "off"] as const;
 export type NyuAnimations = (typeof NYU_ANIMATIONS)[number];
-export type LanguageSetting = "system" | "de" | "en" | "zh_CN" | "zh_TW";
+export type LanguageSetting = "system" | "de" | "en" | "zh-CN" | "zh-TW";
 export type RemoteImages = "ask" | "always";
 /** Beta gets pre-releases (tags like v0.2.0-beta.1) before everyone else. */
 export type UpdateChannel = "stable" | "beta";

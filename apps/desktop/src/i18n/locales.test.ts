@@ -3,10 +3,10 @@ import deNeutral from "./locales/de/neutral.json";
 import dePlayful from "./locales/de/playful.json";
 import enNeutral from "./locales/en/neutral.json";
 import enPlayful from "./locales/en/playful.json";
-import zhCNNeutral from "./locales/zh_CN/neutral.json";
-import zhCNPlayful from "./locales/zh_CN/playful.json";
-import zhTWNeutral from "./locales/zh_TW/neutral.json";
-import zhTWPlayful from "./locales/zh_TW/playful.json";
+import zhCNNeutral from "./locales/zh-CN/neutral.json";
+import zhCNPlayful from "./locales/zh-CN/playful.json";
+import zhTWNeutral from "./locales/zh-TW/neutral.json";
+import zhTWPlayful from "./locales/zh-TW/playful.json";
 
 type Tree = { [key: string]: string | Tree };
 
@@ -45,9 +45,9 @@ describe("the system's language", () => {
     const { systemLanguage } = await import("./index");
     expect(systemLanguage(["fr-FR", "de-CH", "en"])).toBe("de");
     expect(systemLanguage(["en-GB", "de"])).toBe("en");
-    expect(systemLanguage(["ja", "zh_Hans"])).toBe("zh_CN");
-    expect(systemLanguage(["zh-TW"])).toBe("zh_TW");
-    expect(systemLanguage(["zh-CN"])).toBe("zh_CN");
+    expect(systemLanguage(["ja", "zh_Hans"])).toBe("zh-CN");
+    expect(systemLanguage(["zh-TW"])).toBe("zh-TW");
+    expect(systemLanguage(["zh-CN"])).toBe("zh-CN");
     expect(systemLanguage([])).toBe("en");
   });
 });

@@ -172,8 +172,8 @@ function Appearance() {
           <option value="system">{t("language.system")}</option>
           <option value="de">{t("language.de")}</option>
           <option value="en">{t("language.en")}</option>
-          <option value="zh_CN">简体中文</option>
-          <option value="zh_TW">繁體中文</option>
+          <option value="zh-CN">简体中文</option>
+          <option value="zh-TW">繁體中文</option>
         </Select>
       </Row>
     </>
