@@ -20,7 +20,9 @@ export function PgpBadge({ message }: { message: Message }) {
     queryFn: () => backend().pgpVerify(message.id),
     staleTime: 5 * 60_000,
   });
-  if (!message.pgpSigned && !data) return null;
+  // Only messages that actually carried an inline signature get a badge.
+  // A completed query alone must not make unsigned mail show "not signed".
+  if (!message.pgpSigned) return null;
 
   const look = (() => {
     if (isLoading || !data) return { cls: "bg-surface text-muted", icon: ICONS.info, label: "pgp.checking" };

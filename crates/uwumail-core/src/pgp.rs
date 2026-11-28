@@ -48,16 +48,39 @@ pub fn cleartext_payload(body: &str) -> Option<(String, CleartextSignedMessage)>
     if !body.contains("-----BEGIN PGP SIGNED MESSAGE-----") {
         return None;
     }
-    let (msg, _headers) = CleartextSignedMessage::from_string(body).ok()?;
-    Some((msg.signed_text(), msg))
+    // rPGP parses cleartext frames with LF-normalized lines; raw mail bodies
+    // arrive with CRLF. Normalize before handing it over (the signed text rPGP
+    // returns is itself CRLF-normalized per RFC 4880).
+    let normalized = body.replace("\r\n", "\n").replace('\r', "\n");
+    // Raw mail often appends a blank line after the armor; rPGP treats that
+    // as trailing data. Cut at the end marker before parsing.
+    let normalized = match normalized.find("-----END PGP SIGNATURE-----") {
+        Some(i) => {
+            let end = i + "-----END PGP SIGNATURE-----".len();
+            normalized[..end].to_string()
+        }
+        None => normalized,
+    };
+    match CleartextSignedMessage::from_string(&normalized) {
+        Ok((msg, _headers)) => Some((msg.signed_text(), msg)),
+        Err(_) => None,
+    }
 }
 
 /// Get the original, still-armored body from raw RFC 5322 bytes. Verification
 /// needs the signature block that `mime::parse` strips for display.
 pub fn armored_from_raw(raw: &[u8]) -> Option<String> {
-    use mail_parser::MessageParser;
-    let message = MessageParser::default().parse(raw)?;
-    message.body_text(0).map(|t| t.into_owned())
+    // Take the body as the bytes after the header/body separator. Using the
+    // raw bytes (rather than a MIME parser's first text part) matters for
+    // list mail with Resent-* headers, where the parser can expose a nested
+    // message and hand back an empty `body_text(0)`.
+    let header_end = find(raw, b"\r\n\r\n").map(|i| i + 4).or_else(|| find(raw, b"\n\n").map(|i| i + 2))?;
+    let body = String::from_utf8_lossy(&raw[header_end..]);
+    if body.contains("-----BEGIN PGP SIGNED MESSAGE-----") { Some(body.into_owned()) } else { None }
+}
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 /// The signing key's fingerprint from a cleartext signature block, if readable.
