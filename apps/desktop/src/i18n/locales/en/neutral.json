@@ -457,6 +457,7 @@
     "updateFound": "Version {{version}} is ready",
     "updateCheckFailed": "Couldn't check for updates. {{reason}}",
     "security": "Security",
+    "pgp": "PGP keys",
     "swipeRight": "Swipe right",
     "swipeLeft": "Swipe left",
     "swipeDesc": "What happens when you swipe a mail in the list.",

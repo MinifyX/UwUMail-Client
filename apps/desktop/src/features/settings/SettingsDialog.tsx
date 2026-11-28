@@ -68,6 +68,7 @@ const SECTIONS: { id: SettingsSection; icon: IconProps["icon"]; phoneOnly?: bool
   { id: "labels", icon: ICONS.labels },
   { id: "assistant", icon: ICONS.ai },
   { id: "security", icon: ICONS.locked, phoneOnly: true },
+  { id: "pgp", icon: ICONS.locked },
   { id: "accounts", icon: ICONS.account },
   { id: "about", icon: ICONS.info },
 ];
@@ -255,7 +256,6 @@ function Security() {
   const update = useSettings((s) => s.update);
   return (
     <>
-      <PgpKeySettings />
       <div className="border-b border-hairline py-4">
         <Toggle
           checked={appLock}
@@ -793,6 +793,7 @@ export function SettingsSectionBody({ section }: { section: SettingsSection }) {
       {section === "labels" && <LabelsSettings />}
       {section === "assistant" && <AssistantSettings />}
       {section === "security" && <Security />}
+      {section === "pgp" && <PgpKeySettings />}
       {section === "accounts" && <Accounts />}
       {section === "profile" && <ProfileSettings />}
       {section === "masked" && <MaskedSettings />}

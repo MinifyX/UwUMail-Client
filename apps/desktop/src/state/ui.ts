@@ -77,6 +77,7 @@ export type SettingsSection =
   | "labels"
   | "assistant"
   | "security"
+  | "pgp"
   | "accounts"
   | "profile"
   | "masked"

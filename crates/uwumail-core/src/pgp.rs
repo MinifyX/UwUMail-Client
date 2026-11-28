@@ -67,6 +67,77 @@ pub fn cleartext_payload(body: &str) -> Option<(String, CleartextSignedMessage)>
     }
 }
 
+/// Detect a PGP/MIME (RFC 1847) signed message and return the exact bytes of
+/// the first MIME entity plus the detached signature armor. The signature
+/// covers the first part's canonical body (CRLF, no trailing CRLF before the
+/// boundary).
+pub fn mime_signed_payload(raw: &[u8]) -> Option<(Vec<u8>, String)> {
+    let text = String::from_utf8_lossy(raw);
+    // Must be multipart/signed with the OpenPGP protocol.
+    let header_end = find(raw, b"\r\n\r\n").map(|i| i + 4).or_else(|| find(raw, b"\n\n").map(|i| i + 2))?;
+    let headers = &text[..header_end.min(text.len())];
+    if !headers.to_ascii_lowercase().contains("multipart/signed")
+        || !headers.to_ascii_lowercase().contains("application/pgp-signature")
+    {
+        return None;
+    }
+    // Extract boundary from the Content-Type header (may be folded over lines).
+    let lower = headers.to_ascii_lowercase();
+    let marker = "boundary=";
+    let at = lower.find(marker)? + marker.len();
+    let rest = &headers[at..];
+    let boundary =
+        rest.trim_start_matches(|c: char| c == '"' || c.is_whitespace()).split(['"', ';', '\r', '\n', ' ']).next()?;
+    if boundary.is_empty() {
+        return None;
+    }
+    let delim = format!("--{boundary}");
+    let body = &raw[header_end..];
+    let first = find(body, delim.as_bytes())?;
+    // First part's header ends at the first blank line after the boundary.
+    let part_rel =
+        find(&body[first..], b"\r\n\r\n").map(|i| i + 4).or_else(|| find(&body[first..], b"\n\n").map(|i| i + 2))?;
+    let part_start = first + part_rel;
+    // Next boundary line: its preceding CRLF is a delimiter, not part content.
+    let next_marker = format!("\r\n--{boundary}");
+    let next = find(&body[part_start..], next_marker.as_bytes())
+        .map(|i| part_start + i)
+        .or_else(|| find(&body[part_start..], format!("\n--{boundary}").as_bytes()).map(|i| part_start + i))?;
+    let mut signed = body[part_start..next].to_vec();
+    if signed.ends_with(b"\r\n") {
+        signed.truncate(signed.len() - 2);
+    } else if signed.ends_with(b"\n") {
+        signed.truncate(signed.len() - 1);
+    }
+    // Detached signature armor after the second boundary.
+    let tail = String::from_utf8_lossy(&body[next..]);
+    let begin = tail.find("-----BEGIN PGP SIGNATURE-----")?;
+    let end_marker = "-----END PGP SIGNATURE-----";
+    let end = tail.find(end_marker)? + end_marker.len();
+    Some((signed, tail[begin..end].to_string()))
+}
+
+/// Verify a PGP/MIME signed message against imported keys.
+pub fn verify_mime(raw: &[u8], keys: &[PgpKey]) -> PgpVerifyStatus {
+    use pgp::composed::StandaloneSignature;
+    let Some((signed, armor)) = mime_signed_payload(raw) else {
+        return PgpVerifyStatus::NotSigned;
+    };
+    let Ok((sig, _)) = StandaloneSignature::from_armor_single(std::io::Cursor::new(armor.as_bytes())) else {
+        return PgpVerifyStatus::Invalid;
+    };
+    for key in keys {
+        let mut cursor = std::io::Cursor::new(key.armor.as_bytes());
+        let Ok((public, _)) = SignedPublicKey::from_armor_single(&mut cursor) else { continue };
+        let ok = sig.verify(&public, &signed).is_ok()
+            || public.public_subkeys.iter().any(|sub| sig.verify(&sub.key, &signed).is_ok());
+        if ok {
+            return PgpVerifyStatus::Verified { fingerprint: key.fingerprint.clone(), user_id: key.user_id.clone() };
+        }
+    }
+    PgpVerifyStatus::UnknownKey { fingerprint: None }
+}
+
 /// Get the original, still-armored body from raw RFC 5322 bytes. Verification
 /// needs the signature block that `mime::parse` strips for display.
 pub fn armored_from_raw(raw: &[u8]) -> Option<String> {

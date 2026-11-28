@@ -457,6 +457,7 @@
     "updateFound": "Version {{version}} ist bereit",
     "updateCheckFailed": "Konnte nicht nach Updates suchen. {{reason}}",
     "security": "Sicherheit",
+    "pgp": "PGP-Schlüssel",
     "swipeRight": "Nach rechts wischen",
     "swipeLeft": "Nach links wischen",
     "swipeDesc": "Was passiert, wenn du eine Mail in der Liste zur Seite wischst.",

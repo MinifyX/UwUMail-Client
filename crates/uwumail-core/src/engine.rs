@@ -1520,10 +1520,14 @@ impl Engine {
             .pop()
             .ok_or_else(|| Error::not_found("This message no longer exists."))?;
         let raw = self.inner.raw_message(&location).await?;
+        let keys = self.inner.store.pgp_keys()?;
+        // PGP/MIME (multipart/signed) vs inline cleartext armor.
+        if crate::pgp::mime_signed_payload(&raw).is_some() {
+            return Ok(crate::pgp::verify_mime(&raw, &keys));
+        }
         let Some(armored) = crate::pgp::armored_from_raw(&raw) else {
             return Ok(crate::pgp::PgpVerifyStatus::NotSigned);
         };
-        let keys = self.inner.store.pgp_keys()?;
         Ok(crate::pgp::verify(&armored, &keys))
     }
 

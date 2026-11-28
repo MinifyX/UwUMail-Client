@@ -131,9 +131,15 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
     // Inline PGP (-----BEGIN PGP SIGNED MESSAGE-----): keep only the signed
     // text as the visible body, so the reader sees the announcement and not
     // the base64 armor. Verification is a separate, explicit engine action.
-    let pgp_signed = text.as_deref().is_some_and(|t| t.contains("-----BEGIN PGP SIGNED MESSAGE-----"));
-    if pgp_signed {
-        text = text.as_deref().and_then(|t| crate::pgp::cleartext_payload(t).map(|(clean, _)| clean));
+    // Two kinds of signature: inline cleartext armor in the body, or PGP/MIME
+    // (multipart/signed with application/pgp-signature). The latter keeps its
+    // body clean, only the badge is added.
+    let pgp_mime = raw.windows(15).any(|w| w.eq_ignore_ascii_case(b"multipart/signed"))
+        && raw.windows(22).any(|w| w.eq_ignore_ascii_case(b"application/pgp-signature"));
+    let pgp_signed = pgp_mime || text.as_deref().is_some_and(|t| t.contains("-----BEGIN PGP SIGNED MESSAGE-----"));
+    // Only inline armor needs stripping; PGP/MIME's body is already clean.
+    if let Some(clean) = text.as_deref().and_then(|t| crate::pgp::cleartext_payload(t).map(|(c, _)| c)) {
+        text = Some(clean);
     }
     let raw_html = message.body_html(0).map(|h| h.into_owned()).filter(|_| body_present);
     // mail-parser synthesizes HTML from text parts; only keep real HTML.

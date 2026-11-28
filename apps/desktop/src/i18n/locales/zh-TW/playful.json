@@ -157,7 +157,8 @@
     "syncRefused": "伺服器不接受 {{count}} 項設定，這些設定會保留在此裝置上。",
     "signatureLocalOnly": "僅限此裝置",
     "signatureLocalOnlyDesc": "此簽名只保留在此裝置上：內容過大無法同步（最多 256 KB），或包含只能在此裝置上運作的圖片。",
-    "fontDesc": "Nyu 最喜歡 UwU Sans，但由您決定。適用於整個應用程式及郵件，且僅限此裝置。"
+    "fontDesc": "Nyu 最喜歡 UwU Sans，但由您決定。適用於整個應用程式及郵件，且僅限此裝置。",
+    "pgp": "PGP 公鑰"
   },
   "attachment": {
     "loading": "正在解開附件…",
