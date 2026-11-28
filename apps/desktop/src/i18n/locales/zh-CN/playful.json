@@ -49,7 +49,8 @@
     "hideAddresses": "把地址收起来",
     "replyTo": "回复至",
     "copyAddress": "复制 {{email}}",
-    "addressCopied": "地址已收好 ✧"
+    "addressCopied": "地址已收好 ✧",
+    "reportAbuse": "举报垃圾邮件"
   },
   "compose": {
     "placeholder": "写点好听的吧 ✿",
@@ -79,7 +80,10 @@
     "deletedForever_one": "永远消失啦 (｡•́︿•̀｡)",
     "deletedForever_other": "{{count}} 封邮件永远消失啦 (｡•́︿•̀｡)",
     "draftGone": "这里已经没有草稿啦，Nyu 找遍了 (・_・;)",
-    "scheduled": "Nyu 会在 {{time}} 把它送出去 ✉︎"
+    "scheduled": "Nyu 会在 {{time}} 把它送出去 ✉︎",
+    "reportAbusePage": "举报页面已在浏览器中打开",
+    "reportAbuseCopied": "举报邮箱地址已复制",
+    "reportAbuseSpammed": "已标记为垃圾邮件"
   },
   "status": {
     "syncing": "正在获取最新邮件…",
@@ -223,6 +227,15 @@
     "mailToFallback": "如果直接取消不成功，Nyu 会从你这里向 {{address}} 发一封邮件。",
     "failedTitle": "嗯，没有成功 (・_・;)",
     "tryMail": "Nyu 也可以改用邮件帮你取消订阅，为此会从你这里向 {{address}} 发一封邮件。"
+  },
+  "reportAbuse": {
+    "title": "举报垃圾邮件",
+    "body": "这封邮件提供了举报地址。这些信息来自邮件本身，请在继续前核对目标地址。",
+    "page": "举报页面（来自邮件）",
+    "address": "举报邮箱（来自邮件）",
+    "open": "打开举报页面",
+    "copy": "复制地址",
+    "markSpam": "同时标记为垃圾邮件并移到垃圾邮件文件夹"
   },
   "deleteForever": {
     "title_one": "要永远和这封邮件说再见吗？(｡•́︿•̀｡)",

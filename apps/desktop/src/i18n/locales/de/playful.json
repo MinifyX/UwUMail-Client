@@ -49,7 +49,8 @@
     "hideAddresses": "Adressen einklappen",
     "replyTo": "Antwort an",
     "copyAddress": "{{email}} kopieren",
-    "addressCopied": "Adresse eingesteckt ✧"
+    "addressCopied": "Adresse eingesteckt ✧",
+    "reportAbuse": "Missbrauch melden"
   },
   "compose": {
     "placeholder": "Schreib was Liebes ✿",
@@ -79,7 +80,10 @@
     "deletedForever_one": "Für immer weg (｡•́︿•̀｡)",
     "deletedForever_other": "{{count}} Mails für immer weg (｡•́︿•̀｡)",
     "draftGone": "Hier ist kein Entwurf mehr, Nyu hat überall nachgeschaut (・_・;)",
-    "scheduled": "Nyu bringt sie {{time}} vorbei ✉︎"
+    "scheduled": "Nyu bringt sie {{time}} vorbei ✉︎",
+    "reportAbusePage": "Die Melde-Seite ist im Browser geöffnet",
+    "reportAbuseCopied": "Beschwerdeadresse kopiert",
+    "reportAbuseSpammed": "Als Spam markiert"
   },
   "status": {
     "syncing": "Hole frische Mails…",
@@ -223,6 +227,15 @@
     "mailToFallback": "Klappt das nicht direkt, schickt Nyu eine Mail von dir an {{address}}.",
     "failedTitle": "Hm, das hat nicht geklappt (・_・;)",
     "tryMail": "Nyu kann dich stattdessen per Mail abmelden. Dafür schickt Nyu eine Mail von dir an {{address}}."
+  },
+  "reportAbuse": {
+    "title": "Missbrauch melden",
+    "body": "Diese Mail nennt eine Stelle für Missbrauchsmeldungen. Beide Angaben stammen aus der Nachricht selbst – prüfe das Ziel, bevor du fortfährst.",
+    "page": "Melde-Seite (aus der Mail)",
+    "address": "Beschwerdeadresse (aus der Mail)",
+    "open": "Melde-Seite öffnen",
+    "copy": "Adresse kopieren",
+    "markSpam": "Auch als Spam markieren und in den Spam-Ordner verschieben"
   },
   "deleteForever": {
     "title_one": "Diese Mail für immer löschen? (｡•́︿•̀｡)",

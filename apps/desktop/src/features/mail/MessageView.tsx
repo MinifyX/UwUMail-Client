@@ -28,6 +28,7 @@ import { startNewContact, useContactsUi } from "../contacts/state";
 import { useContactsAvailable, useLoadedContacts } from "../contacts/useContactsData";
 import { openDraftMessage } from "../compose/openDraft";
 import { useInlineImages } from "./useInlineImages";
+import { useReportAbuse } from "./ReportAbuse";
 import { nativeMobile } from "@/backend/mobile";
 import { backend } from "@/backend/backend";
 import { blockSender } from "./selection";
@@ -458,12 +459,20 @@ function HeadersDialog({ messageId, open, onClose }: { messageId: string; open: 
     // the async load below then fills in the result.
     void Promise.resolve().then(() => {
       if (!alive) return;
-      setHeaders(null); setError(null);
-      backend().messageHeaders(messageId)
-        .then((h) => { if (alive) setHeaders(h); })
-        .catch((e: unknown) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
+      setHeaders(null);
+      setError(null);
+      backend()
+        .messageHeaders(messageId)
+        .then((h) => {
+          if (alive) setHeaders(h);
+        })
+        .catch((e: unknown) => {
+          if (alive) setError(e instanceof Error ? e.message : String(e));
+        });
     });
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [open, messageId]);
   const copy = () => {
     if (headers) void navigator.clipboard.writeText(headers).then(() => toast(t("reader.headersCopied"), "success"));
@@ -475,9 +484,13 @@ function HeadersDialog({ messageId, open, onClose }: { messageId: string; open: 
         {!error && !headers && <p className="text-muted">{t("reader.headersLoading")}</p>}
         {headers && (
           <>
-            <pre className="selectable max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded bg-surface p-3 font-mono text-[12px] leading-relaxed">{headers}</pre>
+            <pre className="selectable max-h-[60vh] overflow-auto rounded bg-surface p-3 font-mono text-[12px] leading-relaxed break-all whitespace-pre-wrap">
+              {headers}
+            </pre>
             <div className="flex justify-end">
-              <Button variant="ghost" icon={ICONS.copy} onClick={copy}>{t("reader.copyHeaders")}</Button>
+              <Button variant="ghost" icon={ICONS.copy} onClick={copy}>
+                {t("reader.copyHeaders")}
+              </Button>
             </div>
           </>
         )}
@@ -487,7 +500,17 @@ function HeadersDialog({ messageId, open, onClose }: { messageId: string; open: 
 }
 
 /** Less common actions for one message. */
-function MessageMenu({ message, accounts, onPrint, onViewHeaders }: { message: Message; accounts: Account[]; onPrint: () => void; onViewHeaders: () => void }) {
+function MessageMenu({
+  message,
+  accounts,
+  onPrint,
+  onViewHeaders,
+}: {
+  message: Message;
+  accounts: Account[];
+  onPrint: () => void;
+  onViewHeaders: () => void;
+}) {
   const { t } = useT();
   const client = useQueryClient();
   const email = message.from.email;
@@ -500,6 +523,7 @@ function MessageMenu({ message, accounts, onPrint, onViewHeaders }: { message: M
   const refresh = () => client.invalidateQueries();
   // Every mailbox here is the person's own: the assistant may read all of it.
   const assistItems = useMessageAssistItems(message, true, own);
+  const { reportItem, dialog: reportDialog } = useReportAbuse(message);
   const block = (entry: string) => {
     useUi.getState().selectThread(null);
     void blockSender(entry, message.accountId, [message.id], refresh);
@@ -508,6 +532,7 @@ function MessageMenu({ message, accounts, onPrint, onViewHeaders }: { message: M
     // No phone web view prints; the system share sheet will do that later.
     ...(nativeMobile ? [] : [{ icon: ICONS.print, label: t("reader.print"), onSelect: onPrint }]),
     { icon: ICONS.copy, label: t("reader.viewHeaders"), onSelect: onViewHeaders },
+    ...(!own && reportItem ? [reportItem] : []),
     {
       icon: ICONS.download,
       label: t("reader.saveMessage"),
@@ -554,21 +579,24 @@ function MessageMenu({ message, accounts, onPrint, onViewHeaders }: { message: M
     ...assistItems,
   ];
   return (
-    <Menu
-      align="end"
-      items={items}
-      trigger={(menu) => (
-        <IconButton
-          icon={ICONS.more}
-          size="sm"
-          label={t("reader.more")}
-          onClick={menu.toggle}
-          aria-haspopup={menu["aria-haspopup"]}
-          aria-expanded={menu["aria-expanded"]}
-          aria-controls={menu["aria-controls"]}
-        />
-      )}
-    />
+    <>
+      <Menu
+        align="end"
+        items={items}
+        trigger={(menu) => (
+          <IconButton
+            icon={ICONS.more}
+            size="sm"
+            label={t("reader.more")}
+            onClick={menu.toggle}
+            aria-haspopup={menu["aria-haspopup"]}
+            aria-expanded={menu["aria-expanded"]}
+            aria-controls={menu["aria-controls"]}
+          />
+        )}
+      />
+      {reportDialog}
+    </>
   );
 }
 

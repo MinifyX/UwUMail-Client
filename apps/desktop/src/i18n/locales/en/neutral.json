@@ -133,6 +133,7 @@
     "blockSender": "Block {{email}}",
     "blockDomain": "Block everything from @{{domain}}",
     "unsubscribe": "Unsubscribe",
+    "reportAbuse": "Report abuse",
     "print": "Print",
     "saveMessage": "Save as file (.eml)",
     "date": "Date",
@@ -250,7 +251,10 @@
     "deletedForever_one": "{{count}} message deleted forever",
     "deletedForever_other": "{{count}} messages deleted forever",
     "scheduled": "Sends {{time}}",
-    "sendFailedHeld": "The mail couldn't be sent: {{reason}} It's waiting under Scheduled."
+    "sendFailedHeld": "The mail couldn't be sent: {{reason}} It's waiting under Scheduled.",
+    "reportAbusePage": "The abuse report page is open in your browser",
+    "reportAbuseCopied": "Complaint address copied",
+    "reportAbuseSpammed": "Marked as spam"
   },
   "status": {
     "syncing": "Checking for mail",
@@ -863,6 +867,15 @@
     "noOtherWay": "This mail offers no other way. Try again later.",
     "sendMail": "Send the mail",
     "openPage": "Open the page"
+  },
+  "reportAbuse": {
+    "title": "Report abuse",
+    "body": "This mail names where to send abuse complaints. Both come from the message itself, so check the destination before you continue.",
+    "page": "Report page (from the mail)",
+    "address": "Complaint address (from the mail)",
+    "open": "Open report page",
+    "copy": "Copy address",
+    "markSpam": "Also mark as spam and move to the spam folder"
   },
   "deleteForever": {
     "title_one": "Delete this message forever?",

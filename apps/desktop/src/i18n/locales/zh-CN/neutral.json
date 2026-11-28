@@ -133,6 +133,7 @@
     "blockSender": "屏蔽 {{email}}",
     "blockDomain": "屏蔽来自 @{{domain}} 的所有邮件",
     "unsubscribe": "取消订阅",
+    "reportAbuse": "举报垃圾邮件",
     "print": "打印",
     "saveMessage": "另存为文件 (.eml)",
     "date": "日期",
@@ -250,7 +251,10 @@
     "deletedForever_one": "已永久删除 {{count}} 封邮件",
     "deletedForever_other": "已永久删除 {{count}} 封邮件",
     "scheduled": "将于 {{time}} 发送",
-    "sendFailedHeld": "无法发送邮件：{{reason}} 邮件已保存在「定时发送」下。"
+    "sendFailedHeld": "无法发送邮件：{{reason}} 邮件已保存在「定时发送」下。",
+    "reportAbusePage": "举报页面已在浏览器中打开",
+    "reportAbuseCopied": "举报邮箱地址已复制",
+    "reportAbuseSpammed": "已标记为垃圾邮件"
   },
   "status": {
     "syncing": "正在检查邮件",
@@ -863,6 +867,15 @@
     "noOtherWay": "此邮件没有其他方式。请稍后再试。",
     "sendMail": "发送邮件",
     "openPage": "打开页面"
+  },
+  "reportAbuse": {
+    "title": "举报垃圾邮件",
+    "body": "这封邮件提供了举报地址。这些信息来自邮件本身，请在继续前核对目标地址。",
+    "page": "举报页面（来自邮件）",
+    "address": "举报邮箱（来自邮件）",
+    "open": "打开举报页面",
+    "copy": "复制地址",
+    "markSpam": "同时标记为垃圾邮件并移到垃圾邮件文件夹"
   },
   "deleteForever": {
     "title_one": "要永久删除此邮件吗？",

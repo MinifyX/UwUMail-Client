@@ -49,7 +49,8 @@
     "hideAddresses": "Fold addresses away",
     "replyTo": "Reply to",
     "copyAddress": "Copy {{email}}",
-    "addressCopied": "Address tucked away ✧"
+    "addressCopied": "Address tucked away ✧",
+    "reportAbuse": "Report abuse"
   },
   "compose": {
     "placeholder": "Write something nice ✿",
@@ -79,7 +80,10 @@
     "deletedForever_one": "Gone forever (｡•́︿•̀｡)",
     "deletedForever_other": "{{count}} messages gone forever (｡•́︿•̀｡)",
     "draftGone": "No draft left here, Nyu looked everywhere (・_・;)",
-    "scheduled": "Nyu will deliver it {{time}} ✉︎"
+    "scheduled": "Nyu will deliver it {{time}} ✉︎",
+    "reportAbusePage": "The abuse report page is open in your browser",
+    "reportAbuseCopied": "Complaint address copied",
+    "reportAbuseSpammed": "Marked as spam"
   },
   "status": {
     "syncing": "Fetching fresh mail…",
@@ -223,6 +227,15 @@
     "mailToFallback": "If that doesn't work directly, Nyu sends a mail from you to {{address}}.",
     "failedTitle": "Hmm, that didn't work (・_・;)",
     "tryMail": "Nyu can unsubscribe you by mail instead and sends a mail from you to {{address}} for that."
+  },
+  "reportAbuse": {
+    "title": "Report abuse",
+    "body": "This mail names where to send abuse complaints. Both come from the message itself, so check the destination before you continue.",
+    "page": "Report page (from the mail)",
+    "address": "Complaint address (from the mail)",
+    "open": "Open report page",
+    "copy": "Copy address",
+    "markSpam": "Also mark as spam and move to the spam folder"
   },
   "deleteForever": {
     "title_one": "Say goodbye to this one forever? (｡•́︿•̀｡)",

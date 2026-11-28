@@ -413,6 +413,20 @@ pub struct Unsubscribe {
     pub mailto: Option<String>,
 }
 
+/// How a sender's ESP asks for abuse complaints (X-Report-Abuse, X-Complaints-To).
+/// Both come from the mail itself, so the UI always shows the exact destination
+/// before anything is sent or opened.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportAbuse {
+    /// HTTPS complaint page from X-Report-Abuse, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Complaint mailbox from X-Complaints-To, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+}
+
 /// What unsubscribing did.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
@@ -464,6 +478,9 @@ pub struct Message {
     pub attachments: Vec<Attachment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unsubscribe: Option<Unsubscribe>,
+    /// Where to report abuse, from X-Report-Abuse / X-Complaints-To.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report_abuse: Option<ReportAbuse>,
     /// Its own keywords (lower case, no `$` system ones), e.g. assistant labels.
     #[serde(default)]
     pub keywords: Vec<String>,

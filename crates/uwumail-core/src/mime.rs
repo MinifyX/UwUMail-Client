@@ -38,6 +38,8 @@ pub struct ParsedMessage {
     pub attachments: Vec<ParsedAttachment>,
     pub has_body: bool,
     pub unsubscribe: Option<crate::model::Unsubscribe>,
+    /// Where to report abuse (X-Report-Abuse / X-Complaints-To).
+    pub report_abuse: Option<crate::model::ReportAbuse>,
     /// The headers labels without a model read (`uwumail_labels::HEADERS`: List-Id, Precedence, …),
     /// lower-case name and unfolded value.
     pub label_headers: Vec<(String, String)>,
@@ -178,6 +180,10 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
         unsubscribe: message
             .header_raw("List-Unsubscribe")
             .and_then(|value| unsubscribe_options(value, message.header_raw("List-Unsubscribe-Post"))),
+        report_abuse: report_abuse_options(
+            message.header_raw("X-Report-Abuse"),
+            message.header_raw("X-Complaints-To"),
+        ),
         label_headers: message
             .headers_raw()
             .filter(|(name, _)| uwumail_labels::HEADERS.iter().any(|known| known.eq_ignore_ascii_case(name)))
@@ -217,6 +223,28 @@ pub fn unsubscribe_options(value: &str, post: Option<&str>) -> Option<crate::mod
     let one_click = post.is_some_and(|post| post.to_ascii_lowercase().contains("list-unsubscribe=one-click"))
         && url.as_deref().is_some_and(|url| url.starts_with("https://"));
     (url.is_some() || mailto.is_some()).then_some(crate::model::Unsubscribe { one_click, url, mailto })
+}
+
+/// Complaint destinations from X-Report-Abuse (HTTPS) and X-Complaints-To (single address).
+/// The values are kept verbatim for the confirmation dialog; only a syntactically valid
+/// HTTPS URL / single address is accepted, so a malicious header can't turn the button
+/// into a request to an arbitrary scheme or to several recipients at once.
+pub fn report_abuse_options(url: Option<&str>, address: Option<&str>) -> Option<crate::model::ReportAbuse> {
+    let url = url.and_then(|value| {
+        let value: String = value.split_whitespace().collect();
+        let parsed = url::Url::parse(&value).ok()?;
+        (parsed.scheme() == "https").then_some(parsed.to_string())
+    });
+    let address = address.and_then(|value| {
+        let value = value.trim();
+        // Exactly one address, no display name, separators or control characters.
+        (!value.is_empty()
+            && !value.contains([',', ';', '<', '>', '\n', '\r'])
+            && value.split('@').count() == 2
+            && value.bytes().all(|b| !b.is_ascii_control()))
+        .then(|| value.to_string())
+    });
+    (url.is_some() || address.is_some()).then_some(crate::model::ReportAbuse { url, address })
 }
 
 /// Plain text as simple HTML paragraphs, for editing a text-only draft.
@@ -486,6 +514,25 @@ mod tests {
         let page = unsubscribe_options("<http://news.example/u>", Some("List-Unsubscribe=One-Click")).unwrap();
         assert!(!page.one_click, "one click only over https");
         assert!(unsubscribe_options("<javascript:alert(1)>", None).is_none());
+    }
+
+    #[test]
+    fn reads_complaint_destinations_but_not_unsafe_ones() {
+        let both = report_abuse_options(
+            Some(" https://www.postshiba.com/abuse/abc?m=1\r\n"),
+            Some("abuse@postshiba.com"),
+        )
+        .unwrap();
+        assert_eq!(both.url.as_deref(), Some("https://www.postshiba.com/abuse/abc?m=1"));
+        assert_eq!(both.address.as_deref(), Some("abuse@postshiba.com"));
+
+        // No valid destination at all means no Report Abuse button.
+        assert!(report_abuse_options(Some("http://esp.example/abuse"), None).is_none());
+        assert!(report_abuse_options(Some("javascript:alert(1)"), None).is_none());
+        // Several recipients or a display name can't be used as a single complaint address.
+        assert!(report_abuse_options(None, Some("a@b.com,c@d.com")).is_none());
+        assert!(report_abuse_options(None, Some("Name <a@b.com>")).is_none());
+        assert!(report_abuse_options(None, None).is_none());
     }
 
     const SAMPLE: &str = "From: Leni Wanders <leni@wanders.example>\r\n\

@@ -133,6 +133,7 @@
     "blockSender": "封锁 {{email}}",
     "blockDomain": "封锁来自 @{{domain}} 的所有邮件",
     "unsubscribe": "取消订阅",
+    "reportAbuse": "檢舉垃圾郵件",
     "print": "打印",
     "saveMessage": "另存为文件 (.eml)",
     "date": "日期",
@@ -250,7 +251,10 @@
     "deletedForever_one": "已永久删除 {{count}} 封邮件",
     "deletedForever_other": "已永久删除 {{count}} 封邮件",
     "scheduled": "将于 {{time}} 发送",
-    "sendFailedHeld": "无法发送邮件：{{reason}} 邮件已保存在「定时发送」下。"
+    "sendFailedHeld": "无法发送邮件：{{reason}} 邮件已保存在「定时发送」下。",
+    "reportAbusePage": "檢舉頁面已在瀏覽器中開啟",
+    "reportAbuseCopied": "檢舉信箱位址已複製",
+    "reportAbuseSpammed": "已標記為垃圾郵件"
   },
   "status": {
     "syncing": "正在检查邮件",
@@ -863,6 +867,15 @@
     "noOtherWay": "此郵件沒有其他方式。請稍後再試。",
     "sendMail": "寄出郵件",
     "openPage": "開啟頁面"
+  },
+  "reportAbuse": {
+    "title": "檢舉垃圾郵件",
+    "body": "這封郵件提供了檢舉位址。這些資訊來自郵件本身，請在繼續前核對目標位址。",
+    "page": "檢舉頁面（來自郵件）",
+    "address": "檢舉信箱（來自郵件）",
+    "open": "開啟檢舉頁面",
+    "copy": "複製位址",
+    "markSpam": "同時標記為垃圾郵件並移到垃圾郵件資料夾"
   },
   "deleteForever": {
     "title_one": "要永久刪除這封郵件嗎？",

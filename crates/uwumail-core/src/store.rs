@@ -175,6 +175,10 @@ ALTER TABLE messages ADD COLUMN unsubscribe_json TEXT;
 ALTER TABLE messages ADD COLUMN bcc_json TEXT NOT NULL DEFAULT '[]';
 "#,
     r#"
+-- Where to report abuse (X-Report-Abuse / X-Complaints-To), as JSON.
+ALTER TABLE messages ADD COLUMN report_abuse_json TEXT;
+"#,
+    r#"
 -- Calendars over CalDAV: an address typed in by hand, and what CalDAV itself can't keep
 -- (hidden calendars, the default one). Events themselves stay on the server.
 ALTER TABLE accounts ADD COLUMN caldav_url TEXT;
@@ -1054,9 +1058,9 @@ impl Store {
             "INSERT INTO messages (id, account_id, folder_id, uid, message_id, in_reply_to, refs, thread_id, subject,
                 from_json, to_json, cc_json, reply_to_json, date, seen, flagged, answered, draft, snippet, size,
                 has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id, unsubscribe_json, bcc_json,
-                label_headers, calendar, from_trusted)
+                label_headers, calendar, from_trusted, report_abuse_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
-                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32)",
+                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33)",
             params![
                 id,
                 account_id,
@@ -1090,6 +1094,7 @@ impl Store {
                 json(&parsed.label_headers)?,
                 parsed.calendar,
                 parsed.from_trusted,
+                parsed.report_abuse.as_ref().map(json).transpose()?,
             ],
         )?;
 
@@ -1218,7 +1223,7 @@ impl Store {
         tx.execute(
             "UPDATE messages SET has_body = 1, body_html = ?1, body_text = ?2, has_remote = ?3, snippet = ?4,
                 attachments_json = ?5, unsubscribe_json = COALESCE(?7, unsubscribe_json), label_headers = ?8,
-                calendar = ?9, from_trusted = ?10 WHERE id = ?6",
+                calendar = ?9, from_trusted = ?10, report_abuse_json = COALESCE(?11, report_abuse_json) WHERE id = ?6",
             params![
                 parsed.html,
                 parsed.text,
@@ -1229,7 +1234,8 @@ impl Store {
                 parsed.unsubscribe.as_ref().map(json).transpose()?,
                 json(&parsed.label_headers)?,
                 parsed.calendar,
-                parsed.from_trusted
+                parsed.from_trusted,
+                parsed.report_abuse.as_ref().map(json).transpose()?,
             ],
         )?;
         let from: Address = serde_json::from_str(&from_json)?;
@@ -1801,7 +1807,8 @@ impl Store {
     const MESSAGE_COLUMNS: &'static str =
         "m.id, m.thread_id, m.account_id, m.folder_id, m.from_json, m.to_json, m.cc_json,
         m.reply_to_json, m.subject, m.date, m.seen, m.flagged, m.answered, m.draft, m.snippet, m.body_html,
-        m.body_text, m.has_remote, m.attachments_json, m.message_id, m.unsubscribe_json, m.bcc_json, m.keywords";
+        m.body_text, m.has_remote, m.attachments_json, m.message_id, m.unsubscribe_json, m.bcc_json, m.keywords,
+        m.report_abuse_json";
 
     fn message_from_row(row: &Row<'_>) -> rusqlite::Result<Message> {
         Ok(Message {
@@ -1830,6 +1837,7 @@ impl Store {
             attachments: from_json(&row.get::<_, String>(18)?),
             unsubscribe: row.get::<_, Option<String>>(20)?.and_then(|text| serde_json::from_str(&text).ok()),
             keywords: assist::keywords_list(&row.get::<_, String>(22)?),
+            report_abuse: row.get::<_, Option<String>>(23)?.and_then(|text| serde_json::from_str(&text).ok()),
         })
     }
 

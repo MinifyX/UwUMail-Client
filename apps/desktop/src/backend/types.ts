@@ -206,6 +206,14 @@ export interface Unsubscribe {
   mailto?: string;
 }
 
+/** Where a sender's ESP asks for abuse complaints (X-Report-Abuse / X-Complaints-To). */
+export interface ReportAbuse {
+  /** HTTPS complaint page from X-Report-Abuse. */
+  url?: string;
+  /** Complaint mailbox from X-Complaints-To. */
+  address?: string;
+}
+
 /** The way left besides the one click: a mail to the header's address, or the sender's page. */
 export type UnsubscribeFallback = "mail" | "page" | null;
 
@@ -236,6 +244,8 @@ export interface Message {
   hasRemoteContent: boolean;
   attachments: Attachment[];
   unsubscribe?: Unsubscribe;
+  /** Where to report abuse, from X-Report-Abuse / X-Complaints-To. */
+  reportAbuse?: ReportAbuse;
   /** Its own keywords (lower case, without the `$` system ones), e.g. AI assistant labels. */
   keywords?: string[];
 }

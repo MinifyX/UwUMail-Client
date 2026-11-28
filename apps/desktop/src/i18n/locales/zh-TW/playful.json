@@ -49,7 +49,8 @@
     "hideAddresses": "收起地址",
     "replyTo": "回覆至",
     "copyAddress": "複製 {{email}}",
-    "addressCopied": "地址已收起 ✧"
+    "addressCopied": "地址已收起 ✧",
+    "reportAbuse": "檢舉垃圾郵件"
   },
   "compose": {
     "placeholder": "寫點什麼吧 ✿",
@@ -79,7 +80,10 @@
     "deletedForever_one": "已永久刪除 (｡•́︿•̀｡)",
     "deletedForever_other": "{{count}} 封郵件已永久刪除 (｡•́︿•̀｡)",
     "draftGone": "這裡已沒有草稿了，Nyu 找遍了 (・_・;)",
-    "scheduled": "Nyu 會在 {{time}} 寄出 ✉︎"
+    "scheduled": "Nyu 會在 {{time}} 寄出 ✉︎",
+    "reportAbusePage": "檢舉頁面已在瀏覽器中開啟",
+    "reportAbuseCopied": "檢舉信箱位址已複製",
+    "reportAbuseSpammed": "已標記為垃圾郵件"
   },
   "status": {
     "syncing": "正在擷取最新郵件…",
@@ -223,6 +227,15 @@
     "mailToFallback": "如果直接退訂無效，Nyu 會以您的名義寄一封郵件給 {{address}}。",
     "failedTitle": "嗯，這次沒有成功 (・_・;)",
     "tryMail": "Nyu 可以改用郵件為您退訂，為此會以您的名義寄一封郵件給 {{address}}。"
+  },
+  "reportAbuse": {
+    "title": "檢舉垃圾郵件",
+    "body": "這封郵件提供了檢舉位址。這些資訊來自郵件本身，請在繼續前核對目標位址。",
+    "page": "檢舉頁面（來自郵件）",
+    "address": "檢舉信箱（來自郵件）",
+    "open": "開啟檢舉頁面",
+    "copy": "複製位址",
+    "markSpam": "同時標記為垃圾郵件並移到垃圾郵件資料夾"
   },
   "deleteForever": {
     "title_one": "要永久與這封郵件道別嗎？(｡•́︿•̀｡)",
