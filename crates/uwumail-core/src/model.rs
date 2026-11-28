@@ -481,6 +481,9 @@ pub struct Message {
     /// Where to report abuse, from X-Report-Abuse / X-Complaints-To.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub report_abuse: Option<ReportAbuse>,
+    /// Whether the body carried an inline PGP cleartext signature.
+    #[serde(default)]
+    pub pgp_signed: bool,
     /// Its own keywords (lower case, no `$` system ones), e.g. assistant labels.
     #[serde(default)]
     pub keywords: Vec<String>,

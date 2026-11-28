@@ -868,6 +868,28 @@
     "sendMail": "Send the mail",
     "openPage": "Open the page"
   },
+  "pgp": {
+    "title": "PGP signature",
+    "body": "This mail carried an inline PGP signature. Verification uses only keys you imported on this device.",
+    "signer": "Signed by",
+    "checking": "Checking signature",
+    "error": "Check failed",
+    "verified": "Signature verified",
+    "unknown": "Unknown key",
+    "invalid": "Invalid signature",
+    "none": "Not signed",
+    "unknownHint": "The signature is valid but the key is not in your keyring. Fingerprint:",
+    "invalidHint": "The signature does not match the message. The content may have been altered."
+  },
+  "pgpSettings": {
+    "title": "PGP public keys",
+    "hint": "Import public keys to verify inline PGP signatures (e.g. Debian security notices). Keys stay on this device; nothing is fetched automatically.",
+    "import": "Import key (.asc)",
+    "imported": "Imported {{id}} ({{name}})",
+    "importFailed": "Import failed: {{reason}}",
+    "remove": "Remove key",
+    "noUserId": "(no user id)"
+  },
   "reportAbuse": {
     "title": "Report abuse",
     "body": "This mail names where to send abuse complaints. Both come from the message itself, so check the destination before you continue.",

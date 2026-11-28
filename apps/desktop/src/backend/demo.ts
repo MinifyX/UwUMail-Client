@@ -103,9 +103,14 @@ import type {
   ThreadQuery,
   ThreadSummary,
   UnsubscribeOutcome,
+  PgpKey,
+  PgpVerifyStatus,
   UpdateInfo,
 } from "./types";
 import { matchesSearch, parseSearch } from "@/lib/searchQuery";
+
+/** Demo-only in-memory store for imported PGP keys. */
+const demoPgpKeys = new Map<string, PgpKey>();
 
 const OAUTH_DOMAINS: Record<string, "microsoft" | "google"> = {
   "gmail.com": "google",
@@ -1430,6 +1435,33 @@ export class DemoBackend implements Backend {
       if (other.from.email === message.from.email) delete other.unsubscribe;
     }
     return { kind: "done" };
+  }
+
+  async pgpImportKey(armor: string): Promise<PgpKey> {
+    await wait(80);
+    const fingerprint =
+      armor
+        .replace(/[^A-Fa-f0-9]/g, "")
+        .slice(0, 40)
+        .toUpperCase() || "DEMO";
+    const key: PgpKey = { fingerprint, userId: "Demo Key <demo@example.com>", armor };
+    demoPgpKeys.set(fingerprint, key);
+    return key;
+  }
+
+  async pgpKeys(): Promise<PgpKey[]> {
+    await wait(30);
+    return [...demoPgpKeys.values()];
+  }
+
+  async pgpRemoveKey(fingerprint: string): Promise<void> {
+    await wait(30);
+    demoPgpKeys.delete(fingerprint);
+  }
+
+  async pgpVerify(): Promise<PgpVerifyStatus> {
+    await wait(120);
+    return { status: "notSigned" };
   }
 
   async inboxMessagesFrom(email: string) {

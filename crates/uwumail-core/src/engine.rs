@@ -1492,6 +1492,41 @@ impl Engine {
         Ok(mime::forward_attachments(&raw))
     }
 
+    // ------------------------------------------------------------- OpenPGP keys
+
+    /// Import an armored public key after parsing it. Returns the stored key.
+    pub fn pgp_import_key(&self, armor: &str) -> Result<crate::pgp::PgpKey> {
+        let key = crate::pgp::parse_public_key(armor).map_err(Error::invalid)?;
+        self.inner.store.add_pgp_key(&key)?;
+        Ok(key)
+    }
+
+    /// The public keys the user has imported on this device.
+    pub fn pgp_keys(&self) -> Result<Vec<crate::pgp::PgpKey>> {
+        self.inner.store.pgp_keys()
+    }
+
+    pub fn pgp_remove_key(&self, fingerprint: &str) -> Result<()> {
+        self.inner.store.remove_pgp_key(fingerprint)
+    }
+
+    /// Verify a message's inline PGP signature against the imported keys.
+    /// The armor is read from the original raw message (the stored body is the cleaned text).
+    pub async fn pgp_verify(&self, message_id: &str) -> Result<crate::pgp::PgpVerifyStatus> {
+        let location = self
+            .inner
+            .store
+            .locations(&[message_id.to_string()])?
+            .pop()
+            .ok_or_else(|| Error::not_found("This message no longer exists."))?;
+        let raw = self.inner.raw_message(&location).await?;
+        let Some(armored) = crate::pgp::armored_from_raw(&raw) else {
+            return Ok(crate::pgp::PgpVerifyStatus::NotSigned);
+        };
+        let keys = self.inner.store.pgp_keys()?;
+        Ok(crate::pgp::verify(&armored, &keys))
+    }
+
     /// Sends after `delay_seconds`, unless [`Engine::cancel_send`] comes first. The message
     /// waits in the database, so closing the window or even UwUMail doesn't lose it.
     pub fn queue_send(&self, outgoing: OutgoingMessage, delay_seconds: u64) -> Result<QueuedSend> {

@@ -30,6 +30,7 @@ use uwumail_core::birthdays::scan::{BirthdayFeatures, BirthdayImportEntry, Birth
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
 use uwumail_core::pictures::{PictureLookup, SenderPicture};
+use uwumail_core::pgp::{PgpKey, PgpVerifyStatus};
 use uwumail_core::send_later::{ScheduledReceipt, ScheduledRef, ScheduledSend, SendLaterInfo};
 use uwumail_core::{Engine, Error};
 
@@ -541,6 +542,26 @@ async fn unsubscribe(
     // Without the flag, the one click is tried where the mail offers it; `false` is the second
     // answer after a refused one click, and asks for the mail or the page instead.
     engine.unsubscribe(&message_id, one_click.unwrap_or(true)).await
+}
+
+#[tauri::command]
+fn pgp_import_key(engine: State<'_, Engine>, armor: String) -> CommandResult<PgpKey> {
+    engine.pgp_import_key(&armor)
+}
+
+#[tauri::command]
+fn pgp_keys(engine: State<'_, Engine>) -> CommandResult<Vec<PgpKey>> {
+    engine.pgp_keys()
+}
+
+#[tauri::command]
+fn pgp_remove_key(engine: State<'_, Engine>, fingerprint: String) -> CommandResult<()> {
+    engine.pgp_remove_key(&fingerprint)
+}
+
+#[tauri::command]
+async fn pgp_verify(engine: State<'_, Engine>, message_id: String) -> CommandResult<PgpVerifyStatus> {
+    engine.pgp_verify(&message_id).await
 }
 
 #[tauri::command]
@@ -1510,6 +1531,10 @@ pub fn run() {
             mark_spam,
             blocked_senders,
             unsubscribe,
+            pgp_import_key,
+            pgp_keys,
+            pgp_remove_key,
+            pgp_verify,
             inbox_messages_from,
             block_sender,
             unblock_sender,

@@ -132,6 +132,8 @@ import type {
   ThreadPage,
   ThreadQuery,
   UnsubscribeOutcome,
+  PgpKey,
+  PgpVerifyStatus,
   UpdateInfo,
 } from "./types";
 import type { ImageProxy } from "@/lib/remoteImages";
@@ -760,6 +762,22 @@ export class TauriBackend implements Backend {
 
   unsubscribe(messageId: string, options?: { oneClick?: boolean }) {
     return call<UnsubscribeOutcome>("unsubscribe", { messageId, oneClick: options?.oneClick ?? true });
+  }
+
+  pgpImportKey(armor: string) {
+    return call<PgpKey>("pgp_import_key", { armor });
+  }
+
+  pgpKeys() {
+    return call<PgpKey[]>("pgp_keys");
+  }
+
+  pgpRemoveKey(fingerprint: string) {
+    return call<void>("pgp_remove_key", { fingerprint });
+  }
+
+  pgpVerify(messageId: string) {
+    return call<PgpVerifyStatus>("pgp_verify", { messageId });
   }
 
   inboxMessagesFrom(email: string) {

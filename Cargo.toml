@@ -44,6 +44,7 @@ quick-xml = { version = "0.42", features = ["serialize"] }
 # Tests only: a certificate for the local HTTPS stub servers (crates/uwumail-core/tests/support).
 rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs"] }
 getrandom = "0.4"
+pgp = { version = "0.14", default-features = false, features = [] }
 psl = "2"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "form", "http2", "charset", "socks"] }
 rusqlite = { version = "0.41", features = ["bundled"] }

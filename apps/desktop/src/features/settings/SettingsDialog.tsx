@@ -54,6 +54,7 @@ import { Writing } from "./Writing";
 import { useUi, type SettingsSection } from "@/state/ui";
 import { FontPicker, SenderFontsSetting } from "./FontPicker";
 import { WorkspacePicker, WorkspaceSettings } from "../workspaces/WorkspaceSettings";
+import { PgpKeySettings } from "./PgpKeySettings";
 
 const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
 
@@ -254,6 +255,7 @@ function Security() {
   const update = useSettings((s) => s.update);
   return (
     <>
+      <PgpKeySettings />
       <div className="border-b border-hairline py-4">
         <Toggle
           checked={appLock}

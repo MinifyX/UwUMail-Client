@@ -23,6 +23,7 @@ idna.workspace = true
 mail-parser.workspace = true
 memchr.workspace = true
 percent-encoding.workspace = true
+pgp.workspace = true
 quick-xml.workspace = true
 getrandom.workspace = true
 psl.workspace = true

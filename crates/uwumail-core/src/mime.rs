@@ -38,6 +38,8 @@ pub struct ParsedMessage {
     pub attachments: Vec<ParsedAttachment>,
     pub has_body: bool,
     pub unsubscribe: Option<crate::model::Unsubscribe>,
+    /// Whether the body carried an inline PGP cleartext signature (whose armor was stripped).
+    pub pgp_signed: bool,
     /// Where to report abuse (X-Report-Abuse / X-Complaints-To).
     pub report_abuse: Option<crate::model::ReportAbuse>,
     /// The headers labels without a model read (`uwumail_labels::HEADERS`: List-Id, Precedence, …),
@@ -122,10 +124,17 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
     let tnef_body = decoded.iter().map(|d| &d.message.body).find(|b| b.text.is_some() || b.html.is_some());
     let tnef_text = tnef_body.filter(|_| !crate::tnef::mime_has_text(&message));
 
-    let text = match tnef_text {
+    let mut text = match tnef_text {
         Some(body) => body.text.clone().or_else(|| body.html.as_deref().map(html_to_text)),
         None => message.body_text(0).map(|t| t.into_owned()).filter(|_| body_present),
     };
+    // Inline PGP (-----BEGIN PGP SIGNED MESSAGE-----): keep only the signed
+    // text as the visible body, so the reader sees the announcement and not
+    // the base64 armor. Verification is a separate, explicit engine action.
+    let pgp_signed = text.as_deref().is_some_and(|t| t.contains("-----BEGIN PGP SIGNED MESSAGE-----"));
+    if pgp_signed {
+        text = text.as_deref().and_then(|t| crate::pgp::cleartext_payload(t).map(|(clean, _)| clean));
+    }
     let raw_html = message.body_html(0).map(|h| h.into_owned()).filter(|_| body_present);
     // mail-parser synthesizes HTML from text parts; only keep real HTML.
     let has_html_part = message.html_body_count() > 0
@@ -180,6 +189,7 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
         unsubscribe: message
             .header_raw("List-Unsubscribe")
             .and_then(|value| unsubscribe_options(value, message.header_raw("List-Unsubscribe-Post"))),
+        pgp_signed,
         report_abuse: report_abuse_options(
             message.header_raw("X-Report-Abuse"),
             message.header_raw("X-Complaints-To"),

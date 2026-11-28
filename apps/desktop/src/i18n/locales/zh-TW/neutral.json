@@ -868,6 +868,28 @@
     "sendMail": "寄出郵件",
     "openPage": "開啟頁面"
   },
+  "pgp": {
+    "title": "PGP 簽章",
+    "body": "這封郵件包含內嵌 PGP 簽章。驗證只使用你在本裝置匯入的公鑰。",
+    "signer": "簽署者",
+    "checking": "正在驗證簽章",
+    "error": "驗證失敗",
+    "verified": "簽章已驗證",
+    "unknown": "未知公鑰",
+    "invalid": "簽章無效",
+    "none": "未簽章",
+    "unknownHint": "簽章有效，但公鑰不在你的鑰匙圈中。指紋：",
+    "invalidHint": "簽章與郵件內容不符，內容可能被竄改。"
+  },
+  "pgpSettings": {
+    "title": "PGP 公鑰",
+    "hint": "匯入公鑰以驗證內嵌 PGP 簽章（如 Debian 安全公告）。金鑰僅保存在本裝置，不會自動上網取得。",
+    "import": "匯入公鑰（.asc）",
+    "imported": "已匯入 {{id}}（{{name}}）",
+    "importFailed": "匯入失敗：{{reason}}",
+    "remove": "刪除公鑰",
+    "noUserId": "（無使用者識別）"
+  },
   "reportAbuse": {
     "title": "檢舉垃圾郵件",
     "body": "這封郵件提供了檢舉位址。這些資訊來自郵件本身，請在繼續前核對目標位址。",

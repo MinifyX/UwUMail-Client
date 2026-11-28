@@ -228,6 +228,28 @@
     "failedTitle": "嗯，没有成功 (・_・;)",
     "tryMail": "Nyu 也可以改用邮件帮你取消订阅，为此会从你这里向 {{address}} 发一封邮件。"
   },
+  "pgp": {
+    "title": "PGP 签名",
+    "body": "这封邮件包含内联 PGP 签名。验证只使用你在本设备导入的公钥。",
+    "signer": "签名者",
+    "checking": "正在验证签名",
+    "error": "验证失败",
+    "verified": "签名已验证",
+    "unknown": "未知公钥",
+    "invalid": "签名无效",
+    "none": "未签名",
+    "unknownHint": "签名有效，但公钥不在你的密钥环中。指纹：",
+    "invalidHint": "签名与邮件内容不匹配，内容可能被篡改。"
+  },
+  "pgpSettings": {
+    "title": "PGP 公钥",
+    "hint": "导入公钥以验证内联 PGP 签名（如 Debian 安全公告）。密钥仅保存在本设备，不会自动联网获取。",
+    "import": "导入公钥（.asc）",
+    "imported": "已导入 {{id}}（{{name}}）",
+    "importFailed": "导入失败：{{reason}}",
+    "remove": "删除公钥",
+    "noUserId": "（无用户标识）"
+  },
   "reportAbuse": {
     "title": "举报垃圾邮件",
     "body": "这封邮件提供了举报地址。这些信息来自邮件本身，请在继续前核对目标地址。",

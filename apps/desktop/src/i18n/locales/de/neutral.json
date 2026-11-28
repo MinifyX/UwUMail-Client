@@ -868,6 +868,28 @@
     "sendMail": "Mail senden",
     "openPage": "Seite öffnen"
   },
+  "pgp": {
+    "title": "PGP-Signatur",
+    "body": "Diese Mail enthielt eine Inline-PGP-Signatur. Die Prüfung verwendet nur Schlüssel, die du auf diesem Gerät importiert hast.",
+    "signer": "Signiert von",
+    "checking": "Signatur wird geprüft",
+    "error": "Prüfung fehlgeschlagen",
+    "verified": "Signatur gültig",
+    "unknown": "Unbekannter Schlüssel",
+    "invalid": "Ungültige Signatur",
+    "none": "Nicht signiert",
+    "unknownHint": "Die Signatur ist gültig, aber der Schlüssel ist nicht in deinem Schlüsselbund. Fingerabdruck:",
+    "invalidHint": "Die Signatur passt nicht zur Nachricht. Der Inhalt wurde möglicherweise verändert."
+  },
+  "pgpSettings": {
+    "title": "PGP-öffentliche Schlüssel",
+    "hint": "Importiere öffentliche Schlüssel, um Inline-PGP-Signaturen zu prüfen (z. B. Debian-Sicherheitshinweise). Die Schlüssel bleiben auf diesem Gerät; nichts wird automatisch geladen.",
+    "import": "Schlüssel importieren (.asc)",
+    "imported": "{{id}} importiert ({{name}})",
+    "importFailed": "Import fehlgeschlagen: {{reason}}",
+    "remove": "Schlüssel entfernen",
+    "noUserId": "(keine User-ID)"
+  },
   "reportAbuse": {
     "title": "Missbrauch melden",
     "body": "Diese Mail nennt eine Stelle für Missbrauchsmeldungen. Beide Angaben stammen aus der Nachricht selbst – prüfe das Ziel, bevor du fortfährst.",

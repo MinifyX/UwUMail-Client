@@ -29,6 +29,7 @@ import { useContactsAvailable, useLoadedContacts } from "../contacts/useContacts
 import { openDraftMessage } from "../compose/openDraft";
 import { useInlineImages } from "./useInlineImages";
 import { useReportAbuse } from "./ReportAbuse";
+import { PgpBadge } from "./PgpBadge";
 import { nativeMobile } from "@/backend/mobile";
 import { backend } from "@/backend/backend";
 import { blockSender } from "./selection";
@@ -308,6 +309,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
                   </Button>
                 </>
               )}
+              <PgpBadge message={message} />
               {!message.flags.draft && !myAddresses.has(message.from.email.toLowerCase()) && (
                 <UnsubscribeButton message={message} />
               )}

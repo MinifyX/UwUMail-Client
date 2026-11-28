@@ -421,6 +421,7 @@ mod tests {
             attachments: vec![],
             unsubscribe: None,
             report_abuse: None,
+            pgp_signed: false,
             keywords: vec![],
         };
         let mail = MailText::from_raw(&message, &raw, MAX_MAIL_CHARS);
@@ -461,6 +462,7 @@ mod tests {
             attachments: vec![],
             unsubscribe: None,
             report_abuse: None,
+            pgp_signed: false,
             keywords: vec![],
         };
         let prompt = MailText::from_stored(&message, MAX_MAIL_CHARS).for_prompt(true);
@@ -494,6 +496,7 @@ mod tests {
             attachments: vec![],
             unsubscribe: None,
             report_abuse: None,
+            pgp_signed: false,
             keywords: vec![],
         };
         let raw_with = |results: &str| {
