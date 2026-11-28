@@ -175,10 +175,6 @@ ALTER TABLE messages ADD COLUMN unsubscribe_json TEXT;
 ALTER TABLE messages ADD COLUMN bcc_json TEXT NOT NULL DEFAULT '[]';
 "#,
     r#"
--- Where to report abuse (X-Report-Abuse / X-Complaints-To), as JSON.
-ALTER TABLE messages ADD COLUMN report_abuse_json TEXT;
-"#,
-    r#"
 -- Calendars over CalDAV: an address typed in by hand, and what CalDAV itself can't keep
 -- (hidden calendars, the default one). Events themselves stay on the server.
 ALTER TABLE accounts ADD COLUMN caldav_url TEXT;
@@ -233,6 +229,10 @@ UPDATE accounts SET name = email
 WHERE lower(name) = lower(substr(email, instr(email, '@') + 1));
 "#,
     shipments::MIGRATION,
+    r#"
+-- Where to report abuse (X-Report-Abuse / X-Complaints-To), as JSON.
+ALTER TABLE messages ADD COLUMN report_abuse_json TEXT;
+"#,
     r#"
 -- Whether a message carried an inline PGP signature (armor stripped from the body).
 ALTER TABLE messages ADD COLUMN pgp_signed INTEGER NOT NULL DEFAULT 0;
