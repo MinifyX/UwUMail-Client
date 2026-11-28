@@ -54,6 +54,7 @@ import { Writing } from "./Writing";
 import { useUi, type SettingsSection } from "@/state/ui";
 import { FontPicker, SenderFontsSetting } from "./FontPicker";
 import { WorkspacePicker, WorkspaceSettings } from "../workspaces/WorkspaceSettings";
+import { PgpKeySettings } from "./PgpKeySettings";
 
 const PROTOCOL_NAMES: Record<Protocol, string> = { imap: "IMAP", jmap: "JMAP" };
 
@@ -67,6 +68,7 @@ const SECTIONS: { id: SettingsSection; icon: IconProps["icon"]; phoneOnly?: bool
   { id: "labels", icon: ICONS.labels },
   { id: "assistant", icon: ICONS.ai },
   { id: "security", icon: ICONS.locked, phoneOnly: true },
+  { id: "pgp", icon: ICONS.locked },
   { id: "accounts", icon: ICONS.account },
   { id: "about", icon: ICONS.info },
 ];
@@ -172,6 +174,8 @@ function Appearance() {
           <option value="system">{t("language.system")}</option>
           <option value="de">{t("language.de")}</option>
           <option value="en">{t("language.en")}</option>
+          <option value="zh-CN">简体中文</option>
+          <option value="zh-TW">繁體中文</option>
         </Select>
       </Row>
     </>
@@ -789,6 +793,7 @@ export function SettingsSectionBody({ section }: { section: SettingsSection }) {
       {section === "labels" && <LabelsSettings />}
       {section === "assistant" && <AssistantSettings />}
       {section === "security" && <Security />}
+      {section === "pgp" && <PgpKeySettings />}
       {section === "accounts" && <Accounts />}
       {section === "profile" && <ProfileSettings />}
       {section === "masked" && <MaskedSettings />}

@@ -229,6 +229,23 @@ UPDATE accounts SET name = email
 WHERE lower(name) = lower(substr(email, instr(email, '@') + 1));
 "#,
     shipments::MIGRATION,
+    r#"
+-- Where to report abuse (X-Report-Abuse / X-Complaints-To), as JSON.
+ALTER TABLE messages ADD COLUMN report_abuse_json TEXT;
+"#,
+    r#"
+-- Whether a message carried an inline PGP signature (armor stripped from the body).
+ALTER TABLE messages ADD COLUMN pgp_signed INTEGER NOT NULL DEFAULT 0;
+"#,
+    r#"
+-- OpenPGP public keys the user imported, for verifying inline signatures.
+CREATE TABLE pgp_keys (
+    fingerprint TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
+    armor TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+"#,
 ];
 
 /// What this device remembers about one calendar.
@@ -1054,9 +1071,9 @@ impl Store {
             "INSERT INTO messages (id, account_id, folder_id, uid, message_id, in_reply_to, refs, thread_id, subject,
                 from_json, to_json, cc_json, reply_to_json, date, seen, flagged, answered, draft, snippet, size,
                 has_body, body_html, body_text, has_remote, attachments_json, remote_id, blob_id, unsubscribe_json, bcc_json,
-                label_headers, calendar, from_trusted)
+                label_headers, calendar, from_trusted, report_abuse_json, pgp_signed)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
-                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32)",
+                ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34)",
             params![
                 id,
                 account_id,
@@ -1090,6 +1107,8 @@ impl Store {
                 json(&parsed.label_headers)?,
                 parsed.calendar,
                 parsed.from_trusted,
+                parsed.report_abuse.as_ref().map(json).transpose()?,
+                parsed.pgp_signed,
             ],
         )?;
 
@@ -1218,7 +1237,8 @@ impl Store {
         tx.execute(
             "UPDATE messages SET has_body = 1, body_html = ?1, body_text = ?2, has_remote = ?3, snippet = ?4,
                 attachments_json = ?5, unsubscribe_json = COALESCE(?7, unsubscribe_json), label_headers = ?8,
-                calendar = ?9, from_trusted = ?10 WHERE id = ?6",
+                calendar = ?9, from_trusted = ?10, report_abuse_json = COALESCE(?11, report_abuse_json),
+                pgp_signed = ?12 WHERE id = ?6",
             params![
                 parsed.html,
                 parsed.text,
@@ -1229,7 +1249,9 @@ impl Store {
                 parsed.unsubscribe.as_ref().map(json).transpose()?,
                 json(&parsed.label_headers)?,
                 parsed.calendar,
-                parsed.from_trusted
+                parsed.from_trusted,
+                parsed.report_abuse.as_ref().map(json).transpose()?,
+                parsed.pgp_signed,
             ],
         )?;
         let from: Address = serde_json::from_str(&from_json)?;
@@ -1801,7 +1823,8 @@ impl Store {
     const MESSAGE_COLUMNS: &'static str =
         "m.id, m.thread_id, m.account_id, m.folder_id, m.from_json, m.to_json, m.cc_json,
         m.reply_to_json, m.subject, m.date, m.seen, m.flagged, m.answered, m.draft, m.snippet, m.body_html,
-        m.body_text, m.has_remote, m.attachments_json, m.message_id, m.unsubscribe_json, m.bcc_json, m.keywords";
+        m.body_text, m.has_remote, m.attachments_json, m.message_id, m.unsubscribe_json, m.bcc_json, m.keywords,
+        m.report_abuse_json, m.pgp_signed";
 
     fn message_from_row(row: &Row<'_>) -> rusqlite::Result<Message> {
         Ok(Message {
@@ -1830,6 +1853,8 @@ impl Store {
             attachments: from_json(&row.get::<_, String>(18)?),
             unsubscribe: row.get::<_, Option<String>>(20)?.and_then(|text| serde_json::from_str(&text).ok()),
             keywords: assist::keywords_list(&row.get::<_, String>(22)?),
+            report_abuse: row.get::<_, Option<String>>(23)?.and_then(|text| serde_json::from_str(&text).ok()),
+            pgp_signed: row.get::<_, bool>(24)?,
         })
     }
 
@@ -1975,6 +2000,32 @@ impl Store {
 
     pub fn unblock_sender(&self, entry: &str) -> Result<()> {
         self.conn().execute("DELETE FROM blocked_senders WHERE entry = ?1", [entry])?;
+        Ok(())
+    }
+
+    // ------------------------------------------------------------- OpenPGP keys
+
+    pub fn pgp_keys(&self) -> Result<Vec<crate::pgp::PgpKey>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT fingerprint, user_id, armor FROM pgp_keys ORDER BY created_at")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(crate::pgp::PgpKey { fingerprint: row.get(0)?, user_id: row.get(1)?, armor: row.get(2)? })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
+    pub fn add_pgp_key(&self, key: &crate::pgp::PgpKey) -> Result<()> {
+        self.conn().execute(
+            "INSERT OR REPLACE INTO pgp_keys (fingerprint, user_id, armor, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![key.fingerprint, key.user_id, key.armor, crate::mime::now()],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_pgp_key(&self, fingerprint: &str) -> Result<()> {
+        self.conn().execute("DELETE FROM pgp_keys WHERE fingerprint = ?1", [fingerprint])?;
         Ok(())
     }
 

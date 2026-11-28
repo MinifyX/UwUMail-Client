@@ -103,6 +103,8 @@ import type {
   ThreadPage,
   ThreadQuery,
   UnsubscribeOutcome,
+  PgpKey,
+  PgpVerifyStatus,
   UpdateInfo,
 } from "./types";
 import type { DomainSignatureChange } from "@/lib/domainSignatures";
@@ -446,6 +448,14 @@ export interface Backend {
    * as `oneClickFailed`; `{ oneClick: false }` then takes the other way.
    */
   unsubscribe(messageId: string, options?: { oneClick?: boolean }): Promise<UnsubscribeOutcome>;
+  /** Import an armored OpenPGP public key for signature verification. */
+  pgpImportKey(armor: string): Promise<PgpKey>;
+  /** Imported OpenPGP public keys. */
+  pgpKeys(): Promise<PgpKey[]>;
+  /** Remove an imported key by fingerprint. */
+  pgpRemoveKey(fingerprint: string): Promise<void>;
+  /** Verify a message's inline PGP signature against the imported keys. */
+  pgpVerify(messageId: string): Promise<PgpVerifyStatus>;
   /** Inbox mail from an address, e.g. a newsletter's earlier issues. */
   inboxMessagesFrom(email: string): Promise<string[]>;
   /** Blocks on the account's UwUMail server where there is one, otherwise in this app. */
@@ -489,6 +499,8 @@ export interface Backend {
   saveAttachment(attachmentId: string): Promise<boolean>;
   /** The whole mail as an .eml file, where the user picks. False when cancelled. */
   saveMessage(messageId: string): Promise<boolean>;
+  /** The raw header block of a message, up to the first empty line. */
+  messageHeaders(messageId: string): Promise<string>;
 
   /**
    * The picture for an address, looked up per address: with a UwUMail server a person's photo

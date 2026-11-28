@@ -133,6 +133,7 @@
     "blockSender": "Block {{email}}",
     "blockDomain": "Block everything from @{{domain}}",
     "unsubscribe": "Unsubscribe",
+    "reportAbuse": "Report abuse",
     "print": "Print",
     "saveMessage": "Save as file (.eml)",
     "date": "Date",
@@ -143,7 +144,11 @@
     "addressCopied": "Address copied",
     "teamsMeeting": "Teams meeting",
     "teamsJoin": "Join",
-    "replyAllShort": "All"
+    "replyAllShort": "All",
+    "viewHeaders": "View message headers",
+    "headersLoading": "Loading headers…",
+    "copyHeaders": "Copy headers",
+    "headersCopied": "Headers copied"
   },
   "compose": {
     "new": "New message",
@@ -246,7 +251,10 @@
     "deletedForever_one": "{{count}} message deleted forever",
     "deletedForever_other": "{{count}} messages deleted forever",
     "scheduled": "Sends {{time}}",
-    "sendFailedHeld": "The mail couldn't be sent: {{reason}} It's waiting under Scheduled."
+    "sendFailedHeld": "The mail couldn't be sent: {{reason}} It's waiting under Scheduled.",
+    "reportAbusePage": "The abuse report page is open in your browser",
+    "reportAbuseCopied": "Complaint address copied",
+    "reportAbuseSpammed": "Marked as spam"
   },
   "status": {
     "syncing": "Checking for mail",
@@ -449,6 +457,7 @@
     "updateFound": "Version {{version}} is ready",
     "updateCheckFailed": "Couldn't check for updates. {{reason}}",
     "security": "Security",
+    "pgp": "PGP keys",
     "swipeRight": "Swipe right",
     "swipeLeft": "Swipe left",
     "swipeDesc": "What happens when you swipe a mail in the list.",
@@ -859,6 +868,37 @@
     "noOtherWay": "This mail offers no other way. Try again later.",
     "sendMail": "Send the mail",
     "openPage": "Open the page"
+  },
+  "pgp": {
+    "title": "PGP signature",
+    "body": "This mail carried an inline PGP signature. Verification uses only keys you imported on this device.",
+    "signer": "Signed by",
+    "checking": "Checking signature",
+    "error": "Check failed",
+    "verified": "Signature verified",
+    "unknown": "Unknown key",
+    "invalid": "Invalid signature",
+    "none": "Not signed",
+    "unknownHint": "The signature is valid but the key is not in your keyring. Fingerprint:",
+    "invalidHint": "The signature does not match the message. The content may have been altered."
+  },
+  "pgpSettings": {
+    "title": "PGP public keys",
+    "hint": "Import public keys to verify inline PGP signatures (e.g. Debian security notices). Keys stay on this device; nothing is fetched automatically.",
+    "import": "Import key (.asc)",
+    "imported": "Imported {{id}} ({{name}})",
+    "importFailed": "Import failed: {{reason}}",
+    "remove": "Remove key",
+    "noUserId": "(no user id)"
+  },
+  "reportAbuse": {
+    "title": "Report abuse",
+    "body": "This mail names where to send abuse complaints. Both come from the message itself, so check the destination before you continue.",
+    "page": "Report page (from the mail)",
+    "address": "Complaint address (from the mail)",
+    "open": "Open report page",
+    "copy": "Copy address",
+    "markSpam": "Also mark as spam and move to the spam folder"
   },
   "deleteForever": {
     "title_one": "Delete this message forever?",

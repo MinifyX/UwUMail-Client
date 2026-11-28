@@ -133,6 +133,7 @@
     "blockSender": "{{email}} blockieren",
     "blockDomain": "Alles von @{{domain}} blockieren",
     "unsubscribe": "Abmelden",
+    "reportAbuse": "Missbrauch melden",
     "print": "Drucken",
     "saveMessage": "Als Datei speichern (.eml)",
     "date": "Datum",
@@ -143,7 +144,11 @@
     "addressCopied": "Adresse kopiert",
     "teamsMeeting": "Teams-Besprechung",
     "teamsJoin": "Teilnehmen",
-    "replyAllShort": "Allen"
+    "replyAllShort": "Allen",
+    "viewHeaders": "Nachrichtenkopf anzeigen",
+    "headersLoading": "Kopfzeilen werden geladen…",
+    "copyHeaders": "Kopfzeilen kopieren",
+    "headersCopied": "Kopfzeilen kopiert"
   },
   "compose": {
     "new": "Neue Mail",
@@ -246,7 +251,10 @@
     "deletedForever_one": "{{count}} Mail endgültig gelöscht",
     "deletedForever_other": "{{count}} Mails endgültig gelöscht",
     "scheduled": "Wird gesendet: {{time}}",
-    "sendFailedHeld": "Die Mail konnte nicht gesendet werden: {{reason}} Sie wartet unter Geplant."
+    "sendFailedHeld": "Die Mail konnte nicht gesendet werden: {{reason}} Sie wartet unter Geplant.",
+    "reportAbusePage": "Die Melde-Seite ist im Browser geöffnet",
+    "reportAbuseCopied": "Beschwerdeadresse kopiert",
+    "reportAbuseSpammed": "Als Spam markiert"
   },
   "status": {
     "syncing": "Suche nach neuen Mails",
@@ -449,6 +457,7 @@
     "updateFound": "Version {{version}} ist bereit",
     "updateCheckFailed": "Konnte nicht nach Updates suchen. {{reason}}",
     "security": "Sicherheit",
+    "pgp": "PGP-Schlüssel",
     "swipeRight": "Nach rechts wischen",
     "swipeLeft": "Nach links wischen",
     "swipeDesc": "Was passiert, wenn du eine Mail in der Liste zur Seite wischst.",
@@ -859,6 +868,37 @@
     "noOtherWay": "Diese Mail bietet keinen anderen Weg. Versuch es später noch mal.",
     "sendMail": "Mail senden",
     "openPage": "Seite öffnen"
+  },
+  "pgp": {
+    "title": "PGP-Signatur",
+    "body": "Diese Mail enthielt eine Inline-PGP-Signatur. Die Prüfung verwendet nur Schlüssel, die du auf diesem Gerät importiert hast.",
+    "signer": "Signiert von",
+    "checking": "Signatur wird geprüft",
+    "error": "Prüfung fehlgeschlagen",
+    "verified": "Signatur gültig",
+    "unknown": "Unbekannter Schlüssel",
+    "invalid": "Ungültige Signatur",
+    "none": "Nicht signiert",
+    "unknownHint": "Die Signatur ist gültig, aber der Schlüssel ist nicht in deinem Schlüsselbund. Fingerabdruck:",
+    "invalidHint": "Die Signatur passt nicht zur Nachricht. Der Inhalt wurde möglicherweise verändert."
+  },
+  "pgpSettings": {
+    "title": "PGP-öffentliche Schlüssel",
+    "hint": "Importiere öffentliche Schlüssel, um Inline-PGP-Signaturen zu prüfen (z. B. Debian-Sicherheitshinweise). Die Schlüssel bleiben auf diesem Gerät; nichts wird automatisch geladen.",
+    "import": "Schlüssel importieren (.asc)",
+    "imported": "{{id}} importiert ({{name}})",
+    "importFailed": "Import fehlgeschlagen: {{reason}}",
+    "remove": "Schlüssel entfernen",
+    "noUserId": "(keine User-ID)"
+  },
+  "reportAbuse": {
+    "title": "Missbrauch melden",
+    "body": "Diese Mail nennt eine Stelle für Missbrauchsmeldungen. Beide Angaben stammen aus der Nachricht selbst – prüfe das Ziel, bevor du fortfährst.",
+    "page": "Melde-Seite (aus der Mail)",
+    "address": "Beschwerdeadresse (aus der Mail)",
+    "open": "Melde-Seite öffnen",
+    "copy": "Adresse kopieren",
+    "markSpam": "Auch als Spam markieren und in den Spam-Ordner verschieben"
   },
   "deleteForever": {
     "title_one": "Diese Mail endgültig löschen?",

@@ -132,6 +132,8 @@ import type {
   ThreadPage,
   ThreadQuery,
   UnsubscribeOutcome,
+  PgpKey,
+  PgpVerifyStatus,
   UpdateInfo,
 } from "./types";
 import type { ImageProxy } from "@/lib/remoteImages";
@@ -762,6 +764,22 @@ export class TauriBackend implements Backend {
     return call<UnsubscribeOutcome>("unsubscribe", { messageId, oneClick: options?.oneClick ?? true });
   }
 
+  pgpImportKey(armor: string) {
+    return call<PgpKey>("pgp_import_key", { armor });
+  }
+
+  pgpKeys() {
+    return call<PgpKey[]>("pgp_keys");
+  }
+
+  pgpRemoveKey(fingerprint: string) {
+    return call<void>("pgp_remove_key", { fingerprint });
+  }
+
+  pgpVerify(messageId: string) {
+    return call<PgpVerifyStatus>("pgp_verify", { messageId });
+  }
+
   inboxMessagesFrom(email: string) {
     return call<string[]>("inbox_messages_from", { email });
   }
@@ -855,6 +873,10 @@ export class TauriBackend implements Backend {
   // On Android this saves to Downloads/UwUMail, elsewhere a native dialog asks where.
   saveMessage(messageId: string) {
     return call<boolean>("save_message", { messageId });
+  }
+
+  messageHeaders(messageId: string) {
+    return call<string>("message_headers", { messageId });
   }
 
   saveAttachment(attachmentId: string) {

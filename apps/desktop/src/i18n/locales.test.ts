@@ -3,6 +3,10 @@ import deNeutral from "./locales/de/neutral.json";
 import dePlayful from "./locales/de/playful.json";
 import enNeutral from "./locales/en/neutral.json";
 import enPlayful from "./locales/en/playful.json";
+import zhCNNeutral from "./locales/zh-CN/neutral.json";
+import zhCNPlayful from "./locales/zh-CN/playful.json";
+import zhTWNeutral from "./locales/zh-TW/neutral.json";
+import zhTWPlayful from "./locales/zh-TW/playful.json";
 
 type Tree = { [key: string]: string | Tree };
 
@@ -13,15 +17,21 @@ function keys(tree: Tree, prefix = ""): string[] {
 }
 
 describe("locales", () => {
-  it("German and English neutral strings have the same keys", () => {
-    expect(keys(deNeutral).sort()).toEqual(keys(enNeutral).sort());
+  it("all locales have the same neutral keys", () => {
+    const expected = keys(enNeutral).sort();
+    for (const locale of [deNeutral, zhCNNeutral, zhTWNeutral]) {
+      expect(keys(locale).sort()).toEqual(expected);
+    }
   });
 
   // i18next checks the playful namespace in every language before falling back
   // to neutral, so a playful key missing in one language would show the other
   // language's text.
-  it("German and English playful strings have the same keys", () => {
-    expect(keys(dePlayful).sort()).toEqual(keys(enPlayful).sort());
+  it("all locales have the same playful keys", () => {
+    const expected = keys(enPlayful).sort();
+    for (const locale of [dePlayful, zhCNPlayful, zhTWPlayful]) {
+      expect(keys(locale).sort()).toEqual(expected);
+    }
   });
 
   it("every playful key overrides an existing neutral key", () => {
@@ -35,7 +45,9 @@ describe("the system's language", () => {
     const { systemLanguage } = await import("./index");
     expect(systemLanguage(["fr-FR", "de-CH", "en"])).toBe("de");
     expect(systemLanguage(["en-GB", "de"])).toBe("en");
-    expect(systemLanguage(["ja", "zh_Hans"])).toBe("en");
+    expect(systemLanguage(["ja", "zh_Hans"])).toBe("zh-CN");
+    expect(systemLanguage(["zh-TW"])).toBe("zh-TW");
+    expect(systemLanguage(["zh-CN"])).toBe("zh-CN");
     expect(systemLanguage([])).toBe("en");
   });
 });

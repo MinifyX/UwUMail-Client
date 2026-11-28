@@ -42,7 +42,7 @@ export function App() {
 
   return (
     // The words the package's components say themselves (the dialogs' close button, the title bar).
-    <UwuLabels labels={resolveLanguage(language)}>
+    <UwuLabels labels={resolveLanguage(language) === "de" ? "de" : "en"}>
       <div className="flex h-full flex-col">
         <WindowTitleBar />
         <div className="relative min-h-0 flex-1">

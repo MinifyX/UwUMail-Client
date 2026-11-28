@@ -49,7 +49,8 @@
     "hideAddresses": "Fold addresses away",
     "replyTo": "Reply to",
     "copyAddress": "Copy {{email}}",
-    "addressCopied": "Address tucked away ✧"
+    "addressCopied": "Address tucked away ✧",
+    "reportAbuse": "Report abuse"
   },
   "compose": {
     "placeholder": "Write something nice ✿",
@@ -79,7 +80,10 @@
     "deletedForever_one": "Gone forever (｡•́︿•̀｡)",
     "deletedForever_other": "{{count}} messages gone forever (｡•́︿•̀｡)",
     "draftGone": "No draft left here, Nyu looked everywhere (・_・;)",
-    "scheduled": "Nyu will deliver it {{time}} ✉︎"
+    "scheduled": "Nyu will deliver it {{time}} ✉︎",
+    "reportAbusePage": "The abuse report page is open in your browser",
+    "reportAbuseCopied": "Complaint address copied",
+    "reportAbuseSpammed": "Marked as spam"
   },
   "status": {
     "syncing": "Fetching fresh mail…",
@@ -153,7 +157,8 @@
     "syncRefused": "The server doesn’t take {{count}} settings. They stay on this device.",
     "signatureLocalOnly": "Only here",
     "signatureLocalOnlyDesc": "This one stays with me on this device: too big to travel (256 KB at most) or with pictures that only work here.",
-    "fontDesc": "Nyu likes UwU Sans best, but it's your call. For the whole app and for mails, only on this device."
+    "fontDesc": "Nyu likes UwU Sans best, but it's your call. For the whole app and for mails, only on this device.",
+    "pgp": "PGP keys"
   },
   "attachment": {
     "loading": "Unpacking the attachment…",
@@ -223,6 +228,37 @@
     "mailToFallback": "If that doesn't work directly, Nyu sends a mail from you to {{address}}.",
     "failedTitle": "Hmm, that didn't work (・_・;)",
     "tryMail": "Nyu can unsubscribe you by mail instead and sends a mail from you to {{address}} for that."
+  },
+  "pgp": {
+    "title": "PGP signature",
+    "body": "This mail carried an inline PGP signature. Verification uses only keys you imported on this device.",
+    "signer": "Signed by",
+    "checking": "Checking signature",
+    "error": "Check failed",
+    "verified": "Signature verified",
+    "unknown": "Unknown key",
+    "invalid": "Invalid signature",
+    "none": "Not signed",
+    "unknownHint": "The signature is valid but the key is not in your keyring. Fingerprint:",
+    "invalidHint": "The signature does not match the message. The content may have been altered."
+  },
+  "pgpSettings": {
+    "title": "PGP public keys",
+    "hint": "Import public keys to verify inline PGP signatures (e.g. Debian security notices). Keys stay on this device; nothing is fetched automatically.",
+    "import": "Import key (.asc)",
+    "imported": "Imported {{id}} ({{name}})",
+    "importFailed": "Import failed: {{reason}}",
+    "remove": "Remove key",
+    "noUserId": "(no user id)"
+  },
+  "reportAbuse": {
+    "title": "Report abuse",
+    "body": "This mail names where to send abuse complaints. Both come from the message itself, so check the destination before you continue.",
+    "page": "Report page (from the mail)",
+    "address": "Complaint address (from the mail)",
+    "open": "Open report page",
+    "copy": "Copy address",
+    "markSpam": "Also mark as spam and move to the spam folder"
   },
   "deleteForever": {
     "title_one": "Say goodbye to this one forever? (｡•́︿•̀｡)",

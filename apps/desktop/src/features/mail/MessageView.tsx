@@ -1,8 +1,9 @@
 import clsx from "clsx";
 import { Button, Icon, IconButton, ICONS, Menu, Tooltip } from "@uwusuite/design";
-import { Fragment, useId, useMemo, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import type { Account, Message } from "@/backend/types";
 import { Avatar } from "@/components/ui/Avatar";
+import { Dialog } from "@/components/ui/Dialog";
 import { translate, useT } from "@/i18n";
 import { addressRows, fullAddress, type AddressRole } from "@/lib/addresses";
 import { visibleText } from "@/lib/links";
@@ -27,6 +28,8 @@ import { startNewContact, useContactsUi } from "../contacts/state";
 import { useContactsAvailable, useLoadedContacts } from "../contacts/useContactsData";
 import { openDraftMessage } from "../compose/openDraft";
 import { useInlineImages } from "./useInlineImages";
+import { useReportAbuse } from "./ReportAbuse";
+import { PgpBadge } from "./PgpBadge";
 import { nativeMobile } from "@/backend/mobile";
 import { backend } from "@/backend/backend";
 import { blockSender } from "./selection";
@@ -203,6 +206,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
   const [loadRemote, setLoadRemote] = useState(false);
   const inlineImages = useInlineImages(message);
   const [autoDecision, setAutoDecision] = useState<{ key: string; dark: boolean } | null>(null);
+  const [showHeaders, setShowHeaders] = useState(false);
 
   const myAddresses = new Set(accounts.map((a) => a.email.toLowerCase()));
   const showDetails = useSettings((s) => s.showAddressDetails);
@@ -305,6 +309,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
                   </Button>
                 </>
               )}
+              <PgpBadge message={message} />
               {!message.flags.draft && !myAddresses.has(message.from.email.toLowerCase()) && (
                 <UnsubscribeButton message={message} />
               )}
@@ -314,6 +319,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
                   message={message}
                   accounts={accounts}
                   onPrint={() => printMessage(message, allowRemote, inlineImages.urls, imageProxy)}
+                  onViewHeaders={() => setShowHeaders(true)}
                 />
               )}
               <time dateTime={message.date} className="text-[12.5px] text-muted">
@@ -361,6 +367,7 @@ export function MessageView({ message, accounts, collapsed, onExpand }: MessageV
           attachments={message.attachments.filter((attachment) => !inlineImages.shown.has(attachment.id))}
           sender={message.from}
         />
+        <HeadersDialog messageId={message.id} open={showHeaders} onClose={() => setShowHeaders(false)} />
       </article>
     </AssistForAccount>
   );
@@ -442,8 +449,70 @@ function AddressDetails({ id, message }: { id: string; message: Message }) {
   );
 }
 
+/** Shows the raw RFC 822 header block of one message. */
+function HeadersDialog({ messageId, open, onClose }: { messageId: string; open: boolean; onClose: () => void }) {
+  const { t } = useT();
+  const [headers, setHeaders] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    // Reset in a microtask so lint's set-state-in-effect rule stays happy;
+    // the async load below then fills in the result.
+    void Promise.resolve().then(() => {
+      if (!alive) return;
+      setHeaders(null);
+      setError(null);
+      backend()
+        .messageHeaders(messageId)
+        .then((h) => {
+          if (alive) setHeaders(h);
+        })
+        .catch((e: unknown) => {
+          if (alive) setError(e instanceof Error ? e.message : String(e));
+        });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [open, messageId]);
+  const copy = () => {
+    if (headers) void navigator.clipboard.writeText(headers).then(() => toast(t("reader.headersCopied"), "success"));
+  };
+  return (
+    <Dialog open={open} onClose={onClose} title={t("reader.viewHeaders")} width="lg">
+      <div className="flex flex-col gap-3 px-6 py-4">
+        {error && <p className="text-danger-ink">{error}</p>}
+        {!error && !headers && <p className="text-muted">{t("reader.headersLoading")}</p>}
+        {headers && (
+          <>
+            <pre className="selectable max-h-[60vh] overflow-auto rounded bg-surface p-3 font-mono text-[12px] leading-relaxed break-all whitespace-pre-wrap">
+              {headers}
+            </pre>
+            <div className="flex justify-end">
+              <Button variant="ghost" icon={ICONS.copy} onClick={copy}>
+                {t("reader.copyHeaders")}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
 /** Less common actions for one message. */
-function MessageMenu({ message, accounts, onPrint }: { message: Message; accounts: Account[]; onPrint: () => void }) {
+function MessageMenu({
+  message,
+  accounts,
+  onPrint,
+  onViewHeaders,
+}: {
+  message: Message;
+  accounts: Account[];
+  onPrint: () => void;
+  onViewHeaders: () => void;
+}) {
   const { t } = useT();
   const client = useQueryClient();
   const email = message.from.email;
@@ -456,6 +525,7 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
   const refresh = () => client.invalidateQueries();
   // Every mailbox here is the person's own: the assistant may read all of it.
   const assistItems = useMessageAssistItems(message, true, own);
+  const { reportItem, dialog: reportDialog } = useReportAbuse(message);
   const block = (entry: string) => {
     useUi.getState().selectThread(null);
     void blockSender(entry, message.accountId, [message.id], refresh);
@@ -463,6 +533,8 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
   const items = [
     // No phone web view prints; the system share sheet will do that later.
     ...(nativeMobile ? [] : [{ icon: ICONS.print, label: t("reader.print"), onSelect: onPrint }]),
+    { icon: ICONS.copy, label: t("reader.viewHeaders"), onSelect: onViewHeaders },
+    ...(!own && reportItem ? [reportItem] : []),
     {
       icon: ICONS.download,
       label: t("reader.saveMessage"),
@@ -509,21 +581,24 @@ function MessageMenu({ message, accounts, onPrint }: { message: Message; account
     ...assistItems,
   ];
   return (
-    <Menu
-      align="end"
-      items={items}
-      trigger={(menu) => (
-        <IconButton
-          icon={ICONS.more}
-          size="sm"
-          label={t("reader.more")}
-          onClick={menu.toggle}
-          aria-haspopup={menu["aria-haspopup"]}
-          aria-expanded={menu["aria-expanded"]}
-          aria-controls={menu["aria-controls"]}
-        />
-      )}
-    />
+    <>
+      <Menu
+        align="end"
+        items={items}
+        trigger={(menu) => (
+          <IconButton
+            icon={ICONS.more}
+            size="sm"
+            label={t("reader.more")}
+            onClick={menu.toggle}
+            aria-haspopup={menu["aria-haspopup"]}
+            aria-expanded={menu["aria-expanded"]}
+            aria-controls={menu["aria-controls"]}
+          />
+        )}
+      />
+      {reportDialog}
+    </>
   );
 }
 

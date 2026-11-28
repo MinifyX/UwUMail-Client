@@ -29,6 +29,7 @@ use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::birthdays::scan::{BirthdayFeatures, BirthdayImportEntry, BirthdayImportResult, BirthdayScan};
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
+use uwumail_core::pgp::{PgpKey, PgpVerifyStatus};
 use uwumail_core::pictures::{PictureLookup, SenderPicture};
 use uwumail_core::send_later::{ScheduledReceipt, ScheduledRef, ScheduledSend, SendLaterInfo};
 use uwumail_core::{Engine, Error};
@@ -544,6 +545,26 @@ async fn unsubscribe(
 }
 
 #[tauri::command]
+fn pgp_import_key(engine: State<'_, Engine>, armor: String) -> CommandResult<PgpKey> {
+    engine.pgp_import_key(&armor)
+}
+
+#[tauri::command]
+fn pgp_keys(engine: State<'_, Engine>) -> CommandResult<Vec<PgpKey>> {
+    engine.pgp_keys()
+}
+
+#[tauri::command]
+fn pgp_remove_key(engine: State<'_, Engine>, fingerprint: String) -> CommandResult<()> {
+    engine.pgp_remove_key(&fingerprint)
+}
+
+#[tauri::command]
+async fn pgp_verify(engine: State<'_, Engine>, message_id: String) -> CommandResult<PgpVerifyStatus> {
+    engine.pgp_verify(&message_id).await
+}
+
+#[tauri::command]
 fn inbox_messages_from(engine: State<'_, Engine>, email: String) -> CommandResult<Vec<String>> {
     engine.inbox_messages_from(&email)
 }
@@ -1010,6 +1031,21 @@ async fn save_attachment(app: AppHandle, engine: State<'_, Engine>, attachment_i
 async fn save_message(app: AppHandle, engine: State<'_, Engine>, message_id: String) -> CommandResult<bool> {
     let file = engine.message_file(&message_id).await?;
     platform::save_file(&app, &file).await
+}
+
+/// Returns the raw header block of a message (up to the first empty line) as text.
+#[tauri::command]
+async fn message_headers(engine: State<'_, Engine>, message_id: String) -> CommandResult<String> {
+    let file = engine.message_file(&message_id).await?;
+    let path = file.path;
+    let bytes = tokio::task::spawn_blocking(move || std::fs::read(&path))
+        .await
+        .map_err(|e| uwumail_core::Error::internal(format!("Reading headers task failed: {e}")))?
+        .map_err(|e| uwumail_core::Error::internal(format!("Reading headers failed: {e}")))?;
+    let text = String::from_utf8_lossy(&bytes);
+    // Headers end at the first empty line (CRLF CRLF or LF LF).
+    let header = text.split("\r\n\r\n").next().unwrap_or(&text).split("\n\n").next().unwrap_or(&text);
+    Ok(header.to_string())
 }
 
 #[tauri::command]
@@ -1494,6 +1530,10 @@ pub fn run() {
             mark_spam,
             blocked_senders,
             unsubscribe,
+            pgp_import_key,
+            pgp_keys,
+            pgp_remove_key,
+            pgp_verify,
             inbox_messages_from,
             block_sender,
             unblock_sender,
@@ -1552,6 +1592,7 @@ pub fn run() {
             open_attachment,
             save_attachment,
             save_message,
+            message_headers,
             get_sender_picture,
             fetch_mail_image,
             image_sizes,

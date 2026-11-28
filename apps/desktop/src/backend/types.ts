@@ -206,6 +206,31 @@ export interface Unsubscribe {
   mailto?: string;
 }
 
+/** An imported OpenPGP public key for verifying inline signatures. */
+export interface PgpKey {
+  /** Upper-case hex fingerprint, no spaces. */
+  fingerprint: string;
+  /** The first user id on the certificate. */
+  userId: string;
+  /** Armored public key. */
+  armor: string;
+}
+
+/** Result of verifying a mail's inline PGP signature against imported keys. */
+export type PgpVerifyStatus =
+  | { status: "notSigned" }
+  | { status: "unknownKey"; fingerprint: string | null }
+  | { status: "verified"; fingerprint: string; userId: string }
+  | { status: "invalid" };
+
+/** Where a sender's ESP asks for abuse complaints (X-Report-Abuse / X-Complaints-To). */
+export interface ReportAbuse {
+  /** HTTPS complaint page from X-Report-Abuse. */
+  url?: string;
+  /** Complaint mailbox from X-Complaints-To. */
+  address?: string;
+}
+
 /** The way left besides the one click: a mail to the header's address, or the sender's page. */
 export type UnsubscribeFallback = "mail" | "page" | null;
 
@@ -236,6 +261,10 @@ export interface Message {
   hasRemoteContent: boolean;
   attachments: Attachment[];
   unsubscribe?: Unsubscribe;
+  /** Where to report abuse, from X-Report-Abuse / X-Complaints-To. */
+  reportAbuse?: ReportAbuse;
+  /** Whether the body carried an inline PGP signature (armor stripped for display). */
+  pgpSigned?: boolean;
   /** Its own keywords (lower case, without the `$` system ones), e.g. AI assistant labels. */
   keywords?: string[];
 }

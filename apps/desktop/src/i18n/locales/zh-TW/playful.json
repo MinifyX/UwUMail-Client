@@ -1,0 +1,410 @@
+{
+  "list": {
+    "loading": "正在擷取您的郵件 (｡･ω･｡)",
+    "empty": {
+      "inbox": {
+        "title": "收件匣清空！該喝茶了 (っ˘ω˘ς)",
+        "body": "一有新郵件到達，我就告訴您。"
+      },
+      "search": {
+        "title": "找不到任何結果 (・_・;)",
+        "body": "我把每個角落都找過了，連沙發底下也找了。"
+      },
+      "other": {
+        "title": "好空好平靜 (˘ᵕ˘)",
+        "body": "此資料夾目前沒有任何郵件。"
+      },
+      "offline": {
+        "title": "沒有網路連線 (・_・;)",
+        "body": "我會撐著傘等候，連線恢復後再為您擷取郵件。"
+      },
+      "noAccount": {
+        "title": "我的信箱還是空的 (・・ )?",
+        "body": "新增信箱後，我會把您的郵件帶過來。"
+      },
+      "workspace": {
+        "title": "{{name}} 中還沒有任何信箱 (・・ )?",
+        "body": "請到「設定」的「信箱」中將信箱移到此處，我就會擷取郵件。"
+      }
+    }
+  },
+  "reader": {
+    "empty": {
+      "title": "挑一封郵件吧 ✉︎",
+      "body": "我會在這裡為您開啟。"
+    },
+    "loading": "正在打開信封…",
+    "remoteBlocked": "我已封鎖遠端圖片，讓別人無從窺探您 (｀・ω・´)",
+    "appearanceAutoLight": "這封我維持淺色，因為它打扮得很可愛 (・ω・)",
+    "appearanceRemembered": "收到，我會記住 {{email}} 的設定 ✿",
+    "remoteTrustedAddress": "收到，來自 {{email}} 的圖片現在可以載入了 ✿",
+    "remoteTrustedDomain": "收到，來自 {{domain}} 的圖片現在可以載入了 ✿",
+    "remoteUntrustedAddress": "好的，來自 {{email}} 的圖片將再次被擋在外面 (｀・ω・´)",
+    "remoteUntrustedDomain": "好的，來自 {{domain}} 的圖片將再次被擋在外面 (｀・ω・´)",
+    "error": {
+      "title": "我被線纏住了 (╥﹏╥)",
+      "body": "這封郵件未能載入。請稍後再試。"
+    },
+    "showAddresses": "顯示所有地址",
+    "hideAddresses": "收起地址",
+    "replyTo": "回覆至",
+    "copyAddress": "複製 {{email}}",
+    "addressCopied": "地址已收起 ✧",
+    "reportAbuse": "檢舉垃圾郵件"
+  },
+  "compose": {
+    "placeholder": "寫點什麼吧 ✿",
+    "noRecipients": "要寄給誰呢？請先新增收件人 (・・ )?",
+    "draftLocal": "目前只儲存在這裡 (・_・;)"
+  },
+  "toast": {
+    "sent": "出發囉 ✉︎ ~",
+    "sendFailed": "無法傳送 (╥﹏╥) {{reason}}",
+    "archived": "已收進封存區 (˘ω˘)",
+    "trashed": "掰掰 (｡•́︿•̀｡)",
+    "newMail_one": "您有新郵件！(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+    "newMail_other": "有 {{count}}封新郵件！(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+    "accountAdded": "{{email}} 已加入！٩(◕‿◕)۶",
+    "draftSaved": "草稿已安全收好 (˘ω˘)",
+    "draftDiscarded": "噗，像從來沒發生過一樣 (・ω・)",
+    "sending": "Nyu 正準備衝出去 … ✉︎",
+    "sendUndone": "等等，停下！Nyu 回來了 (・ω・) 繼續寫吧。",
+    "undoTooLate": "太遲了，Nyu 已經跑過山頭了 (；・∀・)",
+    "sendFailedKept": "傳送失敗 (╥﹏╥) {{reason}} 郵件仍在草稿匣等候。",
+    "markedSpam": "已送到垃圾郵件角落 (｀へ´)",
+    "moveUndone": "噗，已恢復原狀 (・ω・)",
+    "blocked": "{{entry}} 不能再進來了 (｀・ω・´) 新郵件會進入垃圾郵件資料夾。",
+    "blockedOnServer": "{{entry}} 不能再進來了，您的伺服器會守著 (｀・ω・´) 新郵件會進入垃圾郵件資料夾。",
+    "unsubscribed": "已退訂 (≧▽≦) 不會再收到來自 {{name}} 的郵件",
+    "messageSaved": "郵件已安全收好 (˘ω˘)",
+    "deletedForever_one": "已永久刪除 (｡•́︿•̀｡)",
+    "deletedForever_other": "{{count}} 封郵件已永久刪除 (｡•́︿•̀｡)",
+    "draftGone": "這裡已沒有草稿了，Nyu 找遍了 (・_・;)",
+    "scheduled": "Nyu 會在 {{time}} 寄出 ✉︎",
+    "reportAbusePage": "檢舉頁面已在瀏覽器中開啟",
+    "reportAbuseCopied": "檢舉信箱位址已複製",
+    "reportAbuseSpammed": "已標記為垃圾郵件"
+  },
+  "status": {
+    "syncing": "正在擷取最新郵件…",
+    "error": "{{account}} 沒有回應 (・_・;)",
+    "demo": "示範模式，只是假的郵件。內容不會離開應用程式 (´｡• ω •｡`)",
+    "offline": "沒有網路連線 (・_・;) 正在顯示我為您儲存的內容"
+  },
+  "onboarding": {
+    "welcomeTitle": "嗨！我是 Nyu (◕‿◕✿)",
+    "welcomeBody": "我是 UwUMail 的郵件貓咪。只要三個小步驟，我們就能出發囉！",
+    "welcomeBodyPhone": "我是 UwUMail 的郵件貓咪。只要兩個小步驟，我們就能出發囉！",
+    "start": "出發吧！",
+    "layoutTitle": "您喜歡哪種版面？",
+    "toneTitle": "我該用什麼語氣跟您說話？",
+    "accountTitle": "現在把您的郵件帶過來吧 ✉︎",
+    "doneTitle": "完成啦！٩(◕‿◕)۶",
+    "doneBody": "我正在背景擷取您的郵件。"
+  },
+  "tone": {
+    "playful": {
+      "desc": "顏文字、小玩笑和可愛的訊息 (◕ᴗ◕✿)"
+    }
+  },
+  "account": {
+    "discovering": "正在探查您的伺服器設定…",
+    "connecting": "正在敲伺服器的門…",
+    "errorAuth": "伺服器拒絕了這組密碼 (｡•́︿•̀｡) 要不要再確認一次？",
+    "errorConnection": "我連不上伺服器 (・_・;) 請檢查地址和您的網路連線。",
+    "protocolJmapHint": "您的伺服器使用 JMAP：速度更快、更輕量，新郵件會即時飛進來 ✧",
+    "errorImapDisabled": "Microsoft 不讓我登入 (´･_･`) 此信箱已關閉 IMAP，只有管理員可以開啟：Set-CASMailbox -Identity ADDRESS -ImapEnabled $true",
+    "errorSmtpDisabled": "我不被允許從這裡寄信 (｡•́︿•̀｡) 管理員可以用以下指令開啟：Set-CASMailbox -Identity ADDRESS -SmtpClientAuthenticationDisabled $false",
+    "uwumailWaiting": "正在瀏覽器中等候您… (◕‿◕✿)"
+  },
+  "settings": {
+    "motionDesc": "要讓 Nyu 眨眼、跳躍和飛來飛去嗎？選擇「系統」時，我會跟隨您的作業系統設定。",
+    "nyuAnimationsDesc": "要讓我在您揮別郵件、封存時闔上信箱，並在 AI 運作時沉思嗎？選「減少」時，我會像照片一樣靜止不動。",
+    "senderPicturesCleared": "圖片已清除 ✧",
+    "trustedSendersEmpty": "我的名單上還沒有任何人 (・・ )? 您可以在郵件的圖片提示中直接新增寄件人。",
+    "protocolSwitched": "{{email}} 現在使用 {{protocol}} ✧",
+    "runInBackgroundDesc": "關閉視窗後，Nyu 會在時鐘旁小睡，並持續留意新郵件。請從那裡的圖示結束程式。",
+    "mac": {
+      "madeDefaultMail": "耶！Nyu 現在會接收您的郵件連結了。",
+      "loginItemDesc": "Nyu 會隨您的 Mac 一同醒來，新郵件就能立即顯示。"
+    },
+    "upToDate": "一切都是最新的，無需任何操作 ✧",
+    "backgroundPushDesc": "Nyu 會保持清醒，持續監看您的信箱。Android 會為此顯示一則安靜的通知，您可以將它隱藏 ♡",
+    "unifiedPushDesc": "當 JMAP 信箱有新郵件時，您的 UnifiedPush 應用程式會通知 Nyu，讓她能在其間小睡。其他信箱則維持原有方式，讓她保持清醒。",
+    "unifiedPushWaiting": "{{app}} 和您的郵件伺服器正在打招呼…",
+    "unifiedPushAll": "{{app}} 會帶來您所有的郵件，因此 Nyu 可以好好小睡，持續性的通知也會消失 ✧",
+    "unifiedPushGone": "推播應用程式已不存在 (・_・;) 我會自行重新保持連線。",
+    "senderAdded": "{{email}} 已準備就緒 (｀・ω・´)ゞ",
+    "signatureSaved": "簽名看起來很棒 ✧",
+    "signatureTooBig": "哎呀，這麼多內容放不進簽名裡 (・_・;) 請試試較小的圖片。",
+    "signaturePlaceholder": "謹致問候 ✿",
+    "linkConfirm": "開啟連結前先詢問",
+    "linkConfirmDesc": "開啟郵件中的連結前，我會先告訴您它會前往哪裡。偽裝的連結一律會詢問。",
+    "linkDomains": "不經詢問直接開啟",
+    "linkDomainsDesc": "我會直接放行通往這些網站的連結，但偽裝的連結除外。",
+    "linkDomainsEmpty": "目前沒有。您開啟連結時即可新增網站 ✧",
+    "linkDomainsInactive": "目前我會直接放行所有連結。",
+    "forgetLinkDomain": "移除 {{domain}}",
+    "syncAccount": "同步設定",
+    "syncAccountDesc": "語言、圖片、連結和簽名會隨您的 UwUMail 帳戶同步，套用到每個裝置的應用程式和網頁版信箱 ✧ 版面、密度、滑動操作、應用程式鎖定和更新設定則只保留在此裝置。在開啟連結前或使用圖片阻擋器時關閉詢問，僅適用於您操作的那台裝置，寧可小心一點喔！",
+    "syncAuto": "自動",
+    "syncOff": "關閉",
+    "syncNone": "嗯，您的帳戶中沒有任何一個使用會記住設定的 UwUMail 伺服器 (・・ )? 所以所有設定都只保留在此裝置。",
+    "syncSyncing": "正在與 {{email}} 同步…",
+    "syncDone": "已與 {{email}} 同步完成 ✧ {{when}}",
+    "syncOffline": "{{email}} 目前沒有回應。我會保留您的變更，待它恢復後再傳送 (｡•̀ᴗ-)✧",
+    "syncFailed": "與 {{email}} 同步失敗 (╥﹏╥) {{detail}}",
+    "syncRefused": "伺服器不接受 {{count}} 項設定，這些設定會保留在此裝置上。",
+    "signatureLocalOnly": "僅限此裝置",
+    "signatureLocalOnlyDesc": "此簽名只保留在此裝置上：內容過大無法同步（最多 256 KB），或包含只能在此裝置上運作的圖片。",
+    "fontDesc": "Nyu 最喜歡 UwU Sans，但由您決定。適用於整個應用程式及郵件，且僅限此裝置。",
+    "pgp": "PGP 公鑰"
+  },
+  "attachment": {
+    "loading": "正在解開附件…",
+    "dangerTitle": "小心！此檔案可能會啟動程式 (・_・;)",
+    "noPreview": "我無法查看這個檔案 (・・ )?",
+    "dangerous": {
+      "titleOpen": "Nyu 正瞇著眼睛檢視這個檔案",
+      "titleSave": "Nyu 正瞇著眼睛檢視這個檔案",
+      "body": "這類檔案可能會在您的電腦上執行程式。請只在您預期收到且信任寄件人的情況下才開啟。"
+    }
+  },
+  "update": {
+    "readyTitle": "Nyu 帶來了新東西 ✧"
+  },
+  "link": {
+    "warningTitle": "嗯，這個連結可能在騙人 (・_・;)",
+    "confirmTitle": "要開啟這個連結嗎？(・ω・)",
+    "confirmBody": "我們一起先看看它會前往哪裡吧 ✧",
+    "mailTitle": "要撰寫郵件嗎？✉",
+    "mailBody": "此連結會開始寫一封新郵件給這些收件人。",
+    "open": "開啟",
+    "compose": "撰寫郵件",
+    "copy": "複製地址",
+    "copyShort": "複製",
+    "copied": "連結已收好 ✧",
+    "remember": "不再詢問 {{domain}}",
+    "remembered": "我現在會直接放行通往 {{domain}} 的連結 ✧ 您可以在「設定」的「閱讀」中更改此項。",
+    "insecure": "未加密（http）：他人可能會讀取您在那裡輸入的內容 (・_・;)",
+    "unicodeHost": "看起來像",
+    "lookalike": "這裡有些字母只是假裝成其他字母，假網站常用這種手法偽裝 (・_・;)",
+    "userinfo": "網址前方有一段使用者名稱，可能用來假冒其他網站。它實際上會前往 {{domain}}。",
+    "redirectsTo": "接著會跳轉至",
+    "tracking": "透過 {{host}} 進行點擊追蹤",
+    "service": "重新導向服務 {{host}}",
+    "hiddenTarget": "此連結未說明之後會跳轉至何處。",
+    "otherTarget": "與所顯示的目標不同",
+    "statusRedirect": "接著會跳轉至 {{target}}",
+    "safeLink": "已還原 Microsoft 安全連結 ✧",
+    "safeLinkBody": "Microsoft 將此連結包裝成掃描器地址。我已將它還原，因此您看到並開啟的是真正的地址。",
+    "unsupported": "我不太想開啟這樣的連結 (・_・;)",
+    "sheetTitle": "連結"
+  },
+  "mobile": {
+    "pull": {
+      "release": "放開後我就會檢查 ✧",
+      "refreshing": "Nyu 正在檢查信箱 (｡･ω･｡)"
+    },
+    "lock": {
+      "title": "Nyu 正在小睡 (˘ω˘)",
+      "body": "請用指紋、臉部或 PIN 把我喚醒。"
+    },
+    "draft": {
+      "continue": "繼續撰寫 ✎"
+    },
+    "serverSearch": {
+      "searching": "Nyu 正在詢問伺服器 (｡･ω･｡)",
+      "nothingMore": "伺服器那邊也沒有其他結果了 (・・ )"
+    },
+    "swipe": {
+      "spam": "垃圾郵件！",
+      "notSpam": "其實不是垃圾郵件"
+    }
+  },
+  "unsubscribe": {
+    "title": "跟 {{name}} 說再見？",
+    "mailTo": "為此，Nyu 會以您的名義寄一封郵件給 {{address}}。",
+    "mailToFallback": "如果直接退訂無效，Nyu 會以您的名義寄一封郵件給 {{address}}。",
+    "failedTitle": "嗯，這次沒有成功 (・_・;)",
+    "tryMail": "Nyu 可以改用郵件為您退訂，為此會以您的名義寄一封郵件給 {{address}}。"
+  },
+  "pgp": {
+    "title": "PGP 簽章",
+    "body": "這封郵件包含內嵌 PGP 簽章。驗證只使用你在本裝置匯入的公鑰。",
+    "signer": "簽署者",
+    "checking": "正在驗證簽章",
+    "error": "驗證失敗",
+    "verified": "簽章已驗證",
+    "unknown": "未知公鑰",
+    "invalid": "簽章無效",
+    "none": "未簽章",
+    "unknownHint": "簽章有效，但公鑰不在你的鑰匙圈中。指紋：",
+    "invalidHint": "簽章與郵件內容不符，內容可能被竄改。"
+  },
+  "pgpSettings": {
+    "title": "PGP 公鑰",
+    "hint": "匯入公鑰以驗證內嵌 PGP 簽章（如 Debian 安全公告）。金鑰僅保存在本裝置，不會自動上網取得。",
+    "import": "匯入公鑰（.asc）",
+    "imported": "已匯入 {{id}}（{{name}}）",
+    "importFailed": "匯入失敗：{{reason}}",
+    "remove": "刪除公鑰",
+    "noUserId": "（無使用者識別）"
+  },
+  "reportAbuse": {
+    "title": "檢舉垃圾郵件",
+    "body": "這封郵件提供了檢舉位址。這些資訊來自郵件本身，請在繼續前核對目標位址。",
+    "page": "檢舉頁面（來自郵件）",
+    "address": "檢舉信箱（來自郵件）",
+    "open": "開啟檢舉頁面",
+    "copy": "複製位址",
+    "markSpam": "同時標記為垃圾郵件並移到垃圾郵件資料夾"
+  },
+  "deleteForever": {
+    "title_one": "要永久與這封郵件道別嗎？(｡•́︿•̀｡)",
+    "title_other": "要永久與這 {{count}} 封郵件道別嗎？(｡•́︿•̀｡)",
+    "body_one": "它也會從伺服器上消失，我無法再把它擷取回來。",
+    "body_other": "它們也會從伺服器上消失，我無法再把它們擷取回來。"
+  },
+  "discardChanges": {
+    "title": "要全部丟棄嗎？(・_・;)",
+    "body": "我會忘記您在這裡剛輸入的所有內容。"
+  },
+  "workspace": {
+    "setupTitle": "要把哪些信箱移到 {{name}}？(｀・ω・´)ゞ",
+    "enabled": "{{private}} 和 {{business}} 現在各有自己的空間 ✧"
+  },
+  "shortcuts": {
+    "extendUp": "向上延伸選取範圍",
+    "extendDown": "向下延伸選取範圍",
+    "selectAll": "選取所有已載入的郵件"
+  },
+  "crash": {
+    "title": "哎呀，Nyu 把東西打翻了",
+    "body": "UwUMail 在繪製時出了點問題。重新載入一次即可恢復 ✧",
+    "reload": "重新載入"
+  },
+  "folders": {
+    "created": "資料夾「{{name}}」已準備好放入郵件 ✿",
+    "renamed": "現在改名為「{{name}}」✿",
+    "deleted": "資料夾「{{name}}」已刪除 (｡•́︿•̀｡)",
+    "deleteTitle": "要跟「{{name}}」道別嗎？",
+    "deleteBody_one": "我會先把它的 {{count}} 封郵件移到垃圾桶。",
+    "deleteBody_other": "我會先把它的 {{count}} 封郵件移到垃圾桶。",
+    "emptyTrashTitle": "要清空垃圾桶嗎？(・ω・)",
+    "emptyJunkTitle": "要清掃垃圾郵件嗎？(｀・ω・´)",
+    "emptyBody_one": "{{count}} 封郵件將永久消失，伺服器上的也會一併刪除。我無法再把它擷取回來。",
+    "emptyBody_other": "{{count}} 封郵件將永久消失，伺服器上的也會一併刪除。我無法再把它們擷取回來。",
+    "emptied_one": "清得乾乾淨淨！{{count}} 封郵件已永久刪除 ✧",
+    "emptied_other": "清得乾乾淨淨！{{count}} 封郵件已永久刪除 ✧",
+    "alreadyEmpty": "這裡已經一塵不染了 (˘ᵕ˘)"
+  },
+  "calendar": {
+    "nothingToday": "今天沒有安排。該小睡一下了嗎？(˘ω˘)",
+    "agendaEmpty": {
+      "title": "全都空閒！(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+      "body": "未來 30 天內沒有任何安排。去冒險吧。"
+    },
+    "toast": {
+      "created": "已寫進行事曆 ✿",
+      "deleted": "噗，已從行事曆中消失 (・ω・)"
+    }
+  },
+  "rules": {
+    "empty": "還沒有任何規則。告訴我郵件該放到哪裡，我會替您分類，即使您在睡覺時也一樣 (˘ω˘)",
+    "saved": "收到，從現在起我會依此分類 ✿",
+    "foreignTitle": "有人在這裡亂寫亂畫 (・_・;)"
+  },
+  "accountCalendar": {
+    "checking": "正在尋找行事曆 (｡･ω･｡)",
+    "found": "找到您的行事曆了！(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+    "notFound": "那裡沒有行事曆 (・_・;) {{reason}}"
+  },
+  "assist": {
+    "thinking": "正在努力思考… (・ω・)",
+    "compose": {
+      "applied": "已放進您的草稿 ✿"
+    },
+    "local": {
+      "title": "看，這台電腦上有本地 AI！✿"
+    },
+    "estimate": {
+      "calibrated": "已依您先前的通話調整 ✧"
+    },
+    "spam": {
+      "certainty": {
+        "unsure": "不太確定 (・_・;)",
+        "fairly": "相當確定 (・ω・)",
+        "sure": "非常確定 ✿"
+      },
+      "modelVerdict": "模型判斷為「{{verdict}}」，但事實另有所指，因此結果仍維持在事實允許的範圍內 (｀・ω・´)"
+    },
+    "consent": {
+      "title": "可以把這封郵件寄給 {{name}} 嗎？(・ω・)",
+      "settings": {
+        "revoked": "好的！之後不會再寄任何郵件給 {{name}} ✿"
+      }
+    }
+  },
+  "dates": {
+    "searching": "Nyu 正在尋找約會… (・ω・)",
+    "noneFound": "Nyu 把每個角落都找過了：這裡沒有即將到來的約會 ( ˘ω˘ )"
+  },
+  "labels": {
+    "overlap": {
+      "title": "嗯，這好像似曾相識 (・・?)"
+    }
+  },
+  "scheduled": {
+    "empty": "Nyu 目前沒有任何要寄出的郵件 (・ω・)"
+  },
+  "masked": {
+    "empty": "目前還沒有隱藏地址。要不要為下一個註冊的網站戴上小小的偽裝？(｀・ω・´)",
+    "created": "搞定，您的新偽裝已準備好 ✿"
+  },
+  "picture": {
+    "error": {
+      "notImage": "嗯，這不是圖片 (・_・;)",
+      "unreadable": "我無法辨識這張圖片 (・_・;)"
+    }
+  },
+  "profile": {
+    "saved": "看起來很棒 ✿",
+    "removed": "照片已移除，您的首字母已恢復 (・ω・)"
+  },
+  "invitation": {
+    "answered": {
+      "accepted": "已接受！我已通知主辦人 ✧",
+      "tentative": "或許吧！我已通知主辦人 (・ω・)",
+      "declined": "已婉拒。我已好好地通知主辦人 (˘ᵕ˘)"
+    },
+    "removed": "已從您的行事曆中移除 ✧"
+  },
+  "push": {
+    "notification": {
+      "newMail": "您有新郵件！✉",
+      "many": "您有 {{n}} 封新郵件！✉"
+    }
+  },
+  "markAllRead": {
+    "done_one": "全部看完了，已讀取 {{count}} 封郵件 (^ω^)",
+    "done_other": "全部看完了，已讀取 {{count}} 封郵件 (^ω^)",
+    "nothing": "這裡沒有未讀郵件，一切都很安穩"
+  },
+  "templates": {
+    "none": "尚無範本 (・ω・)",
+    "saved": "已收進範本「{{name}}」✿"
+  },
+  "attachmentReminder": {
+    "title": "忘了什麼嗎？(・・;)",
+    "body": "您的郵件提到了附件，但目前尚未附加任何檔案。"
+  },
+  "snooze": {
+    "title": "要小睡到什麼時候？(˘ω˘)",
+    "done": "Nyu 已將郵件收好，會在 {{time}} 前小睡 (˘ω˘)",
+    "back": "醒來囉，郵件回來了 (｡･ω･｡)"
+  },
+  "notify": {
+    "quietDesc": "噓，Nyu 正在睡覺 (˘ω˘) 在這些時段內不會發出任何通知，包括午夜時段。"
+  }
+}

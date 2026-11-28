@@ -37,6 +37,7 @@ pub mod model;
 pub mod notify;
 pub mod oauth;
 pub mod ocr;
+pub mod pgp;
 pub mod phishing;
 pub mod pictures;
 pub mod search_query;

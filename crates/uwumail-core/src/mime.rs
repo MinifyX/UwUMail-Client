@@ -38,6 +38,10 @@ pub struct ParsedMessage {
     pub attachments: Vec<ParsedAttachment>,
     pub has_body: bool,
     pub unsubscribe: Option<crate::model::Unsubscribe>,
+    /// Whether the body carried an inline PGP cleartext signature (whose armor was stripped).
+    pub pgp_signed: bool,
+    /// Where to report abuse (X-Report-Abuse / X-Complaints-To).
+    pub report_abuse: Option<crate::model::ReportAbuse>,
     /// The headers labels without a model read (`uwumail_labels::HEADERS`: List-Id, Precedence, …),
     /// lower-case name and unfolded value.
     pub label_headers: Vec<(String, String)>,
@@ -120,10 +124,23 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
     let tnef_body = decoded.iter().map(|d| &d.message.body).find(|b| b.text.is_some() || b.html.is_some());
     let tnef_text = tnef_body.filter(|_| !crate::tnef::mime_has_text(&message));
 
-    let text = match tnef_text {
+    let mut text = match tnef_text {
         Some(body) => body.text.clone().or_else(|| body.html.as_deref().map(html_to_text)),
         None => message.body_text(0).map(|t| t.into_owned()).filter(|_| body_present),
     };
+    // Inline PGP (-----BEGIN PGP SIGNED MESSAGE-----): keep only the signed
+    // text as the visible body, so the reader sees the announcement and not
+    // the base64 armor. Verification is a separate, explicit engine action.
+    // Two kinds of signature: inline cleartext armor in the body, or PGP/MIME
+    // (multipart/signed with application/pgp-signature). The latter keeps its
+    // body clean, only the badge is added.
+    let pgp_mime = raw.windows(15).any(|w| w.eq_ignore_ascii_case(b"multipart/signed"))
+        && raw.windows(22).any(|w| w.eq_ignore_ascii_case(b"application/pgp-signature"));
+    let pgp_signed = pgp_mime || text.as_deref().is_some_and(|t| t.contains("-----BEGIN PGP SIGNED MESSAGE-----"));
+    // Only inline armor needs stripping; PGP/MIME's body is already clean.
+    if let Some(clean) = text.as_deref().and_then(|t| crate::pgp::cleartext_payload(t).map(|(c, _)| c)) {
+        text = Some(clean);
+    }
     let raw_html = message.body_html(0).map(|h| h.into_owned()).filter(|_| body_present);
     // mail-parser synthesizes HTML from text parts; only keep real HTML.
     let has_html_part = message.html_body_count() > 0
@@ -178,6 +195,8 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
         unsubscribe: message
             .header_raw("List-Unsubscribe")
             .and_then(|value| unsubscribe_options(value, message.header_raw("List-Unsubscribe-Post"))),
+        pgp_signed,
+        report_abuse: report_abuse_options(message.header_raw("X-Report-Abuse"), message.header_raw("X-Complaints-To")),
         label_headers: message
             .headers_raw()
             .filter(|(name, _)| uwumail_labels::HEADERS.iter().any(|known| known.eq_ignore_ascii_case(name)))
@@ -217,6 +236,28 @@ pub fn unsubscribe_options(value: &str, post: Option<&str>) -> Option<crate::mod
     let one_click = post.is_some_and(|post| post.to_ascii_lowercase().contains("list-unsubscribe=one-click"))
         && url.as_deref().is_some_and(|url| url.starts_with("https://"));
     (url.is_some() || mailto.is_some()).then_some(crate::model::Unsubscribe { one_click, url, mailto })
+}
+
+/// Complaint destinations from X-Report-Abuse (HTTPS) and X-Complaints-To (single address).
+/// The values are kept verbatim for the confirmation dialog; only a syntactically valid
+/// HTTPS URL / single address is accepted, so a malicious header can't turn the button
+/// into a request to an arbitrary scheme or to several recipients at once.
+pub fn report_abuse_options(url: Option<&str>, address: Option<&str>) -> Option<crate::model::ReportAbuse> {
+    let url = url.and_then(|value| {
+        let value: String = value.split_whitespace().collect();
+        let parsed = url::Url::parse(&value).ok()?;
+        (parsed.scheme() == "https").then_some(parsed.to_string())
+    });
+    let address = address.and_then(|value| {
+        let value = value.trim();
+        // Exactly one address, no display name, separators or control characters.
+        (!value.is_empty()
+            && !value.contains([',', ';', '<', '>', '\n', '\r'])
+            && value.split('@').count() == 2
+            && value.bytes().all(|b| !b.is_ascii_control()))
+        .then(|| value.to_string())
+    });
+    (url.is_some() || address.is_some()).then_some(crate::model::ReportAbuse { url, address })
 }
 
 /// Plain text as simple HTML paragraphs, for editing a text-only draft.
@@ -486,6 +527,23 @@ mod tests {
         let page = unsubscribe_options("<http://news.example/u>", Some("List-Unsubscribe=One-Click")).unwrap();
         assert!(!page.one_click, "one click only over https");
         assert!(unsubscribe_options("<javascript:alert(1)>", None).is_none());
+    }
+
+    #[test]
+    fn reads_complaint_destinations_but_not_unsafe_ones() {
+        let both =
+            report_abuse_options(Some(" https://www.postshiba.com/abuse/abc?m=1\r\n"), Some("abuse@postshiba.com"))
+                .unwrap();
+        assert_eq!(both.url.as_deref(), Some("https://www.postshiba.com/abuse/abc?m=1"));
+        assert_eq!(both.address.as_deref(), Some("abuse@postshiba.com"));
+
+        // No valid destination at all means no Report Abuse button.
+        assert!(report_abuse_options(Some("http://esp.example/abuse"), None).is_none());
+        assert!(report_abuse_options(Some("javascript:alert(1)"), None).is_none());
+        // Several recipients or a display name can't be used as a single complaint address.
+        assert!(report_abuse_options(None, Some("a@b.com,c@d.com")).is_none());
+        assert!(report_abuse_options(None, Some("Name <a@b.com>")).is_none());
+        assert!(report_abuse_options(None, None).is_none());
     }
 
     const SAMPLE: &str = "From: Leni Wanders <leni@wanders.example>\r\n\

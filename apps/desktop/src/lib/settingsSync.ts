@@ -117,7 +117,7 @@ const isBoolean = (value: unknown) => typeof value === "boolean";
 const CHOICES: Record<SyncedChoice | (typeof KEYED_CHOICES)[KeyedChoice], (value: unknown) => boolean> = {
   theme: oneOf("system", "light", "dark"),
   tone: oneOf("playful", "neutral"),
-  language: oneOf("system", "de", "en"),
+  language: oneOf("system", "de", "en", "zh-CN", "zh-TW"),
   conversations: isBoolean,
   remoteImages: oneOf("ask", "always"),
   mailAppearance: oneOf("auto", "light", "dark"),

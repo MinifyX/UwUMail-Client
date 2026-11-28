@@ -5,22 +5,35 @@ import deNeutral from "./locales/de/neutral.json";
 import dePlayful from "./locales/de/playful.json";
 import enNeutral from "./locales/en/neutral.json";
 import enPlayful from "./locales/en/playful.json";
+import zhCNNeutral from "./locales/zh-CN/neutral.json";
+import zhCNPlayful from "./locales/zh-CN/playful.json";
+import zhTWNeutral from "./locales/zh-TW/neutral.json";
+import zhTWPlayful from "./locales/zh-TW/playful.json";
 
-export type Language = "de" | "en";
+export type Language = "de" | "en" | "zh-CN" | "zh-TW";
 
 export const resources = {
   en: { neutral: enNeutral, playful: enPlayful },
   de: { neutral: deNeutral, playful: dePlayful },
+  "zh-CN": { neutral: zhCNNeutral, playful: zhCNPlayful },
+  "zh-TW": { neutral: zhTWNeutral, playful: zhTWPlayful },
 } as const;
 
-const LANGUAGES: readonly Language[] = ["de", "en"];
+const LANGUAGES: readonly Language[] = ["de", "en", "zh-CN", "zh-TW"];
 
 /** The first of the system's languages the app speaks, English when it speaks none of them. */
 export function systemLanguage(
   preferred: readonly string[] = navigator.languages?.length ? navigator.languages : [navigator.language],
 ): Language {
   for (const tag of preferred) {
-    const base = tag.toLowerCase().split(/[-_]/)[0];
+    const normalized = tag.toLowerCase().replace(/_/g, "-");
+    // Match full locale first (zh-CN / zh-TW), then base language.
+    if (normalized.startsWith("zh")) {
+      // zh-TW, zh-HK, zh-MO, or any with TW/HK/MO region -> traditional
+      if (/zh-(tw|hk|mo)/.test(normalized) || /hant/.test(normalized)) return "zh-TW";
+      return "zh-CN";
+    }
+    const base = normalized.split("-")[0];
     const found = LANGUAGES.find((language) => language === base);
     if (found) return found;
   }
@@ -28,7 +41,7 @@ export function systemLanguage(
 }
 
 export function resolveLanguage(setting: LanguageSetting): Language {
-  return setting === "de" || setting === "en" ? setting : systemLanguage();
+  return LANGUAGES.includes(setting as Language) ? (setting as Language) : systemLanguage();
 }
 
 void i18n.use(initReactI18next).init({
