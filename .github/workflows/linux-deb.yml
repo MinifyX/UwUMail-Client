@@ -1,0 +1,76 @@
+name: Linux x64 .deb only
+
+# A lightweight, fork-specific workflow: build just the x64 .deb (no AppImage,
+# no rpm, no portable folder, no Windows/macOS/arm64). Useful for quick local
+# testing on the developer's Linux PC. Trigger manually with workflow_dispatch.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: linux-deb-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  deb:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf pkg-config libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v2-rust
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the .deb
+        run: |
+          # Package must be named "uwumail" (not "uw-u-mail") and only the deb
+          # bundle is needed here.
+          node -e '
+            const fs = require("fs");
+            const p = "apps/desktop/src-tauri/tauri.conf.json";
+            const d = JSON.parse(fs.readFileSync(p, "utf8"));
+            d.productName = "uwumail";
+            d.bundle.targets = ["deb"];
+            fs.writeFileSync(p, JSON.stringify(d, null, 2));
+          '
+          pnpm --filter @uwumail/desktop tauri build --bundles deb
+
+      - name: Collect the .deb
+        run: |
+          mkdir -p dist-deb
+          cp target/release/bundle/deb/*.deb dist-deb/
+          ls -la dist-deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uwumail-x64-deb
+          path: dist-deb/*.deb
+          if-no-files-found: error
+          retention-days: 14
