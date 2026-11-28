@@ -2010,22 +2010,17 @@ impl Store {
         let mut stmt = conn.prepare("SELECT fingerprint, user_id, armor FROM pgp_keys ORDER BY created_at")?;
         let rows = stmt
             .query_map([], |row| {
-                Ok(crate::pgp::PgpKey {
-                    fingerprint: row.get(0)?,
-                    user_id: row.get(1)?,
-                    armor: row.get(2)?,
-                })
+                Ok(crate::pgp::PgpKey { fingerprint: row.get(0)?, user_id: row.get(1)?, armor: row.get(2)? })
             })?
             .collect::<rusqlite::Result<_>>()?;
         Ok(rows)
     }
 
     pub fn add_pgp_key(&self, key: &crate::pgp::PgpKey) -> Result<()> {
-        self.conn()
-            .execute(
-                "INSERT OR REPLACE INTO pgp_keys (fingerprint, user_id, armor, created_at) VALUES (?1, ?2, ?3, ?4)",
-                params![key.fingerprint, key.user_id, key.armor, crate::mime::now()],
-            )?;
+        self.conn().execute(
+            "INSERT OR REPLACE INTO pgp_keys (fingerprint, user_id, armor, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![key.fingerprint, key.user_id, key.armor, crate::mime::now()],
+        )?;
         Ok(())
     }
 

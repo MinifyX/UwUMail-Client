@@ -29,8 +29,8 @@ use uwumail_core::attachments::AttachmentFile;
 use uwumail_core::birthdays::scan::{BirthdayFeatures, BirthdayImportEntry, BirthdayImportResult, BirthdayScan};
 use uwumail_core::mailto::MailtoDraft;
 use uwumail_core::model::*;
-use uwumail_core::pictures::{PictureLookup, SenderPicture};
 use uwumail_core::pgp::{PgpKey, PgpVerifyStatus};
+use uwumail_core::pictures::{PictureLookup, SenderPicture};
 use uwumail_core::send_later::{ScheduledReceipt, ScheduledRef, ScheduledSend, SendLaterInfo};
 use uwumail_core::{Engine, Error};
 
@@ -1044,8 +1044,7 @@ async fn message_headers(engine: State<'_, Engine>, message_id: String) -> Comma
         .map_err(|e| uwumail_core::Error::internal(format!("Reading headers failed: {e}")))?;
     let text = String::from_utf8_lossy(&bytes);
     // Headers end at the first empty line (CRLF CRLF or LF LF).
-    let header = text.split("\r\n\r\n").next().unwrap_or(&text)
-        .split("\n\n").next().unwrap_or(&text);
+    let header = text.split("\r\n\r\n").next().unwrap_or(&text).split("\n\n").next().unwrap_or(&text);
     Ok(header.to_string())
 }
 

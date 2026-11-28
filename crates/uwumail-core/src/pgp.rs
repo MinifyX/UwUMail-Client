@@ -101,25 +101,15 @@ pub fn verify(body: &str, keys: &[PgpKey]) -> PgpVerifyStatus {
         // A signature may be made by the primary key or by a signing subkey
         // (Debian's notices commonly use the latter). SignedPublicKey's
         // PublicKeyTrait only covers the primary, so try each subkey too.
-        let matched = msg.verify(&public).is_ok()
-            || public
-                .public_subkeys
-                .iter()
-                .any(|sub| msg.verify(&sub.key).is_ok());
+        let matched =
+            msg.verify(&public).is_ok() || public.public_subkeys.iter().any(|sub| msg.verify(&sub.key).is_ok());
         if matched {
-            return PgpVerifyStatus::Verified {
-                fingerprint: key.fingerprint.clone(),
-                user_id: key.user_id.clone(),
-            };
+            return PgpVerifyStatus::Verified { fingerprint: key.fingerprint.clone(), user_id: key.user_id.clone() };
         }
     }
     // A signature was present but no key matched: distinguish "unknown key"
     // from "wrong/tampered" as far as the header allows.
-    if issuer.is_some() {
-        PgpVerifyStatus::UnknownKey { fingerprint: issuer }
-    } else {
-        PgpVerifyStatus::Invalid
-    }
+    if issuer.is_some() { PgpVerifyStatus::UnknownKey { fingerprint: issuer } } else { PgpVerifyStatus::Invalid }
 }
 
 fn hex_upper(bytes: &[u8]) -> String {
@@ -131,22 +121,15 @@ fn hex_upper(bytes: &[u8]) -> String {
     out
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pgp::composed::{ArmorOptions, Deserializable, SignedPublicKey, SignedSecretKey};
 
     const SIGNED: &str = include_str!("../tests/pgp-fixtures/cleartext-msg-01.asc");
-    const SECRET_KEY: &str = include_str!("../tests/pgp-fixtures/cleartext-key-01.asc");
+    const PUBLIC_KEY: &str = include_str!("../tests/pgp-fixtures/cleartext-public-key.asc");
 
     fn imported_key() -> PgpKey {
-        let (secret, _) = SignedSecretKey::from_string(SECRET_KEY).unwrap();
-        let public = SignedPublicKey::from(secret);
-        let armor = public
-            .to_armored_string(ArmorOptions { headers: None, include_checksum: true })
-            .unwrap();
-        parse_public_key(&armor).unwrap()
+        parse_public_key(PUBLIC_KEY).unwrap()
     }
 
     #[test]
@@ -160,10 +143,7 @@ mod tests {
 
         assert_eq!(
             verify(SIGNED, &[key]),
-            PgpVerifyStatus::Verified {
-                fingerprint: imported_key().fingerprint,
-                user_id: imported_key().user_id,
-            }
+            PgpVerifyStatus::Verified { fingerprint: imported_key().fingerprint, user_id: imported_key().user_id }
         );
     }
 

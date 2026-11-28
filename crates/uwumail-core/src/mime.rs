@@ -190,10 +190,7 @@ pub fn parse(raw: &[u8]) -> ParsedMessage {
             .header_raw("List-Unsubscribe")
             .and_then(|value| unsubscribe_options(value, message.header_raw("List-Unsubscribe-Post"))),
         pgp_signed,
-        report_abuse: report_abuse_options(
-            message.header_raw("X-Report-Abuse"),
-            message.header_raw("X-Complaints-To"),
-        ),
+        report_abuse: report_abuse_options(message.header_raw("X-Report-Abuse"), message.header_raw("X-Complaints-To")),
         label_headers: message
             .headers_raw()
             .filter(|(name, _)| uwumail_labels::HEADERS.iter().any(|known| known.eq_ignore_ascii_case(name)))
@@ -528,11 +525,9 @@ mod tests {
 
     #[test]
     fn reads_complaint_destinations_but_not_unsafe_ones() {
-        let both = report_abuse_options(
-            Some(" https://www.postshiba.com/abuse/abc?m=1\r\n"),
-            Some("abuse@postshiba.com"),
-        )
-        .unwrap();
+        let both =
+            report_abuse_options(Some(" https://www.postshiba.com/abuse/abc?m=1\r\n"), Some("abuse@postshiba.com"))
+                .unwrap();
         assert_eq!(both.url.as_deref(), Some("https://www.postshiba.com/abuse/abc?m=1"));
         assert_eq!(both.address.as_deref(), Some("abuse@postshiba.com"));
 
